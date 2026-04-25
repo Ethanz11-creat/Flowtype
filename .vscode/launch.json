@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:langstream}",
+            "name": "Debug langstream",
+            "target": "langstream",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug langstream"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:langstream}",
+            "name": "Release langstream",
+            "target": "langstream",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release langstream"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:langstream}",
+            "name": "Debug LangStream",
+            "target": "LangStream",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug LangStream"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:langstream}",
+            "name": "Release LangStream",
+            "target": "LangStream",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release LangStream"
+        }
+    ]
+}
