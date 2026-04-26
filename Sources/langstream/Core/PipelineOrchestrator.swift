@@ -90,6 +90,15 @@ final class PipelineOrchestrator {
             return
         }
 
+        // Audio diagnostics
+        let wavHeaderSize = 44
+        let audioPayloadSize = audioData.count - wavHeaderSize
+        let estimatedDuration = Double(audioPayloadSize) / 32000.0 // 16kHz, mono, 16-bit = 32000 bytes/sec
+        print("[PipelineOrchestrator] Audio: \(audioData.count) bytes total, ~\(String(format: "%.1f", estimatedDuration))s duration")
+        if audioPayloadSize <= 0 {
+            print("[PipelineOrchestrator] WARNING: Audio payload is empty (only WAV header)")
+        }
+
         // 3. Cloud ASR — MAIN RECOGNITION PATH
         self.appState.transition(to: .processingASR(provider: "云端识别"))
         print("[PipelineOrchestrator] Starting cloud ASR...")
@@ -97,8 +106,8 @@ final class PipelineOrchestrator {
         Task { [weak self] in
             guard let self = self else { return }
 
-            // TeleSpeech primary, SenseVoice fallback
-            let asrResult = await self.asyncRefiner.transcribeWithFallback(audioData: audioData)
+            // Parallel TeleSpeech + SenseVoice with scoring
+            let asrResult = await self.asyncRefiner.transcribeWithScoring(audioData: audioData)
 
             guard let result = asrResult, !result.text.isEmpty else {
                 print("[PipelineOrchestrator] Cloud ASR returned empty")
@@ -106,31 +115,38 @@ final class PipelineOrchestrator {
                 return
             }
 
-            // 4. Display recognized text in capsule (local rendering)
-            self.appState.recognizedText = result.text
-            self.appState.previewText = result.text
-            print("[PipelineOrchestrator] Recognized: '\(result.text)' from \(result.provider)")
+            // 4. Post-process ASR text
+            let processedText = ASRPostProcessor.process(result.text)
+            let didChange = processedText != result.text
+            if didChange {
+                print("[PipelineOrchestrator] Post-processed: '\(result.text)' -> '\(processedText)'")
+            }
 
-            // 5. Hide window before injection so focus returns to previous app
+            // 5. Display recognized text in capsule (local rendering)
+            self.appState.recognizedText = processedText
+            self.appState.previewText = processedText
+            print("[PipelineOrchestrator] Recognized: '\(processedText)' from \(result.provider)")
+
+            // 6. Hide window before injection so focus returns to previous app
             WindowManager.shared.hide()
             // Give OS time to switch focus back to the target app
             try? await Task.sleep(nanoseconds: 150_000_000)
 
-            // 6. Inject final text
+            // 7. Inject final text
             self.appState.transition(to: .injecting)
             print("[PipelineOrchestrator] Injecting text...")
             do {
-                try await KeyboardInjector.insertText(result.text)
+                try await KeyboardInjector.insertText(processedText)
                 print("[PipelineOrchestrator] Text injected")
             } catch {
                 print("[PipelineOrchestrator] Injection failed: \(error)")
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(result.text, forType: .string)
+                NSPasteboard.general.setString(processedText, forType: .string)
                 self.appState.showError("已复制到剪贴板")
             }
 
-            // 6. Optional background LLM polish (UI only, no re-injection)
-            await self.asyncRefiner.polishIfNeeded(text: result.text, appState: self.appState)
+            // 8. Optional background LLM polish (UI only, no re-injection)
+            await self.asyncRefiner.polishIfNeeded(text: processedText, appState: self.appState)
 
             // Hide window after everything completes
             WindowManager.shared.hide()

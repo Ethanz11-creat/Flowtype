@@ -27,6 +27,25 @@ struct Configuration {
         env["ASR_FALLBACK_MODEL"] ?? "FunAudioLLM/SenseVoiceSmall"
     }
 
+    // ASR Strategy: "parallel" (default) or "fallback"
+    var asrStrategy: String {
+        env["ASR_STRATEGY"] ?? "parallel"
+    }
+
+    // Debug: dump audio to ~/Library/Logs/langstream/
+    var dumpAudio: Bool {
+        env["LANGSTREAM_DUMP_AUDIO"] == "1"
+    }
+
+    // Post-processing switches
+    var enableFillerStrip: Bool {
+        env["ENABLE_FILLER_STRIP"] != "0"
+    }
+
+    var enableTermCorrection: Bool {
+        env["ENABLE_TERM_CORRECTION"] != "0"
+    }
+
     // LLM
     var llmModel: String {
         env["LLM_MODEL"] ?? "deepseek-ai/DeepSeek-V3"
@@ -52,10 +71,10 @@ struct Configuration {
     - 风格参考
     - 输出方式
     5. 将模糊、跳跃的口语整理为自然、清楚、连续的开发指令，但不要强行写成正式文档。
-    6. 如用户表达中包含“先做简单版、局部改、不要重构、只改样式、别动后端”这类边界条件，必须明确保留。
+    6. 如用户表达中包含"先做简单版、局部改、不要重构、只改样式、别动后端"这类边界条件，必须明确保留。
     7. 不要解释你的处理过程，不要补充建议，不要反问，不要输出多个版本。
     8. 只输出最终整理后的文本，不要添加任何前缀、说明、引号或客套话。
-    9. 如果输入只包含语气词、口头词、停顿词、无意义重复，或整体上没有可整理的有效内容，例如“嗯”“啊”“那个”“嗯嗯”“哦哦”，则不输出任何文字。
+    9. 如果输入只包含语气词、口头词、停顿词、无意义重复，或整体上没有可整理的有效内容，例如"嗯""啊""那个""嗯嗯""哦哦"，则不输出任何文字。
     10. 如果输入信息不足但仍包含少量可保留内容，则只做最小必要修正后输出，不要自行补全。
     """
 }

@@ -7,7 +7,8 @@ enum AudioRecorderError: Error, Equatable {
 }
 
 final class AudioRecorder: @unchecked Sendable {
-    private let engine = AVAudioEngine()
+    // NOTE: Create a fresh engine for each session to avoid state issues.
+    private var engine: AVAudioEngine?
     private nonisolated(unsafe) var audioBuffer: AVAudioPCMBuffer?
     private nonisolated(unsafe) var isRecording = false
     private nonisolated(unsafe) var amplitudeContinuation: AsyncStream<Float>.Continuation?
@@ -16,6 +17,9 @@ final class AudioRecorder: @unchecked Sendable {
     private nonisolated(unsafe) var segmentBuffers: [Data] = []
     private nonisolated(unsafe) var currentSegmentBuffer: AVAudioPCMBuffer?
     private let segmentDurationSeconds: Double = 3.0
+
+    // Diagnostics
+    private nonisolated(unsafe) var tapCallCount = 0
 
     func requestPermission() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -31,8 +35,14 @@ final class AudioRecorder: @unchecked Sendable {
             throw AudioRecorderError.permissionDenied
         }
 
-        let inputNode = engine.inputNode
+        // Fresh engine for each session
+        let freshEngine = AVAudioEngine()
+        self.engine = freshEngine
+
+        let inputNode = freshEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        print("[AudioRecorder] Hardware input format: \(inputFormat)")
 
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -49,22 +59,51 @@ final class AudioRecorder: @unchecked Sendable {
 
         audioBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16000 * 60)!
         isRecording = true
+        tapCallCount = 0
         segmentBuffers = []
         currentSegmentBuffer = nil
 
         return AsyncStream { continuation in
             self.amplitudeContinuation = continuation
 
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-                guard let self = self, self.isRecording else { return }
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
+                guard let self = self else {
+                    print("[AudioRecorder] Tap callback: self is nil")
+                    return
+                }
+                guard self.isRecording else {
+                    print("[AudioRecorder] Tap callback: isRecording=false, skipping")
+                    return
+                }
 
-                guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: buffer.frameCapacity) else { return }
+                self.tapCallCount += 1
+                let callIndex = self.tapCallCount
+                let inputFrames = Int(buffer.frameLength)
+                print("[AudioRecorder] Tap #\(callIndex) fired: inputFrames=\(inputFrames), time=\(time)")
+
+                // Converted buffer capacity: same as input buffer size is sufficient
+                guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: buffer.frameCapacity) else {
+                    print("[AudioRecorder] Tap #\(callIndex): failed to create convertedBuffer")
+                    return
+                }
                 var error: NSError?
                 let inputBuffer = buffer
+                var inputConsumed = false
                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-                    outStatus.pointee = .haveData
-                    return inputBuffer
+                    if !inputConsumed {
+                        inputConsumed = true
+                        outStatus.pointee = .haveData
+                        return inputBuffer
+                    }
+                    outStatus.pointee = .noDataNow
+                    return nil
                 }
+
+                if let err = error {
+                    print("[AudioRecorder] Tap #\(callIndex): converter error: \(err)")
+                }
+                let outputFrames = Int(convertedBuffer.frameLength)
+                print("[AudioRecorder] Tap #\(callIndex): converted outputFrames=\(outputFrames)")
 
                 // Append to accumulated full buffer
                 if let mainBuffer = self.audioBuffer,
@@ -77,7 +116,12 @@ final class AudioRecorder: @unchecked Sendable {
                             mainData[currentLength + i] = convertedData[i]
                         }
                         mainBuffer.frameLength = AVAudioFrameCount(currentLength + newLength)
+                        print("[AudioRecorder] Tap #\(callIndex): appended to audioBuffer, totalFrames=\(currentLength + newLength)")
+                    } else {
+                        print("[AudioRecorder] WARNING: Recording exceeded 60s, truncating")
                     }
+                } else {
+                    print("[AudioRecorder] Tap #\(callIndex): audioBuffer is nil or channel data missing")
                 }
 
                 // Phase 2: Append to current segment buffer
@@ -119,8 +163,10 @@ final class AudioRecorder: @unchecked Sendable {
             }
 
             do {
-                try self.engine.start()
+                try freshEngine.start()
+                print("[AudioRecorder] Engine started successfully")
             } catch {
+                print("[AudioRecorder] Engine start FAILED: \(error)")
                 continuation.finish()
             }
 
@@ -133,11 +179,24 @@ final class AudioRecorder: @unchecked Sendable {
     }
 
     nonisolated func stopRecording() -> (fullData: Data?, segments: [Data]) {
+        print("[AudioRecorder] stopRecording called, tapCallCount=\(tapCallCount)")
+
+        if tapCallCount == 0 {
+            print("[AudioRecorder] CRITICAL: No tap callbacks received. Possible causes:")
+            print("  - Microphone permission denied (check System Settings > Privacy > Microphone)")
+            print("  - No input device available")
+            print("  - AVAudioEngine failed to start")
+        }
+
+        // Prevent new callbacks from writing
         isRecording = false
         amplitudeContinuation?.finish()
         amplitudeContinuation = nil
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
+
+        // Stop engine and remove tap
+        engine?.stop()
+        engine?.inputNode.removeTap(onBus: 0)
+        engine = nil
 
         // Flush partial segment
         if let segBuffer = currentSegmentBuffer, segBuffer.frameLength > 0 {
@@ -151,9 +210,33 @@ final class AudioRecorder: @unchecked Sendable {
         segmentBuffers = []
 
         guard let buffer = audioBuffer else {
+            print("[AudioRecorder] stopRecording: audioBuffer is nil")
             return (nil, segments)
         }
-        let fullData = AudioFormatConverter.convertToWAV(buffer)
+
+        let rawFrames = Int(buffer.frameLength)
+        print("[AudioRecorder] stopRecording: raw audioBuffer has \(rawFrames) frames")
+
+        // Trim silence, normalize, convert to WAV
+        let trimmedBuffer = AudioFormatConverter.trimSilence(buffer)
+        let trimmedFrames = Int(trimmedBuffer.frameLength)
+        print("[AudioRecorder] stopRecording: after trimSilence has \(trimmedFrames) frames")
+
+        let fullData = AudioFormatConverter.normalizeAndConvertToWAV(trimmedBuffer)
+
+        if let data = fullData {
+            let payload = data.count - 44
+            let duration = Double(payload) / 32000.0
+            print("[AudioRecorder] stopRecording: final WAV \(data.count) bytes, ~\(String(format: "%.2f", duration))s")
+        } else {
+            print("[AudioRecorder] stopRecording: normalizeAndConvertToWAV returned nil")
+        }
+
+        // Debug dump if enabled
+        if let data = fullData, Configuration.shared.dumpAudio {
+            dumpWAVData(data)
+        }
+
         return (fullData, segments)
     }
 
@@ -164,5 +247,22 @@ final class AudioRecorder: @unchecked Sendable {
     private func createSegmentBuffer(format: AVAudioFormat) -> AVAudioPCMBuffer {
         let frameCapacity = AVAudioFrameCount(format.sampleRate * segmentDurationSeconds)
         return AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity)!
+    }
+
+    private func dumpWAVData(_ data: Data) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let filename = "dump_\(formatter.string(from: Date())).wav"
+        guard let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Logs/langstream", isDirectory: true) else { return }
+
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let url = dir.appendingPathComponent(filename)
+            try data.write(to: url)
+            print("[AudioRecorder] Dumped audio to \(url.path)")
+        } catch {
+            print("[AudioRecorder] Failed to dump audio: \(error)")
+        }
     }
 }

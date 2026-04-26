@@ -64,6 +64,7 @@ class SiliconFlowSpeechProvider: SpeechProvider {
 
         guard (200...299).contains(httpResponse.statusCode) else {
             let errorText = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("[\(name)] HTTP error \(httpResponse.statusCode): \(errorText)")
             throw SpeechProviderError.transcriptionFailed("HTTP \(httpResponse.statusCode): \(errorText)")
         }
 

@@ -1,0 +1,403 @@
+[
+  {
+    "id": "01_short",
+    "ground_truth": "打开设置页面",
+    "tele_text": "打开设置页面。",
+    "tele_cer": 0.16666666666666666,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "",
+    "sense_cer": 1.0,
+    "sense_errors": [
+      "截断/漏字"
+    ],
+    "chosen_text": "打开设置页面。",
+    "chosen_cer": 0.16666666666666666
+  },
+  {
+    "id": "02_short",
+    "ground_truth": "保存当前文件",
+    "tele_text": "保存当前文件",
+    "tele_cer": 0.0,
+    "tele_errors": [],
+    "sense_text": "保存当前文件。",
+    "sense_cer": 0.16666666666666666,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "保存当前文件",
+    "chosen_cer": 0.0
+  },
+  {
+    "id": "03_short",
+    "ground_truth": "运行单元测试",
+    "tele_text": "运行单元测试",
+    "tele_cer": 0.0,
+    "tele_errors": [],
+    "sense_text": "",
+    "sense_cer": 1.0,
+    "sense_errors": [
+      "截断/漏字"
+    ],
+    "chosen_text": "运行单元测试",
+    "chosen_cer": 0.0
+  },
+  {
+    "id": "04_long",
+    "ground_truth": "请帮我检查一下这个函数里面是不是有空指针异常的风险",
+    "tele_text": "请帮我检查一下这个函数，里面是不是有空指针异常的风险。",
+    "tele_cer": 0.08,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "请帮我检查一下这个函数里面是不是有空指针异常的风险。",
+    "sense_cer": 0.04,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "请帮我检查一下这个函数里面是不是有空指针异常的风险。",
+    "chosen_cer": 0.04
+  },
+  {
+    "id": "05_long",
+    "ground_truth": "我想在这个页面添加一个下拉刷新功能，用 SwiftUI 实现",
+    "tele_text": "我想在这个页面添加1个下拉刷新功能，用swiftui实现。",
+    "tele_cer": 0.23333333333333334,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "我想在这个页面添加一个下拉刷新功能，用swift uI实现。",
+    "sense_cer": 0.2,
+    "sense_errors": [
+      "英文术语错误"
+    ],
+    "chosen_text": "我想在这个页面添加一个下拉刷新功能，用swift uI实现。",
+    "chosen_cer": 0.2
+  },
+  {
+    "id": "06_colloquial",
+    "ground_truth": "那个帮我看看这个报错是什么意思啊",
+    "tele_text": "那个帮我看看这个报错是什么意思啊？",
+    "tele_cer": 0.0625,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "那个帮我看看这个报错是什么意思啊。",
+    "sense_cer": 0.0625,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "那个帮我看看这个报错是什么意思啊？",
+    "chosen_cer": 0.0625
+  },
+  {
+    "id": "07_colloquial",
+    "ground_truth": "就是我想改一下这里的样式，然后那个按钮颜色也改一下",
+    "tele_text": "就是我想改一下这里的样式，然后那个按钮颜色也改一下。",
+    "tele_cer": 0.04,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "就是我想改一下这里的样式，然后那个按钮颜色也改一下。",
+    "sense_cer": 0.04,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "就是我想改一下这里的样式，然后那个按钮颜色也改一下。",
+    "chosen_cer": 0.04
+  },
+  {
+    "id": "08_filler",
+    "ground_truth": "嗯那个帮我写一个 RAG 的检索模块",
+    "tele_text": "问那个帮我写一个的检索模块。",
+    "tele_cer": 0.3888888888888889,
+    "tele_errors": [
+      "截断/漏字",
+      "英文术语错误"
+    ],
+    "sense_text": "问，那个帮我写一个we的检索模块。",
+    "sense_cer": 0.4444444444444444,
+    "sense_errors": [
+      "英文术语错误"
+    ],
+    "chosen_text": "问那个帮我写一个的检索模块。",
+    "chosen_cer": 0.3888888888888889
+  },
+  {
+    "id": "09_filler",
+    "ground_truth": "然后然后我想用 LangGraph 实现一个 Agent 工作流",
+    "tele_text": "然后然后我想用狼graph实现一个agent工作流。",
+    "tele_cer": 0.3125,
+    "tele_errors": [
+      "英文术语错误"
+    ],
+    "sense_text": "",
+    "sense_cer": 1.0,
+    "sense_errors": [
+      "截断/漏字",
+      "英文术语错误"
+    ],
+    "chosen_text": "然后然后我想用狼graph实现一个agent工作流。",
+    "chosen_cer": 0.3125
+  },
+  {
+    "id": "10_coding",
+    "ground_truth": "定义一个泛型函数，输入数组返回最大值",
+    "tele_text": "定义一个泛形函数，输入数组，返回最大值。",
+    "tele_cer": 0.16666666666666666,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "定义一个范型函数，输入数组返回最大值。",
+    "sense_cer": 0.1111111111111111,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "定义一个范型函数，输入数组返回最大值。",
+    "chosen_cer": 0.1111111111111111
+  },
+  {
+    "id": "11_coding",
+    "ground_truth": "帮我写一个 Docker Compose 配置文件，包含 Redis 和 PostgreSQL",
+    "tele_text": "帮我写一个doker compose配置文件，包含readies和postersql。",
+    "tele_cer": 0.3617021276595745,
+    "tele_errors": [
+      "英文术语错误"
+    ],
+    "sense_text": "帮我写一个doocre compos配置文件，包含readies和postg SQL。",
+    "sense_cer": 0.3617021276595745,
+    "sense_errors": [
+      "英文术语错误"
+    ],
+    "chosen_text": "帮我写一个doker compose配置文件，包含readies和postersql。",
+    "chosen_cer": 0.3617021276595745
+  },
+  {
+    "id": "12_english_tech",
+    "ground_truth": "配置一下 Kubernetes 的 Deployment 和 Service",
+    "tele_text": "配置一下kubernetes deployment和service",
+    "tele_cer": 0.21052631578947367,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "配置一下Kubernetes的 deploymenteployment和service。",
+    "sense_cer": 0.39473684210526316,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "配置一下kubernetes deployment和service",
+    "chosen_cer": 0.21052631578947367
+  },
+  {
+    "id": "13_english_tech",
+    "ground_truth": "用 Tailwind CSS 写一个响应式导航栏",
+    "tele_text": "用chantcs.S写一个响应式导航栏。",
+    "tele_cer": 0.5,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "用chwin cSS写一个响应式导航栏。",
+    "sense_cer": 0.375,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "用chwin cSS写一个响应式导航栏。",
+    "chosen_cer": 0.375
+  },
+  {
+    "id": "14_mixed",
+    "ground_truth": "把这个 Notion 页面的内容同步到 GitHub 仓库",
+    "tele_text": "把这个notion页面的内容同步到g仓库。",
+    "tele_cer": 0.41379310344827586,
+    "tele_errors": [
+      "截断/漏字"
+    ],
+    "sense_text": "把这个nion页面的内容同步到gihub仓库。",
+    "sense_cer": 0.3793103448275862,
+    "sense_errors": [
+      "截断/漏字"
+    ],
+    "chosen_text": "把这个nion页面的内容同步到gihub仓库。",
+    "chosen_cer": 0.3793103448275862
+  },
+  {
+    "id": "15_mixed",
+    "ground_truth": "用 DeepSeek 模型做一个 Prompt 优化工具",
+    "tele_text": "用deepseek模型做一个prompt优化工具。",
+    "tele_cer": 0.2857142857142857,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "",
+    "sense_cer": 1.0,
+    "sense_errors": [
+      "截断/漏字",
+      "英文术语错误"
+    ],
+    "chosen_text": "用deepseek模型做一个prompt优化工具。",
+    "chosen_cer": 0.2857142857142857
+  },
+  {
+    "id": "16_term",
+    "ground_truth": "实现一个 SwiftUI 的 List 组件，支持下拉刷新",
+    "tele_text": "实现一个swiftu. I w list组件支持下拉刷新。",
+    "tele_cer": 0.3448275862068966,
+    "tele_errors": [
+      "英文术语错误"
+    ],
+    "sense_text": "",
+    "sense_cer": 1.0,
+    "sense_errors": [
+      "截断/漏字",
+      "英文术语错误"
+    ],
+    "chosen_text": "实现一个swiftu. I w list组件支持下拉刷新。",
+    "chosen_cer": 0.3448275862068966
+  },
+  {
+    "id": "17_term",
+    "ground_truth": "配置 FastAPI 的 CORS 和路由",
+    "tele_text": "配置fastip的course和路由",
+    "tele_cer": 0.5714285714285714,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "配置faestt app的coursese和路由。",
+    "sense_cer": 0.8095238095238095,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "配置fastip的course和路由",
+    "chosen_cer": 0.5714285714285714
+  },
+  {
+    "id": "18_term",
+    "ground_truth": "用 LangChain 连接 OpenAI 的 GPT 接口",
+    "tele_text": "用狼train连接open adgp.T接口",
+    "tele_cer": 0.6,
+    "tele_errors": [
+      "截断/漏字"
+    ],
+    "sense_text": "",
+    "sense_cer": 1.0,
+    "sense_errors": [
+      "截断/漏字"
+    ],
+    "chosen_text": "用狼train连接open adgp.T接口",
+    "chosen_cer": 0.6
+  },
+  {
+    "id": "19_term",
+    "ground_truth": "把 ChatGPT 的回复转成 Claude 的 Prompt 格式",
+    "tele_text": "把chatgt的回复转成cloud prompt格式。",
+    "tele_cer": 0.4411764705882353,
+    "tele_errors": [
+      "截断/漏字"
+    ],
+    "sense_text": "把chat GTT的回复转成cloud prompt格式。",
+    "sense_cer": 0.4117647058823529,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "把chat GTT的回复转成cloud prompt格式。",
+    "chosen_cer": 0.4117647058823529
+  },
+  {
+    "id": "20_code",
+    "ground_truth": "创建一个 TypeScript 接口定义用户数据",
+    "tele_text": "创建一个type script接口定义用户数据。",
+    "tele_cer": 0.25,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "创建一个typepescript接口定义用户数据。",
+    "sense_cer": 0.2916666666666667,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "创建一个type script接口定义用户数据。",
+    "chosen_cer": 0.25
+  },
+  {
+    "id": "21_code",
+    "ground_truth": "用 Node.js 写一个 Express 中间件",
+    "tele_text": "用notejs写一个express中间键。",
+    "tele_cer": 0.4,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "用note jS写一个express中间键。",
+    "sense_cer": 0.44,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "用notejs写一个express中间键。",
+    "chosen_cer": 0.4
+  },
+  {
+    "id": "22_code",
+    "ground_truth": "写一个 React Hook 处理表单验证",
+    "tele_text": "写一个react处理表单验证",
+    "tele_cer": 0.38095238095238093,
+    "tele_errors": [
+      "截断/漏字"
+    ],
+    "sense_text": "写一个react处理表单验证。",
+    "sense_cer": 0.42857142857142855,
+    "sense_errors": [
+      "截断/漏字"
+    ],
+    "chosen_text": "写一个react处理表单验证",
+    "chosen_cer": 0.38095238095238093
+  },
+  {
+    "id": "23_professional",
+    "ground_truth": "TeleSpeech 和 SenseVoice 的识别准确率对比测试",
+    "tele_text": "Tell speech和sense voice的识别准确率对比测试",
+    "tele_cer": 0.2647058823529412,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "",
+    "sense_cer": 1.0,
+    "sense_errors": [
+      "截断/漏字"
+    ],
+    "chosen_text": "Tell speech和sense voice的识别准确率对比测试",
+    "chosen_cer": 0.2647058823529412
+  },
+  {
+    "id": "24_professional",
+    "ground_truth": "用 Gradio 和 Streamlit 搭建一个 RAG 演示界面",
+    "tele_text": "用gradio和stream搭建一个演示界面。",
+    "tele_cer": 0.4411764705882353,
+    "tele_errors": [
+      "截断/漏字",
+      "英文术语错误"
+    ],
+    "sense_text": "用gradio和streamlit搭建一个with演示界面。",
+    "sense_cer": 0.35294117647058826,
+    "sense_errors": [
+      "英文术语错误"
+    ],
+    "chosen_text": "用gradio和streamlit搭建一个with演示界面。",
+    "chosen_cer": 0.35294117647058826
+  },
+  {
+    "id": "25_professional",
+    "ground_truth": "Agent 和 Prompt Engineering 的最佳实践总结",
+    "tele_text": "Agent和prompt engineering的最佳实践总结。",
+    "tele_cer": 0.17647058823529413,
+    "tele_errors": [
+      "错字/同音字"
+    ],
+    "sense_text": "agent和prompt engineering的最佳实践总结。",
+    "sense_cer": 0.20588235294117646,
+    "sense_errors": [
+      "错字/同音字"
+    ],
+    "chosen_text": "Agent和prompt engineering的最佳实践总结。",
+    "chosen_cer": 0.17647058823529413
+  }
+]

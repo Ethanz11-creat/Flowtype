@@ -11,6 +11,11 @@ let package = Package(
         .executableTarget(
             name: "LangStream",
             dependencies: [],
+            path: "Sources/langstream",
+            resources: [
+                .copy("Resources/tech_terms.json"),
+                .copy("Resources/filler_words.json")
+            ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"]) // 允许使用 @main
             ]

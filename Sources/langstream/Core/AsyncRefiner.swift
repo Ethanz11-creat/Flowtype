@@ -1,12 +1,13 @@
 import Foundation
 
 /// Manages asynchronous refinement:
-/// 1. Concurrent cloud ASR (TeleSpeech + SenseVoice race)
+/// 1. Concurrent cloud ASR (TeleSpeech + SenseVoice race with scoring)
 /// 2. Non-blocking LLM polish (UI only)
 @MainActor
 final class AsyncRefiner {
     private let speechRouter: SpeechRouter
     private let llmService: LLMService
+    private let scorer = ASRResultScorer()
 
     init(speechRouter: SpeechRouter, llmService: LLMService) {
         self.speechRouter = speechRouter
@@ -15,7 +16,60 @@ final class AsyncRefiner {
 
     // MARK: - Public API
 
-    /// Try TeleSpeech first, fallback to SenseVoice if it fails/timeouts
+    /// Transcribe audio using parallel TeleSpeech + SenseVoice with result scoring.
+    /// Falls back to sequential if ASR_STRATEGY=fallback.
+    func transcribeWithScoring(audioData: Data) async -> TranscriptionResult? {
+        let strategy = Configuration.shared.asrStrategy
+
+        if strategy == "fallback" {
+            return await transcribeWithFallback(audioData: audioData)
+        }
+
+        // Parallel strategy
+        let teleTask = Task {
+            try? await self.speechRouter.primaryProvider.transcribe(
+                audioData: audioData,
+                timeout: 15
+            )
+        }
+        let senseTask = Task {
+            try? await self.speechRouter.fallbackProvider.transcribe(
+                audioData: audioData,
+                timeout: 10
+            )
+        }
+
+        let teleText = await teleTask.value
+        let senseText = await senseTask.value
+
+        var results: [ASRScoredResult] = []
+
+        if let text = teleText, !text.isEmpty {
+            let scored = scorer.score(text, provider: "TeleSpeech")
+            results.append(scored)
+            print("[AsyncRefiner] TeleSpeech raw: '\(text)' score: \(String(format: "%.2f", scored.score))")
+        } else {
+            print("[AsyncRefiner] TeleSpeech failed or empty")
+        }
+
+        if let text = senseText, !text.isEmpty {
+            let scored = scorer.score(text, provider: "SenseVoice")
+            results.append(scored)
+            print("[AsyncRefiner] SenseVoice raw: '\(text)' score: \(String(format: "%.2f", scored.score))")
+        } else {
+            print("[AsyncRefiner] SenseVoice failed or empty")
+        }
+
+        guard let best = results.max(by: { $0.score < $1.score }) else {
+            return nil
+        }
+
+        let isFallback = best.provider != "TeleSpeech"
+        print("[AsyncRefiner] Selected: \(best.provider) with score \(String(format: "%.2f", best.score))")
+        return TranscriptionResult(text: best.text, provider: best.provider, isFallback: isFallback, duration: 0)
+    }
+
+    /// Original sequential fallback (kept for compatibility and env override).
     func transcribeWithFallback(audioData: Data) async -> TranscriptionResult? {
         // TeleSpeech first — usually better quality for Chinese
         do {

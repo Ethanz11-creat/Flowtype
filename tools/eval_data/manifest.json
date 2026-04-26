@@ -1,0 +1,127 @@
+[
+  {
+    "id": "01_short",
+    "audio": "samples/01_short.wav",
+    "ground_truth": "打开设置页面"
+  },
+  {
+    "id": "02_short",
+    "audio": "samples/02_short.wav",
+    "ground_truth": "保存当前文件"
+  },
+  {
+    "id": "03_short",
+    "audio": "samples/03_short.wav",
+    "ground_truth": "运行单元测试"
+  },
+  {
+    "id": "04_long",
+    "audio": "samples/04_long.wav",
+    "ground_truth": "请帮我检查一下这个函数里面是不是有空指针异常的风险"
+  },
+  {
+    "id": "05_long",
+    "audio": "samples/05_long.wav",
+    "ground_truth": "我想在这个页面添加一个下拉刷新功能，用 SwiftUI 实现"
+  },
+  {
+    "id": "06_colloquial",
+    "audio": "samples/06_colloquial.wav",
+    "ground_truth": "那个帮我看看这个报错是什么意思啊"
+  },
+  {
+    "id": "07_colloquial",
+    "audio": "samples/07_colloquial.wav",
+    "ground_truth": "就是我想改一下这里的样式，然后那个按钮颜色也改一下"
+  },
+  {
+    "id": "08_filler",
+    "audio": "samples/08_filler.wav",
+    "ground_truth": "嗯那个帮我写一个 RAG 的检索模块"
+  },
+  {
+    "id": "09_filler",
+    "audio": "samples/09_filler.wav",
+    "ground_truth": "然后然后我想用 LangGraph 实现一个 Agent 工作流"
+  },
+  {
+    "id": "10_coding",
+    "audio": "samples/10_coding.wav",
+    "ground_truth": "定义一个泛型函数，输入数组返回最大值"
+  },
+  {
+    "id": "11_coding",
+    "audio": "samples/11_coding.wav",
+    "ground_truth": "帮我写一个 Docker Compose 配置文件，包含 Redis 和 PostgreSQL"
+  },
+  {
+    "id": "12_english_tech",
+    "audio": "samples/12_english_tech.wav",
+    "ground_truth": "配置一下 Kubernetes 的 Deployment 和 Service"
+  },
+  {
+    "id": "13_english_tech",
+    "audio": "samples/13_english_tech.wav",
+    "ground_truth": "用 Tailwind CSS 写一个响应式导航栏"
+  },
+  {
+    "id": "14_mixed",
+    "audio": "samples/14_mixed.wav",
+    "ground_truth": "把这个 Notion 页面的内容同步到 GitHub 仓库"
+  },
+  {
+    "id": "15_mixed",
+    "audio": "samples/15_mixed.wav",
+    "ground_truth": "用 DeepSeek 模型做一个 Prompt 优化工具"
+  },
+  {
+    "id": "16_term",
+    "audio": "samples/16_term.wav",
+    "ground_truth": "实现一个 SwiftUI 的 List 组件，支持下拉刷新"
+  },
+  {
+    "id": "17_term",
+    "audio": "samples/17_term.wav",
+    "ground_truth": "配置 FastAPI 的 CORS 和路由"
+  },
+  {
+    "id": "18_term",
+    "audio": "samples/18_term.wav",
+    "ground_truth": "用 LangChain 连接 OpenAI 的 GPT 接口"
+  },
+  {
+    "id": "19_term",
+    "audio": "samples/19_term.wav",
+    "ground_truth": "把 ChatGPT 的回复转成 Claude 的 Prompt 格式"
+  },
+  {
+    "id": "20_code",
+    "audio": "samples/20_code.wav",
+    "ground_truth": "创建一个 TypeScript 接口定义用户数据"
+  },
+  {
+    "id": "21_code",
+    "audio": "samples/21_code.wav",
+    "ground_truth": "用 Node.js 写一个 Express 中间件"
+  },
+  {
+    "id": "22_code",
+    "audio": "samples/22_code.wav",
+    "ground_truth": "写一个 React Hook 处理表单验证"
+  },
+  {
+    "id": "23_professional",
+    "audio": "samples/23_professional.wav",
+    "ground_truth": "TeleSpeech 和 SenseVoice 的识别准确率对比测试"
+  },
+  {
+    "id": "24_professional",
+    "audio": "samples/24_professional.wav",
+    "ground_truth": "用 Gradio 和 Streamlit 搭建一个 RAG 演示界面"
+  },
+  {
+    "id": "25_professional",
+    "audio": "samples/25_professional.wav",
+    "ground_truth": "Agent 和 Prompt Engineering 的最佳实践总结"
+  }
+]
