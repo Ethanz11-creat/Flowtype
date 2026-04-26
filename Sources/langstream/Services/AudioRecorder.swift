@@ -11,6 +11,7 @@ final class AudioRecorder: @unchecked Sendable {
     private var engine: AVAudioEngine?
     private nonisolated(unsafe) var audioBuffer: AVAudioPCMBuffer?
     private nonisolated(unsafe) var isRecording = false
+    private nonisolated(unsafe) var isStopping = false
     private nonisolated(unsafe) var amplitudeContinuation: AsyncStream<Float>.Continuation?
 
     // Phase 2: Segment buffering for real-time refinement
@@ -59,6 +60,7 @@ final class AudioRecorder: @unchecked Sendable {
 
         audioBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16000 * 60)!
         isRecording = true
+        isStopping = false
         tapCallCount = 0
         segmentBuffers = []
         currentSegmentBuffer = nil
@@ -71,8 +73,7 @@ final class AudioRecorder: @unchecked Sendable {
                     print("[AudioRecorder] Tap callback: self is nil")
                     return
                 }
-                guard self.isRecording else {
-                    print("[AudioRecorder] Tap callback: isRecording=false, skipping")
+                guard self.isRecording || self.isStopping else {
                     return
                 }
 
@@ -158,13 +159,14 @@ final class AudioRecorder: @unchecked Sendable {
                         sum += abs(data[i])
                     }
                     let avg = frames > 0 ? sum / Float(frames) : 0
-                    continuation.yield(avg)
+                    self.amplitudeContinuation?.yield(avg)
                 }
             }
 
             do {
+                freshEngine.prepare()
                 try freshEngine.start()
-                print("[AudioRecorder] Engine started successfully")
+                print("[AudioRecorder] Engine prepared and started successfully")
             } catch {
                 print("[AudioRecorder] Engine start FAILED: \(error)")
                 continuation.finish()
@@ -188,6 +190,10 @@ final class AudioRecorder: @unchecked Sendable {
             print("  - AVAudioEngine failed to start")
         }
 
+        // Graceful stop: allow final buffer to be processed before cutting off
+        isStopping = true
+        Thread.sleep(forTimeInterval: 0.05) // 50ms grace period for last frame
+
         // Prevent new callbacks from writing
         isRecording = false
         amplitudeContinuation?.finish()
@@ -197,6 +203,7 @@ final class AudioRecorder: @unchecked Sendable {
         engine?.stop()
         engine?.inputNode.removeTap(onBus: 0)
         engine = nil
+        isStopping = false
 
         // Flush partial segment
         if let segBuffer = currentSegmentBuffer, segBuffer.frameLength > 0 {

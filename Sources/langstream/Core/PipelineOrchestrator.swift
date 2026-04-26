@@ -93,6 +93,7 @@ final class PipelineOrchestrator {
         guard let audioData = audioData, !audioData.isEmpty else {
             print("[PipelineOrchestrator] Audio data is empty")
             self.appState.showError("录音数据为空")
+            WindowManager.shared.hide()
             return
         }
 
@@ -110,14 +111,28 @@ final class PipelineOrchestrator {
         print("[PipelineOrchestrator] Starting cloud ASR...")
 
         Task { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                print("[PipelineOrchestrator] Self deallocated during ASR")
+                return
+            }
 
             // Parallel TeleSpeech + SenseVoice with scoring
             let asrResult = await self.asyncRefiner.transcribeWithScoring(audioData: audioData)
 
-            guard let result = asrResult, !result.text.isEmpty else {
-                print("[PipelineOrchestrator] Cloud ASR returned empty")
-                self.appState.showError("未能识别到语音")
+            // Branch 1: Both providers completely failed (nil result)
+            guard let result = asrResult else {
+                print("[PipelineOrchestrator] Cloud ASR failed: no result from any provider")
+                self.appState.showError("语音识别失败，请重试")
+                WindowManager.shared.hide()
+                self.appState.transition(to: .idle)
+                return
+            }
+
+            // Branch 2: ASR returned empty text — silently return to idle, no injection
+            if result.text.isEmpty {
+                print("[PipelineOrchestrator] Cloud ASR returned empty text, skipping injection")
+                WindowManager.shared.hide()
+                self.appState.transition(to: .idle)
                 return
             }
 
@@ -128,10 +143,19 @@ final class PipelineOrchestrator {
                 print("[PipelineOrchestrator] Post-processed: '\(result.text)' -> '\(processedText)'")
             }
 
+            // Branch 3: Post-processing stripped everything — fallback to raw text
+            let finalText: String
+            if processedText.isEmpty {
+                print("[PipelineOrchestrator] Post-processed text is empty, falling back to raw ASR text")
+                finalText = result.text.trimmingCharacters(in: .whitespaces)
+            } else {
+                finalText = processedText
+            }
+
             // 5. Display recognized text in capsule (local rendering)
-            self.appState.recognizedText = processedText
-            self.appState.previewText = processedText
-            print("[PipelineOrchestrator] Recognized: '\(processedText)' from \(result.provider)")
+            self.appState.recognizedText = finalText
+            self.appState.previewText = finalText
+            print("[PipelineOrchestrator] Recognized: '\(finalText)' from \(result.provider)")
 
             // 6. Hide window before injection so focus returns to previous app
             WindowManager.shared.hide()
@@ -140,19 +164,19 @@ final class PipelineOrchestrator {
 
             // 7. Inject final text
             self.appState.transition(to: .injecting)
-            print("[PipelineOrchestrator] Injecting text...")
+            print("[PipelineOrchestrator] Injecting '\(finalText)'...")
             do {
-                try await KeyboardInjector.insertText(processedText)
-                print("[PipelineOrchestrator] Text injected")
+                try await KeyboardInjector.insertText(finalText)
+                print("[PipelineOrchestrator] Text injected successfully")
             } catch {
                 print("[PipelineOrchestrator] Injection failed: \(error)")
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(processedText, forType: .string)
+                NSPasteboard.general.setString(finalText, forType: .string)
                 self.appState.showError("已复制到剪贴板")
             }
 
             // 8. Optional background LLM polish (UI only, no re-injection)
-            await self.asyncRefiner.polishIfNeeded(text: processedText, appState: self.appState)
+            await self.asyncRefiner.polishIfNeeded(text: finalText, appState: self.appState)
 
             // Hide window after everything completes
             WindowManager.shared.hide()
