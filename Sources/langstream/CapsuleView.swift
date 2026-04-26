@@ -137,43 +137,20 @@ struct CapsuleView: View {
     }
 }
 
-// Circular avatar/status icon with tap interaction
+// Circular avatar/status icon (display only, no click interaction)
 struct StatusAvatar: View {
     let state: RecordingState
-    @State private var isPressed = false
-    @State private var isHovered = false
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(avatarColor.opacity(0.15))
                 .frame(width: 36, height: 36)
-                .scaleEffect(isPressed ? 0.85 : (isHovered ? 1.1 : 1.0))
-                .animation(.easeInOut(duration: 0.15), value: isPressed)
-                .animation(.easeInOut(duration: 0.2), value: isHovered)
 
             Image(systemName: iconName)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundColor(avatarColor)
-                .scaleEffect(isPressed ? 0.85 : 1.0)
-                .animation(.easeInOut(duration: 0.15), value: isPressed)
         }
-        .onTapGesture {
-            PipelineOrchestrator.shared.toggleRecording()
-        }
-        .onHover { hovering in
-            isHovered = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in isPressed = true }
-                .onEnded { _ in isPressed = false }
-        )
     }
 
     private var iconName: String {

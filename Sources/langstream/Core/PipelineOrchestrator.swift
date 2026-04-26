@@ -15,7 +15,9 @@ final class PipelineOrchestrator {
     private lazy var asyncRefiner = AsyncRefiner(speechRouter: speechRouter, llmService: llmService)
 
     private var recordingTask: Task<Void, Never>?
-    private(set) var isRecording = false
+
+    /// Derived from appState — single source of truth.
+    var isRecording: Bool { appState.state.isRecordingIndicator }
 
     var state: AppState { appState }
 
@@ -29,59 +31,63 @@ final class PipelineOrchestrator {
 
     private func startRecording() {
         print("[PipelineOrchestrator] startRecording called")
-        isRecording = true
         appState.clearTranscription()
+
+        // Show window immediately with correct state so UI never shows stale .idle
+        appState.transition(to: .recording(elapsedSeconds: 0))
         WindowManager.shared.showWindow()
 
         recordingTask = Task { [weak self] in
             guard let self = self else { return }
 
             do {
-                // 1. Check microphone permission
+                // 1. Check microphone permission (fast path if already granted)
                 print("[PipelineOrchestrator] Requesting mic permission...")
-                self.appState.transition(to: .requestingPermission)
                 let granted = await self.audioRecorder.requestPermission()
                 guard granted else {
                     print("[PipelineOrchestrator] Mic permission denied")
                     self.appState.showError("请在系统设置中允许麦克风访问")
-                    self.isRecording = false
                     return
                 }
                 print("[PipelineOrchestrator] Mic permission granted")
+                try Task.checkCancellation()
 
                 // 2. Start AudioRecorder
-                self.appState.transition(to: .recording(elapsedSeconds: 0))
                 print("[PipelineOrchestrator] Starting AudioRecorder...")
                 let amplitudeStream = try await self.audioRecorder.startRecording()
                 print("[PipelineOrchestrator] AudioRecorder started")
 
-                // 3. Consume amplitude stream (blocks until cancelled)
+                // 3. Consume amplitude stream (blocks until stream finishes or task cancelled)
                 print("[PipelineOrchestrator] Waiting for audio stream...")
                 for await amplitude in amplitudeStream {
-                    if Task.isCancelled {
-                        print("[PipelineOrchestrator] Recording task cancelled")
-                        break
-                    }
+                    try Task.checkCancellation()
                     self.appState.updateAmplitude(amplitude)
                 }
                 print("[PipelineOrchestrator] Audio stream ended")
 
+            } catch is CancellationError {
+                print("[PipelineOrchestrator] Recording task cancelled")
             } catch {
                 print("[PipelineOrchestrator] Recording failed: \(error)")
                 self.appState.showError("录音启动失败: \(error.localizedDescription)")
-                self.isRecording = false
             }
         }
     }
 
     private func stopRecording() {
-        print("[PipelineOrchestrator] stopRecording called")
-        isRecording = false
+        print("[PipelineOrchestrator] stopRecording called, currentState=\(appState.state)")
+
+        // Defensive: if somehow we're not actually recording, just bail
+        guard isRecording else {
+            print("[PipelineOrchestrator] stopRecording: not in recording state, bailing")
+            return
+        }
 
         // 1. Stop AudioRecorder
         print("[PipelineOrchestrator] Stopping AudioRecorder...")
         let (audioData, _) = self.audioRecorder.stopRecording()
         recordingTask?.cancel()
+        recordingTask = nil
 
         // 2. Validate audio data (only real blocker)
         guard let audioData = audioData, !audioData.isEmpty else {

@@ -203,8 +203,8 @@ class WindowManager: ObservableObject {
     func showWindow() {
         guard let panel = panel else { return }
         if let screen = NSScreen.main {
-            let x = (screen.frame.width - 320) / 2
-            let y = screen.frame.height * 0.82
+            let x = screen.visibleFrame.midX - 160
+            let y = screen.visibleFrame.minY + 40
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
         panel.makeKeyAndOrderFront(nil)
