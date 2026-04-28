@@ -166,9 +166,9 @@ final class PipelineOrchestrator {
 
             // 3. Build ordered text from completed segments
             let orderedSegmentTexts = (0..<self.nextSegmentIndex).compactMap { self.segmentResults[$0] }
-            let combinedSegmentText = orderedSegmentTexts.joined(separator: "\n")
+            let combinedSegmentText = SegmentMerger.merge(orderedSegmentTexts)
             if !orderedSegmentTexts.isEmpty {
-                print("[PipelineOrchestrator] Combined \(orderedSegmentTexts.count) segments")
+                print("[PipelineOrchestrator] Combined \(orderedSegmentTexts.count) segments (deduplicated)")
             }
 
             // 4. ASR the final partial buffer

@@ -228,7 +228,7 @@ final class AudioRecorder: @unchecked Sendable {
 
         guard let buffer = audioBuffer else {
             print("[AudioRecorder] stopRecording: audioBuffer is nil")
-            return (segments, nil)
+            return ([], nil)
         }
 
         let rawFrames = Int(buffer.frameLength)
@@ -254,7 +254,7 @@ final class AudioRecorder: @unchecked Sendable {
             dumpWAVData(data)
         }
 
-        return (segments, finalData)
+        return ([], finalData)
     }
 
     private func dumpWAVData(_ data: Data) {
@@ -262,7 +262,7 @@ final class AudioRecorder: @unchecked Sendable {
         formatter.dateFormat = "yyyyMMdd_HHmmss"
         let filename = "dump_\(formatter.string(from: Date())).wav"
         guard let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Logs/langstream", isDirectory: true) else { return }
+            .appendingPathComponent("Logs/flowtype", isDirectory: true) else { return }
 
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

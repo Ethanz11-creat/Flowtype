@@ -39,6 +39,26 @@
             "target": "LangStream",
             "configuration": "release",
             "preLaunchTask": "swift: Build Release LangStream"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:langstream}",
+            "name": "Debug FlowType",
+            "target": "FlowType",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug FlowType"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:langstream}",
+            "name": "Release FlowType",
+            "target": "FlowType",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release FlowType"
         }
     ]
 }

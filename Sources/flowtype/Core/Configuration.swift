@@ -32,9 +32,9 @@ struct Configuration {
         env["ASR_STRATEGY"] ?? "parallel"
     }
 
-    // Debug: dump audio to ~/Library/Logs/langstream/
+    // Debug: dump audio to ~/Library/Logs/flowtype/
     var dumpAudio: Bool {
-        env["LANGSTREAM_DUMP_AUDIO"] == "1"
+        env["FLOWTYPE_DUMP_AUDIO"] == "1"
     }
 
     // Post-processing switches

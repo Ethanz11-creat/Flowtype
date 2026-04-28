@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 @main
-struct LangStreamApp: App {
+struct FlowTypeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {

@@ -3,15 +3,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "LangStream",
+    name: "FlowType",
     platforms: [
         .macOS(.v14) // 设置支持的系统版本
     ],
     targets: [
         .executableTarget(
-            name: "LangStream",
+            name: "FlowType",
             dependencies: [],
-            path: "Sources/langstream",
+            path: "Sources/flowtype",
             resources: [
                 .copy("Resources/tech_terms.json"),
                 .copy("Resources/filler_words.json")
