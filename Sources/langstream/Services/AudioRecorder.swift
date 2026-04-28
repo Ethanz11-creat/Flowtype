@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import os
 
 enum AudioRecorderError: Error, Equatable {
     case permissionDenied
@@ -6,18 +7,35 @@ enum AudioRecorderError: Error, Equatable {
     case formatCreationFailed
 }
 
+/// Output streams from a recording session.
+struct RecordingOutput: @unchecked Sendable {
+    /// VU-meter amplitude stream (for UI animation).
+    let amplitude: AsyncStream<Float>
+    /// Audio segment stream: each Data is a complete WAV file (16kHz mono 16-bit).
+    /// Emitted whenever the 60s buffer fills up; the final partial segment is
+    /// NOT emitted here — it is returned by `stopRecording()`.
+    let segments: AsyncStream<Data>
+}
+
 final class AudioRecorder: @unchecked Sendable {
     // NOTE: Create a fresh engine for each session to avoid state issues.
     private var engine: AVAudioEngine?
     private nonisolated(unsafe) var audioBuffer: AVAudioPCMBuffer?
-    private nonisolated(unsafe) var isRecording = false
-    private nonisolated(unsafe) var isStopping = false
     private nonisolated(unsafe) var amplitudeContinuation: AsyncStream<Float>.Continuation?
+    private nonisolated(unsafe) var segmentContinuation: AsyncStream<Data>.Continuation?
 
-    // Phase 2: Segment buffering for real-time refinement
-    private nonisolated(unsafe) var segmentBuffers: [Data] = []
-    private nonisolated(unsafe) var currentSegmentBuffer: AVAudioPCMBuffer?
-    private let segmentDurationSeconds: Double = 3.0
+    // Recording state — protected by stateLock because accessed from both
+    // main thread (start/stop) and audio tap callback thread.
+    private let stateLock = OSAllocatedUnfairLock()
+    private var _isRecording = false
+    private var _isStopping = false
+
+    var isRecording: Bool {
+        stateLock.withLock { _isRecording }
+    }
+    var isStopping: Bool {
+        stateLock.withLock { _isStopping }
+    }
 
     // Diagnostics
     private nonisolated(unsafe) var tapCallCount = 0
@@ -31,7 +49,7 @@ final class AudioRecorder: @unchecked Sendable {
     }
 
     // nonisolated — ensures installTap closure is NOT created on @MainActor
-    nonisolated func startRecording() async throws -> AsyncStream<Float> {
+    nonisolated func startRecording() async throws -> RecordingOutput {
         guard await requestPermission() else {
             throw AudioRecorderError.permissionDenied
         }
@@ -59,13 +77,19 @@ final class AudioRecorder: @unchecked Sendable {
         }
 
         audioBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16000 * 60)!
-        isRecording = true
-        isStopping = false
+        stateLock.withLock {
+            _isRecording = true
+            _isStopping = false
+        }
         tapCallCount = 0
-        segmentBuffers = []
-        currentSegmentBuffer = nil
 
-        return AsyncStream { continuation in
+        // Segment stream — emitted when 60s buffer rolls over
+        let segmentStream = AsyncStream<Data> { continuation in
+            self.segmentContinuation = continuation
+        }
+
+        // Amplitude stream — VU meter
+        let amplitudeStream = AsyncStream<Float> { continuation in
             self.amplitudeContinuation = continuation
 
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
@@ -119,36 +143,20 @@ final class AudioRecorder: @unchecked Sendable {
                         mainBuffer.frameLength = AVAudioFrameCount(currentLength + newLength)
                         print("[AudioRecorder] Tap #\(callIndex): appended to audioBuffer, totalFrames=\(currentLength + newLength)")
                     } else {
-                        print("[AudioRecorder] WARNING: Recording exceeded 60s, truncating")
+                        // Buffer full: flush as a completed segment, reset, then append
+                        print("[AudioRecorder] Tap #\(callIndex): audioBuffer full (60s), flushing segment")
+                        if let wavData = AudioFormatConverter.normalizeAndConvertToWAV(mainBuffer) {
+                            self.segmentContinuation?.yield(wavData)
+                        }
+                        mainBuffer.frameLength = 0
+                        for i in 0..<newLength {
+                            mainData[i] = convertedData[i]
+                        }
+                        mainBuffer.frameLength = AVAudioFrameCount(newLength)
+                        print("[AudioRecorder] Tap #\(callIndex): reset buffer, new totalFrames=\(newLength)")
                     }
                 } else {
                     print("[AudioRecorder] Tap #\(callIndex): audioBuffer is nil or channel data missing")
-                }
-
-                // Phase 2: Append to current segment buffer
-                if self.currentSegmentBuffer == nil {
-                    self.currentSegmentBuffer = self.createSegmentBuffer(format: format)
-                }
-                if let segBuffer = self.currentSegmentBuffer,
-                   let segData = segBuffer.floatChannelData?[0],
-                   let convertedData = convertedBuffer.floatChannelData?[0] {
-                    let segCurrent = Int(segBuffer.frameLength)
-                    let segNew = Int(convertedBuffer.frameLength)
-                    let segCapacity = Int(segBuffer.frameCapacity)
-                    let toCopy = min(segNew, segCapacity - segCurrent)
-                    if toCopy > 0 {
-                        for i in 0..<toCopy {
-                            segData[segCurrent + i] = convertedData[i]
-                        }
-                        segBuffer.frameLength += AVAudioFrameCount(toCopy)
-                    }
-                    // If segment is full, convert to WAV and start new segment
-                    if segBuffer.frameLength >= segBuffer.frameCapacity {
-                        if let wavData = AudioFormatConverter.convertToWAV(segBuffer) {
-                            self.segmentBuffers.append(wavData)
-                        }
-                        self.currentSegmentBuffer = self.createSegmentBuffer(format: format)
-                    }
                 }
 
                 // Yield average amplitude for VU meter
@@ -174,13 +182,19 @@ final class AudioRecorder: @unchecked Sendable {
 
             continuation.onTermination = { [weak self] _ in
                 Task { @MainActor [weak self] in
-                    _ = self?.stopRecording()
+                    guard let self = self, !self.isRecording && !self.isStopping else { return }
+                    _ = self.stopRecording()
                 }
             }
         }
+
+        return RecordingOutput(amplitude: amplitudeStream, segments: segmentStream)
     }
 
-    nonisolated func stopRecording() -> (fullData: Data?, segments: [Data]) {
+    /// Stops recording and returns all audio data.
+    /// - `segments`: completed 60s WAV segments that were emitted during recording
+    /// - `finalData`: the last (partial) segment as WAV, trimmed and normalized
+    nonisolated func stopRecording() -> (segments: [Data], finalData: Data?) {
         print("[AudioRecorder] stopRecording called, tapCallCount=\(tapCallCount)")
 
         if tapCallCount == 0 {
@@ -190,35 +204,31 @@ final class AudioRecorder: @unchecked Sendable {
             print("  - AVAudioEngine failed to start")
         }
 
-        // Graceful stop: allow final buffer to be processed before cutting off
-        isStopping = true
-        Thread.sleep(forTimeInterval: 0.05) // 50ms grace period for last frame
-
-        // Prevent new callbacks from writing
-        isRecording = false
+        // Graceful stop: tell tap callbacks to finish their current frame
+        stateLock.withLock {
+            _isStopping = true
+            _isRecording = false
+        }
         amplitudeContinuation?.finish()
         amplitudeContinuation = nil
+        segmentContinuation?.finish()
+        segmentContinuation = nil
 
         // Stop engine and remove tap
         engine?.stop()
         engine?.inputNode.removeTap(onBus: 0)
         engine = nil
-        isStopping = false
-
-        // Flush partial segment
-        if let segBuffer = currentSegmentBuffer, segBuffer.frameLength > 0 {
-            if let wavData = AudioFormatConverter.convertToWAV(segBuffer) {
-                segmentBuffers.append(wavData)
-            }
+        stateLock.withLock {
+            _isStopping = false
         }
-        currentSegmentBuffer = nil
 
-        let segments = segmentBuffers
-        segmentBuffers = []
+        // Note: segmentContinuation yielded segments as they completed.
+        // We don't have a local buffer here; segments were consumed by the caller.
+        // The "finalData" is the last partial buffer.
 
         guard let buffer = audioBuffer else {
             print("[AudioRecorder] stopRecording: audioBuffer is nil")
-            return (nil, segments)
+            return (segments, nil)
         }
 
         let rawFrames = Int(buffer.frameLength)
@@ -229,9 +239,9 @@ final class AudioRecorder: @unchecked Sendable {
         let trimmedFrames = Int(trimmedBuffer.frameLength)
         print("[AudioRecorder] stopRecording: after trimSilence has \(trimmedFrames) frames")
 
-        let fullData = AudioFormatConverter.normalizeAndConvertToWAV(trimmedBuffer)
+        let finalData = AudioFormatConverter.normalizeAndConvertToWAV(trimmedBuffer)
 
-        if let data = fullData {
+        if let data = finalData {
             let payload = data.count - 44
             let duration = Double(payload) / 32000.0
             print("[AudioRecorder] stopRecording: final WAV \(data.count) bytes, ~\(String(format: "%.2f", duration))s")
@@ -240,20 +250,11 @@ final class AudioRecorder: @unchecked Sendable {
         }
 
         // Debug dump if enabled
-        if let data = fullData, Configuration.shared.dumpAudio {
+        if let data = finalData, Configuration.shared.dumpAudio {
             dumpWAVData(data)
         }
 
-        return (fullData, segments)
-    }
-
-    nonisolated func getSegmentCount() -> Int {
-        return segmentBuffers.count + (currentSegmentBuffer != nil ? 1 : 0)
-    }
-
-    private func createSegmentBuffer(format: AVAudioFormat) -> AVAudioPCMBuffer {
-        let frameCapacity = AVAudioFrameCount(format.sampleRate * segmentDurationSeconds)
-        return AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity)!
+        return (segments, finalData)
     }
 
     private func dumpWAVData(_ data: Data) {

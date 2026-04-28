@@ -25,22 +25,18 @@ final class AsyncRefiner {
             return await transcribeWithFallback(audioData: audioData)
         }
 
-        // Parallel strategy
-        let teleTask = Task {
-            try? await self.speechRouter.primaryProvider.transcribe(
-                audioData: audioData,
-                timeout: 15
-            )
-        }
-        let senseTask = Task {
-            try? await self.speechRouter.fallbackProvider.transcribe(
-                audioData: audioData,
-                timeout: 10
-            )
-        }
+        // Parallel strategy — async let ensures both start immediately
+        async let teleResult: String? = try? self.speechRouter.primaryProvider.transcribe(
+            audioData: audioData,
+            timeout: 8
+        )
+        async let senseResult: String? = try? self.speechRouter.fallbackProvider.transcribe(
+            audioData: audioData,
+            timeout: 5
+        )
 
-        let teleText = await teleTask.value
-        let senseText = await senseTask.value
+        let teleText = await teleResult
+        let senseText = await senseResult
 
         var results: [ASRScoredResult] = []
 
@@ -75,7 +71,7 @@ final class AsyncRefiner {
         do {
             let text = try await self.speechRouter.primaryProvider.transcribe(
                 audioData: audioData,
-                timeout: 15
+                timeout: 8
             )
             if !text.isEmpty {
                 print("[AsyncRefiner] TeleSpeech succeeded")
@@ -89,7 +85,7 @@ final class AsyncRefiner {
         do {
             let text = try await self.speechRouter.fallbackProvider.transcribe(
                 audioData: audioData,
-                timeout: 10
+                timeout: 5
             )
             if !text.isEmpty {
                 print("[AsyncRefiner] SenseVoice fallback succeeded")

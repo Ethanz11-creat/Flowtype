@@ -104,10 +104,14 @@ actor LLMService {
                             return
                         }
 
-                        if let chunkData = data.data(using: .utf8),
-                           let chunk = try? JSONDecoder().decode(StreamChunk.self, from: chunkData),
-                           let content = chunk.choices.first?.delta.content {
-                            continuation.yield(content)
+                        if let chunkData = data.data(using: .utf8) {
+                            if let chunk = try? JSONDecoder().decode(StreamChunk.self, from: chunkData),
+                               let content = chunk.choices.first?.delta.content {
+                                continuation.yield(content)
+                            } else if let raw = String(data: chunkData, encoding: .utf8) {
+                                // Log unparseable chunks so we can diagnose API changes
+                                print("[LLMService] Unparseable SSE chunk: \(raw)")
+                            }
                         }
                     }
                 }
