@@ -295,14 +295,7 @@ private struct DetailSection: View {
                 .textSelection(.enabled)
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .textBackgroundColor))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
-                )
+                .glassCard(cornerRadius: 8)
         }
     }
 }

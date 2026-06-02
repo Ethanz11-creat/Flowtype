@@ -70,14 +70,7 @@ struct VocabPage: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-        )
+        .glassCard()
     }
 
     // MARK: - Entry List
@@ -138,21 +131,14 @@ struct VocabPage: View {
             }
         }
         .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.blue.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.blue.opacity(0.1), lineWidth: 1)
-        )
+        .glassCard(cornerRadius: 10)
     }
 
     private func hintRow(icon: String, text: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 11))
-                .foregroundColor(.blue.opacity(0.7))
+                .foregroundColor(Brand.accent.opacity(0.7))
                 .frame(width: 16)
             Text(text)
                 .font(.system(size: 11))
@@ -170,7 +156,7 @@ struct VocabTag: View {
             if entry.source == .autoDetected {
                 Image(systemName: "wand.and.stars")
                     .font(.system(size: 9))
-                    .foregroundColor(.blue)
+                    .foregroundColor(Brand.accent)
             }
 
             Text(entry.phrase)
@@ -197,11 +183,11 @@ struct VocabTag: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(entry.enabled ? Color.blue.opacity(0.08) : Color.secondary.opacity(0.06))
+                .fill(entry.enabled ? Brand.accent.opacity(0.10) : Color.secondary.opacity(0.06))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(entry.enabled ? Color.blue.opacity(0.25) : Color.secondary.opacity(0.15), lineWidth: 1)
+                .stroke(entry.enabled ? Brand.accent.opacity(0.30) : Color.secondary.opacity(0.15), lineWidth: 1)
         )
         .opacity(entry.enabled ? 1.0 : 0.5)
         .contextMenu {

@@ -85,7 +85,7 @@ struct StylePage: View {
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.blue)
+                                .background(Brand.accent)
                                 .clipShape(Capsule())
                         }
 
@@ -154,14 +154,7 @@ struct StylePage: View {
                 )
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(pack.active ? Color.blue.opacity(0.4) : Color.secondary.opacity(0.1), lineWidth: pack.active ? 2 : 1)
-        )
+        .glassCard(active: pack.active)
     }
 
     private func kindBadge(_ kind: StylePackKind) -> some View {
