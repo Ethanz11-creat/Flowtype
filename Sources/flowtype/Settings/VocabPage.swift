@@ -131,8 +131,8 @@ struct VocabPage: View {
                 .foregroundColor(.secondary)
 
             VStack(alignment: .leading, spacing: 4) {
-                hintRow(icon: "waveform", text: "词典中的词条会作为热词提示注入 ASR 上下文")
-                hintRow(icon: "sparkles", text: "润色时，启用的词条会被添加到系统提示词中")
+                hintRow(icon: "waveform", text: "启用的词条会作为识别提示注入本地 ASR，帮助模型认对这些专有名词")
+                hintRow(icon: "sparkles", text: "润色时，启用的词条会被添加到系统提示词中，优先使用这些写法")
                 hintRow(icon: "chart.bar", text: "命中次数统计每次识别结果中包含该词条的频率")
                 hintRow(icon: "text.badge.plus", text: "支持在 prompt 中使用 {{HOTWORDS}} 占位符精确控制注入位置")
             }

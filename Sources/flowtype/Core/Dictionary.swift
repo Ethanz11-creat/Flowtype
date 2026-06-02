@@ -1,5 +1,20 @@
 import Foundation
 
+/// Builds an ASR context hint from enabled dictionary phrases so Qwen3-ASR biases
+/// recognition toward the user's jargon. Capped to keep the decoder prompt small.
+func composeASRContext(_ phrases: [String], maxCount: Int = 50, maxChars: Int = 300) -> String? {
+    let cleaned = phrases
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .prefix(maxCount)
+    guard !cleaned.isEmpty else { return nil }
+    var joined = cleaned.joined(separator: "、")
+    // Truncates at a Character boundary (never splits a grapheme); may cut the last
+    // phrase mid-word, which is fine for an ASR bias hint.
+    if joined.count > maxChars { joined = String(joined.prefix(maxChars)) }
+    return joined
+}
+
 enum EntrySource: String, Codable {
     case manual, autoDetected
 }

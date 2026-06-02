@@ -52,12 +52,15 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                 context.statePublisher.send(.processing(provider: "Qwen3-ASR"))
             }
 
+            let asrLanguage = ConfigurationStore.shared.current.asrLanguage
+            let asrPhrases = await MainActor.run { DictionaryStore.shared.enabledPhrases }
+            let asrContext = composeASRContext(asrPhrases)
             let asrStart = Date()
             do {
                 finalASRText = try await speechRouter.qwenProvider.transcribe(
                     samples: rawSamples,
-                    language: nil,
-                    context: nil
+                    language: asrLanguage.qwenLanguageCode,
+                    context: asrContext
                 )
                 AppLogger.log("[ASRStage#\(sessionID)] Qwen3-ASR completed in \(String(format: "%.2f", Date().timeIntervalSince(asrStart)))s: \(finalASRText.count) chars")
             } catch is CancellationError {

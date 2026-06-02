@@ -36,6 +36,7 @@ enum SelfTest {
         testSSEParse(r)          // B8
         testConfigCorrupt(r)     // B9
         testInjectionSegmentation(r) // injection helpers
+        testASRWiring(r)         // ASR language + context
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -127,6 +128,22 @@ enum SelfTest {
         _ = ConfigurationStore(defaults: ud2, backupDirectory: tmp2)
         let backups2 = (try? FileManager.default.contentsOfDirectory(atPath: tmp2.path)) ?? []
         r.check(backups2.isEmpty, "B9 first launch writes no spurious backup")
+    }
+
+    // MARK: - ASR language + context wiring
+
+    static func testASRWiring(_ r: Reporter) {
+        r.check(WhisperLanguage.auto.qwenLanguageCode == nil, "ASR: auto → nil language hint")
+        r.check(WhisperLanguage.zh.qwenLanguageCode == "zh", "ASR: zh → zh")
+        r.check(WhisperLanguage.en.qwenLanguageCode == "en", "ASR: en → en")
+        r.eq(WhisperLanguage.en.appleLocaleIdentifier, "en-US", "ASR: en → en-US locale")
+        r.eq(WhisperLanguage.zh.appleLocaleIdentifier, "zh-CN", "ASR: zh → zh-CN locale")
+        r.eq(WhisperLanguage.auto.appleLocaleIdentifier, "zh-CN", "ASR: auto → zh-CN locale")
+        r.check(composeASRContext([]) == nil, "ASR: empty phrases → nil context")
+        r.check(composeASRContext(["  ", ""]) == nil, "ASR: blank phrases → nil context")
+        r.check(composeASRContext(["React", "SwiftUI"]) == "React、SwiftUI", "ASR: phrases joined")
+        let many = (0..<100).map { "w\($0)" }
+        r.check((composeASRContext(many) ?? "").count <= 300, "ASR: context capped to maxChars")
     }
 
     // MARK: - Injection segmentation (B-inject)

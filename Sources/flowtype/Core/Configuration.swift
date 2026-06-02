@@ -85,6 +85,16 @@ enum WhisperLanguage: String, Codable, CaseIterable {
         case .en: return "English"
         }
     }
+
+    /// Qwen3-ASR language hint. nil = auto-detect.
+    var qwenLanguageCode: String? {
+        self == .auto ? nil : rawValue
+    }
+
+    /// Apple Speech recognizer locale (live preview / fallback). `.auto` falls back to zh-CN.
+    var appleLocaleIdentifier: String {
+        self == .en ? "en-US" : "zh-CN"
+    }
 }
 
 // MARK: - Provider Presets

@@ -19,7 +19,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
     }
 
     init() {
-        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
+        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: ConfigurationStore.shared.current.asrLanguage.appleLocaleIdentifier))
         // Only use on-device recognition; if not supported, the recognizer is nil-effectively
         if let r = recognizer {
             AppLogger.log("[AppleSpeechProvider] init: recognizer available, supportsOnDevice=\(r.supportsOnDeviceRecognition), isAvailable=\(r.isAvailable)")
@@ -34,7 +34,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
 
     /// Check if on-device speech recognition is available on this Mac.
     static func isAvailable() -> Bool {
-        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")) else {
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: ConfigurationStore.shared.current.asrLanguage.appleLocaleIdentifier)) else {
             return false
         }
         return recognizer.isAvailable && recognizer.supportsOnDeviceRecognition
