@@ -131,7 +131,7 @@ final class AudioRecorder: @unchecked Sendable {
 
         let inputNode = freshEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
-        print("[AudioRecorder] Hardware input format: \(inputFormat)")
+        AppLogger.log("[AudioRecorder] Hardware input format: \(inputFormat)")
 
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -172,9 +172,13 @@ final class AudioRecorder: @unchecked Sendable {
                 }
             } else if let lastTap = lastTimestamp, now.timeIntervalSince(lastTap) > self.heartbeatTimeout {
                 guard self.isRecording && !self.isStopping else { return }
-                print("[AudioRecorder] HEARTBEAT FAILURE: No tap callbacks for \(self.heartbeatTimeout)s. Auto-stopping.")
+                AppLogger.log("[AudioRecorder] HEARTBEAT FAILURE: No tap callbacks for \(self.heartbeatTimeout)s. Auto-stopping.")
                 self.heartbeatTimer.cancel()
+                // Notify first (sets the freeze flag), then end the amplitude stream so
+                // RecordingStage's `for await` returns instead of suspending forever.
+                // finish() is idempotent, so a later stopRecording() is safe.
                 self.onRecordingFrozen?()
+                self.amplitudeContinuation?.finish()
             }
         }
 
@@ -230,9 +234,9 @@ final class AudioRecorder: @unchecked Sendable {
             do {
                 freshEngine.prepare()
                 try freshEngine.start()
-                print("[AudioRecorder] Engine prepared and started successfully")
+                AppLogger.log("[AudioRecorder] Engine prepared and started successfully")
             } catch {
-                print("[AudioRecorder] Engine start FAILED: \(error)")
+                AppLogger.log("[AudioRecorder] Engine start FAILED: \(error)")
                 let nsError = error as NSError
                 if nsError.domain == "com.apple.coreaudio.avfaudio" {
                     AppLogger.log("[AudioRecorder] CoreAudio error detected, device may have been disconnected")
@@ -247,7 +251,7 @@ final class AudioRecorder: @unchecked Sendable {
 
     nonisolated func stopRecording() {
         let tapCount = heartbeatLock.withLock { $0.tapCallCount }
-        print("[AudioRecorder] stopRecording called, tapCallCount=\(tapCount)")
+        AppLogger.log("[AudioRecorder] stopRecording called, tapCallCount=\(tapCount)")
 
         let wasRecording = stateLock.withLock {
             let was = _isRecording || _isStopping
@@ -256,12 +260,12 @@ final class AudioRecorder: @unchecked Sendable {
             return was
         }
         if !wasRecording {
-            print("[AudioRecorder] stopRecording: already stopped")
+            AppLogger.log("[AudioRecorder] stopRecording: already stopped")
             return
         }
 
         if heartbeatLock.withLock({ $0.tapCallCount }) == 0 {
-            print("[AudioRecorder] CRITICAL: No tap callbacks received.")
+            AppLogger.log("[AudioRecorder] CRITICAL: No tap callbacks received.")
         }
 
         heartbeatTimer.cancel()

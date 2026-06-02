@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import ApplicationServices
 import os
 
 enum InjectionError: Error {
@@ -55,36 +56,30 @@ struct KeyboardInjector {
         }
         let pasteboard = NSPasteboard.general
 
-        // 1. Save current clipboard contents (all types for each item)
-        let savedItems: [(types: [NSPasteboard.PasteboardType], dataMap: [NSPasteboard.PasteboardType: Data])]? =
-            pasteboard.pasteboardItems?.compactMap { item in
-                let types = item.types
-                var dataMap: [NSPasteboard.PasteboardType: Data] = [:]
-                for type in types {
-                    if let data = item.data(forType: type) {
-                        dataMap[type] = data
-                    }
-                }
-                return dataMap.isEmpty ? nil : (types: types, dataMap: dataMap)
-            }
+        // 1. Snapshot the current clipboard so we can restore it afterwards.
+        let snapshot = snapshotPasteboard(pasteboard)
+
+        // If the clipboard holds promise/lazy content we cannot faithfully capture
+        // (a copied file, image, on-demand RTF), do not clobber it: type the text
+        // instead when it is short enough for keystroke injection.
+        if snapshot.isLossy && text.count <= 100 && !text.contains("\n") && !text.contains("\r") {
+            AppLogger.log("[KeyboardInjector] Clipboard un-snapshottable; typing \(text.count) chars to preserve it")
+            try await typeText(text)
+            return
+        }
 
         // 2. Put our text on the clipboard
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // Defer: always restore clipboard on exit (success, throw, or cancellation)
+        // Defer: restore the original clipboard on exit — but ONLY if we captured it
+        // faithfully. Writing back a lossy snapshot would replace the user's rich
+        // clipboard with a stripped/empty copy, so in that case we leave our text.
         defer {
-            if let savedItems = savedItems, !savedItems.isEmpty {
-                pasteboard.clearContents()
-                var newItems: [NSPasteboardItem] = []
-                for (_, dataMap) in savedItems {
-                    let item = NSPasteboardItem()
-                    for (type, data) in dataMap {
-                        item.setData(data, forType: type)
-                    }
-                    newItems.append(item)
-                }
-                pasteboard.writeObjects(newItems)
+            if snapshot.isLossy {
+                AppLogger.log("[KeyboardInjector] Clipboard had un-snapshottable content; left injected text instead of restoring a degraded copy")
+            } else {
+                restore(snapshot, to: pasteboard)
             }
         }
 
@@ -112,9 +107,62 @@ struct KeyboardInjector {
         try await Task.sleep(nanoseconds: 5_000_000)
         cmdUp?.post(tap: .cghidEventTap)
 
-        // 4. Wait for paste to complete
-        try await Task.sleep(nanoseconds: 500_000_000) // 500ms — give target app time to read clipboard
-        // Clipboard restored by defer above
+        // 4. Wait for the target app to read the clipboard before the defer restores it.
+        // There is no API that signals "paste consumed" (a read does not bump
+        // changeCount), so this is a bounded best-effort wait that exits early only if
+        // the target app itself rewrites the clipboard.
+        let injectedChangeCount = pasteboard.changeCount
+        let deadline = Date().addingTimeInterval(1.0)
+        while Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000) // 20ms
+            if pasteboard.changeCount != injectedChangeCount { break }
+        }
+        // Clipboard restored by defer above (only when the snapshot was faithful)
+    }
+
+    // MARK: - Clipboard snapshot / restore (faithful round-trip detection)
+
+    struct PasteboardSnapshot {
+        let items: [[NSPasteboard.PasteboardType: Data]]
+        /// True when at least one advertised type could not be materialized (a
+        /// promise/lazy type), meaning the snapshot is NOT a faithful copy and must
+        /// not be written back over the user's clipboard.
+        let isLossy: Bool
+    }
+
+    static func snapshotPasteboard(_ pasteboard: NSPasteboard) -> PasteboardSnapshot {
+        var items: [[NSPasteboard.PasteboardType: Data]] = []
+        var lossy = false
+        for item in pasteboard.pasteboardItems ?? [] {
+            var dataMap: [NSPasteboard.PasteboardType: Data] = [:]
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    dataMap[type] = data
+                } else {
+                    lossy = true
+                }
+            }
+            if dataMap.isEmpty && !item.types.isEmpty {
+                lossy = true
+            }
+            items.append(dataMap)
+        }
+        return PasteboardSnapshot(items: items, isLossy: lossy)
+    }
+
+    static func restore(_ snapshot: PasteboardSnapshot, to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        var newItems: [NSPasteboardItem] = []
+        for dataMap in snapshot.items where !dataMap.isEmpty {
+            let item = NSPasteboardItem()
+            for (type, data) in dataMap {
+                item.setData(data, forType: type)
+            }
+            newItems.append(item)
+        }
+        if !newItems.isEmpty {
+            pasteboard.writeObjects(newItems)
+        }
     }
 
     // MARK: - Keystroke injection (single-line text only)
@@ -149,78 +197,33 @@ struct KeyboardInjector {
         }
     }
 
-    // MARK: - Streaming injection
+    // MARK: - Secure field detection
 
-    /// Inject a small text chunk during streaming LLM output.
-    /// Caller manages sequencing (one chunk at a time via async for-await loop).
-    static func typeChunk(_ chunk: String) async throws {
-        let canProceed = injectionLock.withLock { state in
-            if state { return false }
-            state = true
+    /// Whether the system-wide focused UI element is a secure (password) text field.
+    /// Fails open (returns false) if Accessibility cannot answer, so normal dictation
+    /// is never blocked by a transient AX error.
+    static func isFocusedElementSecure() -> Bool {
+        let systemWide = AXUIElementCreateSystemWide()
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let focusedValue = focused,
+              CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+            return false
+        }
+        // Safe force-cast: the CFGetTypeID check above confirms this is an AXUIElement.
+        let element = focusedValue as! AXUIElement
+
+        var subrole: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
+           let s = subrole as? String, s == "AXSecureTextField" {
             return true
         }
-        guard canProceed else {
-            AppLogger.log("[KeyboardInjector] typeChunk rejected: injection already in progress")
-            return
+        var role: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
+           let r = role as? String, r == "AXSecureTextField" {
+            return true
         }
-        defer {
-            injectionLock.withLock { state in
-                state = false
-            }
-        }
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
-            throw InjectionError.eventSourceCreationFailed
-        }
-        isInjecting.withLock { $0 = true }
-        defer { isInjecting.withLock { $0 = false } }
-        for character in chunk {
-            try Task.checkCancellation()
-            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
-            let keyUp   = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-            let charString = String(character)
-            let utf16Chars = Array(charString.utf16)
-            keyDown?.keyboardSetUnicodeString(stringLength: utf16Chars.count, unicodeString: utf16Chars)
-            keyUp?.keyboardSetUnicodeString(stringLength: utf16Chars.count, unicodeString: utf16Chars)
-            keyDown?.post(tap: .cghidEventTap)
-            try await Task.sleep(nanoseconds: 5_000_000)
-            keyUp?.post(tap: .cghidEventTap)
-            try await Task.sleep(nanoseconds: 5_000_000)
-        }
+        return false
     }
 
-    // MARK: - Public helpers
-
-    /// Append only the delta text (difference between already-injected and new text)
-    /// If newText doesn't start with alreadyInjected prefix, falls back to full replacement via backspace
-    static func appendText(_ newText: String, replacing alreadyInjected: String) async throws {
-        guard newText != alreadyInjected else { return }
-
-        if newText.hasPrefix(alreadyInjected) {
-            let delta = String(newText.dropFirst(alreadyInjected.count))
-            guard !delta.isEmpty else { return }
-            try await insertText(delta)
-            return
-        }
-
-        try await deleteCharacters(alreadyInjected.count)
-        try await insertText(newText)
-    }
-
-    /// Simulate backspace N times
-    static func deleteCharacters(_ count: Int) async throws {
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
-            throw InjectionError.eventSourceCreationFailed
-        }
-
-        let deleteKeyCode: CGKeyCode = 0x33 // kVK_Delete
-
-        for _ in 0..<count {
-            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: deleteKeyCode, keyDown: true)
-            let keyUp   = CGEvent(keyboardEventSource: source, virtualKey: deleteKeyCode, keyDown: false)
-            keyDown?.post(tap: .cghidEventTap)
-            try await Task.sleep(nanoseconds: 5_000_000)
-            keyUp?.post(tap: .cghidEventTap)
-            try await Task.sleep(nanoseconds: 5_000_000)
-        }
-    }
 }

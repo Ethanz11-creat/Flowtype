@@ -45,7 +45,6 @@ final class QwenASRProvider: @unchecked Sendable {
     let name: String = "QwenASR"
 
     private nonisolated(unsafe) var model: Qwen3ASRModel?
-    private nonisolated(unsafe) var _streamingASR: StreamingASR?
     private let queue = DispatchQueue(label: "flowtype.qwen-asr")
 
     var isLoaded: Bool {
@@ -63,12 +62,8 @@ final class QwenASRProvider: @unchecked Sendable {
             modelId: modelId,
             progressHandler: progressHandler
         )
-        let streaming = try await StreamingASR.fromPretrained(
-            asrModelId: modelId
-        )
         queue.sync {
             model = loaded
-            _streamingASR = streaming
         }
         AppLogger.log("[QwenASR] Model loaded successfully")
     }
@@ -76,7 +71,6 @@ final class QwenASRProvider: @unchecked Sendable {
     func unloadModel() {
         queue.sync {
             model = nil
-            _streamingASR = nil
         }
         AppLogger.log("[QwenASR] Model unloaded")
     }
@@ -120,25 +114,6 @@ final class QwenASRProvider: @unchecked Sendable {
 
         AppLogger.log("[QwenASR] Transcribed \(samples.count / sampleRate)s audio → \(text.count) chars")
         return text
-    }
-
-    func transcribeStreaming(
-        samples: [Float],
-        sampleRate: Int = 16000,
-        language: String? = nil
-    ) -> AsyncThrowingStream<TranscriptionSegment, Error>? {
-        let currentStreaming: StreamingASR? = queue.sync { _streamingASR }
-        guard let currentStreaming else { return nil }
-
-        let config = StreamingASRConfig(
-            language: language
-        )
-
-        return currentStreaming.transcribeStream(
-            audio: samples,
-            sampleRate: sampleRate,
-            config: config
-        )
     }
 
     // MARK: - SpeechProvider Conformance (Data-based)

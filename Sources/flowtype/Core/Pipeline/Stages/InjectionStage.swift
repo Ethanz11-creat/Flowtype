@@ -68,6 +68,19 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             ))
         }
 
+        // Security: never type/paste a transcript into a password / secure text field,
+        // and leave nothing on the clipboard for one.
+        let isSecure = await MainActor.run { KeyboardInjector.isFocusedElementSecure() }
+        if isSecure {
+            AppLogger.log("[InjectionStage#\(sessionID)] Focused element is a secure text field — aborting injection")
+            return .suspend(ErrorRecoveryContext(
+                failedStage: name,
+                error: InjectionStageError.secureFieldTarget,
+                rawText: nil,   // intentionally nil: no clipboard residue near a password field
+                retryable: false
+            ))
+        }
+
         // Perform injection
         do {
             try await KeyboardInjector.insertText(text)
@@ -90,7 +103,19 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
 
 // MARK: - InjectionStage Errors
 
-enum InjectionStageError: Error {
+enum InjectionStageError: LocalizedError {
     case invalidPayload
     case targetAppChanged
+    case secureFieldTarget
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPayload:
+            return "注入失败：无效的文本"
+        case .targetAppChanged:
+            return "目标应用已切换，已取消注入"
+        case .secureFieldTarget:
+            return "检测到密码框，已跳过注入以保护隐私"
+        }
+    }
 }

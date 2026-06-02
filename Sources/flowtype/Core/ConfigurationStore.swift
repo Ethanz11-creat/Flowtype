@@ -11,10 +11,33 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
     private let currentMigrationVersion = 5
     private let keychainServicePrefix = "llmProvider."
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
-           var config = try? JSONDecoder().decode(Configuration.self, from: data) {
-            let storedVersion = UserDefaults.standard.integer(forKey: migrationVersionKey)
+    private let defaults: UserDefaults
+    private let backupDirectory: URL?
+
+    init(defaults: UserDefaults = .standard, backupDirectory: URL? = nil) {
+        self.defaults = defaults
+        self.backupDirectory = backupDirectory
+
+        guard let data = defaults.data(forKey: defaultsKey) else {
+            // No persisted config = first launch; a clean default is the correct outcome.
+            self.current = Configuration.default
+            return
+        }
+
+        let decoded: Configuration
+        do {
+            decoded = try JSONDecoder().decode(Configuration.self, from: data)
+        } catch {
+            // Corrupt blob: preserve it for diagnosis instead of silently wiping the
+            // user's entire configuration.
+            Self.backupCorruptConfig(data, error: error, directory: backupDirectory)
+            self.current = Configuration.default
+            return
+        }
+
+        do {
+            var config = decoded
+            let storedVersion = defaults.integer(forKey: migrationVersionKey)
             var needsSave = false
 
             if storedVersion < 1 {
@@ -66,7 +89,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
                 needsSave = true
             }
 
-            UserDefaults.standard.set(currentMigrationVersion, forKey: migrationVersionKey)
+            defaults.set(currentMigrationVersion, forKey: migrationVersionKey)
 
             if config.systemPrompt.isEmpty {
                 config.systemPrompt = Configuration.default.systemPrompt
@@ -75,13 +98,23 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
 
             if needsSave {
                 if let encoded = try? JSONEncoder().encode(config) {
-                    UserDefaults.standard.set(encoded, forKey: defaultsKey)
+                    defaults.set(encoded, forKey: defaultsKey)
                 }
             }
             self.current = config
-        } else {
-            self.current = Configuration.default
         }
+    }
+
+    /// Persists a copy of an undecodable config blob so the user's settings are
+    /// recoverable for diagnosis, instead of being silently discarded.
+    private static func backupCorruptConfig(_ data: Data, error: Error, directory: URL?) {
+        let dir = directory ?? URL(fileURLWithPath:
+            (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/flowtype"))
+        let stamp = Int(Date().timeIntervalSince1970)
+        let backupURL = dir.appendingPathComponent("flowtype.config.corrupt-\(stamp).json")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? data.write(to: backupURL)
+        AppLogger.log("[ConfigurationStore] Failed to decode persisted config (\(error)); backed up raw blob to \(backupURL.path) and reset to default")
     }
 
     private var saveWorkItem: DispatchWorkItem?
@@ -93,7 +126,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
             if let data = try? JSONEncoder().encode(config) {
-                UserDefaults.standard.set(data, forKey: self.defaultsKey)
+                self.defaults.set(data, forKey: self.defaultsKey)
             }
         }
         self.saveWorkItem = workItem

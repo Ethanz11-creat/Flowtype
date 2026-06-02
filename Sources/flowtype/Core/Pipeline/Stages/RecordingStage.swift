@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import AVFoundation
+import os
 
 // MARK: - RecordingStage
 
@@ -15,6 +16,11 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
     private let audioRecorder = AudioRecorder()
     private let appleSpeechProvider = AppleSpeechProvider()
 
+    /// Set from the audio heartbeat thread when the mic stops delivering buffers
+    /// (device unplugged / Bluetooth disconnect) so the stage can fail explicitly
+    /// instead of returning a silent partial transcript.
+    private let frozen = OSAllocatedUnfairLock<Bool>(initialState: false)
+
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
         let sessionID = context.sessionID
         AppLogger.log("[RecordingStage#\(sessionID)] Recording phase started")
@@ -26,6 +32,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
         }
 
         var previewTask: Task<Void, Never>?
+        frozen.withLock { $0 = false }
 
         do {
             // 1. Request microphone permission
@@ -48,6 +55,11 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             let deviceID = ConfigurationStore.shared.current.microphoneDeviceID
             let output = try await audioRecorder.startRecording(deviceID: deviceID)
             AppLogger.log("[RecordingStage#\(sessionID)] AudioRecorder started")
+
+            // Detect a mid-recording freeze (device gone) so we can surface an error.
+            audioRecorder.onRecordingFrozen = { [weak self] in
+                self?.frozen.withLock { $0 = true }
+            }
 
             // 3. Start AppleSpeech real-time preview streaming
             audioRecorder.onAudioBuffer = { [weak self] buffer in
@@ -84,6 +96,19 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
             let finalPreviewText = appleSpeechProvider.stopStreamingRecognition()
             AppLogger.log("[RecordingStage#\(sessionID)] AppleSpeech final preview: \(finalPreviewText.count) chars")
+
+            // If the amplitude stream ended because the mic froze (not because the user
+            // stopped — that path throws CancellationError), fail the session so it
+            // recovers to .idle instead of pushing a silent partial transcript.
+            if frozen.withLock({ $0 }) {
+                AppLogger.log("[RecordingStage#\(sessionID)] Recording interrupted (device froze/disconnected)")
+                return .suspend(ErrorRecoveryContext(
+                    failedStage: name,
+                    error: AudioRecorderError.engineStartFailed,
+                    rawText: nil,
+                    retryable: false
+                ))
+            }
 
             let rawSamples = audioRecorder.takeAccumulatedSamples()
             let audioDuration = Double(rawSamples.count) / 16000.0

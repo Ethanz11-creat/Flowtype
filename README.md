@@ -139,9 +139,28 @@ Flowtype uses [Qwen3-ASR](https://huggingface.co/aufklarer/Qwen3-ASR-0.6B-MLX-4b
 ## Requirements
 
 - macOS 15+
-- Swift 6.2+
 - Apple Silicon (M1 or later) — for local MLX inference
+- Swift 6.2+ — only if building from source
 - [SiliconFlow API key](https://cloud.siliconflow.cn/account/ak) — for LLM text refinement only (ASR is fully local)
+
+## Install (downloaded build)
+
+Flowtype is distributed unsigned (no paid Apple Developer certificate), so macOS
+Gatekeeper will block it on first launch. The `mlx.metallib` GPU library is already
+bundled inside the `.app`, so no extra setup is needed — you only need to authorize it:
+
+1. Move `FlowType.app` to `/Applications`.
+2. Remove the quarantine flag macOS adds to downloads (this is the "self-authorization" step):
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/FlowType.app
+   ```
+   (Alternatively: right-click the app → **Open** → **Open** in the dialog.)
+3. Launch it. On first run, grant **Microphone**, **Speech Recognition**, and
+   **Accessibility** permissions when prompted (Accessibility must be enabled manually
+   in **System Settings → Privacy & Security → Accessibility**).
+
+> Without step 2 macOS reports the app as "damaged" — that is the Gatekeeper block on an
+> unsigned download, not actual corruption.
 
 ## Setup
 

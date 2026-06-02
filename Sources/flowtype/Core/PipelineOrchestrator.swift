@@ -288,6 +288,11 @@ final class SessionController: ObservableObject {
             case .skip(let targetName, let nextPayload):
                 if let targetIndex = self.pipeline.firstIndex(where: { $0.name == targetName }) {
                     self.executeStage(at: targetIndex, payload: nextPayload, context: context)
+                } else {
+                    // Unknown skip target: fail the session (self-heals to .idle via the
+                    // .error auto-dismiss) instead of hanging permanently.
+                    AppLogger.log("[SessionController] internal: unknown skip target '\(targetName)' — failing session \(context.sessionID)")
+                    self.transition(to: .error("internal: unknown stage '\(targetName)'"), context: context)
                 }
 
             case .suspend(let recovery):

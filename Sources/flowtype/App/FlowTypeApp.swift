@@ -1,7 +1,18 @@
 import SwiftUI
 import AppKit
 
+/// Process entry point. Intercepts `--self-test` (runnable without Xcode/XCTest)
+/// before launching the GUI; otherwise hands off to the SwiftUI app.
 @main
+enum FlowTypeMain {
+    static func main() {
+        if CommandLine.arguments.contains("--self-test") {
+            SelfTest.runAndExit()
+        }
+        FlowTypeApp.main()
+    }
+}
+
 struct FlowTypeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 

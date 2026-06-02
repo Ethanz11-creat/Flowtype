@@ -307,23 +307,35 @@ actor LLMService {
                     throw LLMError.apiError("HTTP \(statusCode): \(sanitizedBody)")
                 }
 
+                var yieldedAny = false
+                var decodeFailures = 0
                 for try await line in bytes.lines {
-                    if line.hasPrefix("data: ") {
-                        let data = String(line.dropFirst(6))
-                        if data == "[DONE]" {
-                            continuation.finish()
-                            return
+                    switch parseSSELine(line, decodeFailures: &decodeFailures) {
+                    case .content(let content):
+                        if !content.isEmpty {
+                            yieldedAny = true
+                            continuation.yield(content)
                         }
-
-                        if let chunkData = data.data(using: .utf8) {
-                            if let chunk = try? JSONDecoder().decode(StreamChunk.self, from: chunkData),
-                               let content = chunk.choices.first?.delta.content {
-                                continuation.yield(content)
-                            }
-                        }
+                    case .done:
+                        continuation.finish()
+                        return
+                    case .error(let message):
+                        // In-band error frame (HTTP 200 + {"error":...}); surface it
+                        // so PolishStage can fall back / report instead of going silent.
+                        throw LLMError.apiError(sanitizeErrorBody(message))
+                    case .ignore:
+                        break
                     }
                 }
 
+                if decodeFailures > 0 {
+                    AppLogger.log("[LLMService] SSE decode failures: \(decodeFailures), yieldedAny=\(yieldedAny)")
+                }
+                // A stream that produced no content but had undecodable frames is a real
+                // failure, not an empty success — surface it instead of finishing silently.
+                if !yieldedAny && decodeFailures > 0 {
+                    throw LLMError.streamDecodingError
+                }
                 continuation.finish()
             }
 
@@ -362,7 +374,7 @@ private func sanitizeErrorBody(_ body: String) -> String {
     return String(sanitized.prefix(200))
 }
 
-private func validatedAPIURL(baseURL: String) -> URL? {
+func validatedAPIURL(baseURL: String) -> URL? {
     let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
     guard let url = URL(string: trimmed),
           url.scheme?.lowercased() == "https",
@@ -371,9 +383,13 @@ private func validatedAPIURL(baseURL: String) -> URL? {
           url.user == nil, url.password == nil else {
         return nil
     }
-    // Strip any existing path to avoid path traversal, then append /chat/completions
+    // Preserve the base path (e.g. /v1, /openai/deployments/...) — OpenAI-compatible
+    // endpoints live under it — while still rejecting path traversal.
     var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
-    components?.path = "/chat/completions"
+    var basePath = components?.path ?? ""
+    if basePath.contains("..") { return nil }
+    if basePath.hasSuffix("/") { basePath = String(basePath.dropLast()) }
+    components?.path = basePath + "/chat/completions"
     components?.query = nil
     components?.fragment = nil
     return components?.url
@@ -387,4 +403,41 @@ private struct StreamChunk: Codable {
         let delta: Delta
     }
     let choices: [Choice]
+}
+
+private struct StreamErrorEnvelope: Codable {
+    struct ErrorBody: Codable {
+        let message: String?
+        let code: String?
+    }
+    let error: ErrorBody?
+}
+
+/// One classified Server-Sent-Event line from an OpenAI-compatible stream.
+enum SSEEvent: Equatable {
+    case content(String)
+    case done
+    case error(String)
+    case ignore
+}
+
+/// Pure parser for a single SSE line. Recognizes in-band error frames (which many
+/// providers, incl. SiliconFlow, return with HTTP 200) and counts malformed frames
+/// so the caller can surface a real error instead of silently yielding nothing.
+func parseSSELine(_ line: String, decodeFailures: inout Int) -> SSEEvent {
+    guard line.hasPrefix("data: ") else { return .ignore }
+    let payload = String(line.dropFirst(6))
+    if payload == "[DONE]" { return .done }
+    guard let data = payload.data(using: .utf8) else { return .ignore }
+    // Error frame first: a normal content frame has no "error" key, so this only
+    // matches genuine error envelopes.
+    if let env = try? JSONDecoder().decode(StreamErrorEnvelope.self, from: data),
+       let message = env.error?.message {
+        return .error(message)
+    }
+    if let chunk = try? JSONDecoder().decode(StreamChunk.self, from: data) {
+        return .content(chunk.choices.first?.delta.content ?? "")
+    }
+    decodeFailures += 1
+    return .ignore
 }

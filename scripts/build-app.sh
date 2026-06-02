@@ -36,13 +36,22 @@ for candidate in \
         break
     fi
 done
-if [ -n "$MLX_METALLIB" ]; then
-    cp "$MLX_METALLIB" build/${APP_NAME}.app/Contents/MacOS/mlx.metallib
-    echo "✅ MLX metallib copied from $MLX_METALLIB"
-else
-    echo "⚠️  WARNING: mlx.metallib not found. Install Python mlx-metal (pip install mlx) to provide it."
-    echo "   Qwen3-ASR will crash at runtime without this file."
+if [ -z "$MLX_METALLIB" ]; then
+    echo "❌ ERROR: mlx.metallib not found. Qwen3-ASR would crash at runtime."
+    echo "   Install it with: pip install mlx   (or: uv pip install mlx)"
+    echo "   Refusing to build a broken .app bundle."
+    exit 1
 fi
+cp "$MLX_METALLIB" build/${APP_NAME}.app/Contents/MacOS/mlx.metallib
+# Verify the copy landed and is a real metallib (the wheel ships a ~100MB+ file),
+# so a truncated/partial copy can never ship silently.
+BUNDLED_METALLIB="build/${APP_NAME}.app/Contents/MacOS/mlx.metallib"
+METALLIB_SIZE=$(stat -f%z "$BUNDLED_METALLIB" 2>/dev/null || echo 0)
+if [ "$METALLIB_SIZE" -lt 1000000 ]; then
+    echo "❌ ERROR: bundled mlx.metallib is only ${METALLIB_SIZE} bytes (expected >1MB). Aborting."
+    exit 1
+fi
+echo "✅ MLX metallib copied from $MLX_METALLIB (${METALLIB_SIZE} bytes)"
 
 # Generate Info.plist
 cat > build/${APP_NAME}.app/Contents/Info.plist << 'EOF'

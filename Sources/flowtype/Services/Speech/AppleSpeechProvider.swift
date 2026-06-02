@@ -24,7 +24,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
         if let r = recognizer {
             AppLogger.log("[AppleSpeechProvider] init: recognizer available, supportsOnDevice=\(r.supportsOnDeviceRecognition), isAvailable=\(r.isAvailable)")
             if !r.supportsOnDeviceRecognition {
-                print("[AppleSpeechProvider] WARNING: On-device recognition not supported on this device. AppleSpeech will not be available.")
+                AppLogger.log("[AppleSpeechProvider] WARNING: On-device recognition not supported on this device. AppleSpeech will not be available.")
             }
         } else {
             AppLogger.log("[AppleSpeechProvider] init: recognizer is nil")
@@ -79,7 +79,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
                 }
                 if result.isFinal {
                     let text = result.bestTranscription.formattedString
-                    AppLogger.log("[AppleSpeechProvider] transcribe final: '\(text.prefix(80))'")
+                    AppLogger.log("[AppleSpeechProvider] transcribe final: \(text.count) chars")
                     continuation.resume(returning: text)
                 }
             }
@@ -155,7 +155,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
 
                 let transcript = result.bestTranscription.formattedString
                 self.stateLock.withLock { $0.finalResult = transcript }
-                AppLogger.log("[AppleSpeechProvider] Partial result: '\(transcript.prefix(60))' isFinal=\(result.isFinal)")
+                AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
 
                 if result.isFinal {
@@ -193,7 +193,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
 
     func stopStreamingRecognition() -> String {
         let finalResult = stateLock.withLock { $0.finalResult }
-        AppLogger.log("[AppleSpeechProvider] stopStreamingRecognition called, finalResult='\(finalResult.prefix(80))'")
+        AppLogger.log("[AppleSpeechProvider] stopStreamingRecognition called, finalResult=\(finalResult.count) chars")
         streamingTimeoutTimer.cancel()
         stateLock.withLock { $0.recognitionRequest?.endAudio() }
         stateLock.withLock { $0.recognitionTask?.cancel() }

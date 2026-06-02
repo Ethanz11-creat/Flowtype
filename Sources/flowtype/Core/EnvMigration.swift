@@ -49,7 +49,7 @@ enum EnvMigration {
 
         if didMigrate {
             ConfigurationStore.shared.save(config)
-            print("[EnvMigration] Migrated config to new format")
+            AppLogger.log("[EnvMigration] Migrated config to new format")
         }
 
         UserDefaults.standard.set(true, forKey: hasMigratedKey)
