@@ -165,6 +165,29 @@ struct KeyboardInjector {
         }
     }
 
+    // MARK: - Newline / segmentation helpers (pure, testable)
+
+    static func normalizeNewlines(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    static func splitIntoLineSegments(_ text: String) -> [String] {
+        text.components(separatedBy: "\n")
+    }
+
+    static func chunk(_ s: String, size: Int) -> [String] {
+        guard size > 0, !s.isEmpty else { return s.isEmpty ? [] : [s] }
+        var result: [String] = []
+        var idx = s.startIndex
+        while idx < s.endIndex {
+            let end = s.index(idx, offsetBy: size, limitedBy: s.endIndex) ?? s.endIndex
+            result.append(String(s[idx..<end]))
+            idx = end
+        }
+        return result
+    }
+
     // MARK: - Keystroke injection (single-line text only)
 
     private static func typeText(_ text: String) async throws {

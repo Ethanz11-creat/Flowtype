@@ -45,6 +45,7 @@ enum SelfTest {
         testSSEParse(r)          // B8
         testConfigCorrupt(r)     // B9
         testClipboardSnapshot(r) // B7
+        testInjectionSegmentation(r) // injection helpers
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -136,6 +137,23 @@ enum SelfTest {
         _ = ConfigurationStore(defaults: ud2, backupDirectory: tmp2)
         let backups2 = (try? FileManager.default.contentsOfDirectory(atPath: tmp2.path)) ?? []
         r.check(backups2.isEmpty, "B9 first launch writes no spurious backup")
+    }
+
+    // MARK: - Injection segmentation (B-inject)
+
+    static func testInjectionSegmentation(_ r: Reporter) {
+        r.eq(KeyboardInjector.normalizeNewlines("a\r\nb\rc"), "a\nb\nc", "inject: CRLF/CR normalized to LF")
+        r.eq(KeyboardInjector.splitIntoLineSegments("a\n\nc"), ["a", "", "c"], "inject: split keeps empty segments")
+        r.eq(KeyboardInjector.splitIntoLineSegments("single"), ["single"], "inject: single line → one segment")
+        r.eq(KeyboardInjector.chunk("abcdef", size: 2), ["ab", "cd", "ef"], "inject: chunk splits evenly")
+        r.eq(KeyboardInjector.chunk("abcde", size: 2), ["ab", "cd", "e"], "inject: chunk handles remainder")
+        r.eq(KeyboardInjector.chunk("", size: 64), [], "inject: chunk empty → no pieces")
+        r.eq(KeyboardInjector.chunk("abc", size: 0), ["abc"], "inject: chunk size 0 → whole string")
+
+        let text = "hello world\nlonger line that exceeds the chunk size by a fair bit\n\nend"
+        let segs = KeyboardInjector.splitIntoLineSegments(KeyboardInjector.normalizeNewlines(text))
+        let rebuilt = segs.map { KeyboardInjector.chunk($0, size: 8).joined() }.joined(separator: "\n")
+        r.eq(rebuilt, KeyboardInjector.normalizeNewlines(text), "inject: segment+chunk round-trips")
     }
 
     // MARK: - B7: clipboard snapshot round-trips; lossy content is detected
