@@ -40,6 +40,24 @@ final class SpectrumAnalyzer {
 
     deinit { vDSP_destroy_fftsetup(fftSetup) }
 
+    /// Process one audio buffer → smoothed, normalized band energies (0...1, length bandCount).
+    func process(_ samples: [Float]) -> [Float] {
+        let mags = magnitudes(samples)
+        let bands = SpectrumMath.logBin(mags, sampleRate: sampleRate, fftSize: fftSize,
+                                        bandCount: bandCount, minHz: minHz, maxHz: maxHz)
+        let peak = bands.max() ?? 0
+        rollingMax = Swift.max(peak, rollingMax * 0.995)   // adaptive reference, slow decay
+        let normalized = SpectrumMath.normalize(bands, reference: rollingMax)
+        smoothed = SpectrumMath.smooth(previous: smoothed, target: normalized, attack: attack, decay: decay)
+        return smoothed
+    }
+
+    /// Resets smoothing state between sessions.
+    func reset() {
+        smoothed = [Float](repeating: 0, count: bandCount)
+        rollingMax = 1e-6
+    }
+
     /// Hann-windowed magnitude spectrum (length fftSize/2). Input is zero-padded or
     /// truncated to `fftSize`.
     func magnitudes(_ samples: [Float]) -> [Float] {

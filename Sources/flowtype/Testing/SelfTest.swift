@@ -39,6 +39,7 @@ enum SelfTest {
         testASRWiring(r)         // ASR language + context
         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
         testFFTPeak(r)           // SpectrumAnalyzer FFT correctness
+        testSpectrumProcess(r)   // SpectrumAnalyzer.process smoothed bands
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -186,6 +187,26 @@ enum SelfTest {
         let peak = mags.indices.max(by: { mags[$0] < mags[$1] })!
         let expected = Int(freq / (fs / Float(n)))     // 1000 / 15.625 = 64
         r.check(abs(peak - expected) <= 2, "spectrum: FFT peak at ~1kHz bin (got \(peak), want ~\(expected))")
+    }
+
+    // MARK: - SpectrumAnalyzer.process smoothed bands
+
+    static func testSpectrumProcess(_ r: Reporter) {
+        let analyzer = SpectrumAnalyzer()
+        let fs: Float = 16000
+        let freq: Float = 1000
+        let samples = (0..<1024).map { sin(2 * Float.pi * freq * Float($0) / fs) }
+        var bands = [Float]()
+        for _ in 0..<10 { bands = analyzer.process(samples) }   // let smoothing settle
+        r.eq(bands.count, 28, "spectrum: process band count")
+        r.check(bands.allSatisfy { $0 >= 0 && $0 <= 1.0001 }, "spectrum: process bands in 0...1")
+        let maxIdx = bands.indices.max(by: { bands[$0] < bands[$1] })!
+        r.check(bands[maxIdx] > 0.5, "spectrum: dominant band strong after settling")
+
+        let silence = [Float](repeating: 0, count: 1024)
+        var quiet = [Float]()
+        for _ in 0..<30 { quiet = analyzer.process(silence) }
+        r.check((quiet.max() ?? 1) < 0.2, "spectrum: silence decays toward 0")
     }
 
     // MARK: - Injection segmentation (B-inject)
