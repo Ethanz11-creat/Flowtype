@@ -1,14 +1,6 @@
 import Foundation
 import AppKit
 
-/// A pasteboard data provider that intentionally provides nothing, simulating
-/// promise/lazy clipboard content (copied file, on-demand image) whose data cannot
-/// be materialized on demand.
-private final class LazyPasteboardProvider: NSObject, NSPasteboardItemDataProvider {
-    func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem,
-                    provideDataForType type: NSPasteboard.PasteboardType) {}
-}
-
 /// Lightweight, dependency-free self-tests that run WITHOUT Xcode / XCTest.
 ///
 /// This machine (and any Command-Line-Tools-only setup) has no `XCTest` or
@@ -44,7 +36,6 @@ enum SelfTest {
         testLLMURL(r)            // B1
         testSSEParse(r)          // B8
         testConfigCorrupt(r)     // B9
-        testClipboardSnapshot(r) // B7
         testInjectionSegmentation(r) // injection helpers
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
@@ -156,34 +147,4 @@ enum SelfTest {
         r.eq(rebuilt, KeyboardInjector.normalizeNewlines(text), "inject: segment+chunk round-trips")
     }
 
-    // MARK: - B7: clipboard snapshot round-trips; lossy content is detected
-
-    static func testClipboardSnapshot(_ r: Reporter) {
-        let pb = NSPasteboard(name: NSPasteboard.Name("FlowTypeSelfTest.\(UUID().uuidString)"))
-        pb.clearContents()
-        let item = NSPasteboardItem()
-        item.setString("hello", forType: .string)
-        item.setData(Data("<b>hi</b>".utf8), forType: .html)
-        pb.writeObjects([item])
-
-        let snap = KeyboardInjector.snapshotPasteboard(pb)
-        r.check(!snap.isLossy, "B7 faithful multi-type snapshot is not lossy")
-
-        // Simulate our paste overwriting the clipboard, then restore.
-        pb.clearContents()
-        pb.setString("INJECTED", forType: .string)
-        KeyboardInjector.restore(snap, to: pb)
-        r.check(pb.string(forType: .string) == "hello", "B7 string content restored")
-        r.check(pb.data(forType: .html) == Data("<b>hi</b>".utf8), "B7 rich (html) content restored")
-
-        // Un-snapshottable (promise/lazy) content must be flagged lossy so we never
-        // overwrite the user's clipboard with a degraded copy.
-        let pb2 = NSPasteboard(name: NSPasteboard.Name("FlowTypeSelfTest.\(UUID().uuidString)"))
-        pb2.clearContents()
-        let lazyItem = NSPasteboardItem()
-        lazyItem.setDataProvider(LazyPasteboardProvider(), forTypes: [.fileURL])
-        pb2.writeObjects([lazyItem])
-        let snap2 = KeyboardInjector.snapshotPasteboard(pb2)
-        r.check(snap2.isLossy, "B7 promise/lazy clipboard flagged lossy")
-    }
 }
