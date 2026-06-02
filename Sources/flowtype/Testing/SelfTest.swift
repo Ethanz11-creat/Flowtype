@@ -37,6 +37,7 @@ enum SelfTest {
         testConfigCorrupt(r)     // B9
         testInjectionSegmentation(r) // injection helpers
         testASRWiring(r)         // ASR language + context
+        testSpectrumMath(r)      // SpectrumMath pure DSP helpers
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -144,6 +145,31 @@ enum SelfTest {
         r.check(composeASRContext(["React", "SwiftUI"]) == "React、SwiftUI", "ASR: phrases joined")
         let many = (0..<100).map { "w\($0)" }
         r.check((composeASRContext(many) ?? "").count <= 300, "ASR: context capped to maxChars")
+    }
+
+    // MARK: - SpectrumMath pure DSP helpers
+
+    static func testSpectrumMath(_ r: Reporter) {
+        let env = SpectrumMath.centerEnvelope(count: 9)
+        r.eq(env.count, 9, "spectrum: envelope length")
+        r.check(env.first! < 0.01, "spectrum: envelope edge ~0")
+        r.check(env[4] > 0.99, "spectrum: envelope center ~1")
+        r.check(abs(env[1] - env[7]) < 1e-5, "spectrum: envelope symmetric")
+
+        var mags = [Float](repeating: 0, count: 512)   // fftSize 1024 -> 512 magnitudes
+        mags[64] = 10                                  // bin 64 = 64*(16000/1024) = 1000 Hz
+        let bands = SpectrumMath.logBin(mags, sampleRate: 16000, fftSize: 1024,
+                                        bandCount: 28, minHz: 80, maxHz: 6000)
+        r.eq(bands.count, 28, "spectrum: band count")
+        let maxIdx = bands.indices.max(by: { bands[$0] < bands[$1] })!
+        r.check(bands[maxIdx] > 0, "spectrum: energy lands in a band")
+        r.check(maxIdx > 0 && maxIdx < 27, "spectrum: 1kHz lands mid-range")
+
+        r.eq(SpectrumMath.normalize([5, 10, 0], reference: 10), [0.5, 1.0, 0.0], "spectrum: normalize clamps 0...1")
+        let up = SpectrumMath.smooth(previous: [0], target: [1], attack: 0.5, decay: 0.1)
+        r.check(abs(up[0] - 0.5) < 1e-6, "spectrum: attack rate (fast rise)")
+        let down = SpectrumMath.smooth(previous: [1], target: [0], attack: 0.5, decay: 0.1)
+        r.check(abs(down[0] - 0.9) < 1e-6, "spectrum: decay rate (slow fall)")
     }
 
     // MARK: - Injection segmentation (B-inject)
