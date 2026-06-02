@@ -1,5 +1,4 @@
 import Foundation
-import AppKit
 
 /// Lightweight, dependency-free self-tests that run WITHOUT Xcode / XCTest.
 ///
