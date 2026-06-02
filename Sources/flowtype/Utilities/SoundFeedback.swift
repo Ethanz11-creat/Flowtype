@@ -22,4 +22,9 @@ enum SoundFeedback {
         guard isEnabled else { return }
         AudioServicesPlaySystemSound(1102) // subtle bump
     }
+
+    static func playCopiedToClipboard() {
+        guard isEnabled else { return }
+        AudioServicesPlaySystemSound(1054) // "Tink" — distinct from start(1104)/stop(1103)/error(1102)
+    }
 }
