@@ -40,6 +40,7 @@ enum SelfTest {
         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
         testFFTPeak(r)           // SpectrumAnalyzer FFT correctness
         testSpectrumProcess(r)   // SpectrumAnalyzer.process smoothed bands
+        testStatFormatting(r)    // StatFormatting pure formatters
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -207,6 +208,26 @@ enum SelfTest {
         var quiet = [Float]()
         for _ in 0..<30 { quiet = analyzer.process(silence) }
         r.check((quiet.max() ?? 1) < 0.2, "spectrum: silence decays toward 0")
+    }
+
+    // MARK: - StatFormatting pure formatters
+
+    static func testStatFormatting(_ r: Reporter) {
+        r.eq(StatFormatting.duration(seconds: 8054),
+             [StatSegment(number: "2", unit: "小时"), StatSegment(number: "14", unit: "分钟")],
+             "stat: 8054s → 2小时14分钟")
+        r.eq(StatFormatting.duration(seconds: 840),
+             [StatSegment(number: "14", unit: "分钟")],
+             "stat: 840s → 14分钟 (no hours segment)")
+        r.eq(StatFormatting.duration(seconds: 0),
+             [StatSegment(number: "0", unit: "分钟")],
+             "stat: 0s → 0分钟")
+        r.eq(StatFormatting.speed(142),
+             [StatSegment(number: "142", unit: "字/分")],
+             "stat: speed")
+        r.eq(StatFormatting.plain("18,402"),
+             [StatSegment(number: "18,402", unit: nil)],
+             "stat: plain word count unchanged")
     }
 
     // MARK: - Injection segmentation (B-inject)

@@ -80,6 +80,13 @@ final class DailyStatsStore: ObservableObject {
         return "\(minutes) min"
     }
 
+    /// Estimated time saved vs typing at 40 WPM, in whole seconds (for StatFormatting).
+    var estimatedTimeSavedSeconds: Int {
+        let typingMinutes = Double(totalWordCount) / 40.0
+        let speakingMinutes = Double(totalDurationMs) / 1000.0 / 60.0
+        return max(0, Int((typingMinutes - speakingMinutes) * 60))
+    }
+
     private func scheduleSave() {
         saveDebounce?.cancel()
         saveDebounce = Task {
