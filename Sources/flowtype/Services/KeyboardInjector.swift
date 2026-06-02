@@ -144,10 +144,4 @@ struct KeyboardInjector {
         return .present
     }
 
-    // MARK: - Temporary shim (removed in Task 4)
-
-    /// Kept only until InjectionStage migrates to `currentFocusState()`.
-    static func isFocusedElementSecure() -> Bool {
-        currentFocusState() == .secureField
-    }
 }
