@@ -29,7 +29,7 @@ final class SessionController: ObservableObject {
     // MARK: - Published State
 
     @Published private(set) var sessionState: SessionState = .idle
-    @Published private(set) var amplitude: Float = 0.0
+    @Published private(set) var spectrum: [Float] = []
     @Published private(set) var previewText: String = ""
     @Published private(set) var lastErrorRawText: String?
     @Published private(set) var errorActions: [ErrorAction] = []
@@ -51,9 +51,6 @@ final class SessionController: ObservableObject {
     private var recordingTimer = CancellableTimer()
     private var elapsedSeconds: Int = 0
 
-    /// Minimum amplitude change required to trigger a UI update (reduces unnecessary SwiftUI re-renders).
-    private let amplitudeUpdateThreshold: Float = 0.005
-
     // MARK: - Tasks
 
     private var currentTask: Task<Void, Never>?
@@ -62,7 +59,7 @@ final class SessionController: ObservableObject {
     // MARK: - Combine
 
     private var stateCancellable: AnyCancellable?
-    private var amplitudeCancellable: AnyCancellable?
+    private var spectrumCancellable: AnyCancellable?
     private var previewCancellable: AnyCancellable?
 
     // MARK: - Computed
@@ -114,7 +111,7 @@ final class SessionController: ObservableObject {
 
         // Reset state
         previewText = ""
-        amplitude = 0.0
+        spectrum = []
 
         // Subscribe to state publisher for intermediate updates from stages
         stateCancellable = statePublisher
@@ -130,13 +127,10 @@ final class SessionController: ObservableObject {
                 self.transition(to: state, context: ctx)
             }
 
-        // Subscribe to real-time amplitude/preview publishers (avoids 1Hz timer polling)
-        amplitudeCancellable = context.amplitudePublisher
-            .sink { [weak self] amp in
-                guard let self else { return }
-                if abs(self.amplitude - amp) > self.amplitudeUpdateThreshold {
-                    self.amplitude = amp
-                }
+        // Subscribe to real-time spectrum/preview publishers (avoids 1Hz timer polling)
+        spectrumCancellable = context.spectrumPublisher
+            .sink { [weak self] spec in
+                self?.spectrum = spec
             }
         previewCancellable = context.previewTextPublisher
             .sink { [weak self] text in
@@ -429,8 +423,8 @@ final class SessionController: ObservableObject {
         currentContext = nil
         stateCancellable?.cancel()
         stateCancellable = nil
-        amplitudeCancellable?.cancel()
-        amplitudeCancellable = nil
+        spectrumCancellable?.cancel()
+        spectrumCancellable = nil
         previewCancellable?.cancel()
         previewCancellable = nil
         lastErrorRawText = nil
@@ -444,7 +438,7 @@ final class SessionController: ObservableObject {
         errorDismissTask = nil
         stopRecordingTimer()
         previewText = ""
-        amplitude = 0.0
+        spectrum = []
         WindowManager.shared.hide()
     }
 

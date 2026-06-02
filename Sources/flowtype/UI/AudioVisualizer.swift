@@ -1,61 +1,43 @@
 import SwiftUI
 
+/// Frequency-driven mirrored soundwave for the recording capsule.
 struct AudioVisualizer: View {
     @EnvironmentObject var session: SessionController
 
-    private let barCount = 9
-    private let phases: [Double] = [0, 0.3, 0.6, 0.9, 1.2, 0.9, 0.6, 0.3, 0]
+    private static let barCount = 28
+    private static let envelope = SpectrumMath.centerEnvelope(count: barCount)
+    private let maxBarHeight: CGFloat = 24
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<barCount, id: \.self) { index in
-                AudioBar(
-                    amplitude: session.amplitude,
-                    phase: phases[index],
-                    isActive: session.sessionState.isRecordingIndicator
-                )
+        let active = session.sessionState.isRecordingIndicator
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(0..<Self.barCount, id: \.self) { i in
+                let level = barLevel(i, active: active)
+                Capsule()
+                    .fill(barColor(i, level: level))
+                    .frame(width: 3, height: max(2, level * maxBarHeight))
+                    .frame(maxHeight: .infinity, alignment: .center)   // grow up+down from center
             }
         }
-        .frame(width: 40, height: 24)
-    }
-}
-
-struct AudioBar: View {
-    let amplitude: Float
-    let phase: Double
-    let isActive: Bool
-
-    @State private var animationOffset: Double = 0
-
-    var height: CGFloat {
-        guard isActive else { return 3 }
-        let base: CGFloat = 3
-        let wave = sin(animationOffset + phase) * 0.5 + 0.5
-        let volumeBoost = CGFloat(min(amplitude * 15, 1.0)) * 18
-        return base + CGFloat(wave) * 8 + volumeBoost
+        .frame(width: 112, height: maxBarHeight + 2)
+        .animation(.easeOut(duration: 0.09), value: session.spectrum)  // tween between updates
     }
 
-    var body: some View {
-        RoundedRectangle(cornerRadius: 1.5)
-            .fill(barColor)
-            .frame(width: 3, height: height)
-            .animation(.easeInOut(duration: 0.1), value: height)
-            .onAppear {
-                if isActive {
-                    withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
-                        animationOffset = .pi * 2
-                    }
-                }
-            }
+    /// Envelope-weighted band energy; a calm resting line when not recording.
+    private func barLevel(_ i: Int, active: Bool) -> CGFloat {
+        let env = CGFloat(Self.envelope[i])
+        guard active else { return env * 0.06 }
+        let band = i < session.spectrum.count ? CGFloat(session.spectrum[i]) : 0
+        return env * max(band, 0.05)
     }
 
-    private var barColor: Color {
-        if !isActive { return Color.white.opacity(0.2) }
-        let intensity = min(Double(amplitude * 10), 1.0)
-        return Color(
-            red: 0.4 + 0.6 * intensity,
-            green: 0.3 + 0.4 * intensity,
-            blue: 0.8 + 0.2 * intensity
-        )
+    /// Brand purple->blue gradient across bars; brighter where there's energy.
+    private func barColor(_ i: Int, level: CGFloat) -> Color {
+        let t = Double(i) / Double(Self.barCount - 1)
+        let red = 0.55 + (0.30 - 0.55) * t
+        let green = 0.35 + (0.65 - 0.35) * t
+        let blue = 1.0
+        let brightness = 0.45 + 0.55 * Double(min(level / 0.6, 1.0))
+        return Color(red: red, green: green, blue: blue).opacity(brightness)
     }
 }

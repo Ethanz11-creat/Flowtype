@@ -79,16 +79,16 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 }
             }
 
-            // 4. Consume amplitude stream and update amplitude in real time
+            // 4. Consume spectrum stream and update spectrum in real time
             AppLogger.log("[RecordingStage#\(sessionID)] Recording in progress")
-            for await amp in output.amplitude {
+            for await spectrum in output.spectrum {
                 try Task.checkCancellation()
                 await MainActor.run {
-                    context.currentAmplitude = amp
-                    context.amplitudePublisher.send(amp)
+                    context.currentSpectrum = spectrum
+                    context.spectrumPublisher.send(spectrum)
                 }
             }
-            AppLogger.log("[RecordingStage#\(sessionID)] Audio amplitude stream ended")
+            AppLogger.log("[RecordingStage#\(sessionID)] Audio spectrum stream ended")
 
             // 5. Stop recording and collect results
             previewTask?.cancel()
@@ -97,7 +97,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             let finalPreviewText = appleSpeechProvider.stopStreamingRecognition()
             AppLogger.log("[RecordingStage#\(sessionID)] AppleSpeech final preview: \(finalPreviewText.count) chars")
 
-            // If the amplitude stream ended because the mic froze (not because the user
+            // If the spectrum stream ended because the mic froze (not because the user
             // stopped — that path throws CancellationError), fail the session so it
             // recovers to .idle instead of pushing a silent partial transcript.
             if frozen.withLock({ $0 }) {

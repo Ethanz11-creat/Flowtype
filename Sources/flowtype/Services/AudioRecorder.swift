@@ -9,8 +9,8 @@ enum AudioRecorderError: Error, Equatable {
 
 /// Output streams from a recording session.
 struct RecordingOutput: @unchecked Sendable {
-    /// VU-meter amplitude stream (for UI animation).
-    let amplitude: AsyncStream<Float>
+    /// Per-buffer frequency-band energies (0...1) for the visualizer.
+    let spectrum: AsyncStream<[Float]>
 }
 
 final class AudioRecorder: @unchecked Sendable {
@@ -18,7 +18,8 @@ final class AudioRecorder: @unchecked Sendable {
     private static let maxRawSamples = 28_800_000 // 16000 Hz * 60 s/min * 30 min
 
     private var engine: AVAudioEngine?
-    private nonisolated(unsafe) var amplitudeContinuation: AsyncStream<Float>.Continuation?
+    private let spectrumAnalyzer = SpectrumAnalyzer()
+    private nonisolated(unsafe) var spectrumContinuation: AsyncStream<[Float]>.Continuation?
 
     // Raw sample accumulator for batch ASR (Qwen3-ASR)
     private var rawSamples: [Float] = []
@@ -82,6 +83,11 @@ final class AudioRecorder: @unchecked Sendable {
         guard await requestPermission() else {
             throw AudioRecorderError.permissionDenied
         }
+
+        // Fresh visualizer state per session. Relies on start/stop being serial (the same
+        // assumption the engine reuse makes): after this, only the audio tap touches the
+        // analyzer, one buffer at a time.
+        spectrumAnalyzer.reset()
 
         let freshEngine = AVAudioEngine()
         self.engine = freshEngine
@@ -174,16 +180,16 @@ final class AudioRecorder: @unchecked Sendable {
                 guard self.isRecording && !self.isStopping else { return }
                 AppLogger.log("[AudioRecorder] HEARTBEAT FAILURE: No tap callbacks for \(self.heartbeatTimeout)s. Auto-stopping.")
                 self.heartbeatTimer.cancel()
-                // Notify first (sets the freeze flag), then end the amplitude stream so
+                // Notify first (sets the freeze flag), then end the spectrum stream so
                 // RecordingStage's `for await` returns instead of suspending forever.
                 // finish() is idempotent, so a later stopRecording() is safe.
                 self.onRecordingFrozen?()
-                self.amplitudeContinuation?.finish()
+                self.spectrumContinuation?.finish()
             }
         }
 
-        let amplitudeStream = AsyncStream<Float> { continuation in
-            self.amplitudeContinuation = continuation
+        let spectrumStream = AsyncStream<[Float]> { continuation in
+            self.spectrumContinuation = continuation
 
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
@@ -221,13 +227,9 @@ final class AudioRecorder: @unchecked Sendable {
                         }
                     }
 
-                    // Yield average amplitude for VU meter
-                    var sum: Float = 0
-                    for i in 0..<frames {
-                        sum += abs(data[i])
-                    }
-                    let avg = frames > 0 ? sum / Float(frames) : 0
-                    self.amplitudeContinuation?.yield(avg)
+                    // Yield the frequency spectrum for the visualizer.
+                    let spectrum = self.spectrumAnalyzer.process(samplesArray)
+                    self.spectrumContinuation?.yield(spectrum)
                 }
             }
 
@@ -246,7 +248,7 @@ final class AudioRecorder: @unchecked Sendable {
             }
         }
 
-        return RecordingOutput(amplitude: amplitudeStream)
+        return RecordingOutput(spectrum: spectrumStream)
     }
 
     nonisolated func stopRecording() {
@@ -270,8 +272,8 @@ final class AudioRecorder: @unchecked Sendable {
 
         heartbeatTimer.cancel()
         heartbeatLock.withLock { $0.lastTapTimestamp = nil }
-        amplitudeContinuation?.finish()
-        amplitudeContinuation = nil
+        spectrumContinuation?.finish()
+        spectrumContinuation = nil
 
         // Stop engine
         engine?.stop()
