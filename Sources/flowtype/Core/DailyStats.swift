@@ -67,19 +67,6 @@ final class DailyStatsStore: ObservableObject {
         return Int(Double(totalWordCount) / totalMinutes)
     }
 
-    var estimatedTimeSaved: String {
-        // Assume typing speed of 40 WPM (≈ 200 CPM)
-        let typingMinutes = Double(totalWordCount) / 40.0
-        let speakingMinutes = Double(totalDurationMs) / 1000.0 / 60.0
-        let savedMinutes = max(0, Int(typingMinutes - speakingMinutes))
-        let hours = savedMinutes / 60
-        let minutes = savedMinutes % 60
-        if hours > 0 {
-            return "\(hours) hr \(minutes) min"
-        }
-        return "\(minutes) min"
-    }
-
     /// Estimated time saved vs typing at 40 WPM, in whole seconds (for StatFormatting).
     var estimatedTimeSavedSeconds: Int {
         let typingMinutes = Double(totalWordCount) / 40.0
