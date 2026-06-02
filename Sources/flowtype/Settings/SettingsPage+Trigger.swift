@@ -6,7 +6,7 @@ extension SettingsPage {
             HStack(spacing: 8) {
                 Image(systemName: "keyboard")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.orange)
+                    .foregroundStyle(Brand.gradient)
                 Text("触发键与交互")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()

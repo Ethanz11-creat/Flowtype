@@ -52,14 +52,6 @@ struct ServiceConfigCard: View {
             ModelIDField(title: "模型 ID", model: $model, placeholder: modelPlaceholder)
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-        )
+        .glassCard()
     }
 }

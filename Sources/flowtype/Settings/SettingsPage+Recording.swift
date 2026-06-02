@@ -6,7 +6,7 @@ extension SettingsPage {
             HStack(spacing: 8) {
                 Image(systemName: "mic.circle")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.red)
+                    .foregroundStyle(Brand.gradient)
                 Text("录音设置")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()

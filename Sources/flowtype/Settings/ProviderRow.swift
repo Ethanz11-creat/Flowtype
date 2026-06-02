@@ -19,7 +19,7 @@ struct ProviderRow: View {
         HStack(spacing: 12) {
             // Status dot
             Circle()
-                .fill(isActive ? Color.green : Color.gray.opacity(0.4))
+                .fill(isActive ? Brand.accent : Color.gray.opacity(0.4))
                 .frame(width: 8, height: 8)
 
             // Info
@@ -82,7 +82,7 @@ struct ProviderRow: View {
                     }
                     .font(.system(size: 11))
                     .buttonStyle(.plain)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Brand.accent)
                 }
 
                 Button("编辑") {
@@ -101,15 +101,7 @@ struct ProviderRow: View {
             }
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isActive ? Color.green.opacity(0.4) : Color.secondary.opacity(0.08), lineWidth: isActive ? 2 : 1)
-        )
+        .glassCard(active: isActive, cornerRadius: 10)
     }
 
     private func runTest() async {

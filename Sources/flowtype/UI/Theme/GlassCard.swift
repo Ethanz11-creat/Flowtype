@@ -28,6 +28,7 @@ struct GlassCard: ViewModifier {
 
 extension View {
     /// Apply the unified glass-card surface. Use `active: true` for the selected/current item.
+    /// Convention: default radius 12 for primary cards; pass `cornerRadius: 10` for compact/nested cards.
     func glassCard(active: Bool = false, cornerRadius: CGFloat = 12) -> some View {
         modifier(GlassCard(active: active, cornerRadius: cornerRadius))
     }

@@ -6,7 +6,7 @@ extension SettingsPage {
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.green)
+                    .foregroundStyle(Brand.gradient)
                 Text("权限与系统状态")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
@@ -39,15 +39,7 @@ extension SettingsPage {
                 .controlSize(.small)
             }
             .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.secondary.opacity(0.08), lineWidth: 1)
-            )
+            .glassCard(cornerRadius: 10)
         }
         .padding(.horizontal, 4)
     }

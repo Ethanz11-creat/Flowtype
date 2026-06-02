@@ -8,7 +8,7 @@ extension SettingsPage {
                     .font(.system(size: 12))
             }
             .buttonStyle(.plain)
-            .foregroundColor(.blue)
+            .foregroundColor(Brand.accent)
             Spacer()
         }
         .padding(.horizontal, 4)

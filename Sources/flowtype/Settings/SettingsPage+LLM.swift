@@ -6,7 +6,7 @@ extension SettingsPage {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.purple)
+                    .foregroundStyle(Brand.gradient)
                 Text("文本润色（LLM）")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
@@ -52,7 +52,7 @@ extension SettingsPage {
                     .font(.system(size: 12))
             }
             .buttonStyle(.plain)
-            .foregroundColor(.blue)
+            .foregroundColor(Brand.accent)
 
             // System Prompt Editor
             VStack(alignment: .leading, spacing: 6) {
@@ -66,7 +66,7 @@ extension SettingsPage {
                     }
                     .font(.system(size: 11))
                     .buttonStyle(.plain)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Brand.accent)
                 }
 
                 Text("双击触发键结束录音时，使用此提示词对识别结果进行润色。")

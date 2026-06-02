@@ -52,15 +52,7 @@ struct QwenModelStatusCard: View {
             }
         }
         .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(0.03), radius: 6, x: 0, y: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(statusColor.opacity(0.3), lineWidth: 1)
-        )
+        .glassCard(cornerRadius: 10)
     }
 
     private var statusIcon: String {
