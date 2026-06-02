@@ -191,9 +191,6 @@ struct Configuration: Codable, Equatable {
     // Other settings
     var triggerKey: TriggerKey = .command
     var interactionMode: InteractionMode = .tapToStart
-    var dumpAudio: Bool = false
-    var enableFillerStrip: Bool = true
-    var enableTermCorrection: Bool = true
     var enableAudioFeedback: Bool = true
     var maxRecordingDuration: Int = 600 // seconds, default 10 minutes
 
@@ -271,9 +268,6 @@ struct Configuration: Codable, Equatable {
             ?? d.asrLanguage
         triggerKey = (try? c.decode(TriggerKey.self, forKey: .triggerKey)) ?? d.triggerKey
         interactionMode = (try? c.decode(InteractionMode.self, forKey: .interactionMode)) ?? d.interactionMode
-        dumpAudio = (try? c.decode(Bool.self, forKey: .dumpAudio)) ?? d.dumpAudio
-        enableFillerStrip = (try? c.decode(Bool.self, forKey: .enableFillerStrip)) ?? d.enableFillerStrip
-        enableTermCorrection = (try? c.decode(Bool.self, forKey: .enableTermCorrection)) ?? d.enableTermCorrection
         enableAudioFeedback = (try? c.decode(Bool.self, forKey: .enableAudioFeedback)) ?? d.enableAudioFeedback
         let rawDuration = (try? c.decode(Int.self, forKey: .maxRecordingDuration)) ?? d.maxRecordingDuration
         maxRecordingDuration = min(max(rawDuration, Configuration.minRecordingDuration), Configuration.maxRecordingDurationCap)
@@ -307,9 +301,6 @@ extension Configuration {
         case llmProviders
         case triggerKey
         case interactionMode
-        case dumpAudio
-        case enableFillerStrip
-        case enableTermCorrection
         case enableAudioFeedback
         case maxRecordingDuration
         case systemPrompt
@@ -328,9 +319,6 @@ extension Configuration {
         try container.encode(llmProviders, forKey: .llmProviders)
         try container.encode(triggerKey, forKey: .triggerKey)
         try container.encode(interactionMode, forKey: .interactionMode)
-        try container.encode(dumpAudio, forKey: .dumpAudio)
-        try container.encode(enableFillerStrip, forKey: .enableFillerStrip)
-        try container.encode(enableTermCorrection, forKey: .enableTermCorrection)
         try container.encode(enableAudioFeedback, forKey: .enableAudioFeedback)
         try container.encode(maxRecordingDuration, forKey: .maxRecordingDuration)
         try container.encode(systemPrompt, forKey: .systemPrompt)

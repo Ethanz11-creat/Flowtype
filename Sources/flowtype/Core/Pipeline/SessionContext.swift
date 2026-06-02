@@ -2,15 +2,6 @@ import Foundation
 import Combine
 import AppKit
 
-// MARK: - AppProfile
-
-/// Placeholder for per-application styling configuration.
-/// Will be expanded in Phase 2 of the pipeline refactor.
-struct AppProfile {
-    let bundleID: String
-    let stylePackID: String?
-}
-
 // MARK: - SessionContext
 
 /// Shared mutable state for a single dictation session.
@@ -45,15 +36,6 @@ final class SessionContext {
 
     /// When the recording phase started (for diagnostics).
     var recordingStartTime: Date?
-
-    /// Detected target application profile (placeholder for Phase 2).
-    var appProfile: AppProfile?
-
-    /// Clipboard content saved before injection (for restore).
-    var clipboardContent: String?
-
-    /// Text selected in the target app before recording (for context-aware polish).
-    var selectedText: String?
 
     /// Publisher for state transitions (observed by UI and observers).
     let statePublisher: PassthroughSubject<SessionState, Never>
