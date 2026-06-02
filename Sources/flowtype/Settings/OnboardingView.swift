@@ -14,7 +14,7 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 ForEach(0..<4) { i in
                     Circle()
-                        .fill(i <= step ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(i <= step ? Brand.accent : Color.secondary.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
             }
@@ -44,7 +44,7 @@ struct OnboardingView: View {
 
             Image(systemName: "mic.badge.plus")
                 .font(.system(size: 56))
-                .foregroundColor(.accentColor)
+                .foregroundStyle(Brand.gradient)
 
             Text("欢迎使用 FlowType")
                 .font(.system(size: 24, weight: .bold))
@@ -65,6 +65,7 @@ struct OnboardingView: View {
                     .padding(.vertical, 10)
             }
             .buttonStyle(.borderedProminent)
+            .tint(Brand.accent)
             .controlSize(.large)
         }
     }
@@ -137,6 +138,7 @@ struct OnboardingView: View {
                         .frame(width: 80)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Brand.accent)
             }
         }
         .onAppear {
@@ -181,10 +183,7 @@ struct OnboardingView: View {
             }
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
+        .glassCard(cornerRadius: 10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(granted ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
@@ -310,10 +309,7 @@ struct OnboardingView: View {
                 }
             }
             .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
+            .glassCard()
 
             Spacer()
 
@@ -331,6 +327,7 @@ struct OnboardingView: View {
                         .frame(width: 100)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Brand.accent)
             }
         }
     }
@@ -401,6 +398,7 @@ struct OnboardingView: View {
                         .frame(width: 160)
                 }
                 .buttonStyle(.borderedProminent)
+                .tint(Brand.accent)
             }
         }
         .onAppear {

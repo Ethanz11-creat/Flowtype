@@ -50,6 +50,7 @@ struct MainWindowView: View {
             case .settings: SettingsPage()
             }
         }
+        .tint(Brand.accent)
         .frame(minWidth: 780, minHeight: 520)
     }
 }
