@@ -38,6 +38,7 @@ enum SelfTest {
         testInjectionSegmentation(r) // injection helpers
         testASRWiring(r)         // ASR language + context
         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
+        testFFTPeak(r)           // SpectrumAnalyzer FFT correctness
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -170,6 +171,21 @@ enum SelfTest {
         r.check(abs(up[0] - 0.5) < 1e-6, "spectrum: attack rate (fast rise)")
         let down = SpectrumMath.smooth(previous: [1], target: [0], attack: 0.5, decay: 0.1)
         r.check(abs(down[0] - 0.9) < 1e-6, "spectrum: decay rate (slow fall)")
+    }
+
+    // MARK: - SpectrumAnalyzer FFT correctness
+
+    static func testFFTPeak(_ r: Reporter) {
+        let analyzer = SpectrumAnalyzer()
+        let fs: Float = 16000
+        let freq: Float = 1000
+        let n = 1024
+        let samples = (0..<n).map { sin(2 * Float.pi * freq * Float($0) / fs) }
+        let mags = analyzer.magnitudes(samples)
+        r.eq(mags.count, 512, "spectrum: FFT half-spectrum length")
+        let peak = mags.indices.max(by: { mags[$0] < mags[$1] })!
+        let expected = Int(freq / (fs / Float(n)))     // 1000 / 15.625 = 64
+        r.check(abs(peak - expected) <= 2, "spectrum: FFT peak at ~1kHz bin (got \(peak), want ~\(expected))")
     }
 
     // MARK: - Injection segmentation (B-inject)
