@@ -80,6 +80,52 @@ enum StatsEngine {
         return len
     }
 
+    // MARK: Milestones (PRD §6) — pure
+
+    /// Highest reached milestone day; 0 when streak < first milestone.
+    static func flameTier(_ streak: Int) -> Int {
+        StatsConfig.milestones.last(where: { streak >= $0 }) ?? 0
+    }
+
+    /// Next milestone strictly above streak; nil once the top milestone is reached.
+    static func nextMilestone(_ streak: Int) -> Int? {
+        StatsConfig.milestones.first(where: { $0 > streak })
+    }
+
+    /// Fraction [0,1] from the last reached anchor toward the next milestone.
+    static func milestoneProgress(_ streak: Int) -> Double {
+        guard let next = nextMilestone(streak) else { return 1 }
+        let prev = flameTier(streak)
+        let span = Double(next - prev)
+        guard span > 0 else { return 1 }
+        return min(1, max(0, Double(streak - prev) / span))
+    }
+
+    /// Active days (sessionCount>0) within the calendar month containing `now`.
+    static func activeDaysInMonth(_ all: [DailyStats], now: Date, cal: Calendar) -> Int {
+        let m = cal.dateComponents([.year, .month], from: now)
+        return all.filter { $0.sessionCount > 0 }.filter { d in
+            guard let date = parseDate(d.date, cal) else { return false }
+            let dc = cal.dateComponents([.year, .month], from: date)
+            return dc.year == m.year && dc.month == m.month
+        }.count
+    }
+
+    /// Calendar month (1…12) in which the longest streak ends; nil when there is no streak.
+    static func longestStreakEndMonth(_ all: [DailyStats], now: Date, cal: Calendar) -> Int? {
+        let ordinals = Set(all.filter { $0.sessionCount > 0 }
+            .compactMap { parseDate($0.date, cal).map { dayOrdinal($0, cal) } })
+        guard !ordinals.isEmpty else { return nil }
+        var best = 0, bestEnd = ordinals.max()!
+        for o in ordinals where !ordinals.contains(o - 1) {
+            var len = 1; while ordinals.contains(o + len) { len += 1 }
+            if len >= best { best = len; bestEnd = o + len - 1 }
+        }
+        let todayOrd = dayOrdinal(now, cal)
+        guard let endDate = cal.date(byAdding: .day, value: bestEnd - todayOrd, to: cal.startOfDay(for: now)) else { return nil }
+        return cal.component(.month, from: endDate)
+    }
+
     /// One cell per day across the range (today back N days), missing days → chars 0, level 0.
     /// Ordered oldest→newest. weekday 0=Sun..6=Sat for the UI's 7-row layout.
     static func denseHeatmap(_ all: [DailyStats], range: StatsRange, now: Date, cal: Calendar) -> [HeatCell] {

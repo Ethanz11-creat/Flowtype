@@ -436,6 +436,16 @@ enum SelfTest {
         r.eq(StatFormatting.plain("18,402"),
              [StatSegment(number: "18,402", unit: nil)],
              "stat: plain word count unchanged")
+
+        // Milestone system (PRD §6) — pure
+        r.eq(StatsEngine.flameTier(6), 3, "ms: tier(6)=3")
+        r.eq(StatsEngine.flameTier(2), 0, "ms: tier(2)=0 (<3)")
+        r.eq(StatsEngine.flameTier(365), 365, "ms: tier(365)=365")
+        r.eq(StatsEngine.nextMilestone(6), 7, "ms: next(6)=7")
+        r.check(StatsEngine.nextMilestone(365) == nil, "ms: next(365)=nil")
+        r.eq(StatsEngine.milestoneProgress(6), 0.75, "ms: progress(6)=.75")
+        r.eq(StatsEngine.milestoneProgress(3), 0.0, "ms: progress(3)=0 at anchor")
+        r.eq(StatsEngine.milestoneProgress(400), 1.0, "ms: progress(>max)=1")
     }
 
     // MARK: - Injection segmentation (B-inject)
