@@ -1,26 +1,26 @@
 import SwiftUI
 
-/// Mirror-spectrum soundwave for the recording capsule. The bars are symmetric around the
-/// center: the middle shows the LOW-frequency band (where speech energy concentrates, so it
-/// sits tallest), and the two ends show progressively HIGHER frequencies (quieter, so they
-/// sit lower). Each tier still reacts to its own band's energy, so the wave reflects what you
-/// actually say; a calm low line shows when not recording.
+/// Soundwave for the recording capsule. Broadly middle-tall / edges-short (a center envelope
+/// shapes the silhouette), but each bar is driven by its OWN frequency sample so the wave
+/// flickers naturally and is NOT a rigid left/right mirror — closer to how Typeless looks.
+/// Overall height rises and falls with loudness; a calm low line shows when not recording.
 struct AudioVisualizer: View {
     @EnvironmentObject var session: SessionController
 
     private static let barCount = 9
-    private static let center = barCount / 2          // index 4
-    private static let tierCount = 5                  // center tier + 4 mirrored tiers outward
+    private static let center = barCount / 2
     private static let envelope = SpectrumMath.centerEnvelope(count: barCount)
     private let maxBarHeight: CGFloat = 20
     private let minBarHeight: CGFloat = 3
 
     var body: some View {
         let active = session.sessionState.isRecordingIndicator
-        let tiers = Self.fold(session.spectrum, into: Self.tierCount)
+        let spec = session.spectrum
+        let samples = Self.sample(spec, count: Self.barCount)     // per-bar freq detail (asymmetric)
+        let loud = spec.isEmpty ? 0 : CGFloat(spec.max() ?? 0)    // overall loudness 0...1
         HStack(alignment: .center, spacing: 2) {
             ForEach(0..<Self.barCount, id: \.self) { i in
-                let level = barLevel(i, active: active, tiers: tiers)
+                let level = barLevel(i, active: active, detail: samples[i], loud: loud)
                 Capsule()
                     .fill(barColor(i, level: level))
                     .frame(width: 3, height: minBarHeight + level * (maxBarHeight - minBarHeight))
@@ -30,27 +30,26 @@ struct AudioVisualizer: View {
         .animation(.easeOut(duration: 0.08), value: session.spectrum)  // tween between updates
     }
 
-    /// Average the (low→high) spectrum into `count` frequency tiers (tier 0 = lowest band).
-    private static func fold(_ spec: [Float], into count: Int) -> [CGFloat] {
+    /// Sample the (low→high) spectrum at `count` points so each bar gets a DISTINCT band — this is
+    /// what breaks the rigid mirror symmetry and gives a natural, lively, slightly-uneven flicker.
+    private static func sample(_ spec: [Float], count: Int) -> [CGFloat] {
         guard !spec.isEmpty, count > 0 else { return Array(repeating: 0, count: count) }
         let n = spec.count
-        return (0..<count).map { j in
-            let lo = j * n / count
-            let hi = Swift.max(lo + 1, (j + 1) * n / count)
-            let slice = spec[lo..<Swift.min(hi, n)]
-            return CGFloat(slice.reduce(0, +) / Float(slice.count))
+        return (0..<count).map { i in
+            let idx = count == 1 ? 0 : i * (n - 1) / (count - 1)
+            return CGFloat(spec[Swift.min(idx, n - 1)])
         }
     }
 
-    /// Mirror layout: center bar = tier 0 (low freq), ends = tier 4 (high freq). A light center
-    /// envelope keeps the silhouette middle-tall even when a high-frequency tier briefly spikes.
-    private func barLevel(_ i: Int, active: Bool, tiers: [CGFloat]) -> CGFloat {
+    /// Silhouette = center envelope (broad middle-tall / short edges); per-bar frequency detail adds
+    /// the asymmetric flicker; overall amplitude follows loudness. Deliberately NOT a strict mirror.
+    private func barLevel(_ i: Int, active: Bool, detail: CGFloat, loud: CGFloat) -> CGFloat {
         let env = CGFloat(Self.envelope[i])
         guard active else { return env * 0.12 }
-        let tier = Swift.min(abs(i - Self.center), tiers.count - 1)
-        let band = tiers[tier]
-        let shaped = band * (0.6 + 0.4 * env)
-        return Swift.min(Swift.max(shaped, 0.04), 1.0)
+        let shape = 0.22 + 0.78 * env                 // broad middle-tall silhouette
+        let flicker = 0.55 + 0.45 * detail            // distinct per-bar band → asymmetric motion
+        let level = shape * flicker * (0.45 + 0.55 * loud)
+        return Swift.min(Swift.max(level, 0.04), 1.0)
     }
 
     /// Symmetric color: center is brighter brand-purple, ends fade toward blue; brighter with energy.
