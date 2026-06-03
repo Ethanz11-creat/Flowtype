@@ -8,20 +8,20 @@ struct StatSegment: Equatable {
 
 /// Pure formatters that turn raw stats into big-number/small-unit segments.
 enum StatFormatting {
-    /// Whole seconds → 小时/分钟 segments (hours omitted when zero).
+    /// Whole seconds → big-number/small-unit h/m segments (prototype: "3h08m"; minutes zero-padded when hours present).
     static func duration(seconds: Int) -> [StatSegment] {
         let s = max(0, seconds)
-        let hours = s / 3600
-        let minutes = (s % 3600) / 60
-        if hours > 0 {
-            return [StatSegment(number: "\(hours)", unit: "小时"),
-                    StatSegment(number: "\(minutes)", unit: "分钟")]
+        let h = s / 3600
+        let m = (s % 3600) / 60
+        if h > 0 {
+            return [StatSegment(number: "\(h)", unit: "h"),
+                    StatSegment(number: String(format: "%02d", m), unit: "m")]
         }
-        return [StatSegment(number: "\(minutes)", unit: "分钟")]
+        return [StatSegment(number: "\(m)", unit: "m")]
     }
 
     static func speed(_ wpm: Int) -> [StatSegment] {
-        [StatSegment(number: "\(max(0, wpm))", unit: "字/分")]
+        [StatSegment(number: "\(max(0, wpm))", unit: " 字/分")]   // leading space → "142 字/分"
     }
 
     /// Plain value with no unit (e.g. word count) — a single unchanged big number.
@@ -30,23 +30,24 @@ enum StatFormatting {
     }
 }
 
-/// Renders segments as big number + small muted unit, baseline-aligned, with spacing.
 struct StatValueView: View {
     let segments: [StatSegment]
     var numberSize: CGFloat = 22
     var unitSize: CGFloat = 11
+    var numberWeight: Font.Weight = .semibold     // prototype .d = 600
+    var numberColor: Color = Theme.textPrimary
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
                 Text(seg.number)
-                    .font(.system(size: numberSize, weight: .bold))
+                    .font(.system(size: numberSize, weight: numberWeight))
                     .monospacedDigit()
-                    .foregroundColor(.primary)
+                    .foregroundColor(numberColor)
                 if let unit = seg.unit {
-                    Text(" \(unit) ")
-                        .font(.system(size: unitSize, weight: .medium))
-                        .foregroundColor(.secondary)
+                    Text(unit)
+                        .font(.system(size: unitSize, weight: .regular))
+                        .foregroundColor(Theme.textSecondary)
                 }
             }
         }

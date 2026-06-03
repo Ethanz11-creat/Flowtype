@@ -422,20 +422,20 @@ enum SelfTest {
 
     static func testStatFormatting(_ r: Reporter) {
         r.eq(StatFormatting.duration(seconds: 8054),
-             [StatSegment(number: "2", unit: "小时"), StatSegment(number: "14", unit: "分钟")],
-             "stat: 8054s → 2小时14分钟")
+             [StatSegment(number: "2", unit: "h"), StatSegment(number: "14", unit: "m")],
+             "stat: 8054s → 2h14m")
         r.eq(StatFormatting.duration(seconds: 840),
-             [StatSegment(number: "14", unit: "分钟")],
-             "stat: 840s → 14分钟 (no hours segment)")
+             [StatSegment(number: "14", unit: "m")],
+             "stat: 840s → 14m (no hours segment)")
         r.eq(StatFormatting.duration(seconds: 0),
-             [StatSegment(number: "0", unit: "分钟")],
-             "stat: 0s → 0分钟")
+             [StatSegment(number: "0", unit: "m")],
+             "stat: 0s → 0m")
         r.eq(StatFormatting.speed(142),
-             [StatSegment(number: "142", unit: "字/分")],
-             "stat: speed")
+             [StatSegment(number: "142", unit: " 字/分")],
+             "stat: speed 142 → 142 字/分")
         r.eq(StatFormatting.plain("18,402"),
              [StatSegment(number: "18,402", unit: nil)],
-             "stat: plain word count unchanged")
+             "stat: plain passthrough")
 
         // Milestone system (PRD §6) — pure
         r.eq(StatsEngine.flameTier(6), 3, "ms: tier(6)=3")
