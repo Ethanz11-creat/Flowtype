@@ -13,7 +13,7 @@ struct OverviewPage: View {
                 }
                 .frame(height: 200)
 
-                Spacer(minLength: 20)
+                StatsPanel()
             }
             .padding(24)
         }
