@@ -34,6 +34,7 @@ struct OnboardingView: View {
             .padding(.bottom, 24)
         }
         .frame(width: 520, height: 480)
+        .frostWindowBackground()
     }
 
     // MARK: - Step 0: Welcome
