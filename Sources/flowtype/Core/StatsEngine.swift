@@ -6,7 +6,14 @@ enum StatsRange: String, CaseIterable, Identifiable {
     var displayName: String { switch self { case .all: return "All"; case .d30: return "30d"; case .d7: return "7d" } }
 }
 
-struct HeatCell: Equatable { let dayOrdinal: Int; let date: String; let chars: Int; let level: Int }
+struct HeatCell: Equatable {
+    let dayOrdinal: Int
+    let date: String        // yyyy-MM-dd
+    let chars: Int
+    let sessions: Int
+    let level: Int          // 0...4
+    let weekday: Int        // 0=Sun … 6=Sat
+}
 
 struct StatsSummary: Equatable {
     var sessions = 0
@@ -24,7 +31,7 @@ struct StatsSummary: Equatable {
 }
 
 enum StatsEngine {
-    static let baselineCPM = 40
+    static let baselineCPM = StatsConfig.baselineCPM
 
     /// Local-day ordinal (days since era) of a date's local midnight — DST-safe.
     static func dayOrdinal(_ date: Date, _ cal: Calendar) -> Int {
@@ -73,6 +80,27 @@ enum StatsEngine {
         return len
     }
 
+    /// One cell per day across the range (today back N days), missing days → chars 0, level 0.
+    /// Ordered oldest→newest. weekday 0=Sun..6=Sat for the UI's 7-row layout.
+    static func denseHeatmap(_ all: [DailyStats], range: StatsRange, now: Date, cal: Calendar) -> [HeatCell] {
+        let n = StatsConfig.days(for: range)
+        var charsByDate: [String: Int] = [:], sessByDate: [String: Int] = [:]
+        for d in all { charsByDate[d.date, default: 0] += d.totalWordCount; sessByDate[d.date, default: 0] += d.sessionCount }
+        let maxChars = all.map { $0.totalWordCount }.max() ?? 0
+        let f = DateFormatter(); f.calendar = cal; f.timeZone = cal.timeZone; f.dateFormat = "yyyy-MM-dd"
+        let today = cal.startOfDay(for: now)
+        var cells: [HeatCell] = []
+        for offset in stride(from: n - 1, through: 0, by: -1) {
+            guard let day = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let key = f.string(from: day)
+            let chars = charsByDate[key] ?? 0
+            let weekday = (cal.component(.weekday, from: day) - 1)   // Calendar: 1=Sun → 0
+            cells.append(HeatCell(dayOrdinal: dayOrdinal(day, cal), date: key, chars: chars,
+                                  sessions: sessByDate[key] ?? 0, level: level(chars, max: maxChars), weekday: weekday))
+        }
+        return cells
+    }
+
     static func summarize(_ all: [DailyStats], range: StatsRange, now: Date, cal: Calendar = .current) -> StatsSummary {
         let stats = filtered(all, range: range, now: now, cal: cal)
         var s = StatsSummary()
@@ -96,12 +124,7 @@ enum StatsEngine {
         s.longestStreak = longestRun(ordinals)
         s.currentStreak = currentRun(ordinals, todayOrdinal: dayOrdinal(now, cal))
 
-        let maxChars = stats.map { $0.totalWordCount }.max() ?? 0
-        s.heatmap = stats.compactMap { d -> HeatCell? in
-            guard let date = parseDate(d.date, cal) else { return nil }
-            return HeatCell(dayOrdinal: dayOrdinal(date, cal), date: d.date, chars: d.totalWordCount,
-                            level: level(d.totalWordCount, max: maxChars))
-        }.sorted { $0.dayOrdinal < $1.dayOrdinal }
+        s.heatmap = denseHeatmap(all, range: range, now: now, cal: cal)
         return s
     }
 }

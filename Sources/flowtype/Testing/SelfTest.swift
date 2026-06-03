@@ -208,6 +208,26 @@ enum SelfTest {
         r.eq(StatsEngine.summarize(many, range: .all, now: now, cal: cal).activeDays, 3, "engine: all keeps 3")
     }
 
+    // MARK: - StatsEngine: dense heatmap (full range, missing days = 0)
+
+    static func testHeatmapDensity(_ r: Reporter) {
+        func day(_ d: String, chars: Int, recMs: UInt64, sessions: Int = 1, hist: [Int]? = nil) -> DailyStats {
+            DailyStats(date: d, totalDurationMs: recMs, totalWordCount: chars, sessionCount: sessions,
+                       totalRecordingMs: recMs, byApp: [:], byLang: [:],
+                       hourHistogram: hist ?? Array(repeating: 0, count: 24))
+        }
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = StatsEngine.parseDate("2026-06-03", cal)!
+
+        // dense heatmap: 7d range → exactly 7 cells even with one data day
+        let h7 = StatsEngine.summarize([day("2026-06-03", chars: 100, recMs: 1000)], range: .d7, now: now, cal: cal).heatmap
+        r.eq(h7.count, 7, "heatmap: 7d → 7 cells (dense)")
+        r.eq(h7.last?.date, "2026-06-03", "heatmap: last cell is today")
+        r.eq(h7.filter { $0.chars > 0 }.count, 1, "heatmap: only the one data day is non-zero")
+        r.eq(StatsEngine.summarize([], range: .d30, now: now, cal: cal).heatmap.count, 30, "heatmap: 30d empty → 30 zero cells")
+        r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -228,6 +248,7 @@ enum SelfTest {
         testModelLocator(r)        // ModelLocator completeness validation
         testStatsDataModel(r)      // stats data model: language tag + legacy decode
         testStatsEngine(r)         // StatsEngine: metrics, streaks, heatmap
+        testHeatmapDensity(r)      // StatsEngine: dense heatmap (full range, missing days = 0)
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
