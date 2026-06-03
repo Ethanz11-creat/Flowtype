@@ -49,6 +49,9 @@ final class SessionContext {
     /// Final text after all processing / polish, ready for injection.
     var finalText: String = ""
 
+    /// Set when LLM polish failed and we degraded to keeping the raw ASR text (history then marks it .raw).
+    var polishFailed: Bool = false
+
     /// Guard to prevent double-injection.
     var hasInjected: Bool = false
 

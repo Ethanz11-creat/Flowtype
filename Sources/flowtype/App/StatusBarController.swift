@@ -52,6 +52,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
                     self.statusItem?.button?.toolTip = "FlowType — 润色中..."
                 case .injecting:
                     self.statusItem?.button?.toolTip = "FlowType — 输入中..."
+                case .notice(let msg):
+                    self.statusItem?.button?.toolTip = "FlowType — \(msg)"
                 case .error(let msg):
                     self.statusItem?.button?.toolTip = "FlowType — 错误: \(msg)"
                 }

@@ -11,6 +11,7 @@ enum SessionState: Equatable {
     case processing(provider: String)
     case polishing(preview: String)
     case injecting
+    case notice(String)   // 温和提示(如润色降级):无按钮、短暂自动消失
     case error(String)
 }
 
@@ -291,12 +292,24 @@ final class SessionController: ObservableObject {
                 }
 
             case .suspend(let recovery):
-                self.suspendedContext = recovery
-                self.suspendedPayload = payload
-                self.suspendedStageIndex = index
-                self.lastErrorRawText = recovery.rawText
-                self.errorActions = self.buildErrorActions(from: recovery)
-                self.transition(to: .error(recovery.error.localizedDescription), context: context)
+                // Polish is an OPTIONAL enhancement — its failure must NOT discard the already-recognized
+                // text or pop intrusive buttons. Degrade: keep the raw ASR text in history (marked .raw),
+                // show a gentle auto-dismissing notice, do NOT inject. Other stages keep the error+recovery UI.
+                if recovery.failedStage == "Polish", let raw = recovery.rawText, !raw.isEmpty {
+                    context.rawTranscript = raw
+                    context.finalText = raw
+                    context.polishFailed = true
+                    self.saveHistory(context: context)
+                    AppLogger.log("[SessionController#\(context.sessionID)] Polish failed → raw kept in history, no injection")
+                    self.transition(to: .notice("润色失败 · 原文已存历史"), context: context)
+                } else {
+                    self.suspendedContext = recovery
+                    self.suspendedPayload = payload
+                    self.suspendedStageIndex = index
+                    self.lastErrorRawText = recovery.rawText
+                    self.errorActions = self.buildErrorActions(from: recovery)
+                    self.transition(to: .error(recovery.error.localizedDescription), context: context)
+                }
 
             case .complete:
                 self.transition(to: .idle, context: context)
@@ -323,6 +336,20 @@ final class SessionController: ObservableObject {
         // covers the cancel/error paths; the normal .complete → .idle path needs this.
         if case .idle = newState {
             WindowManager.shared.hide()
+        }
+
+        // Auto-dismiss the gentle notice after ~2.2s (no buttons; slides away like a normal finish).
+        if case .notice = newState {
+            WindowManager.shared.showWindow()
+            errorDismissTask?.cancel()
+            let noticeSessionID = activeSessionID
+            errorDismissTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(nanoseconds: 2_200_000_000) } catch { return }
+                guard let self else { return }
+                if case .notice = self.sessionState, self.activeSessionID == noticeSessionID {
+                    self.resetToIdle()
+                }
+            }
         }
 
         // Auto-dismiss error after 5 seconds
@@ -379,6 +406,12 @@ final class SessionController: ObservableObject {
 
     // MARK: - History
 
+    /// History label for a finished session: `.polish` only when polish was requested AND succeeded.
+    /// A degraded (failed-polish) session is stored as `.raw` — its text is the un-polished original.
+    nonisolated static func historyMode(usePolish: Bool, polishFailed: Bool) -> PolishMode {
+        (usePolish && !polishFailed) ? .polish : .raw
+    }
+
     private func saveHistory(context: SessionContext) {
         let durationMs: UInt64?
         if let recStart = context.recordingStartTime {
@@ -386,7 +419,7 @@ final class SessionController: ObservableObject {
         } else {
             durationMs = nil
         }
-        let mode: PolishMode = context.usePolish ? .polish : .raw
+        let mode: PolishMode = SessionController.historyMode(usePolish: context.usePolish, polishFailed: context.polishFailed)
         let sttBackend = speechRouter.qwenProvider.isLoaded ? "qwen" : "apple"
         let session = DictationSession(
             rawTranscript: context.rawTranscript,
@@ -492,6 +525,7 @@ extension SessionState {
         case .processing: return .blue
         case .polishing:  return Color(red: 0.8, green: 0.4, blue: 0.9)
         case .injecting:  return .green
+        case .notice:     return Color(red: 0.66, green: 0.61, blue: 1.0)  // 温和紫 #A99BFF,非红
         case .error:      return .red
         }
     }
@@ -503,6 +537,7 @@ extension SessionState {
         case .processing(let provider):  return "\(provider)..."
         case .polishing:                 return "润色中..."
         case .injecting:                 return "输入中..."
+        case .notice(let msg):           return msg
         case .error:                     return "出错了"
         }
     }

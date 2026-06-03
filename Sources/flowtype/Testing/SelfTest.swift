@@ -241,6 +241,7 @@ enum SelfTest {
         testSpectrumProcess(r)   // SpectrumAnalyzer.process smoothed bands
         testStatFormatting(r)    // StatFormatting pure formatters
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
+        testHistoryMode(r)         // polish-degrade → history label .raw
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
         testAppearanceConfig(r)    // appearance pref round-trip + legacy default
         testModelConfig(r)         // model provisioning fields: round-trip + legacy default
@@ -519,6 +520,14 @@ enum SelfTest {
     static func noonDate(_ iso: String, _ cal: Calendar) -> Date {
         let f = DateFormatter(); f.calendar = cal; f.timeZone = cal.timeZone; f.dateFormat = "yyyy-MM-dd HH:mm"
         return f.date(from: "\(iso) 12:00")!
+    }
+
+    // MARK: - Polish-degrade → history label
+
+    static func testHistoryMode(_ r: Reporter) {
+        r.check(SessionController.historyMode(usePolish: true, polishFailed: false) == .polish, "history: polish ok → .polish")
+        r.check(SessionController.historyMode(usePolish: true, polishFailed: true) == .raw, "history: polish failed → degraded .raw")
+        r.check(SessionController.historyMode(usePolish: false, polishFailed: false) == .raw, "history: raw request → .raw")
     }
 
     // MARK: - JSONMigration idempotent import

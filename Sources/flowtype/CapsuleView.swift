@@ -96,6 +96,8 @@ struct CapsuleView: View {
             return preview.isEmpty ? (session.previewText.isEmpty ? "润色中..." : session.previewText) : preview
         case .injecting:
             return session.previewText.isEmpty ? "输入中..." : session.previewText
+        case .notice:
+            return ""
         case .error(let msg):
             return msg
         }
@@ -103,46 +105,21 @@ struct CapsuleView: View {
 
     @ViewBuilder
     private var subtitleContent: some View {
-        if case .error = session.sessionState, !session.errorActions.isEmpty {
-            errorActionButtons
-        } else {
-            HStack(spacing: 4) {
-                if let timer = recordingTimerText {
-                    Text(timer)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(statusColor.opacity(0.7))
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-                Text(statusSubtitle)
+        // No action buttons on failure — they look intrusive. Every state (incl. errors/notices) shows a
+        // single gentle text line that auto-dismisses. Polish failures degrade to a notice + history entry;
+        // genuine errors show a brief message and slide away on their own.
+        HStack(spacing: 4) {
+            if let timer = recordingTimerText {
+                Text(timer)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(statusColor.opacity(0.7))
-                    .lineLimit(1)
-                    .truncationMode(.head)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-        }
-    }
-
-    private var errorActionButtons: some View {
-        HStack(spacing: 6) {
-            ForEach(session.errorActions, id: \.self) { action in
-                Button(action.displayName) {
-                    switch action {
-                    case .retry:
-                        session.retryPolish()
-                    case .copyRaw:
-                        if let text = session.lastErrorRawText {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(text, forType: .string)
-                        }
-                        session.dismissError()
-                    case .dismiss:
-                        session.dismissError()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.mini)
-                .tint(action == .dismiss ? .gray : .red)
-            }
+            Text(statusSubtitle)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(statusColor.opacity(0.7))
+                .lineLimit(1)
+                .truncationMode(.head)
         }
     }
 
