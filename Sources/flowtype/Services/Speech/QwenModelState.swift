@@ -100,7 +100,9 @@ final class QwenModelState: ObservableObject {
                 try await provider.loadModel(offlineMode: false) { @Sendable p, _ in
                     let snap = progress.update(fraction: p, totalBytes: totalBytes)
                     Task { @MainActor in
-                        guard QwenModelState.shared.status.isLoading else { return }
+                        // Only a genuine in-progress download may write progress — never resurrect
+                        // .downloading over a .stalled / .loading banner from a late callback.
+                        guard case .downloading = QwenModelState.shared.status else { return }
                         if p >= 1.0 {
                             QwenModelState.shared.status = .loading
                         } else {
