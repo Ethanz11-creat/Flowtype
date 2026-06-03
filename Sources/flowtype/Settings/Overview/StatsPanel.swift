@@ -30,18 +30,23 @@ struct ActivityHeatmap: View {
     }
 
     private var heatGrid: some View {
-        // Tidy full 7×N rectangle with NO ragged edges (HTML-style): show the most-recent whole weeks
-        // (52 cols × 7 = 364 days). TODAY is the bottom-right cell; as days pass, the newest column
-        // enters on the right and the oldest scrolls off the left (GitHub/HTML time axis). Cell color =
-        // that day's word-count level. We trade strict weekday alignment for a clean rectangle.
-        // Small fixed cell (11) so a year fits the content width WITHOUT horizontal scrolling.
-        let cols = cells.count / 7
-        let shown = Array(cells.suffix(max(0, cols) * 7))
+        // GitHub-style weekday-aligned calendar: 7 rows = Sun…Sat, each column = one week, left→right is
+        // time, TODAY sits in the rightmost column on its own weekday row. The two ragged corners (the
+        // week before the range start, and this week's not-yet-arrived days) are filled with EMPTY dark
+        // cells (level 0) instead of left transparent — so it reads as a tidy rectangle while staying a
+        // real calendar. Cell brightness = that day's word-count level. Fixed 11px cell → fits the width.
+        let leading = cells.first?.weekday ?? 0       // pad up to the starting Sunday
+        let total = leading + cells.count
+        let cols = (total + 6) / 7
+        let trailing = cols * 7 - total               // pad this week's future days up to Saturday
         let size: CGFloat = 11
         let gap: CGFloat = 2
         let rows = Array(repeating: GridItem(.fixed(size), spacing: gap), count: 7)
         return LazyHGrid(rows: rows, spacing: gap) {
-            ForEach(shown, id: \.dayOrdinal) { cell in
+            ForEach(0..<leading, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 2).fill(heatColor(0)).frame(width: size, height: size)
+            }
+            ForEach(cells, id: \.dayOrdinal) { cell in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(heatColor(cell.level))
                     .frame(width: size, height: size)
@@ -61,6 +66,9 @@ struct ActivityHeatmap: View {
                             .background(Theme.cardBackground)
                     }
                     .accessibilityLabel("\(cell.date), \(cell.chars) 字")
+            }
+            ForEach(0..<trailing, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 2).fill(heatColor(0)).frame(width: size, height: size)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
