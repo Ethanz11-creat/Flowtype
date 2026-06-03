@@ -17,19 +17,6 @@ struct OverviewPage: View {
             }
             .padding(24)
         }
-        .background(brandBackdrop)
-    }
-
-    /// Window background with a barely-there brand tint in the corners.
-    private var brandBackdrop: some View {
-        ZStack {
-            Color(nsColor: .windowBackgroundColor)
-            RadialGradient(colors: [Brand.purple.opacity(0.06), .clear],
-                           center: .topLeading, startRadius: 0, endRadius: 340)
-            RadialGradient(colors: [Brand.blue.opacity(0.05), .clear],
-                           center: .bottomTrailing, startRadius: 0, endRadius: 340)
-        }
-        .ignoresSafeArea()
     }
 
     private var accuracyCard: some View {
@@ -40,7 +27,7 @@ struct OverviewPage: View {
                     .frame(width: 80, height: 80)
                 Circle()
                     .trim(from: 0, to: accuracyProgress)
-                    .stroke(Brand.gradient, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .stroke(Brand.accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                     .frame(width: 80, height: 80)
                     .rotationEffect(.degrees(-90))
                     .shadow(color: Brand.purple.opacity(0.22), radius: 6)

@@ -46,7 +46,6 @@ struct SettingsPage: View {
             .padding(24)
         }
         .frame(minWidth: 520, maxWidth: 580, minHeight: 600, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             hasAccessibility = PermissionHelper.checkAccessibility()
         }

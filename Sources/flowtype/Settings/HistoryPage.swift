@@ -18,7 +18,6 @@ struct HistoryPage: View {
                     .frame(minWidth: 300)
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .alert("确认清空", isPresented: $showClearConfirm) {
             Button("清空全部", role: .destructive) { historyStore.clear() }
             Button("取消", role: .cancel) {}

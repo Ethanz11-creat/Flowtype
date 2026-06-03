@@ -11,7 +11,6 @@ struct VocabPage: View {
             Divider()
             content
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     // MARK: - Header

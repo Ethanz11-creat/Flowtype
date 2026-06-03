@@ -14,7 +14,6 @@ struct StylePage: View {
             Divider()
             content
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $showNewSheet) { newPackSheet }
         .sheet(item: $editingPack) { pack in
             editPackSheet(pack)
