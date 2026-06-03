@@ -7,11 +7,11 @@ struct OverviewPage: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                HStack(spacing: 20) {
+                HStack(spacing: 14) {
                     accuracyCard
                     mainStatsGrid
                 }
-                .frame(height: 200)
+                .frame(height: 112)
 
                 StatsPanel()
             }
@@ -20,47 +20,44 @@ struct OverviewPage: View {
     }
 
     private var accuracyCard: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .stroke(Color.secondary.opacity(0.18), lineWidth: 8)
-                    .frame(width: 80, height: 80)
+                    .stroke(Color.secondary.opacity(0.18), lineWidth: 7)
+                    .frame(width: 60, height: 60)
                 Circle()
                     .trim(from: 0, to: accuracyProgress)
-                    .stroke(Brand.accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .frame(width: 80, height: 80)
+                    .stroke(Brand.accent, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .frame(width: 60, height: 60)
                     .rotationEffect(.degrees(-90))
-                    .shadow(color: Brand.accent.opacity(0.22), radius: 6)
                 Text("\(Int(accuracyProgress * 100))%")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
+                    .monospacedDigit()
             }
             Text("个性化")
-                .font(.system(size: 13))
+                .font(.system(size: 11))
                 .foregroundColor(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(16)
+        .frame(width: 124)
+        .frame(maxHeight: .infinity)
+        .padding(12)
         .glassCard()
     }
 
     private var mainStatsGrid: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                statCard(icon: "clock",
-                         segments: StatFormatting.duration(seconds: Int(statsStore.totalDurationMs / 1000)),
-                         label: "总口述时间")
-                statCard(icon: "text.word.count",
-                         segments: StatFormatting.plain(formatWordCount(statsStore.totalWordCount)),
-                         label: "口述字数")
-            }
-            HStack(spacing: 12) {
-                statCard(icon: "hourglass",
-                         segments: StatFormatting.duration(seconds: statsStore.estimatedTimeSavedSeconds),
-                         label: "节省时间")
-                statCard(icon: "bolt",
-                         segments: StatFormatting.speed(statsStore.overallAverageSpeed),
-                         label: "平均口述速度（字/分钟）")
-            }
+        HStack(spacing: 12) {
+            statCard(icon: "clock",
+                     segments: StatFormatting.duration(seconds: Int(statsStore.totalDurationMs / 1000)),
+                     label: "总口述时间")
+            statCard(icon: "text.word.count",
+                     segments: StatFormatting.plain(formatWordCount(statsStore.totalWordCount)),
+                     label: "口述字数")
+            statCard(icon: "hourglass",
+                     segments: StatFormatting.duration(seconds: statsStore.estimatedTimeSavedSeconds),
+                     label: "节省时间")
+            statCard(icon: "bolt",
+                     segments: StatFormatting.speed(statsStore.overallAverageSpeed),
+                     label: "平均速度")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

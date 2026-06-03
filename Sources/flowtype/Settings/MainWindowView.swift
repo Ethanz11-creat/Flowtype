@@ -45,7 +45,7 @@ struct MainWindowView: View {
         // content, rather than NavigationSplitView's distinct .sidebar vibrancy.
         .background(FrostBackground())
         .tint(Brand.accent)
-        .frame(minWidth: 780, minHeight: 520)
+        .frame(minWidth: StatsConfig.minWindowWidth, minHeight: StatsConfig.minWindowHeight)
     }
 
     private var sidebar: some View {

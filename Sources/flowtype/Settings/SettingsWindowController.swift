@@ -10,14 +10,14 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: mainView)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "FlowType"
         window.contentView = hostingView
-        window.contentMinSize = NSSize(width: 780, height: 520)
+        window.contentMinSize = NSSize(width: StatsConfig.minWindowWidth, height: StatsConfig.minWindowHeight)
         window.center()
         window.isReleasedWhenClosed = false
         window.titlebarAppearsTransparent = true
