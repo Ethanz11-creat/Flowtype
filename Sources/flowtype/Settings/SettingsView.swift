@@ -30,6 +30,8 @@ struct SettingsPage: View {
                 }
                 .padding(.horizontal, 4)
 
+                appearanceSection
+                Divider().padding(.vertical, 4)
                 asrSection
                 Divider().padding(.vertical, 4)
                 llmSection

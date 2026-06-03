@@ -97,6 +97,18 @@ enum WhisperLanguage: String, Codable, CaseIterable {
     }
 }
 
+enum AppearancePreference: String, Codable, CaseIterable, Identifiable {
+    case system, light, dark
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .system: return "随系统"
+        case .light:  return "浅色"
+        case .dark:   return "深色"
+        }
+    }
+}
+
 // MARK: - Provider Presets
 
 struct ProviderPreset: Identifiable, Hashable {
@@ -210,6 +222,9 @@ struct Configuration: Codable, Equatable {
     // Module 2b: Onboarding
     var hasCompletedOnboarding: Bool = false
 
+    // Appearance: 浅色 / 深色 / 随系统
+    var appearancePreference: AppearancePreference = .system
+
     // Constants
     let temperature: Double = 0.3
     let maxTokens: Int = 2048
@@ -284,6 +299,7 @@ struct Configuration: Codable, Equatable {
         systemPrompt = (try? c.decode(String.self, forKey: .systemPrompt)) ?? d.systemPrompt
         microphoneDeviceID = (try? c.decode(String?.self, forKey: .microphoneDeviceID)) ?? d.microphoneDeviceID
         hasCompletedOnboarding = (try? c.decode(Bool.self, forKey: .hasCompletedOnboarding)) ?? d.hasCompletedOnboarding
+        appearancePreference = (try? c.decode(AppearancePreference.self, forKey: .appearancePreference)) ?? d.appearancePreference
 
         // Try new multi-provider format first
         if let providers = try? c.decode([LLMProvider].self, forKey: .llmProviders), !providers.isEmpty {
@@ -316,6 +332,7 @@ extension Configuration {
         case systemPrompt
         case microphoneDeviceID
         case hasCompletedOnboarding
+        case appearancePreference
         // Legacy keys (for migration only, not stored properties)
         case llmProvider
         case llmBaseURL
@@ -334,6 +351,7 @@ extension Configuration {
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(microphoneDeviceID, forKey: .microphoneDeviceID)
         try container.encode(hasCompletedOnboarding, forKey: .hasCompletedOnboarding)
+        try container.encode(appearancePreference, forKey: .appearancePreference)
     }
 }
 

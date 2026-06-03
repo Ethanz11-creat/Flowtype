@@ -36,6 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         _ = ConfigurationStore.shared
+        AppearanceController.apply(ConfigurationStore.shared.current.appearancePreference)
         EnvMigration.migrateIfNeeded()
         StatusBarController.shared.setup()
 

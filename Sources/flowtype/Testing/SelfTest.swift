@@ -83,6 +83,23 @@ enum SelfTest {
              "inject: blind/unknown → inject, fail open (row 3)")
     }
 
+    // MARK: - Appearance preference: round-trip + legacy default
+
+    static func testAppearanceConfig(_ r: Reporter) {
+        var cfg = Configuration()
+        cfg.appearancePreference = .dark
+        if let data = try? JSONEncoder().encode(cfg),
+           let back = try? JSONDecoder().decode(Configuration.self, from: data) {
+            r.eq(back.appearancePreference, .dark, "appearance: round-trips .dark")
+        } else {
+            r.check(false, "appearance: encode/decode round-trip failed")
+        }
+        // A config saved before this field existed must default to .system (not crash).
+        let legacy = Data("{\"asrLanguage\":\"zh\"}".utf8)
+        let decoded = try? JSONDecoder().decode(Configuration.self, from: legacy)
+        r.eq(decoded?.appearancePreference, .system, "appearance: legacy missing key → .system")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -97,6 +114,7 @@ enum SelfTest {
         testStatFormatting(r)    // StatFormatting pure formatters
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
+        testAppearanceConfig(r)    // appearance pref round-trip + legacy default
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
