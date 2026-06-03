@@ -92,3 +92,32 @@ Narrow window: 4-col grid → 2-col; heatmap scrolls.
 - No export / multi-user / server leaderboard.
 - No App/Language **tabs** (capture only); no `edited`/一次成稿率.
 - No destructive rebuild of historical `daily_stats.json`.
+
+---
+
+## 11. v2 (deferred — design, not built in this plan)
+
+v2 surfaces the dimensions whose **capture already starts in v1** (`appName`, `language`, `DailyStats.byApp/byLang`), so by the time v2 ships there is real (non-未知) data. v2 is purely additive UI + Swift Charts over data the write-path already records.
+
+**11.1 App tab (the high-value downroll — "你都在哪些应用里口述")**
+- Aggregate `byApp` over the selected range → a **ranking list**: app name (localized) + chars + time + share %, sorted desc, **top-N (e.g. 6) + 「其他」** rolled up.
+- A **stacked bar chart** of chars-per-day segmented by app: Swift Charts `BarMark(x: date, y: chars) .foregroundStyle(by: .value("App", app))` with an explicit color `domain` for stable ordering; pre-aggregate top-N+其他 in the view-model.
+- **Custom legend** (Swift Charts' built-in can't show value/%): rows of `■ name — 12,345 字 · 32%`, colors from one shared `[String: Color]` brand map.
+- Historical sessions (pre-capture) appear as **「未知」**; the bucket shrinks as new data accrues.
+
+**11.2 Language tab**
+- `byLang` (`zh`/`en`/`mixed`/未知) over range → list + a **donut** (`SectorMark(innerRadius: .ratio(0.6), angularInset: 1.5)`, macOS 14+, center label via `.chartBackground`), tiny slices collapsed to 其他.
+- Same custom legend (name + chars + %).
+
+**11.3 Charts infrastructure (v2 introduces Swift Charts)**
+- Shared `[String: Color]` category→brand-color map; dynamic (light/dark) colors; `.chartLegend(.hidden)` + custom legends throughout.
+- Empty/single-point branching in the view-model; `domain`-stable axes; `accessibilityLabel` on marks; gate animation on `accessibilityReduceMotion`.
+
+**11.4 Optional enhancements (PRD §10 — pick by value, future)**
+- **Speed trend line** (`LineMark` + `PointMark` fallback at N=1) — "我越用越快了吗".
+- **Week rhythm** (Mon–Sun 7-cell strip, reuse heatmap cells) + the v1 24h bars already cover the daily rhythm.
+- **Milestones/成就** (10万字, 连续7天, 单日新高) with a reduced-motion-respecting micro-animation.
+- **个性化进度环联动**: tie the top progress ring to learned-vocab/correction counts so it actually rises.
+- **一次成稿率 (`edited`)** — still deferred; needs a "what counts as edited" product definition + a post-injection monitor (AX value-watch or clipboard diff) the architecture doesn't have. Out of v2 unless that's specced first.
+
+**11.5 v2 data note:** no new schema beyond v1 (it already records `byApp`/`byLang`). v2 = view-models + Swift Charts views + the two tabs wired into the existing header tab control (un-greying 应用/语言).
