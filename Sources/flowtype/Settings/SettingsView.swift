@@ -38,6 +38,8 @@ struct SettingsPage: View {
                 Divider().padding(.vertical, 4)
                 recordingSection
                 Divider().padding(.vertical, 4)
+                privacySection
+                Divider().padding(.vertical, 4)
                 triggerSection
                 Divider().padding(.vertical, 4)
                 permissionSection

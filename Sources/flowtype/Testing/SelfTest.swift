@@ -253,6 +253,7 @@ enum SelfTest {
         testSessionRecord(r)       // SessionRecord round-trip + charCount/sttBackend/recordingMs
         testStatsRepository(r)     // StatsRepository boundary fold: legacy/session/boundary
         testJSONMigration(r)       // JSONMigration: idempotent import + sttBackend tagging
+        testPrivacyConfig(r)       // storeTranscriptText: round-trip + legacy default true
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -525,6 +526,18 @@ enum SelfTest {
         r.check(JSONMigration.hasMigrated(db), "mig: migrated after import")
         let recs = (try? db.dbQueue.read { try SessionRecord.fetchAll($0) }) ?? []
         r.eq(recs.first?.sttBackend, "legacy", "mig: imported session tagged legacy (no backend)")
+    }
+
+    // MARK: - Privacy config: storeTranscriptText round-trip + legacy default
+
+    static func testPrivacyConfig(_ r: Reporter) {
+        var c = Configuration(); c.storeTranscriptText = false
+        let data = try! JSONEncoder().encode(c)
+        let back = try! JSONDecoder().decode(Configuration.self, from: data)
+        r.check(back.storeTranscriptText == false, "config: storeTranscriptText round-trips")
+        let legacy = Data(#"{"asrLanguage":"zh"}"#.utf8)
+        let dflt = try? JSONDecoder().decode(Configuration.self, from: legacy)
+        r.check(dflt?.storeTranscriptText == true, "config: storeTranscriptText defaults true on legacy JSON")
     }
 
     // MARK: - Injection segmentation (B-inject)
