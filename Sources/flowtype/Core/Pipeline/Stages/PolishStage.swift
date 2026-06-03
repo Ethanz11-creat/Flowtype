@@ -55,7 +55,8 @@ final class PolishStage: PipelineStage, @unchecked Sendable {
 
         var polishedText: String? = nil
         do {
-            let stream = await llmService.polishText(text, systemPrompt: composedPrompt)
+            let config = await MainActor.run { ConfigurationStore.shared.current }
+            let stream = await llmService.polishText(text, systemPrompt: composedPrompt, config: config)
             var accumulated = ""
             for try await chunk in stream {
                 accumulated += chunk

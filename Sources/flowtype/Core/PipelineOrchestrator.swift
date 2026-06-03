@@ -92,7 +92,7 @@ final class SessionController: ObservableObject {
         AppLogger.log("[SessionController#\(newID)] startRecording requested")
 
         switch sessionState {
-        case .idle, .error:
+        case .idle, .error, .notice:
             break
         default:
             AppLogger.log("[SessionController#\(newID)] REJECTED: state=\(sessionState)")

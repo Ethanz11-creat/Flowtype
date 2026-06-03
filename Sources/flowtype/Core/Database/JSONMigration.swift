@@ -9,7 +9,13 @@ enum JSONMigration {
     /// Pure import (testable): insert sessions + legacy days, set migrationDate. Caller wraps with file IO.
     static func importInto(_ db: AppDatabase, sessions: [DictationSession], daily: [DailyStats], migrationDay: String) throws {
         try db.dbQueue.write { d in
-            for s in sessions { var rec = SessionRecord(from: s); try rec.insert(d) }
+            for s in sessions {
+                var rec = SessionRecord(from: s)
+                // A duplicate/invalid id must not abort (and thus permanently block) the whole one-time
+                // migration — skip the bad row and keep going so migrationDate still gets written.
+                do { try rec.insert(d) }
+                catch { AppLogger.log("[Migration] skipped session \(s.id): \(error)") }
+            }
             for day in daily { try DailyLegacyRecord(from: day).insert(d) }
             try d.execute(sql: "INSERT OR REPLACE INTO meta VALUES('migrationDate', ?)", arguments: [migrationDay])
             try d.execute(sql: "INSERT OR REPLACE INTO meta VALUES('schemaVersion', '1')")

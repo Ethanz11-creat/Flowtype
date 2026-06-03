@@ -113,8 +113,17 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         let stamp = Int(Date().timeIntervalSince1970)
         let backupURL = dir.appendingPathComponent("flowtype.config.corrupt-\(stamp).json")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? data.write(to: backupURL)
-        AppLogger.log("[ConfigurationStore] Failed to decode persisted config (\(error)); backed up raw blob to \(backupURL.path) and reset to default")
+        // REDACT secrets before writing into the diagnostics dir (users zip + share these logs). If the
+        // blob isn't even valid JSON we don't write it at all — it could contain the API key verbatim.
+        if let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            var redacted = obj
+            if redacted["providerAPIKeys"] != nil { redacted["providerAPIKeys"] = "[REDACTED]" }
+            if redacted["llmApiKey"] != nil { redacted["llmApiKey"] = "[REDACTED]" }
+            if let out = try? JSONSerialization.data(withJSONObject: redacted, options: [.prettyPrinted, .sortedKeys]) {
+                try? out.write(to: backupURL)
+            }
+        }
+        AppLogger.log("[ConfigurationStore] Failed to decode persisted config (\(error)); backed up REDACTED blob to \(backupURL.path) and reset to default")
     }
 
     private var saveWorkItem: DispatchWorkItem?

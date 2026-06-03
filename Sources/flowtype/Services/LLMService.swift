@@ -64,8 +64,9 @@ actor LLMService {
 
     // MARK: - Public API
 
-    func polishText(_ text: String, systemPrompt: String? = nil) -> AsyncThrowingStream<String, Error> {
-        let config = ConfigurationStore.shared.current
+    /// `config` MUST be a snapshot the caller read on the main actor — do NOT read
+    /// ConfigurationStore.shared.current from this actor (it's a @Published value mutated on main → data race).
+    func polishText(_ text: String, systemPrompt: String? = nil, config: Configuration) -> AsyncThrowingStream<String, Error> {
         let prompt = systemPrompt ?? config.systemPrompt
         let maxTokens = config.maxTokens
         return makeStream(text: text, systemPrompt: prompt, maxTokens: maxTokens, timeoutSeconds: 30, config: config)
@@ -108,26 +109,20 @@ actor LLMService {
 
     // MARK: - Provider Resolution
 
-    private func resolveProviderChain(providers: [LLMProvider]) -> [(provider: LLMProvider, apiKey: String)] {
+    /// Resolve providers + keys from a config SNAPSHOT (no shared-state read off the actor — see polishText).
+    private func resolveProviderChain(config: Configuration) -> [(provider: LLMProvider, apiKey: String)] {
+        func key(_ id: UUID) -> String? {
+            let k = config.providerAPIKeys[id.uuidString]
+            return (k?.isEmpty == false) ? k : nil
+        }
+        let providers = config.llmProviders
         var result: [(provider: LLMProvider, apiKey: String)] = []
-
-        // Active provider first
-        if let active = providers.first(where: \.isActive) {
-            if let apiKey = ConfigurationStore.shared.loadProviderAPIKey(active.id),
-               !apiKey.isEmpty {
-                result.append((active, apiKey))
-            }
+        if let active = providers.first(where: \.isActive), let apiKey = key(active.id) {
+            result.append((active, apiKey))
         }
-
-        // Then other providers with valid API keys
-        for provider in providers {
-            if provider.isActive { continue } // Skip active, already added
-            if let apiKey = ConfigurationStore.shared.loadProviderAPIKey(provider.id),
-               !apiKey.isEmpty {
-                result.append((provider, apiKey))
-            }
+        for provider in providers where !provider.isActive {
+            if let apiKey = key(provider.id) { result.append((provider, apiKey)) }
         }
-
         return result
     }
 
@@ -210,7 +205,7 @@ actor LLMService {
                     return
                 }
 
-                let chain = self.resolveProviderChain(providers: config.llmProviders)
+                let chain = self.resolveProviderChain(config: config)
                 guard !chain.isEmpty else {
                     continuation.finish(throwing: LLMError.apiError("请在设置中配置 LLM API Key"))
                     return
