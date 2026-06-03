@@ -40,6 +40,7 @@ struct MainWindowView: View {
                     .tag(tab)
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
             .frame(minWidth: 150, maxWidth: 170)
         } detail: {
             switch selectedTab {
@@ -50,6 +51,7 @@ struct MainWindowView: View {
             case .settings: SettingsPage()
             }
         }
+        .background(FrostBackground())
         .tint(Brand.accent)
         .frame(minWidth: 780, minHeight: 520)
     }
