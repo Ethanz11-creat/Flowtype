@@ -6,8 +6,17 @@ enum StatsConfig {
     // Baseline typing speed (chars/min) for "time saved".
     static let baselineCPM = 40
 
-    // Heatmap: 5 levels (0=empty … 4=very high) → single-hue opacity.
-    static let heatOpacity: [Double] = [0.25, 0.45, 0.65, 0.85, 1.0]
+    // Heatmap: index by level (0 = empty → uses Theme.heatEmpty, so [0] is a placeholder).
+    // PRD §8: levels 1…4 = #8E7DF5 at 0.35 / 0.6 / 0.85 / 1.0.
+    static let heatOpacity: [Double] = [0, 0.35, 0.6, 0.85, 1.0]
+
+    // Streak milestones (days) + per-tier flame colors (PRD §6). Colors are 0xRRGGBB; views map via Color(hex:).
+    static let milestones: [Int] = [3, 7, 14, 30, 60, 100, 365]
+    static let milestoneStartHex: UInt = 0xFFB454            // flame color while streak < first milestone
+    static let milestoneTierHex: [Int: UInt] = [
+        3: 0xFFB454, 7: 0xFF8A3D, 14: 0xFF6B35, 30: 0xFF4D4D,
+        60: 0xE0479E, 100: 0xA99BFF, 365: 0xFFD24D,
+    ]
     static func days(for range: StatsRange) -> Int {
         switch range { case .d7: return 7; case .d30: return 30; case .all: return 365 }
     }
