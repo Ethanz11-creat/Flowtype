@@ -59,6 +59,14 @@ final class AppDatabase: @unchecked Sendable {
                 t.column("value", .text).notNull()
             }
         }
+        // v2: word-count should reflect the ORIGINAL recognized text (rawTranscript), not the polished
+        // finalText. Recompute charCount for existing rows that still have the raw text.
+        m.registerMigration("v2_charcount_from_raw") { db in
+            try db.execute(sql: """
+                UPDATE session SET charCount = length(trim(rawTranscript))
+                WHERE rawTranscript IS NOT NULL AND trim(rawTranscript) <> ''
+                """)
+        }
         return m
     }
 }

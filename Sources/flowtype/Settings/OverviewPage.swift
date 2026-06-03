@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct OverviewPage: View {
     @ObservedObject private var statsStore = DailyStatsStore.shared
@@ -25,6 +26,13 @@ struct OverviewPage: View {
             .frame(maxWidth: .infinity)                     // ② center; gutters absorb extra width
             .padding(.horizontal, 32)
             .padding(.vertical, 24)
+        }
+        // Force a refresh when the Overview appears or FlowType regains focus. The @Published stats
+        // update fine in the foreground, but NSHostingView can skip redraws while the window is in the
+        // background (e.g. you dictate into another app, then switch back) — this keeps numbers live.
+        .onAppear { statsStore.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            statsStore.refresh()
         }
     }
 

@@ -472,14 +472,14 @@ enum SelfTest {
 
     static func testSessionRecord(_ r: Reporter) {
         guard let db = try? AppDatabase.inMemory() else { r.check(false, "rec: db"); return }
-        let s = DictationSession(rawTranscript: "原文", finalText: "你好世界", polishMode: .polish,
+        let s = DictationSession(rawTranscript: "你好世界", finalText: "你好", polishMode: .polish,
                                  durationMs: 9000, recordingMs: 4000, appName: "Xcode",
                                  appBundleID: "com.apple.dt.Xcode", language: "zh", sttBackend: "qwen")
         var rec = SessionRecord(from: s)
         try? db.dbQueue.write { try rec.insert($0) }
         let back = (try? db.dbQueue.read { try SessionRecord.fetchAll($0) }) ?? []
         r.eq(back.count, 1, "rec: one row")
-        r.eq(back.first?.charCount, 4, "rec: charCount=4 (你好世界)")
+        r.eq(back.first?.charCount, 4, "rec: charCount=4 from rawTranscript 你好世界 (not polished finalText)")
         r.eq(back.first?.sttBackend, "qwen", "rec: sttBackend persisted")
         r.eq(back.first?.recordingMs, 4000, "rec: recordingMs persisted")
     }
@@ -494,7 +494,7 @@ enum SelfTest {
             return f.date(from: "\(iso) 12:00")!.timeIntervalSince1970
         }
         func session(_ day: String, chars: Int, recMs: UInt64, durMs: UInt64 = 0) -> SessionRecord {
-            var s = SessionRecord(from: DictationSession(rawTranscript: "", finalText: String(repeating: "字", count: chars),
+            var s = SessionRecord(from: DictationSession(rawTranscript: String(repeating: "字", count: chars), finalText: "",
                                   polishMode: .raw, durationMs: durMs, recordingMs: recMs,
                                   appName: "A", appBundleID: nil, language: "zh", sttBackend: "qwen"))
             s.startedAt = noon(day); return s

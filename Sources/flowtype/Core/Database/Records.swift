@@ -21,7 +21,7 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         self.startedAt = s.createdAt.timeIntervalSince1970
         self.recordingMs = Int64(s.recordingMs ?? 0)
         self.durationMs = Int64(s.durationMs ?? 0)
-        self.charCount = s.finalText.trimmingCharacters(in: .whitespacesAndNewlines).count
+        self.charCount = s.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).count  // 原始识别字数（不是润色后）
         self.language = s.language
         self.appName = s.appName
         self.appBundleID = s.appBundleID
