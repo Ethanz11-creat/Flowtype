@@ -21,10 +21,15 @@ struct FrostMaterial: NSViewRepresentable {
     }
 }
 
-/// The full window backdrop: translucent frosted material + subtle grain.
+/// The full window backdrop: translucent frosted material + a deep tint in dark mode + grain.
+/// The dark tint pushes the frosted shell toward a near-black "deep frost" at night; light mode
+/// is left untouched.
 struct FrostBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
         FrostMaterial(material: .hudWindow, blending: .behindWindow)
+            .overlay(scheme == .dark ? Color.black.opacity(0.5) : Color.clear)
             .grain(0.04)
             .ignoresSafeArea()
     }

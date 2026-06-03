@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Frosted content surface, one step more opaque than the window shell so text stays legible
-/// over the see-through window. Adaptive hairline bevel (lit-from-above), token radius, soft
-/// appearance-aware shadow. `active: true` swaps the border to the solid accent (the gradient
-/// lives only on the capsule now) for the selected/current item.
+/// Flat frosted content surface — deliberately NOT skeuomorphic: a uniform hairline border,
+/// no lit-from-above bevel, no drop shadow, so cards read as matte/premium rather than raised
+/// physical buttons. `active: true` is a subtle accent wash + accent border for the
+/// selected/current item.
 struct GlassCard: ViewModifier {
     @Environment(\.colorScheme) private var scheme
     var active: Bool = false
@@ -12,21 +12,18 @@ struct GlassCard: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return content
-            .background(shape.fill(.thinMaterial))
+            .background(shape.fill(fill))
             .overlay(shape.strokeBorder(border, lineWidth: 1))
-            .shadow(color: shadow, radius: active ? 12 : 8, x: 0, y: active ? 4 : 3)
+    }
+
+    private var fill: AnyShapeStyle {
+        if active { return AnyShapeStyle(Brand.accent.opacity(0.12)) }
+        return AnyShapeStyle(.thinMaterial)
     }
 
     private var border: AnyShapeStyle {
-        if active { return AnyShapeStyle(Brand.accent) }
-        let top    = scheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.55)
-        let bottom = scheme == .dark ? Color.black.opacity(0.30) : Color.black.opacity(0.08)
-        return AnyShapeStyle(LinearGradient(colors: [top, bottom], startPoint: .top, endPoint: .bottom))
-    }
-
-    private var shadow: Color {
-        if active { return Brand.accent.opacity(0.22) }
-        return scheme == .dark ? .black.opacity(0.28) : .black.opacity(0.10)
+        if active { return AnyShapeStyle(Brand.accent.opacity(0.55)) }
+        return AnyShapeStyle(scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.08))
     }
 }
 
