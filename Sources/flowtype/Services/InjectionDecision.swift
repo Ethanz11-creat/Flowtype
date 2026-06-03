@@ -52,3 +52,28 @@ func decideInjection(_ s: FocusSignals) -> InjectionDecision {
     case .blindOrUnknown: return .inject            // row 3: fail open (terminals/Electron)
     }
 }
+
+// MARK: - Readable diagnostics (compact, unqualified — these get logged per delivery)
+
+extension FocusKind: CustomStringConvertible {
+    var description: String {
+        switch self {
+        case .editableText:   return "editableText"
+        case .nonTextControl: return "nonTextControl"
+        case .blindOrUnknown: return "blindOrUnknown"
+        }
+    }
+}
+
+extension InjectionDecision: CustomStringConvertible {
+    var description: String {
+        switch self {
+        case .inject:    return "inject"
+        case .clipboard: return "clipboard"
+        }
+    }
+}
+
+extension FocusSignals: CustomStringConvertible {
+    var description: String { "secure=\(secureInputActive) focus=\(focus)" }
+}

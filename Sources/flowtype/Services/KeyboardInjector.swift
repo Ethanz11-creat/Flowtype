@@ -141,6 +141,8 @@ struct KeyboardInjector {
         let role = copyStringAttribute(element, kAXRoleAttribute as CFString)
         let subrole = copyStringAttribute(element, kAXSubroleAttribute as CFString)
 
+        // A real password field reports role AXTextField + subrole AXSecureTextField; the
+        // subrole check is the reliable one. The role check + global flag are belt-and-suspenders.
         if secureGlobal || role == "AXSecureTextField" || subrole == "AXSecureTextField" {
             return FocusSignals(secureInputActive: true, focus: .nonTextControl)
         }
