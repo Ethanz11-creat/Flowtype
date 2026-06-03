@@ -9,6 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/soniqo/speech-swift.git", from: "0.0.15"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0"),
     ],
     targets: [
         .executableTarget(
@@ -17,6 +18,7 @@ let package = Package(
                 .product(name: "Qwen3ASR", package: "speech-swift"),
                 .product(name: "SpeechVAD", package: "speech-swift"),
                 .product(name: "AudioCommon", package: "speech-swift"),
+                .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Sources/flowtype",
             resources: [
