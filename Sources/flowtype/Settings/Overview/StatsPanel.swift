@@ -47,12 +47,10 @@ struct StatsPanel: View {
         }
     }
 
-    // MARK: 8-card grid (D1 — adaptive columns for reflow)
+    // MARK: 8-card grid (D1 — fixed 4-column layout)
 
     private func statGrid(s: StatsSummary) -> some View {
-        let columns = [GridItem(.adaptive(minimum: StatsConfig.cardMinWidth,
-                                          maximum: StatsConfig.cardMaxWidth),
-                                spacing: 14)]
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 14), count: 4)
         return LazyVGrid(columns: columns, spacing: 14) {
             MiniStatCard(icon: "mic.fill",       value: "\(s.sessions)",          unit: nil,     label: "口述次数",   accent: false)
             MiniStatCard(icon: "text.alignleft", value: formatThousands(s.chars), unit: nil,     label: "口述字数",   accent: false)
@@ -72,7 +70,7 @@ struct StatsPanel: View {
             Spacer()
             Text("开始你的第一次口述，数据会出现在这里")
                 .font(.system(size: 13))
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.vertical, 32)
             Spacer()
@@ -86,7 +84,7 @@ struct StatsPanel: View {
             if let text = buildFooterText(s: s) {
                 Text(text)
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Theme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .multilineTextAlignment(.center)
             }
@@ -161,7 +159,7 @@ private struct TabChip: View {
             if comingSoon {
                 Text("v2")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(.secondary.opacity(0.4))
+                    .foregroundColor(Theme.textSecondary.opacity(0.4))
                     .padding(.horizontal, 3)
                     .padding(.vertical, 1)
                     .background(
@@ -197,24 +195,24 @@ private struct MiniStatCard: View {
         VStack(alignment: .leading, spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 12))
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.textSecondary)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundColor(accent ? Brand.accent : .primary)
+                    .foregroundColor(accent ? Brand.accent : Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                 if let unit = unit {
                     Text(unit)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Theme.textSecondary)
                 }
             }
             Text(label)
                 .font(.system(size: 10))
                 .textCase(.uppercase)
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.textSecondary)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -227,11 +225,19 @@ private struct MiniStatCard: View {
 struct ActivityHeatmap: View {
     let cells: [HeatCell]
 
+    @State private var hovered: HeatCell?
+
+    private func cellDateLabel(_ iso: String) -> String {
+        let parts = iso.split(separator: "-")
+        guard parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) else { return iso }
+        return "\(m)月\(d)日"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("活动热力图 · 最近一年")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.textSecondary)
             heatGrid
             legendRow
         }
@@ -239,7 +245,7 @@ struct ActivityHeatmap: View {
 
     /// Level 0 = neutral (empty) cell; 1...4 = brand-accent ramp (matches the mockup).
     private func heatColor(_ level: Int) -> Color {
-        level == 0 ? Color.primary.opacity(0.08) : Brand.accent.opacity(StatsConfig.heatOpacity[level])
+        level == 0 ? Theme.heatEmpty : Brand.accent.opacity(StatsConfig.heatOpacity[level])
     }
 
     private var heatGrid: some View {
@@ -254,7 +260,21 @@ struct ActivityHeatmap: View {
                     RoundedRectangle(cornerRadius: 2.5)
                         .fill(heatColor(cell.level))
                         .frame(width: 12, height: 12)
-                        .help("\(cell.date) · \(cell.chars) 字 · \(cell.sessions) 次")
+                        .onHover { inside in
+                            if inside { hovered = cell }
+                            else if hovered?.dayOrdinal == cell.dayOrdinal { hovered = nil }
+                        }
+                        .popover(isPresented: Binding(
+                            get: { hovered?.dayOrdinal == cell.dayOrdinal },
+                            set: { if !$0 { hovered = nil } }
+                        ), arrowEdge: .top) {
+                            Text("\(cellDateLabel(cell.date)) — \(cell.chars)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Theme.textPrimary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Theme.cardBackground)
+                        }
                         .accessibilityLabel("\(cell.date), \(cell.chars) 字")
                 }
             }
@@ -265,11 +285,11 @@ struct ActivityHeatmap: View {
     private var legendRow: some View {
         HStack(spacing: 4) {
             Spacer()
-            Text("少").font(.system(size: 9)).foregroundColor(.secondary)
+            Text("少").font(.system(size: 9)).foregroundColor(Theme.textSecondary)
             ForEach(0..<5, id: \.self) { lvl in
                 RoundedRectangle(cornerRadius: 2).fill(heatColor(lvl)).frame(width: 10, height: 10)
             }
-            Text("多").font(.system(size: 9)).foregroundColor(.secondary)
+            Text("多").font(.system(size: 9)).foregroundColor(Theme.textSecondary)
         }
     }
 }
@@ -294,12 +314,12 @@ struct HourDistributionChart: View {
         HStack(spacing: 4) {
             Text("24 小时分布")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.textSecondary)
             if let peak = summary.peakHour {
                 let nextHour = (peak + 1) % 24
                 Text("· 高峰 \(peak):00–\(nextHour):00")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Theme.textSecondary)
             }
         }
     }
@@ -312,7 +332,7 @@ struct HourDistributionChart: View {
         if allZero {
             Text("暂无分布数据")
                 .font(.system(size: 11))
-                .foregroundColor(.secondary)
+                .foregroundColor(Theme.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .frame(height: 64)
         } else {
