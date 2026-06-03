@@ -107,6 +107,7 @@ final class SessionController: ObservableObject {
         let statePublisher = PassthroughSubject<SessionState, Never>()
         let context = SessionContext(sessionID: newID, statePublisher: statePublisher)
         context.recordingStartTime = Date()
+        context.targetApp = NSWorkspace.shared.frontmostApplication
         currentContext = context
 
         // Reset state
@@ -390,7 +391,11 @@ final class SessionController: ObservableObject {
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,
             polishMode: mode,
-            durationMs: durationMs
+            durationMs: durationMs,
+            recordingMs: context.recordingMs,
+            appName: context.targetApp?.localizedName,
+            appBundleID: context.targetApp?.bundleIdentifier,
+            language: detectLanguageTag(context.finalText)
         )
         HistoryStore.shared.append(session)
 

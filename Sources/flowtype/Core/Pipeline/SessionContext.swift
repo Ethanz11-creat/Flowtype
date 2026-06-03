@@ -37,6 +37,9 @@ final class SessionContext {
     /// When the recording phase started (for diagnostics).
     var recordingStartTime: Date?
 
+    /// Pure recording duration in ms (samples/16000), set by RecordingStage. The speed denominator.
+    var recordingMs: UInt64?
+
     /// Publisher for state transitions (observed by UI and observers).
     let statePublisher: PassthroughSubject<SessionState, Never>
 

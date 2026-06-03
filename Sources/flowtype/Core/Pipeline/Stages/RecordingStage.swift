@@ -114,6 +114,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             let audioDuration = Double(rawSamples.count) / 16000.0
             AppLogger.log("[RecordingStage#\(sessionID)] Raw samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
 
+            await MainActor.run { context.recordingMs = UInt64(audioDuration * 1000) }
             return .continue(.audio(samples: rawSamples, previewText: finalPreviewText))
 
         } catch is CancellationError {
