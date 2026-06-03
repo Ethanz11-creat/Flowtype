@@ -113,16 +113,20 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         let stamp = Int(Date().timeIntervalSince1970)
         let backupURL = dir.appendingPathComponent("flowtype.config.corrupt-\(stamp).json")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // REDACT secrets before writing into the diagnostics dir (users zip + share these logs). If the
-        // blob isn't even valid JSON we don't write it at all — it could contain the API key verbatim.
-        if let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            var redacted = obj
-            if redacted["providerAPIKeys"] != nil { redacted["providerAPIKeys"] = "[REDACTED]" }
-            if redacted["llmApiKey"] != nil { redacted["llmApiKey"] = "[REDACTED]" }
-            if let out = try? JSONSerialization.data(withJSONObject: redacted, options: [.prettyPrinted, .sortedKeys]) {
-                try? out.write(to: backupURL)
+        // REDACT secrets before writing into the shareable diagnostics dir (users zip + send these logs).
+        // String-level so it still works when the blob isn't valid JSON (corrupt configs often aren't),
+        // while always producing a backup for diagnosis.
+        var text = String(data: data, encoding: .utf8) ?? "<non-utf8 blob, \(data.count) bytes>"
+        if let re = try? NSRegularExpression(pattern: #""providerAPIKeys"\s*:\s*\{[^}]*\}"#) {
+            text = re.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                               withTemplate: #""providerAPIKeys":"[REDACTED]""#)
+        }
+        for p in [#"sk-[A-Za-z0-9_-]{8,}"#, #"sf-[A-Za-z0-9_-]{8,}"#] {
+            if let re = try? NSRegularExpression(pattern: p) {
+                text = re.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "[REDACTED]")
             }
         }
+        try? text.data(using: .utf8)?.write(to: backupURL)
         AppLogger.log("[ConfigurationStore] Failed to decode persisted config (\(error)); backed up REDACTED blob to \(backupURL.path) and reset to default")
     }
 
