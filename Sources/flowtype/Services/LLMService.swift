@@ -133,9 +133,13 @@ actor LLMService {
 
     // MARK: - Connection Test
 
-    func testConnection(provider: LLMProvider) async -> Result<String, LLMError> {
-        guard let apiKey = ConfigurationStore.shared.loadProviderAPIKey(provider.id),
-              !apiKey.isEmpty else {
+    /// `overrideKey` lets the editor test the key currently typed in the form (before it's saved) —
+    /// otherwise a brand-new provider would always test against an empty stored key.
+    func testConnection(provider: LLMProvider, apiKey overrideKey: String? = nil) async -> Result<String, LLMError> {
+        let apiKey = (overrideKey?.isEmpty == false)
+            ? overrideKey!
+            : (ConfigurationStore.shared.loadProviderAPIKey(provider.id) ?? "")
+        guard !apiKey.isEmpty else {
             return .failure(LLMError.apiError("请在设置中配置 LLM API Key"))
         }
 

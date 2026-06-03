@@ -242,6 +242,7 @@ enum SelfTest {
         testStatFormatting(r)    // StatFormatting pure formatters
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
         testHistoryMode(r)         // polish-degrade → history label .raw
+        testProviderAPIKeyLocal(r) // local API-key storage round-trip
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
         testAppearanceConfig(r)    // appearance pref round-trip + legacy default
         testModelConfig(r)         // model provisioning fields: round-trip + legacy default
@@ -528,6 +529,21 @@ enum SelfTest {
         r.check(SessionController.historyMode(usePolish: true, polishFailed: false) == .polish, "history: polish ok → .polish")
         r.check(SessionController.historyMode(usePolish: true, polishFailed: true) == .raw, "history: polish failed → degraded .raw")
         r.check(SessionController.historyMode(usePolish: false, polishFailed: false) == .raw, "history: raw request → .raw")
+    }
+
+    // MARK: - Local API-key storage (no Keychain)
+
+    static func testProviderAPIKeyLocal(_ r: Reporter) {
+        var c = Configuration()
+        let pid = UUID()
+        c.llmProviders = [LLMProvider(id: pid, name: "P", provider: "X", baseURL: "https://x", model: "m", isActive: true)]
+        c.llmApiKey = "sk-test-123"   // setter stores under the active provider
+        r.check(c.providerAPIKeys[pid.uuidString] == "sk-test-123", "key: llmApiKey setter → providerAPIKeys[active]")
+        r.check(c.llmApiKey == "sk-test-123", "key: llmApiKey getter reads active provider key")
+        let data = try! JSONEncoder().encode(c)
+        let back = try! JSONDecoder().decode(Configuration.self, from: data)
+        r.check(back.providerAPIKeys[pid.uuidString] == "sk-test-123", "key: persists across encode/decode (local)")
+        r.check(back.llmApiKey == "sk-test-123", "key: still readable after reload")
     }
 
     // MARK: - JSONMigration idempotent import

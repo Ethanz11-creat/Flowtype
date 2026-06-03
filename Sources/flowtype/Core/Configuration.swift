@@ -181,6 +181,13 @@ struct Configuration: Codable, Equatable {
     // LLM
     var llmProviders: [LLMProvider] = []
 
+    /// Per-provider API keys, stored LOCALLY (providerID.uuidString → key). Kept here rather than in
+    /// the Keychain on purpose: this is an unsigned, local-only tool, and the data-protection keychain
+    /// needs an entitlement we don't have (SecItemAdd returns -34018). Trade-off: keys live in the
+    /// local config (UserDefaults) in plaintext — acceptable for a personal on-device tool whose
+    /// threat model is other local processes, not the network.
+    var providerAPIKeys: [String: String] = [:]
+
     // Backward-compatible computed properties (active provider)
     var llmProvider: String {
         get { llmProviders.first(where: \.isActive)?.provider ?? "" }
@@ -204,9 +211,14 @@ struct Configuration: Codable, Equatable {
         }
     }
     var llmApiKey: String {
-        get { "" }  // API keys are stored in Keychain, not the struct
+        get {
+            guard let id = llmProviders.first(where: \.isActive)?.id else { return "" }
+            return providerAPIKeys[id.uuidString] ?? ""
+        }
         set {
-            // No-op: API keys are stored in Keychain via ConfigurationStore
+            guard let id = llmProviders.first(where: \.isActive)?.id else { return }
+            if newValue.isEmpty { providerAPIKeys.removeValue(forKey: id.uuidString) }
+            else { providerAPIKeys[id.uuidString] = newValue }
         }
     }
 
@@ -310,6 +322,7 @@ struct Configuration: Codable, Equatable {
         localModelPath = (try? c.decode(String?.self, forKey: .localModelPath)) ?? d.localModelPath
         downloadSource = (try? c.decode(DownloadSource.self, forKey: .downloadSource)) ?? d.downloadSource
         storeTranscriptText = (try? c.decodeIfPresent(Bool.self, forKey: .storeTranscriptText)) ?? true
+        providerAPIKeys = (try? c.decodeIfPresent([String: String].self, forKey: .providerAPIKeys)) ?? [:]
 
         // Try new multi-provider format first
         if let providers = try? c.decode([LLMProvider].self, forKey: .llmProviders), !providers.isEmpty {
@@ -346,6 +359,7 @@ extension Configuration {
         case localModelPath
         case downloadSource
         case storeTranscriptText
+        case providerAPIKeys
         // Legacy keys (for migration only, not stored properties)
         case llmProvider
         case llmBaseURL
@@ -368,6 +382,7 @@ extension Configuration {
         try container.encode(localModelPath, forKey: .localModelPath)
         try container.encode(downloadSource, forKey: .downloadSource)
         try container.encode(storeTranscriptText, forKey: .storeTranscriptText)
+        try container.encode(providerAPIKeys, forKey: .providerAPIKeys)
     }
 }
 

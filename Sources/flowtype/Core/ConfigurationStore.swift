@@ -139,22 +139,27 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         return "\(keychainServicePrefix)\(providerID.uuidString)"
     }
 
+    // API keys are now stored LOCALLY in the config (Configuration.providerAPIKeys), not the Keychain.
+    // The data-protection keychain needs an entitlement unsigned apps lack (SecItemAdd -34018), which is
+    // why keys weren't persisting. `save(_:)` updates `current` synchronously + debounces the disk write.
     func saveProviderAPIKey(_ apiKey: String, for providerID: UUID) {
-        let key = keychainKey(for: providerID)
-        if !apiKey.isEmpty {
-            _ = KeychainHelper.save(key: key, value: apiKey)
+        var c = current
+        if apiKey.isEmpty {
+            c.providerAPIKeys.removeValue(forKey: providerID.uuidString)
         } else {
-            KeychainHelper.delete(key: key)
+            c.providerAPIKeys[providerID.uuidString] = apiKey
         }
+        save(c)
     }
 
     func loadProviderAPIKey(_ providerID: UUID) -> String? {
-        let key = keychainKey(for: providerID)
-        return KeychainHelper.load(key: key)
+        let v = current.providerAPIKeys[providerID.uuidString]
+        return (v?.isEmpty == false) ? v : nil
     }
 
     func deleteProviderAPIKey(_ providerID: UUID) {
-        let key = keychainKey(for: providerID)
-        KeychainHelper.delete(key: key)
+        var c = current
+        c.providerAPIKeys.removeValue(forKey: providerID.uuidString)
+        save(c)
     }
 }

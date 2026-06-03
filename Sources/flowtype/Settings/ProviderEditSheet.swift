@@ -174,7 +174,7 @@ struct ProviderEditSheet: View {
         if !apiKey.isEmpty {
             testStatus = .testing
             let service = LLMService()
-            let result = await service.testConnection(provider: provider)
+            let result = await service.testConnection(provider: provider, apiKey: apiKey)
             switch result {
             case .success:
                 testStatus = .success
@@ -200,7 +200,7 @@ struct ProviderEditSheet: View {
         }
         provider.baseURL = normalizeBaseURL(provider.baseURL)
         testStatus = .testing
-        let result = await LLMService().testConnection(provider: provider)
+        let result = await LLMService().testConnection(provider: provider, apiKey: apiKey)
         switch result {
         case .success:
             testStatus = .success
