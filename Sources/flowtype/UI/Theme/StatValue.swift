@@ -41,6 +41,7 @@ struct StatValueView: View {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
                 Text(seg.number)
                     .font(.system(size: numberSize, weight: .bold))
+                    .monospacedDigit()
                     .foregroundColor(.primary)
                 if let unit = seg.unit {
                     Text(" \(unit) ")
