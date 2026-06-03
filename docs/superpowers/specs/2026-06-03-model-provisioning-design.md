@@ -37,12 +37,14 @@ Never an indefinite silent spinner. The status card is an explicit state machine
        offlineMode:true → READY ✓  (resolve symlinks when validating, e.g. an hf-download cache)
      incomplete → surface "已选文件夹不完整" + fall through
 
-1. OFFLINE-FIRST from speech-swift's own cache (NO network, NO folder ops — the daily path):
-     ~/Library/Caches/qwen3-speech/...  validateComplete? → offlineMode:true → READY ✓
-     (This is why the model already loads in 7–30 s today; passing offlineMode:true here is
-      what kills the occasional per-launch network-revalidation stall.)
-     (We deliberately do NOT auto-scan the whole machine / copy from other caches — if the
-      user has a copy elsewhere they point the folder picker at it, step 0. Keep it simple.)
+1. OFFLINE-FIRST from two KNOWN cache dirs (NO network, NO folder ops — the daily path):
+     a. ~/Library/Caches/qwen3-speech/models/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/  (speech-swift's own — what it uses today)
+     b. ~/.cache/huggingface/hub/models--aufklarer--Qwen3-ASR-0.6B-MLX-4bit/snapshots/<rev>/  (hf download; resolve symlinks → blobs)
+     first that validateComplete → offlineMode:true (cacheDir = that copy) → READY ✓
+     (This is why the model already loads in 7–30 s today; forcing offlineMode:true here is
+      what kills the occasional per-launch network-revalidation stall AND guarantees no re-download.)
+     (Bounded to these two well-known cache dirs — NOT a whole-machine scan. Anything elsewhere
+      is handled by the user pointing the folder picker at it, step 0.)
 
 2. NETWORK DOWNLOAD (only if no usable local copy)
      setenv HF_ENDPOINT per the chosen source (CN auto → hf-mirror.com)
@@ -67,7 +69,7 @@ Never an indefinite silent spinner. The status card is an explicit state machine
 ## 4. Architecture / files
 
 **New:**
-- `Sources/flowtype/Services/Speech/ModelLocator.swift` — pure: `validateComplete(URL) -> Bool` (resolves symlinks) + the speech-swift cache URL. (No whole-machine scan — reuse is either the specified folder or the speech-swift cache.) Unit-testable with a temp dir.
+- `Sources/flowtype/Services/Speech/ModelLocator.swift` — pure-ish: `validateComplete(URL) -> Bool` (resolves symlinks) + `knownCacheDirs() -> [URL]` (the two well-known caches: speech-swift's + the HF hub snapshot) + `firstCompleteLocalCopy() -> URL?`. No whole-machine scan. `validateComplete` unit-testable with a temp dir.
 - `Sources/flowtype/Services/Speech/DownloadSource.swift` — `enum DownloadSource { case auto, official, mirror, custom(String) }` + `endpoint(isChina:) -> String?` (pure) + a region check. Unit-testable.
 - `Sources/flowtype/Services/Speech/ModelProvisioner.swift` — orchestrates the ladder + the stall watchdog (wraps `fromPretrained` in a cancellable `Task`, monitors progress deltas), emits `QwenModelState`.
 
