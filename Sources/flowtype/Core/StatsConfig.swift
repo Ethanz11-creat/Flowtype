@@ -7,7 +7,7 @@ enum StatsConfig {
     static let baselineCPM = 40
 
     // Heatmap: 5 levels (0=empty … 4=very high) → single-hue opacity.
-    static let heatOpacity: [Double] = [0.08, 0.30, 0.55, 0.80, 1.0]
+    static let heatOpacity: [Double] = [0.25, 0.45, 0.65, 0.85, 1.0]
     static func days(for range: StatsRange) -> Int {
         switch range { case .d7: return 7; case .d30: return 30; case .all: return 365 }
     }
@@ -19,8 +19,9 @@ enum StatsConfig {
     static let charsPerBook = 730_000      // 《红楼梦》
 
     // Window + grid layout.
-    static let minWindowWidth: CGFloat = 900
-    static let minWindowHeight: CGFloat = 600
+    static let minWindowWidth: CGFloat = 1040
+    static let minWindowHeight: CGFloat = 700
+    static let contentMaxWidth: CGFloat = 1200
     static let cardMinWidth: CGFloat = 220
     static let cardMaxWidth: CGFloat = 320
 }
