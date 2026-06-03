@@ -109,6 +109,7 @@ struct SettingsPage: View {
                     if !draftApiKey.isEmpty {
                         ConfigurationStore.shared.saveProviderAPIKey(draftApiKey, for: newProvider.id)
                     }
+                    store.save(store.current)   // persist the provider list, not just the in-memory copy
                     showAddProvider = false
                 },
                 onCancel: {
@@ -136,6 +137,7 @@ struct SettingsPage: View {
                 ),
                 existingProviders: store.current.llmProviders,
                 onSave: {
+                    store.save(store.current)   // persist edits to name/url/model
                     editingProvider = nil
                 },
                 onCancel: {

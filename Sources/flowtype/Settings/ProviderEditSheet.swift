@@ -137,6 +137,11 @@ struct ProviderEditSheet: View {
             }
 
             HStack {
+                Button("测试连接") {
+                    Task { await testOnly() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(testStatus == .testing || apiKey.isEmpty)
                 Spacer()
                 Button("取消", action: onCancel)
                     .buttonStyle(.plain)
@@ -184,5 +189,23 @@ struct ProviderEditSheet: View {
         }
 
         onSave()
+    }
+
+    /// Explicit "测试连接" — validate + ping the provider, show the result, do NOT save.
+    private func testOnly() async {
+        validationError = nil
+        if let error = validateProvider(provider, existingProviders: existingProviders) {
+            validationError = error.localizedDescription
+            return
+        }
+        provider.baseURL = normalizeBaseURL(provider.baseURL)
+        testStatus = .testing
+        let result = await LLMService().testConnection(provider: provider)
+        switch result {
+        case .success:
+            testStatus = .success
+        case .failure(let error):
+            testStatus = .failure(error.userFriendlyMessage)
+        }
     }
 }

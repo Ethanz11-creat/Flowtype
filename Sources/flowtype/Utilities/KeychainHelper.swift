@@ -4,14 +4,14 @@ import Security
 enum KeychainHelper {
     private static let service = "com.flowtype.app"
 
-    /// Security: use kSecAttrAccessibleWhenUnlockedThisDeviceOnly to prevent
-    /// iCloud Keychain syncing of API keys, and kSecUseDataProtectionKeychain
-    /// for modern data-protection-based keychain on macOS.
+    /// Traditional (file-based) keychain. We deliberately do NOT set kSecUseDataProtectionKeychain:
+    /// the data-protection keychain needs a keychain-access entitlement we don't have when distributing
+    /// UNSIGNED, which makes SecItemAdd fail with errSecMissingEntitlement (-34018) — that's exactly why
+    /// API keys weren't being saved. The traditional keychain works for unsigned apps (login keychain).
     private static var baseQuery: [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecUseDataProtectionKeychain as String: true,
         ]
     }
 
@@ -25,7 +25,6 @@ enum KeychainHelper {
         var addQuery = baseQuery
         addQuery[kSecAttrAccount as String] = key
         addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status != errSecSuccess {
