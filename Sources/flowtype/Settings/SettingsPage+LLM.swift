@@ -6,7 +6,7 @@ extension SettingsPage {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Brand.gradient)
+                    .foregroundStyle(Brand.accent)
                 Text("文本润色（LLM）")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()

@@ -6,7 +6,7 @@ extension SettingsPage {
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Brand.gradient)
+                    .foregroundStyle(Brand.accent)
                 Text("权限与系统状态")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()

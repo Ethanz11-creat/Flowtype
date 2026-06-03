@@ -45,7 +45,7 @@ struct OnboardingView: View {
 
             Image(systemName: "mic.badge.plus")
                 .font(.system(size: 56))
-                .foregroundStyle(Brand.gradient)
+                .foregroundStyle(Brand.accent)
 
             Text("欢迎使用 FlowType")
                 .font(.system(size: 24, weight: .bold))

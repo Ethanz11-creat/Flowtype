@@ -30,7 +30,7 @@ struct OverviewPage: View {
                     .stroke(Brand.accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                     .frame(width: 80, height: 80)
                     .rotationEffect(.degrees(-90))
-                    .shadow(color: Brand.purple.opacity(0.22), radius: 6)
+                    .shadow(color: Brand.accent.opacity(0.22), radius: 6)
                 Text("\(Int(accuracyProgress * 100))%")
                     .font(.system(size: 18, weight: .bold))
             }

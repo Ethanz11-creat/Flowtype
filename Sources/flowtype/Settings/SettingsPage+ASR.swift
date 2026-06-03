@@ -6,7 +6,7 @@ extension SettingsPage {
             HStack(spacing: 8) {
                 Image(systemName: "waveform")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Brand.gradient)
+                    .foregroundStyle(Brand.accent)
                 Text("语音转文字（ASR）")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()

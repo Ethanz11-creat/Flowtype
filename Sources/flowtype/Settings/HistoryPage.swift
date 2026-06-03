@@ -126,6 +126,7 @@ struct HistoryPage: View {
             }
         }
         .listStyle(.inset)
+        .scrollContentBackground(.hidden)
     }
 
     // MARK: - Detail
