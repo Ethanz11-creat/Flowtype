@@ -21,7 +21,7 @@ struct CapsuleView: View {
             Spacer()
         }
         .padding(.horizontal, 20)
-        .frame(width: 320, height: 70)
+        .frame(width: 240, height: 70)
         .background(
             ZStack {
                 VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)

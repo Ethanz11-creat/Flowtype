@@ -83,15 +83,10 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             finalASRText = localPreviewText
         }
 
-        // 3. Validate result
+        // 3. No speech recognized → end the session quietly (idle + hide capsule), NOT an error.
         guard !finalASRText.isEmpty else {
-            AppLogger.log("[ASRStage#\(sessionID)] Empty text after ASR and fallback")
-            return .suspend(ErrorRecoveryContext(
-                failedStage: name,
-                error: ASRStageError.emptyResult,
-                rawText: nil,
-                retryable: false
-            ))
+            AppLogger.log("[ASRStage#\(sessionID)] No speech recognized — ending session quietly")
+            return .complete
         }
 
         return .continue(.transcript(finalASRText))
@@ -102,5 +97,4 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
 
 enum ASRStageError: Error {
     case invalidPayload
-    case emptyResult
 }

@@ -370,7 +370,7 @@ class WindowManager: ObservableObject {
             panel.orderFront(nil)
             return
         }
-        let targetX = screen.visibleFrame.midX - 160
+        let targetX = screen.visibleFrame.midX - 120   // half the 240pt capsule width
         let targetY = screen.visibleFrame.minY + 40
 
         // Start just below the resting position, fully transparent, then slide up + fade in.

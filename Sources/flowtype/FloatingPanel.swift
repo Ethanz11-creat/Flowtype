@@ -12,7 +12,7 @@ class FloatingPanel: NSPanel {
 
     init(view: AnyView) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 70),
+            contentRect: NSRect(x: 0, y: 0, width: 240, height: 70),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false)
 
@@ -32,7 +32,7 @@ class FloatingPanel: NSPanel {
         // Apply capsule mask so the window itself is capsule-shaped
         let cornerRadius: CGFloat = 35
         let capsulePath = CGPath(
-            roundedRect: NSRect(x: 0, y: 0, width: 320, height: 70),
+            roundedRect: NSRect(x: 0, y: 0, width: 240, height: 70),
             cornerWidth: cornerRadius,
             cornerHeight: cornerRadius,
             transform: nil
