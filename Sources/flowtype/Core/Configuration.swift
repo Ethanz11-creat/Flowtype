@@ -225,6 +225,9 @@ struct Configuration: Codable, Equatable {
     // Appearance: 浅色 / 深色 / 随系统
     var appearancePreference: AppearancePreference = .system
 
+    // Privacy: whether to persist transcript text alongside session metadata
+    var storeTranscriptText: Bool = true
+
     // Model provisioning
     var localModelPath: String? = nil          // user-specified model folder (offline load)
     var downloadSource: DownloadSource = .auto
@@ -306,6 +309,7 @@ struct Configuration: Codable, Equatable {
         appearancePreference = (try? c.decode(AppearancePreference.self, forKey: .appearancePreference)) ?? d.appearancePreference
         localModelPath = (try? c.decode(String?.self, forKey: .localModelPath)) ?? d.localModelPath
         downloadSource = (try? c.decode(DownloadSource.self, forKey: .downloadSource)) ?? d.downloadSource
+        storeTranscriptText = (try? c.decodeIfPresent(Bool.self, forKey: .storeTranscriptText)) ?? true
 
         // Try new multi-provider format first
         if let providers = try? c.decode([LLMProvider].self, forKey: .llmProviders), !providers.isEmpty {
@@ -341,6 +345,7 @@ extension Configuration {
         case appearancePreference
         case localModelPath
         case downloadSource
+        case storeTranscriptText
         // Legacy keys (for migration only, not stored properties)
         case llmProvider
         case llmBaseURL
@@ -362,6 +367,7 @@ extension Configuration {
         try container.encode(appearancePreference, forKey: .appearancePreference)
         try container.encode(localModelPath, forKey: .localModelPath)
         try container.encode(downloadSource, forKey: .downloadSource)
+        try container.encode(storeTranscriptText, forKey: .storeTranscriptText)
     }
 }
 
