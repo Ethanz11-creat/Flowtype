@@ -10,7 +10,7 @@ struct AudioVisualizer: View {
     private static let barCount = 9
     private static let center = barCount / 2
     private static let envelope = SpectrumMath.centerEnvelope(count: barCount)
-    private let maxBarHeight: CGFloat = 20
+    private let maxBarHeight: CGFloat = 22
     private let minBarHeight: CGFloat = 3
 
     var body: some View {
@@ -47,8 +47,9 @@ struct AudioVisualizer: View {
         let env = CGFloat(Self.envelope[i])
         guard active else { return env * 0.12 }
         let shape = 0.22 + 0.78 * env                 // broad middle-tall silhouette
-        let flicker = 0.55 + 0.45 * detail            // distinct per-bar band → asymmetric motion
-        let level = shape * flicker * (0.45 + 0.55 * loud)
+        let flicker = 0.5 + 0.5 * detail              // distinct per-bar band → asymmetric motion
+        let drive = Swift.min(1.0, loud * 1.5)        // boost so normal-volume speech pushes bars higher (more "jump")
+        let level = shape * flicker * (0.3 + 0.85 * drive)
         return Swift.min(Swift.max(level, 0.04), 1.0)
     }
 
