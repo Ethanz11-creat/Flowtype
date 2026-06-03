@@ -6,7 +6,7 @@ struct OverviewPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
                 HStack(spacing: 14) {
                     accuracyCard
                     mainStatsGrid
@@ -15,7 +15,10 @@ struct OverviewPage: View {
 
                 StatsPanel()
             }
-            .padding(24)
+            .frame(maxWidth: StatsConfig.contentMaxWidth)   // cap content width
+            .frame(maxWidth: .infinity)                     // center; gutters absorb extra width
+            .padding(.horizontal, 32)
+            .padding(.vertical, 24)
         }
     }
 
