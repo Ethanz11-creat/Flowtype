@@ -21,7 +21,7 @@ enum StatsConfig {
     // Window + grid layout.
     static let minWindowWidth: CGFloat = 1040
     static let minWindowHeight: CGFloat = 700
-    static let contentMaxWidth: CGFloat = 1200
+    static let contentMaxWidth: CGFloat = 960
     static let cardMinWidth: CGFloat = 220
     static let cardMaxWidth: CGFloat = 320
 }
