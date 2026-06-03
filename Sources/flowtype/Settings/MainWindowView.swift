@@ -50,12 +50,18 @@ struct MainWindowView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 3) {
-            ForEach(AppTab.allCases) { tab in
+            ForEach(AppTab.allCases.filter { $0 != .settings }) { tab in
                 SidebarRow(tab: tab, selected: selectedTab == tab) {
                     selectedTab = tab
                 }
             }
             Spacer()
+            // §7: 设置 pinned to the bottom-left, separated by a thin divider.
+            Divider().overlay(Color.white.opacity(0.06))
+            SidebarRow(tab: .settings, selected: selectedTab == .settings) {
+                selectedTab = .settings
+            }
+            .padding(.top, 6)
         }
         .padding(.horizontal, 10)
         .padding(.top, 36)   // clear the traffic-light buttons over the transparent titlebar
