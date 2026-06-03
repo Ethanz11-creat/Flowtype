@@ -249,6 +249,10 @@ enum SelfTest {
         testStatsDataModel(r)      // stats data model: language tag + legacy decode
         testStatsEngine(r)         // StatsEngine: metrics, streaks, heatmap
         testHeatmapDensity(r)      // StatsEngine: dense heatmap (full range, missing days = 0)
+        testDatabaseSchema(r)      // GRDB schema: session/daily_legacy/meta tables
+        testSessionRecord(r)       // SessionRecord round-trip + charCount/sttBackend/recordingMs
+        testStatsRepository(r)     // StatsRepository boundary fold: legacy/session/boundary
+        testJSONMigration(r)       // JSONMigration: idempotent import + sttBackend tagging
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -446,6 +450,81 @@ enum SelfTest {
         r.eq(StatsEngine.milestoneProgress(6), 0.75, "ms: progress(6)=.75")
         r.eq(StatsEngine.milestoneProgress(3), 0.0, "ms: progress(3)=0 at anchor")
         r.eq(StatsEngine.milestoneProgress(400), 1.0, "ms: progress(>max)=1")
+    }
+
+    // MARK: - GRDB schema self-test
+
+    static func testDatabaseSchema(_ r: Reporter) {
+        guard let db = try? AppDatabase.inMemory() else { r.check(false, "db: inMemory open"); return }
+        let tables = (try? db.dbQueue.read { d in
+            try String.fetchAll(d, sql: "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        }) ?? []
+        r.check(tables.contains("session"), "db: session table exists")
+        r.check(tables.contains("daily_legacy"), "db: daily_legacy table exists")
+        r.check(tables.contains("meta"), "db: meta table exists")
+    }
+
+    // MARK: - SessionRecord round-trip
+
+    static func testSessionRecord(_ r: Reporter) {
+        guard let db = try? AppDatabase.inMemory() else { r.check(false, "rec: db"); return }
+        let s = DictationSession(rawTranscript: "原文", finalText: "你好世界", polishMode: .polish,
+                                 durationMs: 9000, recordingMs: 4000, appName: "Xcode",
+                                 appBundleID: "com.apple.dt.Xcode", language: "zh", sttBackend: "qwen")
+        var rec = SessionRecord(from: s)
+        try? db.dbQueue.write { try rec.insert($0) }
+        let back = (try? db.dbQueue.read { try SessionRecord.fetchAll($0) }) ?? []
+        r.eq(back.count, 1, "rec: one row")
+        r.eq(back.first?.charCount, 4, "rec: charCount=4 (你好世界)")
+        r.eq(back.first?.sttBackend, "qwen", "rec: sttBackend persisted")
+        r.eq(back.first?.recordingMs, 4000, "rec: recordingMs persisted")
+    }
+
+    // MARK: - StatsRepository boundary fold
+
+    static func testStatsRepository(_ r: Reporter) {
+        guard let db = try? AppDatabase.inMemory() else { r.check(false, "repo: db"); return }
+        let cal = Calendar.current
+        func noon(_ iso: String) -> Double {
+            let f = DateFormatter(); f.calendar = cal; f.timeZone = cal.timeZone; f.dateFormat = "yyyy-MM-dd HH:mm"
+            return f.date(from: "\(iso) 12:00")!.timeIntervalSince1970
+        }
+        // migrationDate = 2026-06-01; legacy day 2026-05-20 (chars 100); sessions on 06-02 (chars 50, recMs 20000) + a session on 05-19 (chars 999, should be ignored for stats)
+        try? db.dbQueue.write { d in
+            try d.execute(sql: "INSERT OR REPLACE INTO meta VALUES('migrationDate','2026-06-01')")
+            try DailyLegacyRecord(from: DailyStats(date: "2026-05-20", totalDurationMs: 0, totalWordCount: 100, sessionCount: 1, totalRecordingMs: 60000)).insert(d)
+            var s1 = SessionRecord(from: DictationSession(rawTranscript: "", finalText: String(repeating: "字", count: 50), polishMode: .raw, durationMs: 99999, recordingMs: 20000, appName: "A", appBundleID: nil, language: "zh", sttBackend: "qwen"))
+            s1.startedAt = noon("2026-06-02"); try s1.insert(d)
+            var sOld = SessionRecord(from: DictationSession(rawTranscript: "", finalText: String(repeating: "x", count: 999), polishMode: .raw, durationMs: 0, recordingMs: 0, appName: "A", appBundleID: nil, language: "en", sttBackend: "qwen"))
+            sOld.startedAt = noon("2026-05-19"); try sOld.insert(d)
+        }
+        let stats = StatsRepository(db: db).buildDailyStats(cal: cal)
+        let d0520 = stats.first { $0.date == "2026-05-20" }
+        let d0602 = stats.first { $0.date == "2026-06-02" }
+        r.eq(d0520?.totalWordCount, 100, "repo: legacy day from snapshot (no session double-count)")
+        r.check(stats.first { $0.date == "2026-05-19" } == nil, "repo: pre-migration session excluded from stats")
+        r.eq(d0602?.totalWordCount, 50, "repo: post-migration day from sessions")
+        // recordingMs denominator: 50 chars / (20000ms=0.333min) → high speed, durationMs(99999) ignored
+        let summary = StatsEngine.summarize(stats, range: .all, now: noonDate("2026-06-02", cal), cal: cal)
+        r.check(summary.avgSpeedCPM >= 100, "repo: speed uses recordingMs not durationMs")
+    }
+
+    static func noonDate(_ iso: String, _ cal: Calendar) -> Date {
+        let f = DateFormatter(); f.calendar = cal; f.timeZone = cal.timeZone; f.dateFormat = "yyyy-MM-dd HH:mm"
+        return f.date(from: "\(iso) 12:00")!
+    }
+
+    // MARK: - JSONMigration idempotent import
+
+    static func testJSONMigration(_ r: Reporter) {
+        guard let db = try? AppDatabase.inMemory() else { r.check(false, "mig: db"); return }
+        r.check(!JSONMigration.hasMigrated(db), "mig: not migrated initially")
+        let s = DictationSession(rawTranscript: "", finalText: "你好", polishMode: .raw, durationMs: 1000,
+                                 recordingMs: 1000, appName: "A", appBundleID: nil, language: "zh", sttBackend: nil)
+        try? JSONMigration.importInto(db, sessions: [s], daily: [], migrationDay: "2026-01-01")
+        r.check(JSONMigration.hasMigrated(db), "mig: migrated after import")
+        let recs = (try? db.dbQueue.read { try SessionRecord.fetchAll($0) }) ?? []
+        r.eq(recs.first?.sttBackend, "legacy", "mig: imported session tagged legacy (no backend)")
     }
 
     // MARK: - Injection segmentation (B-inject)
