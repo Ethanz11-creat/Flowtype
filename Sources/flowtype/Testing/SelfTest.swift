@@ -243,6 +243,7 @@ enum SelfTest {
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
         testHistoryMode(r)         // polish-degrade → history label .raw
         testProviderAPIKeyLocal(r) // local API-key storage round-trip
+        testFunFact(r)             // fun-fact footer clauses
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
         testAppearanceConfig(r)    // appearance pref round-trip + legacy default
         testModelConfig(r)         // model provisioning fields: round-trip + legacy default
@@ -544,6 +545,18 @@ enum SelfTest {
         let back = try! JSONDecoder().decode(Configuration.self, from: data)
         r.check(back.providerAPIKeys[pid.uuidString] == "sk-test-123", "key: persists across encode/decode (local)")
         r.check(back.llmApiKey == "sk-test-123", "key: still readable after reload")
+    }
+
+    // MARK: - Fun-fact footer
+
+    static func testFunFact(_ r: Reporter) {
+        var s = StatsSummary()
+        s.chars = 24180
+        s.timeSavedSeconds = StatsConfig.secondsPerMovie
+        let f = DefaultFunFactProvider().fact(for: s)
+        r.check(f.clauses.count == 3, "funfact: chars + keystrokes + movie → 3 clauses")
+        r.check(f.clauses.first?.value.contains("24") == true, "funfact: highlighted char value present")
+        r.check(DefaultFunFactProvider().fact(for: StatsSummary()).isEmpty, "funfact: empty when no chars")
     }
 
     // MARK: - JSONMigration idempotent import

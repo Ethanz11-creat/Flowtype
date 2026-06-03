@@ -41,38 +41,10 @@ struct OverviewPage: View {
     }
 
     @ViewBuilder private func footerLine(s: StatsSummary) -> some View {
-        if let text = buildFooterText(s: s) {
-            HStack(alignment: .top, spacing: 0) {
-                Text(text)
-                    .font(.system(size: 13)).foregroundColor(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.top, 14)
-            .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5), alignment: .top)
+        let fact = FunFactStore.shared.fact(for: s)
+        if !fact.isEmpty {
+            FunFactFooter(fact: fact)
         }
-    }
-
-    private func buildFooterText(s: StatsSummary) -> String? {
-        guard s.chars > 0 else { return nil }
-        var parts: [String] = ["你已累计口述约 \(thousands(s.chars)) 字"]
-        if s.chars >= 50 {
-            let keystrokes = Int(Double(s.chars) * StatsConfig.keystrokesPerChar)
-            parts.append("少敲约 \(wan(keystrokes)) 次键盘")
-        }
-        if s.timeSavedSeconds >= StatsConfig.secondsPerMovie {
-            parts.append("节省时间够看 \(s.timeSavedSeconds / StatsConfig.secondsPerMovie) 部电影")
-        } else if s.timeSavedSeconds >= StatsConfig.secondsPerCoffee {
-            parts.append("够泡 \(s.timeSavedSeconds / StatsConfig.secondsPerCoffee) 杯咖啡")
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func thousands(_ n: Int) -> String {
-        let f = NumberFormatter(); f.numberStyle = .decimal
-        return f.string(from: NSNumber(value: n)) ?? "\(n)"
-    }
-    private func wan(_ n: Int) -> String {
-        n >= 10_000 ? String(format: "%.1f 万", Double(n) / 10_000.0) : thousands(n)
     }
 }
 
