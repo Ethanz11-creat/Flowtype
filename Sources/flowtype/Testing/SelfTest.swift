@@ -553,10 +553,10 @@ enum SelfTest {
         var s = StatsSummary()
         s.chars = 24180
         s.timeSavedSeconds = StatsConfig.secondsPerMovie
-        let f = DefaultFunFactProvider().fact(for: s)
+        let f = FunFact.make(for: s)
         r.check(f.clauses.count == 3, "funfact: chars + keystrokes + movie → 3 clauses")
         r.check(f.clauses.first?.value.contains("24") == true, "funfact: highlighted char value present")
-        r.check(DefaultFunFactProvider().fact(for: StatsSummary()).isEmpty, "funfact: empty when no chars")
+        r.check(FunFact.make(for: StatsSummary()).isEmpty, "funfact: empty when no chars")
     }
 
     // MARK: - JSONMigration idempotent import

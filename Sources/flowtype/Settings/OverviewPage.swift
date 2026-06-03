@@ -41,7 +41,7 @@ struct OverviewPage: View {
     }
 
     @ViewBuilder private func footerLine(s: StatsSummary) -> some View {
-        let fact = FunFactStore.shared.fact(for: s)
+        let fact = FunFact.make(for: s)
         if !fact.isEmpty {
             FunFactFooter(fact: fact)
         }
