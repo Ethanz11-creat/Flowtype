@@ -36,15 +36,14 @@ struct MainWindowView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-            Divider().overlay(Color.primary.opacity(0.06))
+                .background(Theme.sidebarBackground)
+            Divider().overlay(Color.white.opacity(0.06))
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.pageBackground)
         }
-        // A single frosted backdrop behind BOTH columns — a custom sidebar (instead of
-        // NavigationSplitView) so the sidebar shares the exact same .hudWindow frost as the
-        // content, rather than NavigationSplitView's distinct .sidebar vibrancy.
-        .background(FrostBackground())
+        // Fully solid window per the prototype — no vibrancy/frost (that was the "发灰发糊" root).
+        .background(Theme.pageBackground)
         .tint(Brand.accent)
         .frame(minWidth: StatsConfig.minWindowWidth, minHeight: StatsConfig.minWindowHeight)
     }
