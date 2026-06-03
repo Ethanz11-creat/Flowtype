@@ -50,9 +50,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if !hasAccessibility {
                 PermissionHelper.showPermissionGuide()
             }
-            Task {
-                await loadQwenASRModel()
-            }
+        }
+
+        // Load the ASR model in the background regardless of onboarding state — onboarding's
+        // own load (if any) dedups via QwenModelState, so this never double-loads.
+        Task {
+            await loadQwenASRModel()
         }
     }
 

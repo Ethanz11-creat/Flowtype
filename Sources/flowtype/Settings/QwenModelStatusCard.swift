@@ -24,14 +24,9 @@ struct QwenModelStatusCard: View {
                 Spacer()
 
                 if case .error = modelState.status {
-                    Button("重试") {
-                        Task {
-                            let provider = SessionController.shared.qwenProvider
-                            await modelState.loadModel(provider: provider)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    loadButton("重试")
+                } else if case .notLoaded = modelState.status {
+                    loadButton("加载模型")
                 }
             }
 
@@ -53,6 +48,17 @@ struct QwenModelStatusCard: View {
         }
         .padding(14)
         .glassCard(cornerRadius: 10)
+    }
+
+    private func loadButton(_ title: String) -> some View {
+        Button(title) {
+            Task {
+                let provider = SessionController.shared.qwenProvider
+                await modelState.loadModel(provider: provider)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
     }
 
     private var statusIcon: String {
