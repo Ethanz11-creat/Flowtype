@@ -2,17 +2,13 @@ import Foundation
 import CoreGraphics
 import AppKit
 import ApplicationServices
+import Carbon
 import os
 
 enum InjectionError: Error {
     case eventSourceCreationFailed
+    case eventCreationFailed
     case textTooLong
-}
-
-enum FocusState: Equatable {
-    case secureField   // focused element is a password / secure text field
-    case present       // some focused element exists — assume injectable
-    case noFocus       // no focused UI element at all
 }
 
 struct KeyboardInjector {
@@ -96,52 +92,72 @@ struct KeyboardInjector {
     private static func postUnicode(_ s: String, source: CGEventSource) async throws {
         guard !s.isEmpty else { return }
         let utf16 = Array(s.utf16)
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
-        let keyUp   = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-        keyDown?.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
-        keyUp?.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
-        keyDown?.post(tap: .cghidEventTap)
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+            throw InjectionError.eventCreationFailed
+        }
+        keyDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
+        keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
+        keyDown.post(tap: .cghidEventTap)
         try await Task.sleep(nanoseconds: interEventDelayNs)
-        keyUp?.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
         try await Task.sleep(nanoseconds: interEventDelayNs)
     }
 
     private static func postShiftReturn(source: CGEventSource) async throws {
         let returnKey: CGKeyCode = 0x24 // kVK_Return
-        let down = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true)
-        let up   = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false)
-        down?.flags = .maskShift
-        up?.flags   = .maskShift
-        down?.post(tap: .cghidEventTap)
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false) else {
+            throw InjectionError.eventCreationFailed
+        }
+        down.flags = .maskShift
+        up.flags   = .maskShift
+        down.post(tap: .cghidEventTap)
         try await Task.sleep(nanoseconds: interEventDelayNs)
-        up?.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
         try await Task.sleep(nanoseconds: interEventDelayNs)
     }
 
     // MARK: - Focus detection
 
-    /// Classifies the system-wide focused element. Fails toward `.present`/`.noFocus`
-    /// (never blocks normal injection on a transient AX hiccup).
-    static func currentFocusState() -> FocusState {
+    /// Gathers the signals the delivery decision needs from the live system. Bounds AX
+    /// latency with a 0.25 s messaging timeout and fails open to `.blindOrUnknown` so a
+    /// transient AX miss never blocks injection. Must be called on the main thread.
+    static func currentFocusSignals() -> FocusSignals {
         let systemWide = AXUIElementCreateSystemWide()
+        // Global default timeout for all AX messages — prevents a hung target app from
+        // blocking the main thread for the ~6 s system default.
+        AXUIElementSetMessagingTimeout(systemWide, 0.25)
+
+        let secureGlobal = IsSecureEventInputEnabled()
+
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focusedValue = focused,
-              CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
-            return .noFocus
+              let value = focused,
+              CFGetTypeID(value) == AXUIElementGetTypeID() else {
+            return FocusSignals(secureInputActive: secureGlobal, focus: .blindOrUnknown)
         }
-        let element = focusedValue as! AXUIElement
-        var subrole: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
-           let s = subrole as? String, s == "AXSecureTextField" {
-            return .secureField
+        let element = value as! AXUIElement
+        let role = copyStringAttribute(element, kAXRoleAttribute as CFString)
+        let subrole = copyStringAttribute(element, kAXSubroleAttribute as CFString)
+
+        if secureGlobal || role == "AXSecureTextField" || subrole == "AXSecureTextField" {
+            return FocusSignals(secureInputActive: true, focus: .nonTextControl)
         }
-        var role: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
-           let r = role as? String, r == "AXSecureTextField" {
-            return .secureField
-        }
-        return .present
+        let kind = classifyFocus(role: role, isValueSettable: isValueSettable(element))
+        return FocusSignals(secureInputActive: false, focus: kind)
+    }
+
+    private static func copyStringAttribute(_ element: AXUIElement, _ attr: CFString) -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attr, &value) == .success else { return nil }
+        return value as? String
+    }
+
+    private static func isValueSettable(_ element: AXUIElement) -> Bool {
+        var settable: DarwinBoolean = false
+        let err = AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable)
+        return err == .success && settable.boolValue
     }
 
 }

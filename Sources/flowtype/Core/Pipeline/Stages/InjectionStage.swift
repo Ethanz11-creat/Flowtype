@@ -43,50 +43,32 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
         }
         await MainActor.run { context.hasInjected = true }
 
-        // Capture the app we were dictating into.
-        let targetBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
-        AppLogger.log("[InjectionStage#\(sessionID)] Target app: \(targetBundleID)")
-
         // (.injecting is set by the orchestrator's pre-stage transition; the
         // statePublisher subscriber filters .injecting, so we don't re-send it.)
-        try? await Task.sleep(nanoseconds: 100_000_000) // let UI settle
+        try? await Task.sleep(nanoseconds: 100_000_000) // let focus settle after the end-tap
 
-        let currentBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown"
-        let appChanged = currentBundleID != targetBundleID
-        let focusState = await MainActor.run { KeyboardInjector.currentFocusState() }
+        // Decide from the focus at THIS moment (not from whether the app changed):
+        // editable text → inject (even across an app switch); a non-text control or secure
+        // input → clipboard + sound; AX-blind apps (terminals/Electron) fail open to inject.
+        let signals = await MainActor.run { KeyboardInjector.currentFocusSignals() }
+        let decision = decideInjection(signals)
+        AppLogger.log("[InjectionStage#\(sessionID)] signals=\(signals) → \(decision)")
 
-        // Never inject into — or leave a transcript on the clipboard near — a password field.
-        if focusState == .secureField {
-            AppLogger.log("[InjectionStage#\(sessionID)] Secure field focused — aborting (no inject, no clipboard)")
-            return .suspend(ErrorRecoveryContext(
-                failedStage: name,
-                error: InjectionStageError.secureFieldTarget,
-                rawText: nil,
-                retryable: false
-            ))
-        }
-
-        // You switched to a different app since recording started → you walked away, so put the
-        // text on the clipboard instead of typing into the wrong place. This is the ONLY
-        // condition that diverts to the clipboard. We deliberately do NOT use AX focus
-        // detection to decide — it is unreliable in many apps (WeChat / Electron / terminals
-        // report "no focused field" even when the cursor IS in a text box), and staying in the
-        // same app means the cursor is almost certainly still where you were dictating.
-        if appChanged {
-            AppLogger.log("[InjectionStage#\(sessionID)] App changed \(targetBundleID)→\(currentBundleID); copied to clipboard")
+        switch decision {
+        case .clipboard:
             await copyToClipboard(text)
             return .complete
-        }
-
-        // Same app → inject directly. On failure, fall back to clipboard so text is never lost.
-        do {
-            try await KeyboardInjector.insertText(text)
-            AppLogger.log("[InjectionStage#\(sessionID)] Injected in \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
-            return .complete
-        } catch {
-            AppLogger.log("[InjectionStage#\(sessionID)] Injection failed (\(error)); falling back to clipboard")
-            await copyToClipboard(text)
-            return .complete
+        case .inject:
+            do {
+                try await KeyboardInjector.insertText(text)
+                AppLogger.log("[InjectionStage#\(sessionID)] Injected in \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
+                return .complete
+            } catch {
+                // Never lose text: a failed/blocked injection falls back to clipboard + sound.
+                AppLogger.log("[InjectionStage#\(sessionID)] Injection failed (\(error)); falling back to clipboard")
+                await copyToClipboard(text)
+                return .complete
+            }
         }
     }
 
@@ -103,14 +85,11 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
 
 enum InjectionStageError: LocalizedError {
     case invalidPayload
-    case secureFieldTarget
 
     var errorDescription: String? {
         switch self {
         case .invalidPayload:
             return "注入失败：无效的文本"
-        case .secureFieldTarget:
-            return "检测到密码框，已跳过注入以保护隐私"
         }
     }
 }
