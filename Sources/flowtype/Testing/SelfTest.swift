@@ -172,6 +172,42 @@ enum SelfTest {
         r.eq(d?.hourHistogram.count, 24, "daily: legacy decodes, hourHistogram default 24")
     }
 
+    // MARK: - StatsEngine: metrics, streaks, heatmap
+
+    static func testStatsEngine(_ r: Reporter) {
+        func day(_ d: String, chars: Int, recMs: UInt64, sessions: Int = 1, hist: [Int]? = nil) -> DailyStats {
+            DailyStats(date: d, totalDurationMs: recMs, totalWordCount: chars, sessionCount: sessions,
+                       totalRecordingMs: recMs, byApp: [:], byLang: [:],
+                       hourHistogram: hist ?? Array(repeating: 0, count: 24))
+        }
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = StatsEngine.parseDate("2026-06-03", cal)!
+
+        // speed regression: 100 chars over 50s pure recording = 100 / (50/60) = 120 CPM
+        let one = StatsEngine.summarize([day("2026-06-03", chars: 100, recMs: 50_000)], range: .all, now: now, cal: cal)
+        r.eq(one.avgSpeedCPM, 120, "engine: speed = chars/(recSec/60) = 120")
+        r.check(one.timeSavedSeconds >= 0, "engine: timeSaved never negative")
+
+        // empty → zeros, no crash
+        let empty = StatsEngine.summarize([], range: .all, now: now, cal: cal)
+        r.check(empty.isEmpty && empty.avgSpeedCPM == 0 && empty.currentStreak == 0, "engine: empty → zeros")
+
+        // levels
+        r.eq(StatsEngine.level(0, max: 100), 0, "engine: level 0")
+        r.eq(StatsEngine.level(100, max: 100), 4, "engine: level max → 4")
+
+        // streaks
+        r.eq(StatsEngine.longestRun([1,2,3,5,6]), 3, "engine: longest run 3")
+        r.eq(StatsEngine.currentRun([10,9,8], todayOrdinal: 10), 3, "engine: current streak today-anchored 3")
+        r.eq(StatsEngine.currentRun([9,8], todayOrdinal: 10), 2, "engine: current streak yesterday-anchored 2")
+        r.eq(StatsEngine.currentRun([5], todayOrdinal: 10), 0, "engine: stale → 0")
+
+        // range filter keeps only recent
+        let many = [day("2026-01-01", chars: 5, recMs: 5000), day("2026-06-01", chars: 5, recMs: 5000), day("2026-06-03", chars: 5, recMs: 5000)]
+        r.eq(StatsEngine.summarize(many, range: .d7, now: now, cal: cal).activeDays, 2, "engine: 7d keeps 06-01 & 06-03")
+        r.eq(StatsEngine.summarize(many, range: .all, now: now, cal: cal).activeDays, 3, "engine: all keeps 3")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -191,6 +227,7 @@ enum SelfTest {
         testDownloadSource(r)      // DownloadSource endpoint mapping
         testModelLocator(r)        // ModelLocator completeness validation
         testStatsDataModel(r)      // stats data model: language tag + legacy decode
+        testStatsEngine(r)         // StatsEngine: metrics, streaks, heatmap
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
