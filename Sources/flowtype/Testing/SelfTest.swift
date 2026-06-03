@@ -100,6 +100,28 @@ enum SelfTest {
         r.eq(decoded?.appearancePreference, .system, "appearance: legacy missing key → .system")
     }
 
+    // MARK: - Model provisioning config: round-trip + legacy default
+
+    static func testModelConfig(_ r: Reporter) {
+        // Round-trip: localModelPath + downloadSource survive encode→decode
+        var cfg = Configuration()
+        cfg.localModelPath = "/tmp/m"
+        cfg.downloadSource = .mirror
+        if let data = try? JSONEncoder().encode(cfg),
+           let back = try? JSONDecoder().decode(Configuration.self, from: data) {
+            r.eq(back.localModelPath, "/tmp/m", "modelcfg: localModelPath round-trips")
+            r.eq(back.downloadSource, .mirror, "modelcfg: downloadSource round-trips .mirror")
+        } else {
+            r.check(false, "modelcfg: encode/decode round-trip failed")
+            r.check(false, "modelcfg: encode/decode round-trip failed (downloadSource)")
+        }
+        // Legacy JSON without the new keys → defaults
+        let legacy = Data("{\"asrLanguage\":\"zh\"}".utf8)
+        let decoded = try? JSONDecoder().decode(Configuration.self, from: legacy)
+        r.eq(decoded?.localModelPath, nil, "modelcfg: legacy missing key → localModelPath nil")
+        r.eq(decoded?.downloadSource, .auto, "modelcfg: legacy missing key → downloadSource .auto")
+    }
+
     // MARK: - DownloadSource endpoint mapping
 
     static func testDownloadSource(_ r: Reporter) {
@@ -126,6 +148,7 @@ enum SelfTest {
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
         testAppearanceConfig(r)    // appearance pref round-trip + legacy default
+        testModelConfig(r)         // model provisioning fields: round-trip + legacy default
         testDownloadSource(r)      // DownloadSource endpoint mapping
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)

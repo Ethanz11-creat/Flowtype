@@ -225,6 +225,10 @@ struct Configuration: Codable, Equatable {
     // Appearance: 浅色 / 深色 / 随系统
     var appearancePreference: AppearancePreference = .system
 
+    // Model provisioning
+    var localModelPath: String? = nil          // user-specified model folder (offline load)
+    var downloadSource: DownloadSource = .auto
+
     // Constants
     let temperature: Double = 0.3
     let maxTokens: Int = 2048
@@ -300,6 +304,8 @@ struct Configuration: Codable, Equatable {
         microphoneDeviceID = (try? c.decode(String?.self, forKey: .microphoneDeviceID)) ?? d.microphoneDeviceID
         hasCompletedOnboarding = (try? c.decode(Bool.self, forKey: .hasCompletedOnboarding)) ?? d.hasCompletedOnboarding
         appearancePreference = (try? c.decode(AppearancePreference.self, forKey: .appearancePreference)) ?? d.appearancePreference
+        localModelPath = (try? c.decode(String?.self, forKey: .localModelPath)) ?? d.localModelPath
+        downloadSource = (try? c.decode(DownloadSource.self, forKey: .downloadSource)) ?? d.downloadSource
 
         // Try new multi-provider format first
         if let providers = try? c.decode([LLMProvider].self, forKey: .llmProviders), !providers.isEmpty {
@@ -333,6 +339,8 @@ extension Configuration {
         case microphoneDeviceID
         case hasCompletedOnboarding
         case appearancePreference
+        case localModelPath
+        case downloadSource
         // Legacy keys (for migration only, not stored properties)
         case llmProvider
         case llmBaseURL
@@ -352,6 +360,8 @@ extension Configuration {
         try container.encode(microphoneDeviceID, forKey: .microphoneDeviceID)
         try container.encode(hasCompletedOnboarding, forKey: .hasCompletedOnboarding)
         try container.encode(appearancePreference, forKey: .appearancePreference)
+        try container.encode(localModelPath, forKey: .localModelPath)
+        try container.encode(downloadSource, forKey: .downloadSource)
     }
 }
 
