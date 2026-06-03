@@ -30,21 +30,18 @@ struct ActivityHeatmap: View {
     }
 
     private var heatGrid: some View {
-        // GitHub-style fixed 7×N rectangle: pad the leading column (first weekday) AND the trailing
-        // column so every column has 7 cells → tidy rectangle. Small fixed cell (11) so a full year
-        // (~53 cols) fits the content width WITHOUT horizontal scrolling.
-        let leadingBlanks = cells.first?.weekday ?? 0
-        let total = leadingBlanks + cells.count
-        let columns = (total + 6) / 7                 // ceil
-        let trailingBlanks = columns * 7 - total
+        // Tidy full 7×N rectangle with NO ragged edges (HTML-style): show the most-recent whole weeks
+        // (52 cols × 7 = 364 days). TODAY is the bottom-right cell; as days pass, the newest column
+        // enters on the right and the oldest scrolls off the left (GitHub/HTML time axis). Cell color =
+        // that day's word-count level. We trade strict weekday alignment for a clean rectangle.
+        // Small fixed cell (11) so a year fits the content width WITHOUT horizontal scrolling.
+        let cols = cells.count / 7
+        let shown = Array(cells.suffix(max(0, cols) * 7))
         let size: CGFloat = 11
         let gap: CGFloat = 2
         let rows = Array(repeating: GridItem(.fixed(size), spacing: gap), count: 7)
         return LazyHGrid(rows: rows, spacing: gap) {
-            ForEach(0..<leadingBlanks, id: \.self) { _ in
-                Color.clear.frame(width: size, height: size)
-            }
-            ForEach(cells, id: \.dayOrdinal) { cell in
+            ForEach(shown, id: \.dayOrdinal) { cell in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(heatColor(cell.level))
                     .frame(width: size, height: size)
@@ -64,9 +61,6 @@ struct ActivityHeatmap: View {
                             .background(Theme.cardBackground)
                     }
                     .accessibilityLabel("\(cell.date), \(cell.chars) 字")
-            }
-            ForEach(0..<trailingBlanks, id: \.self) { _ in
-                Color.clear.frame(width: size, height: size)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
