@@ -100,6 +100,17 @@ enum SelfTest {
         r.eq(decoded?.appearancePreference, .system, "appearance: legacy missing key → .system")
     }
 
+    // MARK: - DownloadSource endpoint mapping
+
+    static func testDownloadSource(_ r: Reporter) {
+        r.eq(DownloadSource.auto.endpoint(isChina: true), "https://hf-mirror.com", "src: auto+CN → mirror")
+        r.eq(DownloadSource.auto.endpoint(isChina: false), nil, "src: auto+非CN → 官方(nil)")
+        r.eq(DownloadSource.official.endpoint(isChina: true), nil, "src: official → nil")
+        r.eq(DownloadSource.mirror.endpoint(isChina: false), "https://hf-mirror.com", "src: mirror → mirror")
+        r.eq(DownloadSource.custom("https://x.example").endpoint(isChina: false), "https://x.example", "src: custom → custom")
+        r.eq(DownloadSource.custom("   ").endpoint(isChina: false), nil, "src: blank custom → nil")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -115,6 +126,7 @@ enum SelfTest {
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
         testAppearanceConfig(r)    // appearance pref round-trip + legacy default
+        testDownloadSource(r)      // DownloadSource endpoint mapping
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
