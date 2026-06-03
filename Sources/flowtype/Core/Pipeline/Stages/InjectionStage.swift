@@ -66,24 +66,28 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             ))
         }
 
-        // Inject only when staying in the same app with a focused element.
-        if !appChanged && focusState == .present {
-            do {
-                try await KeyboardInjector.insertText(text)
-                AppLogger.log("[InjectionStage#\(sessionID)] Injected in \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
-                return .complete
-            } catch {
-                AppLogger.log("[InjectionStage#\(sessionID)] Injection failed (\(error)); falling back to clipboard")
-                await copyToClipboard(text)
-                return .complete
-            }
+        // You switched to a different app since recording started → you walked away, so put the
+        // text on the clipboard instead of typing into the wrong place. This is the ONLY
+        // condition that diverts to the clipboard. We deliberately do NOT use AX focus
+        // detection to decide — it is unreliable in many apps (WeChat / Electron / terminals
+        // report "no focused field" even when the cursor IS in a text box), and staying in the
+        // same app means the cursor is almost certainly still where you were dictating.
+        if appChanged {
+            AppLogger.log("[InjectionStage#\(sessionID)] App changed \(targetBundleID)→\(currentBundleID); copied to clipboard")
+            await copyToClipboard(text)
+            return .complete
         }
 
-        // No place to inject (moved to another app, or no focused field) → clipboard + sound.
-        let reason = appChanged ? "app changed \(targetBundleID)→\(currentBundleID)" : "no focused field"
-        AppLogger.log("[InjectionStage#\(sessionID)] Not injecting (\(reason)); copied to clipboard")
-        await copyToClipboard(text)
-        return .complete
+        // Same app → inject directly. On failure, fall back to clipboard so text is never lost.
+        do {
+            try await KeyboardInjector.insertText(text)
+            AppLogger.log("[InjectionStage#\(sessionID)] Injected in \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
+            return .complete
+        } catch {
+            AppLogger.log("[InjectionStage#\(sessionID)] Injection failed (\(error)); falling back to clipboard")
+            await copyToClipboard(text)
+            return .complete
+        }
     }
 
     private func copyToClipboard(_ text: String) async {

@@ -18,7 +18,8 @@ final class AudioRecorder: @unchecked Sendable {
     private static let maxRawSamples = 28_800_000 // 16000 Hz * 60 s/min * 30 min
 
     private var engine: AVAudioEngine?
-    private let spectrumAnalyzer = SpectrumAnalyzer()
+    // 9 bands — one per bar in the compact capsule visualizer.
+    private let spectrumAnalyzer = SpectrumAnalyzer(bandCount: 9)
     private nonisolated(unsafe) var spectrumContinuation: AsyncStream<[Float]>.Continuation?
 
     // Raw sample accumulator for batch ASR (Qwen3-ASR)

@@ -22,7 +22,7 @@ final class SpectrumAnalyzer {
     private var rollingMax: Float = 1e-6
 
     init(bandCount: Int = 28, fftSize: Int = 1024, sampleRate: Float = 16000,
-         minHz: Float = 80, maxHz: Float = 6000, attack: Float = 0.6, decay: Float = 0.18) {
+         minHz: Float = 80, maxHz: Float = 6000, attack: Float = 0.7, decay: Float = 0.30) {
         self.bandCount = bandCount
         self.fftSize = fftSize
         self.sampleRate = sampleRate
@@ -46,7 +46,9 @@ final class SpectrumAnalyzer {
         let bands = SpectrumMath.logBin(mags, sampleRate: sampleRate, fftSize: fftSize,
                                         bandCount: bandCount, minHz: minHz, maxHz: maxHz)
         let peak = bands.max() ?? 0
-        rollingMax = Swift.max(peak, rollingMax * 0.995)   // adaptive reference, slow decay
+        // Fast-decaying adaptive reference: it follows the recent speech envelope (~0.5s) instead
+        // of latching onto a single loud syllable, so normal-volume speech keeps filling the bars.
+        rollingMax = Swift.max(peak, rollingMax * 0.90)
         let normalized = SpectrumMath.normalize(bands, reference: rollingMax)
         smoothed = SpectrumMath.smooth(previous: smoothed, target: normalized, attack: attack, decay: decay)
         return smoothed

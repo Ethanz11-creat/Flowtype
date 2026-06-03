@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import ApplicationServices
 import CoreGraphics
+import QuartzCore
 
 @preconcurrency import CoreFoundation
 
@@ -359,20 +360,58 @@ class WindowManager: ObservableObject {
 
     // MARK: - Window Management
 
+    /// Distance the capsule travels while sliding in/out, in points.
+    private static let slideOffset: CGFloat = 60
+
     func showWindow() {
         guard let panel = panel else { return }
-        if let screen = NSScreen.main {
-            let x = screen.visibleFrame.midX - 160
-            let y = screen.visibleFrame.minY + 40
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        guard let screen = NSScreen.main else {
+            panel.alphaValue = 1
+            panel.orderFront(nil)
+            return
         }
+        let targetX = screen.visibleFrame.midX - 160
+        let targetY = screen.visibleFrame.minY + 40
+
+        // Start just below the resting position, fully transparent, then slide up + fade in.
+        panel.setFrameOrigin(NSPoint(x: targetX, y: targetY - Self.slideOffset))
+        panel.alphaValue = 0
         panel.orderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.28
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrameOrigin(NSPoint(x: targetX, y: targetY))
+            panel.animator().alphaValue = 1
+        }
     }
 
     func hide() {
         // Don't hide the panel during text injection — user needs to see progress
         guard SessionController.shared.sessionState != .injecting else { return }
-        panel?.orderOut(nil)
+        guard let panel = panel, panel.isVisible else {
+            panel?.orderOut(nil)
+            return
+        }
+
+        // Slide down + fade out, then actually order out once the animation finishes.
+        let origin = panel.frame.origin
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().setFrameOrigin(NSPoint(x: origin.x, y: origin.y - Self.slideOffset))
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            // The completion fires on the main runloop; assert that to satisfy isolation.
+            MainActor.assumeIsolated {
+                guard let panel = self?.panel else { return }
+                // A new session may have started during the animation — only finish hiding if the
+                // session is still idle, otherwise leave the freshly-shown capsule alone.
+                if SessionController.shared.sessionState == .idle {
+                    panel.orderOut(nil)
+                    panel.alphaValue = 1
+                }
+            }
+        })
     }
 
     func toggleWindow() {

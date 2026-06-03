@@ -318,6 +318,12 @@ final class SessionController: ObservableObject {
         sessionState = newState
         observers.forEach { $0.sessionDidTransition(from: oldState, to: newState, context: context) }
 
+        // Hide the capsule when the session finishes normally (slides down). resetToIdle()
+        // covers the cancel/error paths; the normal .complete → .idle path needs this.
+        if case .idle = newState {
+            WindowManager.shared.hide()
+        }
+
         // Auto-dismiss error after 5 seconds
         if case .error = newState {
             WindowManager.shared.showWindow()
