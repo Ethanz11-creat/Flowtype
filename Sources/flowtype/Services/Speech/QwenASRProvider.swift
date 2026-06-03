@@ -55,11 +55,15 @@ final class QwenASRProvider: @unchecked Sendable {
 
     func loadModel(
         modelId: String = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+        cacheDir: URL? = nil,
+        offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws {
-        AppLogger.log("[QwenASR] Loading model: \(modelId)")
+        AppLogger.log("[QwenASR] Loading model: \(modelId) offline=\(offlineMode) cacheDir=\(cacheDir?.path ?? "default")")
         let loaded = try await Qwen3ASRModel.fromPretrained(
             modelId: modelId,
+            cacheDir: cacheDir,
+            offlineMode: offlineMode,
             progressHandler: progressHandler
         )
         queue.sync {
