@@ -98,9 +98,9 @@ final class DailyStatsStore: ObservableObject {
         return Int(Double(totalWordCount) / totalMinutes)
     }
 
-    /// Estimated time saved vs typing at 40 WPM, in whole seconds (for StatFormatting).
+    /// Estimated time saved vs typing at the fixed baseline (StatsConfig.baselineCPM 字/min), whole seconds.
     var estimatedTimeSavedSeconds: Int {
-        let typingMinutes = Double(totalWordCount) / 40.0
+        let typingMinutes = Double(totalWordCount) / Double(StatsConfig.baselineCPM)
         let speakingMinutes = Double(totalDurationMs) / 1000.0 / 60.0
         return max(0, Int((typingMinutes - speakingMinutes) * 60))
     }

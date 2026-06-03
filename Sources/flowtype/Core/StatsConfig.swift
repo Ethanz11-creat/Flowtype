@@ -3,8 +3,10 @@ import CoreGraphics
 
 /// Single home for all stats thresholds / conversion constants / layout sizes.
 enum StatsConfig {
-    // Baseline typing speed (chars/min) for "time saved".
-    static let baselineCPM = 40
+    // Baseline typing speed (字/min) for the "节省时间" estimate. FIXED by design — NOT user-editable:
+    // a realistic "average person" rate (40–50 字/min) keeps 节省时间 honest. Too low a baseline would
+    // inflate 节省时间 and read as fake for a production tool. 节省时间 = max(0, 字数/baselineCPM − 录音分钟).
+    static let baselineCPM = 45
 
     // Heatmap: index by level (0 = empty → uses Theme.heatEmpty, so [0] is a placeholder).
     // PRD §8: levels 1…4 = #8E7DF5 at 0.35 / 0.6 / 0.85 / 1.0.
