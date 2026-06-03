@@ -2,103 +2,81 @@ import SwiftUI
 
 struct OverviewPage: View {
     @ObservedObject private var statsStore = DailyStatsStore.shared
-    @ObservedObject private var dictionaryStore = DictionaryStore.shared
+    @State private var range: StatsRange = .d30
 
     var body: some View {
+        let s = StatsEngine.summarize(statsStore.stats, range: range, now: Date())
+        let yearCells = StatsEngine.denseHeatmap(statsStore.stats, range: .all, now: Date(), cal: .current)
+
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
-                HStack(spacing: 14) {
-                    accuracyCard
-                    mainStatsGrid
+                OverviewControlBar(range: $range)
+                HeroSection(summary: s)
+                AchievementsSection(summary: s)
+                if s.isEmpty {
+                    emptyGuideCard
+                } else {
+                    ActivityHeatmap(cells: yearCells)
+                    HourDistributionChart(summary: s)
                 }
-                .frame(height: 112)
-
-                StatsPanel()
+                footerLine(s: s)
             }
-            .frame(maxWidth: StatsConfig.contentMaxWidth)   // cap content width
-            .frame(maxWidth: .infinity)                     // center; gutters absorb extra width
+            .frame(maxWidth: StatsConfig.contentMaxWidth)   // ① cap (780)
+            .frame(maxWidth: .infinity)                     // ② center; gutters absorb extra width
             .padding(.horizontal, 32)
             .padding(.vertical, 24)
         }
     }
 
-    private var accuracyCard: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(Color.secondary.opacity(0.18), lineWidth: 7)
-                    .frame(width: 60, height: 60)
-                Circle()
-                    .trim(from: 0, to: accuracyProgress)
-                    .stroke(Brand.accent, style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                    .frame(width: 60, height: 60)
-                    .rotationEffect(.degrees(-90))
-                Text("\(Int(accuracyProgress * 100))%")
-                    .font(.system(size: 15, weight: .bold))
-                    .monospacedDigit()
-            }
-            Text("个性化")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
+    private var emptyGuideCard: some View {
+        HStack {
+            Spacer()
+            Text("开始你的第一次口述，数据会出现在这里")
+                .font(.system(size: 13)).foregroundColor(Theme.textSecondary)
+                .multilineTextAlignment(.center).padding(.vertical, 32)
+            Spacer()
         }
-        .frame(width: 124)
-        .frame(maxHeight: .infinity)
-        .padding(12)
+        .frame(maxWidth: .infinity)
         .glassCard()
     }
 
-    private var mainStatsGrid: some View {
-        HStack(spacing: 12) {
-            statCard(icon: "text.word.count",
-                     segments: StatFormatting.plain(formatWordCount(statsStore.totalWordCount)),
-                     label: "口述字数")
-            statCard(icon: "hourglass",
-                     segments: StatFormatting.duration(seconds: statsStore.estimatedTimeSavedSeconds),
-                     label: "节省时间")
-            statCard(icon: "clock",
-                     segments: StatFormatting.duration(seconds: Int(statsStore.totalDurationMs / 1000)),
-                     label: "总口述时间")
-            statCard(icon: "bolt",
-                     segments: StatFormatting.speed(statsStore.overallAverageSpeed),
-                     label: "平均速度")
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func statCard(icon: String, segments: [StatSegment], label: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary)
-                Spacer()
+    @ViewBuilder private func footerLine(s: StatsSummary) -> some View {
+        if let text = buildFooterText(s: s) {
+            HStack(alignment: .top, spacing: 0) {
+                Text(text)
+                    .font(.system(size: 13)).foregroundColor(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            StatValueView(segments: segments)
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
+            .padding(.top, 14)
+            .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5), alignment: .top)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .glassCard()
     }
 
-    private var accuracyProgress: Double {
-        let total = dictionaryStore.entries.count
-        guard total > 0 else { return 0 }
-        let enabled = dictionaryStore.entries.filter(\.enabled).count
-        return Double(enabled) / Double(total)
+    private func buildFooterText(s: StatsSummary) -> String? {
+        guard s.chars > 0 else { return nil }
+        var parts: [String] = ["你已累计口述约 \(thousands(s.chars)) 字"]
+        if s.chars >= 50 {
+            let keystrokes = Int(Double(s.chars) * StatsConfig.keystrokesPerChar)
+            parts.append("少敲约 \(wan(keystrokes)) 次键盘")
+        }
+        if s.timeSavedSeconds >= StatsConfig.secondsPerMovie {
+            parts.append("节省时间够看 \(s.timeSavedSeconds / StatsConfig.secondsPerMovie) 部电影")
+        } else if s.timeSavedSeconds >= StatsConfig.secondsPerCoffee {
+            parts.append("够泡 \(s.timeSavedSeconds / StatsConfig.secondsPerCoffee) 杯咖啡")
+        }
+        return parts.joined(separator: " · ")
     }
 
-    private func formatWordCount(_ count: Int) -> String {
-        if count >= 1000 {
-            return String(format: "%.1fK", Double(count) / 1000.0)
-        }
-        return "\(count)"
+    private func thousands(_ n: Int) -> String {
+        let f = NumberFormatter(); f.numberStyle = .decimal
+        return f.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+    private func wan(_ n: Int) -> String {
+        n >= 10_000 ? String(format: "%.1f 万", Double(n) / 10_000.0) : thousands(n)
     }
 }
 
-// MARK: - Shared Components
+// MARK: - Shared Components  (PageHeader — used by History/Vocab/Style; keep unchanged)
 
 struct PageHeader: View {
     let title: String
@@ -106,11 +84,8 @@ struct PageHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 22, weight: .bold))
-            Text(subtitle)
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
+            Text(title).font(.system(size: 22, weight: .bold))
+            Text(subtitle).font(.system(size: 12)).foregroundColor(.secondary)
         }
     }
 }
