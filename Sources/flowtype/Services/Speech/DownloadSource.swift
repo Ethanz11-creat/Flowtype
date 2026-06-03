@@ -1,7 +1,7 @@
 import Foundation
 
 /// Which Hugging Face endpoint to download the model from. `auto` uses the mirror in China.
-enum DownloadSource: Codable, Equatable {
+enum DownloadSource: Codable, Equatable, Hashable {
     case auto
     case official
     case mirror

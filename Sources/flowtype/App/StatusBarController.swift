@@ -71,8 +71,10 @@ class StatusBarController: NSObject, NSMenuDelegate {
         switch QwenModelState.shared.status {
         case .ready:
             statusItem?.button?.toolTip = "FlowType — Qwen3-ASR 就绪"
-        case .downloading(let progress, _):
+        case .downloading(let progress, _, _):
             statusItem?.button?.toolTip = "FlowType — 下载中 \(Int(progress * 100))%"
+        case .stalled:
+            statusItem?.button?.toolTip = "FlowType — 下载停滞，重试中"
         case .loading:
             statusItem?.button?.toolTip = "FlowType — 模型加载中..."
         case .error:
@@ -154,12 +156,14 @@ class StatusBarController: NSObject, NSMenuDelegate {
             switch QwenModelState.shared.status {
             case .ready:
                 statusText = "Qwen3-ASR 就绪"
-            case .downloading(let progress, _):
+            case .downloading(let progress, _, _):
                 statusText = "下载中 \(Int(progress * 100))%"
+            case .stalled:
+                statusText = "下载停滞，重试中"
             case .loading:
                 statusText = "模型加载中..."
-            case .error(let msg):
-                statusText = "加载失败: \(msg.prefix(30))"
+            case .error(let reason, _):
+                statusText = "加载失败: \(reason.prefix(30))"
             case .notLoaded:
                 statusText = "等待加载模型"
             }
