@@ -151,6 +151,27 @@ enum SelfTest {
         r.check(!ModelLocator.validateComplete(dir, minBytes: 100), "locator: missing config → incomplete")
     }
 
+    // MARK: - Stats data model: language tag + legacy decode
+
+    static func testStatsDataModel(_ r: Reporter) {
+        // language heuristic
+        r.eq(detectLanguageTag("你好世界"), "zh", "lang: CJK → zh")
+        r.eq(detectLanguageTag("hello world"), "en", "lang: latin → en")
+        r.eq(detectLanguageTag("hello 你好世界吗"), "mixed", "lang: mixed → mixed")
+        r.eq(detectLanguageTag("   "), nil, "lang: blank → nil")
+        // old DictationSession JSON (no new keys) still decodes
+        let oldSession = Data(#"{"id":"x","createdAt":"2026-01-01T00:00:00Z","rawTranscript":"a","finalText":"a","polishMode":"raw","durationMs":1000}"#.utf8)
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        let s = try? dec.decode(DictationSession.self, from: oldSession)
+        r.eq(s?.recordingMs, nil, "session: legacy decodes, recordingMs nil")
+        r.eq(s?.appName, nil, "session: legacy decodes, appName nil")
+        // old DailyStats JSON (no new keys) → defaults
+        let oldDaily = Data(#"{"date":"2026-01-01","totalDurationMs":1000,"totalWordCount":5,"sessionCount":1}"#.utf8)
+        let d = try? JSONDecoder().decode(DailyStats.self, from: oldDaily)
+        r.eq(d?.totalRecordingMs, 0, "daily: legacy decodes, totalRecordingMs 0")
+        r.eq(d?.hourHistogram.count, 24, "daily: legacy decodes, hourHistogram default 24")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -169,6 +190,7 @@ enum SelfTest {
         testModelConfig(r)         // model provisioning fields: round-trip + legacy default
         testDownloadSource(r)      // DownloadSource endpoint mapping
         testModelLocator(r)        // ModelLocator completeness validation
+        testStatsDataModel(r)      // stats data model: language tag + legacy decode
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }

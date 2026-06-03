@@ -1,12 +1,42 @@
 import Foundation
 
 struct DailyStats: Codable, Identifiable {
-    let date: String // "YYYY-MM-DD"
+    let date: String // "YYYY-MM-DD" (local)
     var totalDurationMs: UInt64
     var totalWordCount: Int
     var sessionCount: Int
+    var totalRecordingMs: UInt64 = 0
+    var byApp: [String: Int] = [:]
+    var byLang: [String: Int] = [:]
+    var hourHistogram: [Int] = Array(repeating: 0, count: 24)
 
     var id: String { date }
+
+    init(date: String, totalDurationMs: UInt64, totalWordCount: Int, sessionCount: Int,
+         totalRecordingMs: UInt64 = 0, byApp: [String: Int] = [:],
+         byLang: [String: Int] = [:], hourHistogram: [Int] = Array(repeating: 0, count: 24)) {
+        self.date = date
+        self.totalDurationMs = totalDurationMs
+        self.totalWordCount = totalWordCount
+        self.sessionCount = sessionCount
+        self.totalRecordingMs = totalRecordingMs
+        self.byApp = byApp
+        self.byLang = byLang
+        self.hourHistogram = hourHistogram
+    }
+
+    // Backward-compatible decode: new fields fall back to defaults when absent (legacy JSON).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date = try c.decode(String.self, forKey: .date)
+        totalDurationMs = try c.decode(UInt64.self, forKey: .totalDurationMs)
+        totalWordCount = try c.decode(Int.self, forKey: .totalWordCount)
+        sessionCount = try c.decode(Int.self, forKey: .sessionCount)
+        totalRecordingMs = (try? c.decodeIfPresent(UInt64.self, forKey: .totalRecordingMs)) ?? 0
+        byApp = (try? c.decodeIfPresent([String: Int].self, forKey: .byApp)) ?? [:]
+        byLang = (try? c.decodeIfPresent([String: Int].self, forKey: .byLang)) ?? [:]
+        hourHistogram = (try? c.decodeIfPresent([Int].self, forKey: .hourHistogram)) ?? Array(repeating: 0, count: 24)
+    }
 
     var averageSpeed: Int {
         let totalMinutes = Double(totalDurationMs) / 1000.0 / 60.0
@@ -28,24 +58,25 @@ final class DailyStatsStore: ObservableObject {
         stats = store.load() ?? []
     }
 
-    func recordSession(durationMs: UInt64, wordCount: Int) {
+    func recordSession(durationMs: UInt64, recordingMs: UInt64, charCount: Int,
+                       app: String, language: String, hour: Int) {
         let date = Self.todayString
         if let idx = stats.firstIndex(where: { $0.date == date }) {
             stats[idx].totalDurationMs += durationMs
-            stats[idx].totalWordCount += wordCount
+            stats[idx].totalRecordingMs += recordingMs
+            stats[idx].totalWordCount += charCount
             stats[idx].sessionCount += 1
+            stats[idx].byApp[app, default: 0] += charCount
+            stats[idx].byLang[language, default: 0] += charCount
+            if (0..<24).contains(hour) { stats[idx].hourHistogram[hour] += 1 }
         } else {
-            stats.append(DailyStats(
-                date: date,
-                totalDurationMs: durationMs,
-                totalWordCount: wordCount,
-                sessionCount: 1
-            ))
+            var hist = Array(repeating: 0, count: 24)
+            if (0..<24).contains(hour) { hist[hour] = 1 }
+            stats.append(DailyStats(date: date, totalDurationMs: durationMs, totalWordCount: charCount,
+                                    sessionCount: 1, totalRecordingMs: recordingMs,
+                                    byApp: [app: charCount], byLang: [language: charCount], hourHistogram: hist))
         }
-        // Keep last 365 days
-        if stats.count > 365 {
-            stats.removeFirst(stats.count - 365)
-        }
+        if stats.count > 365 { stats.removeFirst(stats.count - 365) }
         scheduleSave()
     }
 
