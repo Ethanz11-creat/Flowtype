@@ -61,12 +61,12 @@ On launch, if the DB file does not exist (or `meta.schemaVersion` absent):
 5. Commit. On success, **rename** `history.json` → `history.json.bak` and `daily_stats.json` → `daily_stats.json.bak` (do **not** delete — recovery safety).
 6. Any failure → roll back the transaction, leave JSON untouched, log, retry on next launch (no half state).
 
-### 5.1 Stat boundary rule (no double-count, no loss) — ratifies (a)
-`StatsRepository` builds `[DailyStats]` as:
-- **`date < migrationDate`** → take the row from `daily_legacy` (frozen historical truth).
-- **`date >= migrationDate`** → aggregate from the `session` table (live).
+### 5.1 Stat boundary rule (no double-count, no loss) — ratifies (a), corrected on real data
+`StatsRepository` builds `[DailyStats]` per day **D**:
+- **D is owned by the frozen `daily_legacy` snapshot** (D present in `daily_legacy` AND D < migrationDate) → use `daily_legacy[D]` (authoritative historical total, includes sessions the old 500-cap truncated); the `session` rows for D are **skipped** (no double-count).
+- **otherwise** → aggregate D from the `session` table.
 
-`migrationDate` (today) and onward come **only** from `session`; `daily_legacy` strictly excludes today. Today's earlier-than-migration sessions are all present in `session` because `history.json`'s 500-cap only truncates **old** sessions — recent days (incl. today) are complete. Therefore the two sources never overlap → no day is counted twice and none is lost. Migrated old sessions still live in `session` for History browsing but do **not** feed stats for pre-migration days (those come from `daily_legacy`).
+The cut is **per-day membership of the snapshot**, NOT a single `migrationDate` threshold. Real on-device data showed `history.json` can contain days the old `daily_stats.json` never recorded (e.g. a session day from weeks ago) — a pure `>= migrationDate` rule silently DROPPED those days (lost chars/active-days). By keying on "does the snapshot own this day", snapshot-covered days avoid double-count and every other day — including pre-migration days the snapshot is missing — is counted from `session`, so nothing is lost. `migrationDate` only makes today's snapshot row (if any) ineligible, so today is always taken live from `session`.
 
 ## 6. StatsRepository (DB → `[DailyStats]`)
 - Loads the stat columns of `session` rows (not transcripts) and **folds them into `[DailyStats]` in Swift using the existing `Calendar` local-midnight `dayOrdinal`** — reusing the tested, DST/timezone-safe bucketing and keeping a single source of day-grouping truth. (Equivalent SQL would be `date(startedAt,'unixepoch','localtime')`; UTC default is forbidden — **Tech-1**.) Per-day it accumulates `totalRecordingMs`, `totalDurationMs`, `totalWordCount=ΣcharCount`, `sessionCount`, `byApp`, `byLang`, `hourHistogram[localHour]`.

@@ -490,21 +490,27 @@ enum SelfTest {
             let f = DateFormatter(); f.calendar = cal; f.timeZone = cal.timeZone; f.dateFormat = "yyyy-MM-dd HH:mm"
             return f.date(from: "\(iso) 12:00")!.timeIntervalSince1970
         }
-        // migrationDate = 2026-06-01; legacy day 2026-05-20 (chars 100); sessions on 06-02 (chars 50, recMs 20000) + a session on 05-19 (chars 999, should be ignored for stats)
+        func session(_ day: String, chars: Int, recMs: UInt64, durMs: UInt64 = 0) -> SessionRecord {
+            var s = SessionRecord(from: DictationSession(rawTranscript: "", finalText: String(repeating: "字", count: chars),
+                                  polishMode: .raw, durationMs: durMs, recordingMs: recMs,
+                                  appName: "A", appBundleID: nil, language: "zh", sttBackend: "qwen"))
+            s.startedAt = noon(day); return s
+        }
+        // migrationDate 2026-06-01; legacy snapshot has only 2026-05-20 (100 chars). Sessions:
+        //   05-20 (999) → same day as the snapshot → must be IGNORED (no double-count)
+        //   05-19 (50)  → a pre-migration day the snapshot is MISSING → must be COUNTED from sessions (no loss) ← real-device bug
+        //   06-02 (50, recMs 20000, durMs 99999) → post-migration → counted; speed must use recordingMs
         try? db.dbQueue.write { d in
             try d.execute(sql: "INSERT OR REPLACE INTO meta VALUES('migrationDate','2026-06-01')")
             try DailyLegacyRecord(from: DailyStats(date: "2026-05-20", totalDurationMs: 0, totalWordCount: 100, sessionCount: 1, totalRecordingMs: 60000)).insert(d)
-            var s1 = SessionRecord(from: DictationSession(rawTranscript: "", finalText: String(repeating: "字", count: 50), polishMode: .raw, durationMs: 99999, recordingMs: 20000, appName: "A", appBundleID: nil, language: "zh", sttBackend: "qwen"))
-            s1.startedAt = noon("2026-06-02"); try s1.insert(d)
-            var sOld = SessionRecord(from: DictationSession(rawTranscript: "", finalText: String(repeating: "x", count: 999), polishMode: .raw, durationMs: 0, recordingMs: 0, appName: "A", appBundleID: nil, language: "en", sttBackend: "qwen"))
-            sOld.startedAt = noon("2026-05-19"); try sOld.insert(d)
+            var a = session("2026-05-20", chars: 999, recMs: 0); try a.insert(d)
+            var b = session("2026-05-19", chars: 50, recMs: 0); try b.insert(d)
+            var c = session("2026-06-02", chars: 50, recMs: 20000, durMs: 99999); try c.insert(d)
         }
         let stats = StatsRepository(db: db).buildDailyStats(cal: cal)
-        let d0520 = stats.first { $0.date == "2026-05-20" }
-        let d0602 = stats.first { $0.date == "2026-06-02" }
-        r.eq(d0520?.totalWordCount, 100, "repo: legacy day from snapshot (no session double-count)")
-        r.check(stats.first { $0.date == "2026-05-19" } == nil, "repo: pre-migration session excluded from stats")
-        r.eq(d0602?.totalWordCount, 50, "repo: post-migration day from sessions")
+        r.eq(stats.first { $0.date == "2026-05-20" }?.totalWordCount, 100, "repo: legacy-covered day uses snapshot, session ignored (no double-count)")
+        r.eq(stats.first { $0.date == "2026-05-19" }?.totalWordCount, 50, "repo: pre-migration day MISSING from snapshot counted from sessions (no loss)")
+        r.eq(stats.first { $0.date == "2026-06-02" }?.totalWordCount, 50, "repo: post-migration day from sessions")
         // recordingMs denominator: 50 chars / (20000ms=0.333min) → high speed, durationMs(99999) ignored
         let summary = StatsEngine.summarize(stats, range: .all, now: noonDate("2026-06-02", cal), cal: cal)
         r.check(summary.avgSpeedCPM >= 100, "repo: speed uses recordingMs not durationMs")
