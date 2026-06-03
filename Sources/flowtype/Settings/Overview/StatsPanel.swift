@@ -9,6 +9,7 @@ struct StatsPanel: View {
 
     var body: some View {
         let s = StatsEngine.summarize(store.stats, range: range, now: Date())
+        let yearCells = StatsEngine.denseHeatmap(store.stats, range: .all, now: Date(), cal: .current)
 
         VStack(alignment: .leading, spacing: 16) {
             headerRow
@@ -16,7 +17,7 @@ struct StatsPanel: View {
             if s.isEmpty {
                 emptyGuideCard
             } else {
-                ActivityHeatmap(summary: s)
+                ActivityHeatmap(cells: yearCells)
                 HourDistributionChart(summary: s)
             }
             footerLine(s: s)
@@ -216,34 +217,34 @@ private struct MiniStatCard: View {
 // MARK: - ActivityHeatmap (A1 — GitHub-style 7-row LazyHGrid)
 
 struct ActivityHeatmap: View {
-    let summary: StatsSummary
+    let cells: [HeatCell]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("活动热力图")
+            Text("活动热力图 · 最近一年")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.secondary)
-
             heatGrid
             legendRow
         }
     }
 
+    /// Level 0 = neutral (empty) cell; 1...4 = brand-accent ramp (matches the mockup).
+    private func heatColor(_ level: Int) -> Color {
+        level == 0 ? Color.primary.opacity(0.08) : Brand.accent.opacity(StatsConfig.heatOpacity[level])
+    }
+
     private var heatGrid: some View {
-        let cells = summary.heatmap
-        // leadingBlanks: push first real cell down to its weekday row
         let leadingBlanks = cells.first?.weekday ?? 0
         let rows = Array(repeating: GridItem(.fixed(12), spacing: 3), count: 7)
-
         return ScrollView(.horizontal, showsIndicators: false) {
             LazyHGrid(rows: rows, spacing: 3) {
-                // Leading blank cells so the first real cell lands on the correct weekday row
                 ForEach(0..<leadingBlanks, id: \.self) { _ in
                     Color.clear.frame(width: 12, height: 12)
                 }
                 ForEach(cells, id: \.dayOrdinal) { cell in
                     RoundedRectangle(cornerRadius: 2.5)
-                        .fill(Brand.accent.opacity(StatsConfig.heatOpacity[cell.level]))
+                        .fill(heatColor(cell.level))
                         .frame(width: 12, height: 12)
                         .help("\(cell.date) · \(cell.chars) 字 · \(cell.sessions) 次")
                         .accessibilityLabel("\(cell.date), \(cell.chars) 字")
@@ -256,17 +257,11 @@ struct ActivityHeatmap: View {
     private var legendRow: some View {
         HStack(spacing: 4) {
             Spacer()
-            Text("少")
-                .font(.system(size: 9))
-                .foregroundColor(.secondary)
+            Text("少").font(.system(size: 9)).foregroundColor(.secondary)
             ForEach(0..<5, id: \.self) { lvl in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Brand.accent.opacity(StatsConfig.heatOpacity[lvl]))
-                    .frame(width: 10, height: 10)
+                RoundedRectangle(cornerRadius: 2).fill(heatColor(lvl)).frame(width: 10, height: 10)
             }
-            Text("多")
-                .font(.system(size: 9))
-                .foregroundColor(.secondary)
+            Text("多").font(.system(size: 9)).foregroundColor(.secondary)
         }
     }
 }
