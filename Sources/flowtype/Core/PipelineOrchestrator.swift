@@ -387,6 +387,7 @@ final class SessionController: ObservableObject {
             durationMs = nil
         }
         let mode: PolishMode = context.usePolish ? .polish : .raw
+        let sttBackend = speechRouter.qwenProvider.isLoaded ? "qwen" : "apple"
         let session = DictationSession(
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,
@@ -395,9 +396,10 @@ final class SessionController: ObservableObject {
             recordingMs: context.recordingMs,
             appName: context.targetApp?.localizedName,
             appBundleID: context.targetApp?.bundleIdentifier,
-            language: detectLanguageTag(context.finalText)
+            language: detectLanguageTag(context.finalText),
+            sttBackend: sttBackend
         )
-        HistoryStore.shared.append(session)
+        HistoryStore.shared.append(session, storeText: ConfigurationStore.shared.current.storeTranscriptText)
 
         // Auto-detect corrections for dictionary
         if context.rawTranscript != context.finalText {

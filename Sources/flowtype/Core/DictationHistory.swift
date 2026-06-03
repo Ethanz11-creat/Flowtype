@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 
 enum PolishMode: String, Codable, CaseIterable, Identifiable {
     case raw
@@ -82,53 +83,47 @@ func detectLanguageTag(_ text: String) -> String? {
 @MainActor
 final class HistoryStore: ObservableObject {
     static let shared = HistoryStore()
-
     @Published private(set) var sessions: [DictationSession] = []
+    private let db = AppDatabaseProvider.shared
 
-    private let store = PersistentStore<[DictationSession]>(filename: "history.json")
-    private let maxEntries = 500
-    private var saveDebounce: Task<Void, Never>?
+    private init() { reload() }
 
-    private init() {
-        sessions = store.load() ?? []
+    func reload() {
+        do {
+            let recs = try db.dbQueue.read { try SessionRecord.order(Column("startedAt").desc).fetchAll($0) }
+            sessions = recs.map { $0.toDictationSession() }
+        } catch { AppLogger.log("[History] reload failed: \(error)"); sessions = [] }
     }
 
-    func append(_ session: DictationSession) {
-        sessions.insert(session, at: 0)
-        if sessions.count > maxEntries {
-            sessions = Array(sessions.prefix(maxEntries))
-        }
-        scheduleSave()
-
-        // Always aggregate (sessions with no duration must still count toward chars/active-days/heatmap).
-        let charCount = session.finalText.trimmingCharacters(in: .whitespacesAndNewlines).count
-        let hour = Calendar.current.component(.hour, from: session.createdAt)
-        DailyStatsStore.shared.recordSession(
-            durationMs: session.durationMs ?? 0,
-            recordingMs: session.recordingMs ?? 0,
-            charCount: charCount,
-            app: session.appName ?? "未知",
-            language: session.language ?? "未知",
-            hour: hour
-        )
+    /// Insert one session. `charCount` is computed before nulling text, so stats survive privacy-off.
+    func append(_ session: DictationSession, storeText: Bool) {
+        var rec = SessionRecord(from: session)
+        if !storeText { rec.rawTranscript = nil; rec.finalText = nil }
+        do { try db.dbQueue.write { try rec.insert($0) } } catch { AppLogger.log("[History] insert failed: \(error)") }
+        reload()
+        DailyStatsStore.shared.refresh()
     }
 
     func delete(id: String) {
-        sessions.removeAll { $0.id == id }
-        scheduleSave()
+        try? db.dbQueue.write { _ = try SessionRecord.deleteOne($0, key: id) }
+        reload(); DailyStatsStore.shared.refresh()
     }
 
-    func clear() {
-        sessions.removeAll()
-        scheduleSave()
+    /// 清空历史 (privacy): erase transcripts, keep metadata rows → stats/streaks survive.
+    func clearTranscripts() {
+        try? db.dbQueue.write { try $0.execute(sql: "UPDATE session SET rawTranscript=NULL, finalText=NULL") }
+        reload()
     }
 
-    private func scheduleSave() {
-        saveDebounce?.cancel()
-        saveDebounce = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard !Task.isCancelled else { return }
-            self.store.save(self.sessions)
+    /// Backward-compatible alias for HistoryPage (Task 8 will replace with two-step UI).
+    func clear() { clearTranscripts() }
+
+    /// 重置统计 (destruction): delete all rows incl. frozen legacy aggregates.
+    func resetAllStats() {
+        try? db.dbQueue.write { d in
+            try d.execute(sql: "DELETE FROM session")
+            try d.execute(sql: "DELETE FROM daily_legacy")
         }
+        reload(); DailyStatsStore.shared.refresh()
     }
 }
