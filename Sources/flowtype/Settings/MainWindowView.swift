@@ -39,6 +39,7 @@ struct MainWindowView: View {
             Divider().overlay(Color.primary.opacity(0.06))
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Theme.pageBackground)
         }
         // A single frosted backdrop behind BOTH columns — a custom sidebar (instead of
         // NavigationSplitView) so the sidebar shares the exact same .hudWindow frost as the
