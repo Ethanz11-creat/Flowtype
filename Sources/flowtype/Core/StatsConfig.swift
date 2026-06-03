@@ -21,7 +21,10 @@ enum StatsConfig {
     // Window + grid layout.
     static let minWindowWidth: CGFloat = 1040
     static let minWindowHeight: CGFloat = 700
-    static let contentMaxWidth: CGFloat = 960
+    // Overview content column width. MUST stay ≤ (minWindowWidth − sidebar 176 − divider 1 − OverviewPage padding 64 = 799)
+    // so the column is the binding width constraint from the very first pixel of resize — otherwise the content grows
+    // with the window until the cap is reached (the "content width changes when you widen" bug). See OverviewPage cap-then-center.
+    static let contentMaxWidth: CGFloat = 780
     static let cardMinWidth: CGFloat = 220
     static let cardMaxWidth: CGFloat = 320
 }
