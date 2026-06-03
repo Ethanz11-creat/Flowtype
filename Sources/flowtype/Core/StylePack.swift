@@ -11,7 +11,6 @@ struct StylePack: Codable, Identifiable {
     var name: String
     var description: String
     var prompt: String
-    var baseMode: PolishMode
     let kind: StylePackKind
     var enabled: Bool
     var active: Bool
@@ -30,7 +29,6 @@ struct StylePack: Codable, Identifiable {
         4. 不添加任何前缀、说明或客套话。
         5. 只输出整理后的文本。
         """,
-        baseMode: .light,
         kind: .builtin,
         enabled: true,
         active: false
@@ -41,7 +39,6 @@ struct StylePack: Codable, Identifiable {
         name: "AI Prompt 模式",
         description: "将口语整理为结构化的 AI 编码指令",
         prompt: Configuration.default.systemPrompt,
-        baseMode: .structured,
         kind: .builtin,
         enabled: true,
         active: true
@@ -63,7 +60,6 @@ struct StylePack: Codable, Identifiable {
         6. 不添加任何前缀、说明或客套话。
         7. 只输出整理后的文本。
         """,
-        baseMode: .formal,
         kind: .builtin,
         enabled: true,
         active: false
@@ -128,7 +124,6 @@ final class StylePackStore: ObservableObject {
             name: name,
             description: "",
             prompt: prompt,
-            baseMode: .light,
             kind: .custom,
             enabled: true,
             active: false
@@ -153,7 +148,6 @@ final class StylePackStore: ObservableObject {
             name: pack.name,
             description: pack.description,
             prompt: pack.prompt,
-            baseMode: pack.baseMode,
             kind: .imported,
             enabled: true,
             active: false

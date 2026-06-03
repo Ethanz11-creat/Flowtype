@@ -379,7 +379,7 @@ final class SessionController: ObservableObject {
         } else {
             durationMs = nil
         }
-        let mode: PolishMode = context.usePolish ? (StylePackStore.shared.activePack?.baseMode ?? .structured) : .raw
+        let mode: PolishMode = context.usePolish ? .polish : .raw
         let session = DictationSession(
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,

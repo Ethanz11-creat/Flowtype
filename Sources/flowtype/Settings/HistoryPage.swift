@@ -205,10 +205,8 @@ struct HistoryPage: View {
 
     private func pillColor(_ mode: PolishMode) -> Color {
         switch mode {
-        case .raw: return .blue
-        case .light: return .teal
-        case .structured: return .purple
-        case .formal: return .orange
+        case .raw: return .secondary
+        case .polish: return Brand.accent
         }
     }
 

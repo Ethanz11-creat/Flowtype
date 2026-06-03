@@ -2,19 +2,21 @@ import Foundation
 
 enum PolishMode: String, Codable, CaseIterable, Identifiable {
     case raw
-    case light
-    case structured
-    case formal
+    case polish
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
         case .raw: return "原文"
-        case .light: return "轻度润色"
-        case .structured: return "清晰结构"
-        case .formal: return "正式表达"
+        case .polish: return "润色"
         }
+    }
+
+    /// Backward-compatible decode: old records stored light/structured/formal — fold to .polish.
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = (value == PolishMode.raw.rawValue) ? .raw : .polish
     }
 }
 

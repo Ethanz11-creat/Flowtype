@@ -29,6 +29,20 @@ enum SelfTest {
         }
     }
 
+    // MARK: - PolishMode: 2 modes (raw/polish) + legacy-record migration
+
+    static func testPolishModeMigration(_ r: Reporter) {
+        func decode(_ raw: String) -> PolishMode? {
+            try? JSONDecoder().decode(PolishMode.self, from: Data("\"\(raw)\"".utf8))
+        }
+        r.check(decode("raw") == .raw, "polishMode: raw → raw")
+        r.check(decode("polish") == .polish, "polishMode: polish → polish")
+        r.check(decode("light") == .polish, "polishMode: legacy light → polish")
+        r.check(decode("structured") == .polish, "polishMode: legacy structured → polish")
+        r.check(decode("formal") == .polish, "polishMode: legacy formal → polish")
+        r.eq(PolishMode.allCases.count, 2, "polishMode: exactly 2 modes")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -41,6 +55,7 @@ enum SelfTest {
         testFFTPeak(r)           // SpectrumAnalyzer FFT correctness
         testSpectrumProcess(r)   // SpectrumAnalyzer.process smoothed bands
         testStatFormatting(r)    // StatFormatting pure formatters
+        testPolishModeMigration(r) // history mode raw/polish + legacy decode
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
