@@ -53,6 +53,8 @@ enum SelfTest {
              "inject: AXTextArea → editableText")
         r.eq(classifyFocus(role: "AXComboBox", isValueSettable: false), .editableText,
              "inject: AXComboBox → editableText")
+        r.eq(classifyFocus(role: "AXSearchField", isValueSettable: false), .editableText,
+             "inject: AXSearchField → editableText")
         r.eq(classifyFocus(role: "AXButton", isValueSettable: false), .nonTextControl,
              "inject: AXButton → nonTextControl")
         r.eq(classifyFocus(role: "AXMenuItem", isValueSettable: false), .nonTextControl,
