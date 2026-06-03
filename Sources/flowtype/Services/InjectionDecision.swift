@@ -20,14 +20,14 @@ struct FocusSignals: Equatable {
     var focus: FocusKind
 }
 
-/// AX roles that mean "you can type text here".
-let editableTextRoles: Set<String> = [
+/// AX roles that mean "you can type text here". Implementation detail of `classifyFocus`.
+private let editableTextRoles: Set<String> = [
     "AXTextField", "AXTextArea", "AXComboBox", "AXSearchField",
 ]
 
 /// AX roles that mean "this is a focusable control you clearly cannot type into".
 /// Reaching one of these is a positive signal to divert to the clipboard.
-let nonTextControlRoles: Set<String> = [
+private let nonTextControlRoles: Set<String> = [
     "AXButton", "AXMenuButton", "AXMenuItem", "AXMenu", "AXMenuBar", "AXMenuBarItem",
     "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXSlider", "AXLink",
     "AXDisclosureTriangle", "AXIncrementor", "AXColorWell", "AXImage",

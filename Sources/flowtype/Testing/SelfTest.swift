@@ -69,6 +69,10 @@ enum SelfTest {
         // decideInjection: signals → outcome (spec §4 rows 0–3)
         r.eq(decideInjection(FocusSignals(secureInputActive: true, focus: .editableText)), .clipboard,
              "inject: secure input → clipboard (row 0)")
+        r.eq(decideInjection(FocusSignals(secureInputActive: true, focus: .nonTextControl)), .clipboard,
+             "inject: secure input dominates nonTextControl → clipboard (row 0)")
+        r.eq(decideInjection(FocusSignals(secureInputActive: true, focus: .blindOrUnknown)), .clipboard,
+             "inject: secure input dominates blind → clipboard (row 0)")
         r.eq(decideInjection(FocusSignals(secureInputActive: false, focus: .editableText)), .inject,
              "inject: editable text → inject (row 1)")
         r.eq(decideInjection(FocusSignals(secureInputActive: false, focus: .nonTextControl)), .clipboard,
