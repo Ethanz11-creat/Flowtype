@@ -58,6 +58,9 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
         let tmpDir = FileManager.default.temporaryDirectory
         let tmpFile = tmpDir.appendingPathComponent("flowtype_apple_speech_\(UUID().uuidString).wav")
         try audioData.write(to: tmpFile)
+        // §10 audio-never-persists: this is the ONLY audio FlowType ever writes to disk. The defer fires on
+        // EVERY exit of transcribe(...) — normal return (isFinal), thrown error / no-result, and the timeout
+        // guard below (which cancels the task → resumes the continuation → returns here). Never persist it.
         defer {
             try? FileManager.default.removeItem(at: tmpFile)
         }
