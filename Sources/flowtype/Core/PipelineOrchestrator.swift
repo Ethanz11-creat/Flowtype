@@ -478,17 +478,6 @@ extension SessionController {
 
 extension SessionState {
 
-    var iconName: String {
-        switch self {
-        case .idle:       return "mic"
-        case .recording:  return "waveform"
-        case .processing: return "brain.head.profile"
-        case .polishing:  return "sparkles"
-        case .injecting:  return "keyboard"
-        case .error:      return "exclamationmark.triangle"
-        }
-    }
-
     var statusColor: Color {
         switch self {
         case .idle:       return Color.white.opacity(0.5)

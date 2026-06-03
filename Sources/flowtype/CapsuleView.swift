@@ -7,10 +7,8 @@ struct CapsuleView: View {
     @State private var glowOpacity: Double = 0.3
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
             AudioVisualizer()
-
-            StatusAvatar(state: session.sessionState)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.sessionState.statusTitle)
@@ -150,22 +148,6 @@ struct CapsuleView: View {
 
     private var statusColor: Color {
         session.sessionState.statusColor
-    }
-}
-
-struct StatusAvatar: View {
-    let state: SessionState
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(state.statusColor.opacity(0.15))
-                .frame(width: 36, height: 36)
-
-            Image(systemName: state.iconName)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(state.statusColor)
-        }
     }
 }
 

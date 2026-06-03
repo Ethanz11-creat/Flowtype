@@ -15,6 +15,10 @@ final class SpectrumAnalyzer {
     private let attack: Float
     private let decay: Float
 
+    /// Below this input RMS the buffer is treated as silence — bars decay flat instead of
+    /// jittering on the mic noise floor (samples are normalized −1...1 Float32). Tune on device.
+    private let silenceRMS: Float = 0.006
+
     private let log2n: vDSP_Length
     private let fftSetup: FFTSetup
     private let hann: [Float]
@@ -42,6 +46,16 @@ final class SpectrumAnalyzer {
 
     /// Process one audio buffer → smoothed, normalized band energies (0...1, length bandCount).
     func process(_ samples: [Float]) -> [Float] {
+        // Noise gate: when nobody is speaking, let the bars settle flat instead of jittering on
+        // the mic noise floor (which reads as a constant "looping" wiggle).
+        var meanSquare: Float = 0
+        vDSP_measqv(samples, 1, &meanSquare, vDSP_Length(samples.count))
+        if sqrt(meanSquare) < silenceRMS {
+            smoothed = SpectrumMath.smooth(previous: smoothed,
+                                           target: [Float](repeating: 0, count: bandCount),
+                                           attack: attack, decay: decay)
+            return smoothed
+        }
         let mags = magnitudes(samples)
         let bands = SpectrumMath.logBin(mags, sampleRate: sampleRate, fftSize: fftSize,
                                         bandCount: bandCount, minHz: minHz, maxHz: maxHz)
