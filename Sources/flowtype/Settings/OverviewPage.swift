@@ -46,15 +46,15 @@ struct OverviewPage: View {
 
     private var mainStatsGrid: some View {
         HStack(spacing: 12) {
-            statCard(icon: "clock",
-                     segments: StatFormatting.duration(seconds: Int(statsStore.totalDurationMs / 1000)),
-                     label: "总口述时间")
             statCard(icon: "text.word.count",
                      segments: StatFormatting.plain(formatWordCount(statsStore.totalWordCount)),
                      label: "口述字数")
             statCard(icon: "hourglass",
                      segments: StatFormatting.duration(seconds: statsStore.estimatedTimeSavedSeconds),
                      label: "节省时间")
+            statCard(icon: "clock",
+                     segments: StatFormatting.duration(seconds: Int(statsStore.totalDurationMs / 1000)),
+                     label: "总口述时间")
             statCard(icon: "bolt",
                      segments: StatFormatting.speed(statsStore.overallAverageSpeed),
                      label: "平均速度")

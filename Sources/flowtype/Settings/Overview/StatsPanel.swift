@@ -61,7 +61,7 @@ struct StatsPanel: View {
             MiniStatCard(icon: "calendar",       value: "\(s.activeDays)",        unit: nil,     label: "活跃天数",   accent: false)
             MiniStatCard(icon: "flame.fill",     value: "\(s.currentStreak)",     unit: nil,     label: "当前连续",   accent: true)
             MiniStatCard(icon: "trophy.fill",    value: "\(s.longestStreak)",     unit: nil,     label: "最长连续",   accent: false)
-            MiniStatCard(icon: "bolt.fill",      value: "\(s.avgSpeedCPM)",       unit: "字/分",  label: "平均速度",  accent: false)
+            MiniStatCard(icon: "bolt.fill",      value: "\(s.avgSpeedCPM)",       unit: "字/分",  label: "平均速度 ✓修正", accent: false)
         }
     }
 
@@ -105,7 +105,7 @@ struct StatsPanel: View {
         // Keystroke clause: only when chars >= 50 to avoid awkward small numbers
         if chars >= 50 {
             let keystrokes = Int(Double(chars) * StatsConfig.keystrokesPerChar)
-            parts.append("少敲了约 \(formatThousands(keystrokes)) 次键盘 ⌨️")
+            parts.append("少敲了约 \(formatWan(keystrokes)) 次键盘 ⌨️")
         }
 
         // Saved-time clause: pick highest-tier that qualifies
@@ -135,6 +135,14 @@ struct StatsPanel: View {
         let fmt = NumberFormatter()
         fmt.numberStyle = .decimal
         return fmt.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+
+    /// Large counts as 万 (e.g. 24,180 → "2.4 万"); small counts keep thousands separators.
+    private func formatWan(_ n: Int) -> String {
+        if n >= 10_000 {
+            return String(format: "%.1f 万", Double(n) / 10_000.0)
+        }
+        return formatThousands(n)
     }
 }
 
