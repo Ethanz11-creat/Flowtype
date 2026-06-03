@@ -17,6 +17,7 @@ struct FrostMaterial: NSViewRepresentable {
     func updateNSView(_ v: NSVisualEffectView, context: Context) {
         v.material = material
         v.blendingMode = blending
+        v.state = .active
     }
 }
 
