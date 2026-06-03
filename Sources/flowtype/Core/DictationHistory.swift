@@ -115,9 +115,6 @@ final class HistoryStore: ObservableObject {
         reload()
     }
 
-    /// Backward-compatible alias for HistoryPage (Task 8 will replace with two-step UI).
-    func clear() { clearTranscripts() }
-
     /// 重置统计 (destruction): delete all rows incl. frozen legacy aggregates.
     func resetAllStats() {
         try? db.dbQueue.write { d in

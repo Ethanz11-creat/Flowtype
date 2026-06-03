@@ -5,7 +5,9 @@ struct HistoryPage: View {
     @State private var selectedID: String?
     @State private var searchText: String = ""
     @State private var filterMode: PolishMode?
-    @State private var showClearConfirm = false
+    @State private var showClearTranscriptsConfirm = false
+    @State private var showResetStatsConfirm1 = false
+    @State private var showResetStatsConfirm2 = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,11 +20,32 @@ struct HistoryPage: View {
                     .frame(minWidth: 300)
             }
         }
-        .alert("确认清空", isPresented: $showClearConfirm) {
-            Button("清空全部", role: .destructive) { historyStore.clear() }
+        // 清空历史：one-step confirm — erases text, keeps stats
+        .alert("清空历史文本", isPresented: $showClearTranscriptsConfirm) {
+            Button("清空历史文本", role: .destructive) { historyStore.clearTranscripts() }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("将删除所有历史记录，此操作不可撤销。")
+            Text("清空所有历史文本？时长、字数、连续打卡等统计会保留。")
+        }
+        // 重置统计：first confirmation
+        .alert("重置全部统计", isPresented: $showResetStatsConfirm1) {
+            Button("继续", role: .destructive) {
+                showResetStatsConfirm1 = false
+                showResetStatsConfirm2 = true
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("即将删除全部历史记录与统计数据。")
+        }
+        // 重置统计：second (final) confirmation
+        .alert("无法撤销", isPresented: $showResetStatsConfirm2) {
+            Button("确认删除全部", role: .destructive) {
+                selectedID = nil
+                historyStore.resetAllStats()
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这会删除全部记录与统计，且不可恢复。")
         }
     }
 
@@ -55,12 +78,24 @@ struct HistoryPage: View {
             .buttonStyle(.borderless)
             .disabled(filteredSessions.isEmpty)
 
+            // 清空历史（保留统计）
             Button(role: .destructive) {
-                showClearConfirm = true
+                showClearTranscriptsConfirm = true
             } label: {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
+            .help("清空历史文本（保留统计）")
+            .disabled(historyStore.sessions.isEmpty)
+
+            // 重置统计（危险，需两次确认）
+            Button(role: .destructive) {
+                showResetStatsConfirm1 = true
+            } label: {
+                Image(systemName: "xmark.bin")
+            }
+            .buttonStyle(.borderless)
+            .help("重置全部统计（不可撤销）")
             .disabled(historyStore.sessions.isEmpty)
         }
         .padding(.horizontal, 20)
@@ -100,10 +135,10 @@ struct HistoryPage: View {
                         .foregroundColor(.secondary)
                 }
 
-                Text(session.finalText)
+                Text(session.finalText.isEmpty ? "(文本已清除)" : session.finalText)
                     .font(.system(size: 12))
                     .lineLimit(2)
-                    .foregroundColor(.primary)
+                    .foregroundColor(session.finalText.isEmpty ? .secondary : .primary)
 
                 if let ms = session.durationMs {
                     Text("\(String(format: "%.1f", Double(ms) / 1000))s")
@@ -158,10 +193,14 @@ struct HistoryPage: View {
                         }
 
                         if session.rawTranscript != session.finalText {
-                            DetailSection(title: "原始识别", text: session.rawTranscript)
+                            DetailSection(title: "原始识别",
+                                         text: session.rawTranscript.isEmpty ? "(文本已清除)" : session.rawTranscript,
+                                         isCleared: session.rawTranscript.isEmpty)
                         }
 
-                        DetailSection(title: "最终文本", text: session.finalText)
+                        DetailSection(title: "最终文本",
+                                      text: session.finalText.isEmpty ? "(文本已清除)" : session.finalText,
+                                      isCleared: session.finalText.isEmpty)
 
                         HStack(spacing: 12) {
                             Button {
@@ -239,13 +278,16 @@ struct HistoryPage: View {
                 try data.write(to: url)
             } else {
                 // CSV with formula injection protection
-                var csv = "Created At,Mode,Duration (s),Final Text\n"
+                var csv = "startedAt,appName,language,charCount,recordingMs,sttBackend,finalText\n"
                 for session in sessions {
-                    let date = sanitizeCSVCell(formatDateFull(session.createdAt))
-                    let mode = sanitizeCSVCell(session.polishMode.displayName)
-                    let duration = sanitizeCSVCell(session.durationMs.map { String(Double($0) / 1000.0) } ?? "")
+                    let startedAt = sanitizeCSVCell(formatDateFull(session.createdAt))
+                    let appName = sanitizeCSVCell(session.appName ?? "")
+                    let language = sanitizeCSVCell(session.language ?? "")
+                    let charCount = sanitizeCSVCell(String(session.finalText.trimmingCharacters(in: .whitespacesAndNewlines).count))
+                    let recordingMs = sanitizeCSVCell(session.recordingMs.map { String($0) } ?? "")
+                    let sttBackend = sanitizeCSVCell(session.sttBackend ?? "")
                     let text = sanitizeCSVCell(session.finalText)
-                    csv += "\(date),\(mode),\(duration),\(text)\n"
+                    csv += "\(startedAt),\(appName),\(language),\(charCount),\(recordingMs),\(sttBackend),\(text)\n"
                 }
                 try csv.write(to: url, atomically: true, encoding: .utf8)
             }
@@ -282,18 +324,31 @@ struct HistoryPage: View {
 private struct DetailSection: View {
     let title: String
     let text: String
+    var isCleared: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.secondary)
-            Text(text)
-                .font(.system(size: 13))
-                .textSelection(.enabled)
+            textContent
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassCard(cornerRadius: 8)
+        }
+    }
+
+    @ViewBuilder private var textContent: some View {
+        if isCleared {
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+                .italic()
+                .textSelection(.disabled)
+        } else {
+            Text(text)
+                .font(.system(size: 13))
+                .textSelection(.enabled)
         }
     }
 }
