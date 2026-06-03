@@ -133,6 +133,24 @@ enum SelfTest {
         r.eq(DownloadSource.custom("   ").endpoint(isChina: false), nil, "src: blank custom → nil")
     }
 
+    // MARK: - ModelLocator: completeness validation
+
+    static func testModelLocator(_ r: Reporter) {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("flowtype-modeltest-\(UUID().uuidString)")
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: dir) }
+        func write(_ name: String, _ bytes: Int) {
+            fm.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data(count: bytes))
+        }
+        r.check(!ModelLocator.validateComplete(dir, minBytes: 100), "locator: empty dir → incomplete")
+        write("config.json", 10); write("tokenizer.json", 10); write("model.safetensors", 200)
+        r.check(ModelLocator.validateComplete(dir, minBytes: 100), "locator: config+tok+big weights → complete")
+        r.check(!ModelLocator.validateComplete(dir, minBytes: 1000), "locator: weights below floor → incomplete")
+        try? fm.removeItem(at: dir.appendingPathComponent("config.json"))
+        r.check(!ModelLocator.validateComplete(dir, minBytes: 100), "locator: missing config → incomplete")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -150,6 +168,7 @@ enum SelfTest {
         testAppearanceConfig(r)    // appearance pref round-trip + legacy default
         testModelConfig(r)         // model provisioning fields: round-trip + legacy default
         testDownloadSource(r)      // DownloadSource endpoint mapping
+        testModelLocator(r)        // ModelLocator completeness validation
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
