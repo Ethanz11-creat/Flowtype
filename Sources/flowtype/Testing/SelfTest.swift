@@ -43,6 +43,40 @@ enum SelfTest {
         r.eq(PolishMode.allCases.count, 2, "polishMode: exactly 2 modes")
     }
 
+    // MARK: - Injection delivery decision (classifyFocus + decideInjection)
+
+    static func testInjectionDecision(_ r: Reporter) {
+        // classifyFocus: role + settable → kind
+        r.eq(classifyFocus(role: "AXTextField", isValueSettable: false), .editableText,
+             "inject: AXTextField → editableText")
+        r.eq(classifyFocus(role: "AXTextArea", isValueSettable: false), .editableText,
+             "inject: AXTextArea → editableText")
+        r.eq(classifyFocus(role: "AXComboBox", isValueSettable: false), .editableText,
+             "inject: AXComboBox → editableText")
+        r.eq(classifyFocus(role: "AXButton", isValueSettable: false), .nonTextControl,
+             "inject: AXButton → nonTextControl")
+        r.eq(classifyFocus(role: "AXMenuItem", isValueSettable: false), .nonTextControl,
+             "inject: AXMenuItem (status bar) → nonTextControl")
+        r.eq(classifyFocus(role: "AXSlider", isValueSettable: true), .nonTextControl,
+             "inject: settable slider stays nonTextControl (not text)")
+        r.eq(classifyFocus(role: "AXGroup", isValueSettable: true), .editableText,
+             "inject: settable generic role → editableText (web/custom editor)")
+        r.eq(classifyFocus(role: "AXGroup", isValueSettable: false), .blindOrUnknown,
+             "inject: generic non-settable → blindOrUnknown")
+        r.eq(classifyFocus(role: nil, isValueSettable: false), .blindOrUnknown,
+             "inject: no role → blindOrUnknown")
+
+        // decideInjection: signals → outcome (spec §4 rows 0–3)
+        r.eq(decideInjection(FocusSignals(secureInputActive: true, focus: .editableText)), .clipboard,
+             "inject: secure input → clipboard (row 0)")
+        r.eq(decideInjection(FocusSignals(secureInputActive: false, focus: .editableText)), .inject,
+             "inject: editable text → inject (row 1)")
+        r.eq(decideInjection(FocusSignals(secureInputActive: false, focus: .nonTextControl)), .clipboard,
+             "inject: non-text control → clipboard (row 2)")
+        r.eq(decideInjection(FocusSignals(secureInputActive: false, focus: .blindOrUnknown)), .inject,
+             "inject: blind/unknown → inject, fail open (row 3)")
+    }
+
     static func runAndExit() -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
@@ -56,6 +90,7 @@ enum SelfTest {
         testSpectrumProcess(r)   // SpectrumAnalyzer.process smoothed bands
         testStatFormatting(r)    // StatFormatting pure formatters
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
+        testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
