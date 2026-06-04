@@ -49,6 +49,15 @@ Flowtype 是一款为 AI 编程工作流打造的 macOS 语音输入应用。
 4. **精炼** —— LLM 清理填充词、修正识别错误、结构化提示词（仅双击结束时）
 5. **注入** —— 结果直接输入到当前活动文本框
 
+## 功能
+
+- **语音 → 结构化提示词** —— 本地 Qwen3-ASR 转写 + 可选的一键 LLM 润色，直接注入到当前光标处
+- **统计概览页** —— 口述字数 / 速度 / 总口述时间、节省时间、个性化进度环、成就（活跃天数、当前/最长连续、多邻国式里程碑）、GitHub 式年度活动热力图、24 小时分布图、趣味文案
+- **历史记录** —— 每次口述都存入本地 SQLite 数据库（基于 GRDB）；可浏览、搜索、导出为 JSON/CSV
+- **隐私优先** —— 音频永不落盘；`storeTranscriptText` 开关可只存元数据；「清空历史」抹掉正文但保留统计，「重置统计」清空一切
+- **多个润色模型** —— OpenAI 兼容；可新增/编辑服务商并内置「测试连接」；密钥本地存储
+- **词典 & 风格包** —— 个人词汇表（含自动检测纠正）与可切换的润色提示词模板
+
 ## 架构
 
 ```
@@ -71,8 +80,16 @@ Sources/flowtype/
 │   │       ├── PostProcessStage.swift # 填充词过滤、术语纠正
 │   │       ├── PolishStage.swift      # LLM 润色
 │   │       └── InjectionStage.swift   # 键盘文本注入
-│   ├── DailyStats.swift               # 使用统计聚合
-│   ├── DictationHistory.swift         # 历史记录持久化
+│   ├── Database/                      # 本地 SQLite (GRDB) 数据层
+│   │   ├── AppDatabase.swift          # 连接 + 表结构迁移
+│   │   ├── Records.swift              # SessionRecord / DailyLegacyRecord
+│   │   ├── StatsRepository.swift      # DB → 每日聚合，喂给统计引擎
+│   │   └── JSONMigration.swift        # 一次性 JSON → SQLite 迁移
+│   ├── StatsEngine.swift              # 纯指标 / 连续打卡 / 热力图计算
+│   ├── StatsConfig.swift              # 阈值、里程碑、换算常量
+│   ├── DailyStats.swift               # SQLite 支撑的每日统计 store
+│   ├── DictationHistory.swift         # SQLite 支撑的会话历史 store
+│   ├── StylePack.swift                # 润色提示词模板包
 │   └── Dictionary.swift               # 用户词汇表 & 自动检测纠正
 ├── Services/
 │   ├── AudioRecorder.swift            # macOS 音频采集（16kHz 单声道 Float32）
@@ -91,21 +108,23 @@ Sources/flowtype/
 │   ├── SettingsView.swift             # SwiftUI 设置面板
 │   ├── SettingsWindowController.swift # 设置窗口宿主
 │   ├── MainWindowView.swift           # 设置标签页容器
-│   ├── OverviewPage.swift             # 每日统计仪表盘
-│   ├── HistoryPage.swift              # 听写历史与导出
+│   ├── OverviewPage.swift             # 统计仪表盘（组合 Overview/*）
+│   ├── Overview/                      # Hero、成就/里程碑、热力图、24h、趣味文案
+│   ├── HistoryPage.swift              # 会话历史：搜索、导出、清空/重置
 │   ├── VocabPage.swift                # 个人词典管理
-│   └── StylePage.swift                # UI 样式自定义
+│   └── StylePage.swift                # 润色风格包（提示词模板）
 ├── Features/
 │   └── Onboarding/
 │       └── OnboardingPipeline.swift   # 首次启动引导
 ├── UI/
 │   ├── CapsuleView.swift              # 录音胶囊窗口
 │   ├── FloatingPanel.swift            # 面板窗口宿主
-│   └── AudioVisualizer.swift          # 录音可视化反馈
+│   ├── AudioVisualizer.swift          # 录音波形（镜像频谱）
+│   └── Theme/                         # 品牌色、Theme tokens、GlassCard、StatValue
 ├── Utilities/
 │   ├── AppLogger.swift                # 文件诊断日志
 │   ├── AudioFormatConverter.swift     # PCM 格式转换
-│   ├── KeychainHelper.swift           # API 密钥安全存储
+│   ├── KeychainHelper.swift           # 传统钥匙串助手（历史迁移用）
 │   ├── PermissionHelper.swift         # 辅助功能权限检测与引导
 │   ├── SoundFeedback.swift            # 录音事件音频反馈
 │   └── UnsafeCell.swift               # 线程安全值包装器
@@ -191,12 +210,23 @@ open build/Flowtype.app
 | 分类 | 设置项 |
 |------|--------|
 | **本地语音识别** | 模型加载状态、语言选择（自动 / 中文 / English） |
-| **文本润色模型** | 服务商、Base URL、API Key、模型 ID |
+| **文本润色模型** | 服务商、Base URL、API Key、模型 ID、测试连接 |
+| **录音** | 最长时长、音频反馈、麦克风设备 |
+| **隐私** | `storeTranscriptText` —— 保存转写正文，或仅保存元数据 |
 | **触发键** | Fn / Control / Option / Command |
-| **历史记录** | 听写历史，支持 JSON/CSV 导出 |
+| **概览** | 使用统计、连续打卡与里程碑、热力图、24 小时分布 |
+| **历史记录** | 会话历史，支持 JSON/CSV 导出；清空正文 / 重置统计 |
 | **词典** | 个人词汇表 & 自动检测纠正 |
+| **风格** | 润色提示词模板包 |
 
 设置会自动保存到 `UserDefaults`。如果存在 `.env` 文件，首次启动时会**自动迁移一次**，此后以 GUI 设置为准。
+
+### 数据存储与隐私
+
+- **口述数据**存于本地 SQLite 数据库（`~/Library/Application Support/FlowType/flowtype.sqlite`，基于 [GRDB](https://github.com/groue/GRDB.swift)）。旧的 JSON 文件会一次性迁移，并保留为 `*.json.bak`。
+- **音频永不落盘** —— 唯一的临时 `.wav`（AppleSpeech）在成功 / 失败 / 取消所有路径上都会删除。
+- **API 密钥**本地存储在配置中（未签名应用无法使用 data-protection 钥匙串），因此能跨启动保留。
+- **口述字数**按**原始识别**文本计算，而非润色后结果。润色失败时，原始文本会保留在历史里、绝不丢失。
 
 ### 语音识别回退行为
 

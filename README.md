@@ -49,6 +49,15 @@ This branch contains the **Qwen3-ASR + Modular Pipeline** architecture. Key diff
 4. **Refine** — LLM cleans up filler words, fixes recognition errors, and structures the prompt (double-press end only)
 5. **Inject** — Result is typed directly into your active text field
 
+## Features
+
+- **Voice → polished prompt** — local Qwen3-ASR transcription + optional one-key LLM refinement, injected into the focused field
+- **Stats dashboard** — an Overview page with total characters / speed / dictation time, estimated time saved, a personalization ring, achievements (active days, current & longest streak, Duolingo-style milestones), a GitHub-style year heatmap, a 24-hour distribution chart, and a fun-fact footer
+- **History** — every session is stored in a local SQLite database (via GRDB); browse, search, and export to JSON/CSV
+- **Privacy first** — audio is never written to disk; a `storeTranscriptText` toggle keeps metadata only when off; "clear history" wipes transcripts but keeps stats, "reset stats" wipes everything
+- **Multiple LLM providers** — OpenAI-compatible; add/edit providers with a built-in "Test connection"; keys stored locally
+- **Dictionary & style packs** — personal vocabulary (with auto-detected corrections) and switchable polishing prompt templates
+
 ## Architecture
 
 ```
@@ -71,8 +80,16 @@ Sources/flowtype/
 │   │       ├── PostProcessStage.swift # Filler stripping, term correction
 │   │       ├── PolishStage.swift      # LLM refinement
 │   │       └── InjectionStage.swift   # Keyboard text injection
-│   ├── DailyStats.swift               # Usage statistics aggregation
-│   ├── DictationHistory.swift         # History persistence
+│   ├── Database/                      # Local SQLite (GRDB) data layer
+│   │   ├── AppDatabase.swift          # Connection + schema migrations
+│   │   ├── Records.swift              # SessionRecord / DailyLegacyRecord
+│   │   ├── StatsRepository.swift      # DB → daily aggregates for the engine
+│   │   └── JSONMigration.swift        # One-time JSON → SQLite migration
+│   ├── StatsEngine.swift              # Pure metrics / streaks / heatmap computation
+│   ├── StatsConfig.swift              # Thresholds, milestones, conversion constants
+│   ├── DailyStats.swift               # SQLite-backed daily-stats store
+│   ├── DictationHistory.swift         # SQLite-backed session history store
+│   ├── StylePack.swift                # Polishing prompt-template packs
 │   └── Dictionary.swift               # User vocabulary & auto-detected corrections
 ├── Services/
 │   ├── AudioRecorder.swift            # macOS audio capture (16kHz mono Float32)
@@ -91,21 +108,23 @@ Sources/flowtype/
 │   ├── SettingsView.swift             # SwiftUI settings panel
 │   ├── SettingsWindowController.swift # Settings window host
 │   ├── MainWindowView.swift           # Settings tab container
-│   ├── OverviewPage.swift             # Daily stats dashboard
-│   ├── HistoryPage.swift              # Dictation history with export
+│   ├── OverviewPage.swift             # Stats dashboard (composes Overview/*)
+│   ├── Overview/                      # Hero, achievements/milestones, heatmap, 24h, fun-fact
+│   ├── HistoryPage.swift              # Session history: search, export, clear/reset
 │   ├── VocabPage.swift                # Personal dictionary management
-│   └── StylePage.swift                # UI style customization
+│   └── StylePage.swift                # Polishing style packs (prompt templates)
 ├── Features/
 │   └── Onboarding/
 │       └── OnboardingPipeline.swift   # First-launch guide
 ├── UI/
 │   ├── CapsuleView.swift              # Recording capsule window
 │   ├── FloatingPanel.swift            # Panel window host
-│   └── AudioVisualizer.swift          # Recording visual feedback
+│   ├── AudioVisualizer.swift          # Recording waveform (mirror-spectrum)
+│   └── Theme/                         # Brand colors, Theme tokens, GlassCard, StatValue
 ├── Utilities/
 │   ├── AppLogger.swift                # File-based diagnostic logging
 │   ├── AudioFormatConverter.swift     # PCM format conversion
-│   ├── KeychainHelper.swift           # Secure API key storage
+│   ├── KeychainHelper.swift           # Traditional keychain helper (legacy migration)
 │   ├── PermissionHelper.swift         # Accessibility permission check & guide
 │   ├── SoundFeedback.swift            # Audio feedback for recording events
 │   └── UnsafeCell.swift               # Thread-safe value wrapper
@@ -210,12 +229,23 @@ All settings are managed through the **Settings GUI** (click the status bar icon
 | Section | Settings |
 |----------|---------|
 | **Local ASR** | Model load status, language (Auto / 中文 / English) |
-| **LLM** | Provider, Base URL, API Key, Model ID |
+| **LLM** | Provider(s), Base URL, API Key, Model ID, Test connection |
+| **Recording** | Max duration, audio feedback, microphone device |
+| **Privacy** | `storeTranscriptText` — store transcript text, or metadata only |
 | **Trigger Key** | Fn / Control / Option / Command |
-| **History** | Dictation history with JSON/CSV export |
+| **Overview** | Usage stats, streaks & milestones, heatmap, 24h distribution |
+| **History** | Session history with JSON/CSV export; clear transcripts / reset stats |
 | **Dictionary** | Personal vocabulary & auto-detected corrections |
+| **Style** | Polishing prompt-template packs |
 
 Settings are persisted to `UserDefaults` automatically. An existing `.env` file will be **migrated once** on first launch, after which the GUI settings take precedence.
+
+### Data storage & privacy
+
+- **Dictation data** lives in a local SQLite database (`~/Library/Application Support/FlowType/flowtype.sqlite`, via [GRDB](https://github.com/groue/GRDB.swift)). Older JSON files are migrated once and kept as `*.json.bak`.
+- **Audio is never written to disk** — the only temporary `.wav` (AppleSpeech) is deleted on every path (success / failure / cancel).
+- **API keys** are stored locally in the config (unsigned apps can't use the data-protection keychain), so they persist across launches.
+- **Word count** is computed from the *original recognized* text, not the polished result. If polishing fails, the raw text is kept in history and never lost.
 
 ### ASR fallback behavior
 
