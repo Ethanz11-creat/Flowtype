@@ -25,6 +25,8 @@ enum KeychainHelper {
         var addQuery = baseQuery
         addQuery[kSecAttrAccount as String] = key
         addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        addQuery[kSecAttrSynchronizable as String] = false
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         if status != errSecSuccess {

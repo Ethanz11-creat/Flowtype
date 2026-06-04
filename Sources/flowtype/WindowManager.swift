@@ -370,6 +370,9 @@ class WindowManager: ObservableObject {
             panel.orderFront(nil)
             return
         }
+        // Already visible — don't replay the slide-in animation (e.g. .polishing → .notice).
+        if panel.isVisible { return }
+
         let targetX = screen.visibleFrame.midX - 120   // half the 240pt capsule width
         let targetY = screen.visibleFrame.minY + 40
 

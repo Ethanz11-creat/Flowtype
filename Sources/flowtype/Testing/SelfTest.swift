@@ -187,6 +187,11 @@ enum SelfTest {
         let one = StatsEngine.summarize([day("2026-06-03", chars: 100, recMs: 50_000)], range: .all, now: now, cal: cal)
         r.eq(one.avgSpeedCPM, 120, "engine: speed = chars/(recSec/60) = 120")
         r.check(one.timeSavedSeconds >= 0, "engine: timeSaved never negative")
+        // timeSaved precise: Int(100/45*60)=133, recSec=50, 133-50=83
+        r.eq(one.timeSavedSeconds, 83, "engine: timeSaved = chars/45*60 − recSec")
+        // max(0,…) clamp: few chars over a long recording → timeSaved must be 0, not negative
+        let longRec = StatsEngine.summarize([day("2026-06-03", chars: 5, recMs: 600_000)], range: .all, now: now, cal: cal)
+        r.eq(longRec.timeSavedSeconds, 0, "engine: timeSaved clamped to 0 when recording exceeds typing estimate")
 
         // empty → zeros, no crash
         let empty = StatsEngine.summarize([], range: .all, now: now, cal: cal)
@@ -202,10 +207,35 @@ enum SelfTest {
         r.eq(StatsEngine.currentRun([9,8], todayOrdinal: 10), 2, "engine: current streak yesterday-anchored 2")
         r.eq(StatsEngine.currentRun([5], todayOrdinal: 10), 0, "engine: stale → 0")
 
+        // peakHour / hour-histogram aggregation
+        var h = Array(repeating: 0, count: 24); h[21] = 5; h[9] = 2
+        let peakDay = DailyStats(date: "2026-06-03", totalDurationMs: 10_000, totalWordCount: 50, sessionCount: 1,
+                                 totalRecordingMs: 10_000, byApp: [:], byLang: [:], hourHistogram: h)
+        let peakSummary = StatsEngine.summarize([peakDay], range: .all, now: now, cal: cal)
+        r.eq(peakSummary.peakHour, 21, "engine: peakHour is bucket with most sessions (hour 21)")
+        // all-zero histogram → peakHour nil
+        let zeroPeak = StatsEngine.summarize([day("2026-06-03", chars: 5, recMs: 5000)], range: .all, now: now, cal: cal)
+        r.check(zeroPeak.peakHour == nil, "engine: all-zero histogram → peakHour nil")
+
         // range filter keeps only recent
         let many = [day("2026-01-01", chars: 5, recMs: 5000), day("2026-06-01", chars: 5, recMs: 5000), day("2026-06-03", chars: 5, recMs: 5000)]
         r.eq(StatsEngine.summarize(many, range: .d7, now: now, cal: cal).activeDays, 2, "engine: 7d keeps 06-01 & 06-03")
         r.eq(StatsEngine.summarize(many, range: .all, now: now, cal: cal).activeDays, 3, "engine: all keeps 3")
+
+        // speed denominator: totalRecordingMs vs totalDurationMs must differ
+        // 100 chars / (60_000ms = 1 min) = 100 CPM using recordingMs; durationMs(600_000) would give 10 CPM
+        let diffMs = DailyStats(date: "2026-06-03", totalDurationMs: 600_000, totalWordCount: 100, sessionCount: 1,
+                                totalRecordingMs: 60_000, byApp: [:], byLang: [:],
+                                hourHistogram: Array(repeating: 0, count: 24))
+        let s = StatsEngine.summarize([diffMs], range: .all, now: now, cal: cal)
+        r.eq(s.avgSpeedCPM, 100, "engine: speed uses recordingMs not durationMs")
+
+        // legacy fallback: totalRecordingMs == 0 → fall back to durationMs (100 chars / 1 min = 100 CPM)
+        let legacyMs = DailyStats(date: "2026-06-03", totalDurationMs: 60_000, totalWordCount: 100, sessionCount: 1,
+                                  totalRecordingMs: 0, byApp: [:], byLang: [:],
+                                  hourHistogram: Array(repeating: 0, count: 24))
+        let sl = StatsEngine.summarize([legacyMs], range: .all, now: now, cal: cal)
+        r.eq(sl.avgSpeedCPM, 100, "engine: speed falls back to durationMs when recordingMs is 0")
     }
 
     // MARK: - StatsEngine: dense heatmap (full range, missing days = 0)
@@ -220,11 +250,11 @@ enum SelfTest {
         let now = StatsEngine.parseDate("2026-06-03", cal)!
 
         // dense heatmap: 7d range → exactly 7 cells even with one data day
-        let h7 = StatsEngine.summarize([day("2026-06-03", chars: 100, recMs: 1000)], range: .d7, now: now, cal: cal).heatmap
+        let h7 = StatsEngine.denseHeatmap([day("2026-06-03", chars: 100, recMs: 1000)], range: .d7, now: now, cal: cal)
         r.eq(h7.count, 7, "heatmap: 7d → 7 cells (dense)")
         r.eq(h7.last?.date, "2026-06-03", "heatmap: last cell is today")
         r.eq(h7.filter { $0.chars > 0 }.count, 1, "heatmap: only the one data day is non-zero")
-        r.eq(StatsEngine.summarize([], range: .d30, now: now, cal: cal).heatmap.count, 30, "heatmap: 30d empty → 30 zero cells")
+        r.eq(StatsEngine.denseHeatmap([], range: .d30, now: now, cal: cal).count, 30, "heatmap: 30d empty → 30 zero cells")
         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
     }
 
@@ -242,6 +272,7 @@ enum SelfTest {
         testStatFormatting(r)    // StatFormatting pure formatters
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
         testHistoryMode(r)         // polish-degrade → history label .raw
+        testCharCountSemantics(r)  // charCount grapheme-cluster semantics (CJK parity)
         testProviderAPIKeyLocal(r) // local API-key storage round-trip
         testFunFact(r)             // fun-fact footer clauses
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
@@ -530,6 +561,21 @@ enum SelfTest {
         r.check(SessionController.historyMode(usePolish: true, polishFailed: false) == .polish, "history: polish ok → .polish")
         r.check(SessionController.historyMode(usePolish: true, polishFailed: true) == .raw, "history: polish failed → degraded .raw")
         r.check(SessionController.historyMode(usePolish: false, polishFailed: false) == .raw, "history: raw request → .raw")
+    }
+
+    // MARK: - charCount grapheme-cluster semantics
+
+    /// Documents that SessionRecord.charCount uses Swift grapheme-cluster count (.count), so CJK
+    /// characters each count as 1 visual character, matching what readers perceive as 字数.
+    /// (Contrast: the SQLite v2/v3 migration uses length() which counts code points — for plain
+    /// CJK these are equal; emoji can differ, but that delta is acceptable for statistics.)
+    static func testCharCountSemantics(_ r: Reporter) {
+        let session = DictationSession(rawTranscript: "你好世界", finalText: "",
+                                       polishMode: .raw, durationMs: 1000,
+                                       recordingMs: 1000, appName: nil, appBundleID: nil,
+                                       language: "zh", sttBackend: "qwen")
+        let rec = SessionRecord(from: session)
+        r.eq(rec.charCount, 4, "charCount: CJK grapheme == code-point parity (你好世界 = 4)")
     }
 
     // MARK: - Local API-key storage (no Keychain)

@@ -118,32 +118,30 @@ struct SettingsPage: View {
             )
         }
         .sheet(item: $editingProvider) { provider in
-            let idx = store.current.llmProviders.firstIndex(where: { $0.id == provider.id }) ?? 0
-            let binding = Binding<LLMProvider>(
-                get: { store.current.llmProviders[idx] },
-                set: { store.current.llmProviders[idx] = $0 }
-            )
             ProviderEditSheet(
-                provider: binding,
-                apiKey: .init(
-                    get: { ConfigurationStore.shared.loadProviderAPIKey(provider.id) ?? "" },
-                    set: { newKey in
-                        if !newKey.isEmpty {
-                            ConfigurationStore.shared.saveProviderAPIKey(newKey, for: provider.id)
-                        } else {
-                            ConfigurationStore.shared.deleteProviderAPIKey(provider.id)
-                        }
-                    }
-                ),
-                existingProviders: store.current.llmProviders,
+                provider: $draftProvider,
+                apiKey: $draftApiKey,
+                existingProviders: store.current.llmProviders.filter { $0.id != provider.id },
                 onSave: {
-                    store.save(store.current)   // persist edits to name/url/model
+                    if let idx = store.current.llmProviders.firstIndex(where: { $0.id == provider.id }) {
+                        store.current.llmProviders[idx] = draftProvider
+                    }
+                    if draftApiKey.isEmpty {
+                        ConfigurationStore.shared.deleteProviderAPIKey(provider.id)
+                    } else {
+                        ConfigurationStore.shared.saveProviderAPIKey(draftApiKey, for: provider.id)
+                    }
+                    store.save(store.current)
                     editingProvider = nil
                 },
                 onCancel: {
                     editingProvider = nil
                 }
             )
+            .onAppear {
+                draftProvider = provider
+                draftApiKey = ConfigurationStore.shared.loadProviderAPIKey(provider.id) ?? ""
+            }
         }
     }
 }

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>概览页重排原型 v3</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.7.0/dist/tabler-icons.min.css">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#161618;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;padding:28px 16px;color:#F2F2F5}
+  .cap{font-size:13px;color:#9A9AA2;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+  .win{width:100%;max-width:1080px;background:#0C0C0F;border:0.5px solid rgba(255,255,255,.10);border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.45)}
+  .titlebar{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:0.5px solid rgba(255,255,255,.07)}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .body{display:flex;min-height:660px}
+  .side{width:184px;flex:none;background:#101013;border-right:0.5px solid rgba(255,255,255,.06);display:flex;flex-direction:column;padding:16px 12px}
+  .nav{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:9px;font-size:14px;color:#9A9AA2;cursor:pointer;margin-bottom:2px}
+  .nav i{font-size:18px}
+  .nav.on{background:rgba(142,125,245,.16);color:#B9AEFF}
+  .nav.set{border-top:0.5px solid rgba(255,255,255,.06);border-radius:0;padding-top:14px;margin-top:8px}
+  .nav.set:hover{color:#D6D6DC}
+  .main{flex:1;position:relative;display:flex;justify-content:center;padding:22px 0}
+  .gutter{position:absolute;top:0;bottom:0;width:28px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.035),rgba(255,255,255,.035) 4px,transparent 4px,transparent 9px)}
+  .content{width:100%;max-width:600px;padding:0 12px}
+  .card{background:#17171C;border:0.5px solid rgba(255,255,255,.07);border-radius:12px;padding:14px 15px}
+  .val{display:flex;align-items:baseline;margin-top:8px;line-height:1}
+  .val .d{font-size:27px;font-weight:600;color:#F2F2F5}
+  .val .u{font-size:15px;color:#8A8A92;font-weight:400}
+  .val.hero .d{color:#B9AEFF}
+  .lab{font-size:12px;color:#8A8A92;margin-top:7px}
+  .sub{font-size:11px;color:#7C7C84;margin-top:7px;display:flex;align-items:center;gap:4px}
+  .ic{font-size:16px}
+  .hd{font-size:13px;color:#9A9AA2;font-weight:500;margin:0 0 9px}
+  .seg{display:flex;background:#17171C;border:0.5px solid rgba(255,255,255,.08);border-radius:9px;padding:2px;font-size:12px;color:#8A8A92}
+  .seg span{padding:4px 11px;border-radius:7px;cursor:pointer}
+  .seg .a{background:#8E7DF5;color:#0C0C0F;font-weight:600}
+  .hcell{width:11px;height:11px;border-radius:2px;display:inline-block}
+  @keyframes flick{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.1);opacity:.82}}
+  @keyframes glow{0%,100%{text-shadow:0 0 6px rgba(255,138,61,.45)}50%{text-shadow:0 0 13px rgba(255,138,61,.8)}}
+  .flame{display:inline-block;animation:flick 1.5s ease-in-out infinite,glow 1.5s ease-in-out infinite}
+  .ms{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;color:#7C7C84}
+  .ms i{font-size:20px}
+</style>
+</head>
+<body>
+  <div class="cap"><i class="ti ti-arrows-horizontal"></i> 横向拉伸时,中间内容固定宽度,只有两侧留白增减(试着拖动浏览器窗口)</div>
+  <div class="win">
+    <div class="titlebar">
+      <span class="dot" style="background:#ED6A5E"></span>
+      <span class="dot" style="background:#F4BE4F"></span>
+      <span class="dot" style="background:#61C554"></span>
+    </div>
+    <div class="body">
+      <div class="side">
+        <div class="nav on"><i class="ti ti-chart-bar"></i>概览</div>
+        <div class="nav"><i class="ti ti-history"></i>历史</div>
+        <div class="nav"><i class="ti ti-book"></i>词典</div>
+        <div class="nav"><i class="ti ti-wand"></i>风格</div>
+        <div style="flex:1"></div>
+        <div class="nav set" title="进入设置页面"><i class="ti ti-settings"></i>设置</div>
+      </div>
+      <div class="main">
+        <div class="gutter" style="left:0"></div>
+        <div class="gutter" style="right:0"></div>
+        <div class="content">
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+            <div style="display:flex;gap:18px;font-size:14px;color:#8A8A92">
+              <span style="color:#B9AEFF;font-weight:600">概览</span><span>应用</span><span>语言</span>
+            </div>
+            <div class="seg"><span>All</span><span class="a">30d</span><span>7d</span></div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:24px;align-items:stretch">
+            <div class="card" style="width:188px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px">
+              <div style="width:72px;height:72px;border-radius:50%;border:6px solid rgba(255,255,255,.10);border-top-color:#8E7DF5;border-right-color:#8E7DF5;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;transform:rotate(45deg)"><span style="transform:rotate(-45deg)">62%</span></div>
+              <div>
+                <div style="font-size:14px;font-weight:600">个性化进度</div>
+                <div style="font-size:11px;color:#8A8A92;margin-top:4px;line-height:1.5">继续口述,<br>让转写更贴合你</div>
+              </div>
+            </div>
+            <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="card"><i class="ti ti-hourglass ic" style="color:#A99BFF"></i><div class="val hero"><span class="d">3</span><span class="u">h</span><span class="d">08</span><span class="u">m</span></div><div class="lab">节省时间</div></div>
+              <div class="card"><i class="ti ti-align-left ic" style="color:#8A8A92"></i><div class="val"><span class="d">24,180</span></div><div class="lab">口述字数</div></div>
+              <div class="card"><i class="ti ti-clock ic" style="color:#8A8A92"></i><div class="val"><span class="d">2</span><span class="u">h</span><span class="d">51</span><span class="u">m</span></div><div class="lab">总口述时间</div></div>
+              <div class="card"><i class="ti ti-bolt ic" style="color:#8A8A92"></i><div class="val"><span class="d">142</span><span class="u"> 字/分</span></div><div class="lab">平均速度</div></div>
+            </div>
+          </div>
+
+          <p class="hd">成就</p>
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:6px;align-items:stretch">
+            <div class="card" style="display:flex;flex-direction:column">
+              <i class="ti ti-calendar ic" style="color:#FFB454"></i>
+              <div class="val"><span class="d">21</span></div>
+              <div class="lab">活跃天数</div>
+              <div class="sub">本月共 21 天</div>
+            </div>
+            <div class="card" style="display:flex;flex-direction:column">
+              <div style="display:flex;align-items:center;gap:7px"><i class="ti ti-flame flame" id="flame"></i><div class="val" style="margin-top:0"><span class="d" id="streakNum">6</span><span class="u"> 天</span></div></div>
+              <div class="lab" style="margin-top:8px">当前连续</div>
+              <div style="height:5px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:11px;overflow:hidden"><div id="streakBar" style="width:75%;height:100%;border-radius:3px"></div></div>
+              <div class="sub" id="streakCap"></div>
+            </div>
+            <div class="card" style="display:flex;flex-direction:column">
+              <i class="ti ti-trophy ic" style="color:#FFB454"></i>
+              <div class="val"><span class="d">14</span></div>
+              <div class="lab">最长连续</div>
+              <div class="sub">个人最佳 · 4 月</div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#7C7C84;margin-bottom:24px">达成里程碑时火苗会变色并有点亮动效(见下方里程碑预览)</div>
+
+          <p class="hd">活动热力图 · 最近一年</p>
+          <div id="heat" style="display:flex;gap:2px;margin-bottom:7px"></div>
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:4px;font-size:12px;color:#8A8A92;margin-bottom:24px">少
+            <span class="hcell" style="background:#1C1C22"></span>
+            <span class="hcell" style="background:rgba(142,125,245,.35)"></span>
+            <span class="hcell" style="background:rgba(142,125,245,.6)"></span>
+            <span class="hcell" style="background:rgba(142,125,245,.85)"></span>
+            <span class="hcell" style="background:#8E7DF5"></span>多
+          </div>
+
+          <p class="hd">24 小时分布 · 高峰 21:00–22:00</p>
+          <div id="bars" style="display:flex;align-items:flex-end;gap:3px;height:80px;margin-bottom:5px"></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#8A8A92;margin-bottom:18px"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div>
+
+          <div style="border-top:0.5px solid rgba(255,255,255,.06);padding-top:14px;font-size:13px;color:#8A8A92;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+            <span>你已累计口述约 <span style="color:#C9C9CF">24,180</span> 字</span><span>·</span>
+            <i class="ti ti-keyboard"></i><span>少敲约 <span style="color:#C9C9CF">2.4 万</span> 次键盘</span><span>·</span>
+            <i class="ti ti-movie"></i><span>节省时间够看 <span style="color:#C9C9CF">1</span> 部电影</span>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="width:100%;max-width:1080px;margin-top:18px;background:#0C0C0F;border:0.5px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 20px">
+    <div style="font-size:13px;color:#9A9AA2;font-weight:600;margin-bottom:4px">连续里程碑系统(多邻国式)</div>
+    <div style="font-size:12px;color:#7C7C84;margin-bottom:16px">每达成一个节点,火苗升级换色 + 点亮动效;进度条按"距下一个里程碑"填充。当前 6 天 → 已达成 3 天,下一站 7 天。</div>
+    <div id="msrow" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px"></div>
+  </div>
+
+<script>
+(function(){
+  var MS=[3,7,14,30,60,100,365];
+  var COL={3:'#FFB454',7:'#FF8A3D',14:'#FF6B35',30:'#FF4D4D',60:'#E0479E',100:'#A99BFF',365:'#FFD24D'};
+  var streak=6;
+  var reached=MS.filter(function(m){return streak>=m;});
+  var tier=reached.length?reached[reached.length-1]:0;
+  var flameColor=tier?COL[tier]:'#FFB454';
+  var next=MS.find(function(m){return m>streak;})||365;
+  var prev=tier||0;
+  var pct=Math.round((streak-prev)/(next-prev)*100);
+  document.getElementById('flame').style.color=flameColor;
+  document.getElementById('streakBar').style.width=pct+'%';
+  document.getElementById('streakBar').style.background=COL[next]||'#FFB454';
+  document.getElementById('streakCap').innerHTML='<i class="ti ti-flame" style="font-size:12px;color:'+flameColor+'"></i>还差 '+(next-streak)+' 天解锁 '+next+' 天里程碑';
+
+  var row=document.getElementById('msrow');
+  MS.forEach(function(m){
+    var done=streak>=m;
+    var d=document.createElement('div');d.className='ms';
+    d.innerHTML='<i class="ti ti-flame" style="color:'+COL[m]+'"></i><span style="color:'+(done?'#D6D6DC':'#7C7C84')+'">'+m+' 天</span>'+(done?'<i class="ti ti-check" style="font-size:13px;color:#61C554"></i>':'<i class="ti ti-lock" style="font-size:13px;color:#4A4A50"></i>');
+    d.style.opacity=done?'1':'.45';
+    row.appendChild(d);
+  });
+
+  var heat=document.getElementById('heat');
+  var seed=7;function rnd(){seed=(seed*9301+49297)%233280;return seed/233280;}
+  for(var c=0;c<52;c++){
+    var col=document.createElement('div');col.style.cssText='display:flex;flex-direction:column;gap:2px';
+    for(var r=0;r<7;r++){
+      var cell=document.createElement('div');cell.style.cssText='width:8px;height:8px;border-radius:2px';
+      var dense=c>34?0.62:c>22?0.4:0.22, v=rnd(), bg='#1C1C22';
+      if(v<dense){var lv=rnd();bg=lv>0.8?'#8E7DF5':lv>0.55?'rgba(142,125,245,.85)':lv>0.3?'rgba(142,125,245,.6)':'rgba(142,125,245,.35)';}
+      cell.style.background=bg;col.appendChild(cell);
+    }
+    heat.appendChild(col);
+  }
+  var bars=document.getElementById('bars');
+  var h=[3,2,1,1,2,2,4,8,12,16,15,14,18,15,16,14,15,17,22,26,30,38,28,20];
+  for(var i=0;i<24;i++){
+    var b=document.createElement('div');
+    b.style.cssText='flex:1;border-radius:3px 3px 0 0;height:'+(h[i]*2.4+2)+'px;background:'+(i===21?'#A99BFF':'rgba(142,125,245,.55)');
+    b.title=i+':00 · '+h[i];bars.appendChild(b);
+  }
+})();
+</script>
+</body>
+</html>

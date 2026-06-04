@@ -295,7 +295,7 @@ final class SessionController: ObservableObject {
                 // Polish is an OPTIONAL enhancement — its failure must NOT discard the already-recognized
                 // text or pop intrusive buttons. Degrade: keep the raw ASR text in history (marked .raw),
                 // show a gentle auto-dismissing notice, do NOT inject. Other stages keep the error+recovery UI.
-                if recovery.failedStage == "Polish", let raw = recovery.rawText, !raw.isEmpty {
+                if recovery.failedStage == "Polish", !(recovery.error is CancellationError), let raw = recovery.rawText, !raw.isEmpty {
                     context.rawTranscript = raw
                     context.finalText = raw
                     context.polishFailed = true

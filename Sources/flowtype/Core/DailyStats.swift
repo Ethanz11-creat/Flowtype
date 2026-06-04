@@ -51,5 +51,11 @@ final class DailyStatsStore: ObservableObject {
     @Published private(set) var stats: [DailyStats] = []
     private let repo = StatsRepository(db: AppDatabaseProvider.shared)
     private init() { refresh() }
-    func refresh() { stats = repo.buildDailyStats() }
+    func refresh() {
+        let repo = self.repo
+        Task.detached(priority: .utility) {
+            let result = repo.buildDailyStats()
+            await MainActor.run { self.stats = result }
+        }
+    }
 }

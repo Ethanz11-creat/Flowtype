@@ -21,6 +21,9 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         self.startedAt = s.createdAt.timeIntervalSince1970
         self.recordingMs = Int64(s.recordingMs ?? 0)
         self.durationMs = Int64(s.durationMs ?? 0)
+        // Grapheme-cluster count (Swift .count); intentionally differs from the SQLite v2/v3 migration
+        // which uses length() (Unicode code points) — emoji/combining text can diverge by a few counts.
+        // Acceptable: 字数 tracks visual characters, and the delta is cosmetic for statistics.
         self.charCount = s.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).count  // 原始识别字数（不是润色后）
         self.language = s.language
         self.appName = s.appName

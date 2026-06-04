@@ -132,13 +132,18 @@ enum StatsEngine {
         let n = StatsConfig.days(for: range)
         var charsByDate: [String: Int] = [:], sessByDate: [String: Int] = [:]
         for d in all { charsByDate[d.date, default: 0] += d.totalWordCount; sessByDate[d.date, default: 0] += d.sessionCount }
-        let maxChars = all.map { $0.totalWordCount }.max() ?? 0
         let f = DateFormatter(); f.calendar = cal; f.timeZone = cal.timeZone; f.dateFormat = "yyyy-MM-dd"
         let today = cal.startOfDay(for: now)
-        var cells: [HeatCell] = []
+        // Gather per-day chars for only the window cells, then compute max from those.
+        var windowDates: [String] = []
         for offset in stride(from: n - 1, through: 0, by: -1) {
             guard let day = cal.date(byAdding: .day, value: -offset, to: today) else { continue }
-            let key = f.string(from: day)
+            windowDates.append(f.string(from: day))
+        }
+        let maxChars = windowDates.map { charsByDate[$0] ?? 0 }.max() ?? 0
+        var cells: [HeatCell] = []
+        for key in windowDates {
+            guard let day = f.date(from: key) else { continue }
             let chars = charsByDate[key] ?? 0
             let weekday = (cal.component(.weekday, from: day) - 1)   // Calendar: 1=Sun → 0
             cells.append(HeatCell(dayOrdinal: dayOrdinal(day, cal), date: key, chars: chars,
@@ -170,7 +175,6 @@ enum StatsEngine {
         s.longestStreak = longestRun(ordinals)
         s.currentStreak = currentRun(ordinals, todayOrdinal: dayOrdinal(now, cal))
 
-        s.heatmap = denseHeatmap(all, range: range, now: now, cal: cal)
         return s
     }
 }
