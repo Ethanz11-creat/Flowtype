@@ -61,21 +61,30 @@ struct DictationSession: Codable, Identifiable {
     }
 }
 
-/// Cheap per-session language tag from the final text: CJK-char ratio → "zh" / "en" / "mixed".
-/// Works even when ASR language is "auto". Empty/whitespace → nil.
+/// Cheap per-session language tag from the final text: CJK-char ratio → "zh" / "ja" / "ko" /
+/// "en" / "mixed". Works even when ASR language is "auto". Empty/whitespace → nil.
+/// Kana/Hangul stay inside the CJK bucket for the ratio (they are also Alphabetic — moving
+/// them to `letters` would mislabel Japanese as "en"), then split the CJK-dominant case.
 func detectLanguageTag(_ text: String) -> String? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
-    var cjk = 0, letters = 0
+    var han = 0, kana = 0, hangul = 0, letters = 0
     for scalar in trimmed.unicodeScalars {
-        if (0x4E00...0x9FFF).contains(scalar.value) || (0x3040...0x30FF).contains(scalar.value)
-            || (0xAC00...0xD7AF).contains(scalar.value) { cjk += 1 }
+        if (0x4E00...0x9FFF).contains(scalar.value) { han += 1 }
+        else if (0x3040...0x30FF).contains(scalar.value) { kana += 1 }
+        else if (0xAC00...0xD7AF).contains(scalar.value) { hangul += 1 }
         else if scalar.properties.isAlphabetic { letters += 1 }
     }
+    let cjk = han + kana + hangul
     let total = cjk + letters
     guard total > 0 else { return nil }
     let cjkRatio = Double(cjk) / Double(total)
-    if cjkRatio > 0.8 { return "zh" }
+    if cjkRatio > 0.8 {
+        // Japanese intermixes kanji with kana; Chinese never contains kana.
+        if kana > 0, kana * 4 >= han { return "ja" }
+        if hangul > han { return "ko" }
+        return "zh"
+    }
     if cjkRatio < 0.2 { return "en" }
     return "mixed"
 }
