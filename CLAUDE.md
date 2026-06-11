@@ -11,11 +11,12 @@ FlowType is a macOS voice-input app for AI coding workflows. It captures speech,
 ```bash
 swift build                    # Debug build
 swift run FlowType             # Run from CLI (requires mlx.metallib next to binary)
+swift run FlowType --self-test # Pure-logic self-tests (exit 0 = all pass)
 ./scripts/build-app.sh         # Build .app bundle → build/Flowtype.app
 ./scripts/build-dmg.sh         # Build distributable DMG
 ```
 
-No test targets exist. The project has no linter configured. Verify changes with `swift build`.
+**Testing**: the real test suite is `swift run FlowType --self-test` (`Sources/flowtype/Testing/SelfTest.swift`) — pure-logic assertions compiled into the main target; exits 0 on all-pass, 1 on any failure, so CI can gate on the exit code. Package.swift also declares a `FlowTypeTests` XCTest target, but Command-Line-Tools-only machines have no XCTest module so `swift test` cannot run there (it works once full Xcode is installed). The project has no linter configured. Verify changes with `swift build` and the self-test.
 
 **Metal shaders**: SPM cannot compile Metal shaders. The `mlx.metallib` file from the Python `mlx-metal` package is copied next to the binary at build time. For `swift run`, manually copy it: `cp ~/.cache/uv/archive-v0/*/mlx/lib/mlx.metallib .build/debug/`
 
@@ -31,8 +32,11 @@ Diagnostic logs write to `~/Library/Logs/flowtype/diagnostic.log` via `AppLogger
 
 ```
 SessionState: .idle → .recording → .processing → [.polishing] → .injecting → .idle
-                                                                    ↘ .error → .idle (auto-dismiss 3s)
+                                                                    ↘ .notice → .idle (auto-dismiss ~2.2s)
+                                                                    ↘ .error  → .idle (auto-dismiss 5s)
 ```
+
+`.notice` is the gentle degradation path (e.g. LLM polish failed → raw text delivered instead): purple, no buttons, slides away on its own. `.error` is red and carries recovery semantics (retry / copy raw / dismiss actions).
 
 `SessionController` is a `@MainActor ObservableObject` singleton. It owns the full pipeline: audio recording → batch Qwen3-ASR transcription → optional LLM polish → keyboard injection.
 
@@ -61,14 +65,15 @@ SessionState: .idle → .recording → .processing → [.polishing] → .injecti
 ### Configuration
 
 - `Configuration` struct (Codable) with backward-compatible decoding — new fields get defaults
-- `ConfigurationStore` persists to UserDefaults with 0.5s debounce; API key stored in Keychain via `KeychainHelper`
-- LLM config: provider/baseURL/apiKey/model for OpenAI-compatible API (default: SiliconFlow + DeepSeek-V3)
+- `ConfigurationStore` persists to UserDefaults with 0.5s debounce (`flushPendingSave()` on quit); API keys are stored locally in `Configuration.providerAPIKeys` — Keychain (`KeychainHelper`) is only used by legacy migrations, since unsigned apps fail `SecItemAdd` (-34018)
+- LLM config: multi-provider list (`llmProviders`, one active) for OpenAI-compatible APIs (default: SiliconFlow + DeepSeek-V3)
 
 ### Text injection
 
-**KeyboardInjector** uses two strategies:
-- Short single-line text: simulated keystrokes via CGEvent
-- Multi-line or long text: clipboard paste (Cmd+V) with clipboard save/restore
+**InjectionStage** samples the focused element at delivery time (`KeyboardInjector.currentFocusSignals()`); the pure function `decideInjection` (`InjectionDecision.swift`) picks one of two outcomes:
+- Editable text, or AX-blind focus (terminals/Electron — fail open) → `KeyboardInjector.insertText()`: CGEvent Unicode typing in 64-char chunks, newlines sent as Shift+Return, 20k-char cap
+- Secure input or a non-text control → text is written to the clipboard + sound cue; the clipboard IS the delivery destination (no Cmd+V is sent, the previous clipboard is not restored)
+- If typing fails mid-way it also falls back to clipboard — text is never lost
 
 ## Key Constraints
 
