@@ -85,6 +85,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AppLogger.log("[AppDelegate] App will terminate")
     }
 
+    @MainActor
     private func loadQwenASRModel() async {
         let provider = await SessionController.shared.qwenProvider
         AppLogger.log("[AppDelegate] Loading Qwen3-ASR model...")

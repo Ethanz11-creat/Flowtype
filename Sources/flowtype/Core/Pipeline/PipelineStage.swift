@@ -45,7 +45,10 @@ struct ErrorRecoveryContext {
 /// Stages are executed sequentially. Errors are communicated via `.suspend()`
 /// rather than thrown, keeping the protocol simple and allowing the orchestrator
 /// to present retryable error cards.
-protocol PipelineStage {
+///
+/// Stages must be Sendable: the MainActor orchestrator sends them into
+/// nonisolated Tasks for execution.
+protocol PipelineStage: Sendable {
     /// Human-readable name for diagnostics and logging.
     var name: String { get }
 
