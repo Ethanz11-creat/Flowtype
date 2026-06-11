@@ -18,8 +18,11 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
         var finalResult: String = ""
     }
 
+    private var recognizerLocaleID: String
+
     init() {
-        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: ConfigurationStore.shared.current.asrLanguage.appleLocaleIdentifier))
+        let localeID = ConfigurationStore.shared.current.asrLanguage.appleLocaleIdentifier
+        let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeID))
         // Only use on-device recognition; if not supported, the recognizer is nil-effectively
         if let r = recognizer {
             AppLogger.log("[AppleSpeechProvider] init: recognizer available, supportsOnDevice=\(r.supportsOnDeviceRecognition), isAvailable=\(r.isAvailable)")
@@ -30,6 +33,18 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
             AppLogger.log("[AppleSpeechProvider] init: recognizer is nil")
         }
         self.recognizer = recognizer
+        self.recognizerLocaleID = localeID
+    }
+
+    /// The provider instance lives as long as the app, but the user can change the ASR
+    /// language at runtime — rebuild the recognizer when the configured locale moved on.
+    /// Called only at recognition entry points (start/stop serial convention, no lock).
+    private func refreshRecognizerIfNeeded() {
+        let configured = ConfigurationStore.shared.current.asrLanguage.appleLocaleIdentifier
+        guard configured != recognizerLocaleID else { return }
+        AppLogger.log("[AppleSpeechProvider] Locale changed \(recognizerLocaleID) → \(configured), rebuilding recognizer")
+        recognizer = SFSpeechRecognizer(locale: Locale(identifier: configured))
+        recognizerLocaleID = configured
     }
 
     /// Check if on-device speech recognition is available on this Mac.
@@ -45,6 +60,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
     /// One-shot offline recognition from WAV data.
     /// Writes data to a temp file and uses SFSpeechURLRecognitionRequest with on-device recognition.
     func transcribe(audioData: Data, timeout: TimeInterval = 20) async throws -> String {
+        refreshRecognizerIfNeeded()
         guard let recognizer = recognizer,
               recognizer.isAvailable,
               recognizer.supportsOnDeviceRecognition else {
@@ -68,27 +84,33 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
         let request = SFSpeechURLRecognitionRequest(url: tmpFile)
         request.requiresOnDeviceRecognition = true
 
+        // Exactly-once resume box: SFSpeech may call back error-then-final or never call
+        // back after a cancel — a bare continuation would double-resume (crash) or hang.
+        let box = CancellableContinuationBox<String>()
         return try await withCheckedThrowingContinuation { continuation in
+            box.setContinuation(continuation)
             let task = recognizer.recognitionTask(with: request) { result, error in
                 if let error = error {
                     AppLogger.log("[AppleSpeechProvider] transcribe error: \(error.localizedDescription)")
-                    continuation.resume(throwing: SpeechProviderError.transcriptionFailed(error.localizedDescription))
+                    box.resume(throwing: SpeechProviderError.transcriptionFailed(error.localizedDescription))
                     return
                 }
                 guard let result = result else {
                     AppLogger.log("[AppleSpeechProvider] transcribe: no result")
-                    continuation.resume(throwing: SpeechProviderError.transcriptionFailed("No result"))
+                    box.resume(throwing: SpeechProviderError.transcriptionFailed("No result"))
                     return
                 }
                 if result.isFinal {
                     let text = result.bestTranscription.formattedString
                     AppLogger.log("[AppleSpeechProvider] transcribe final: \(text.count) chars")
-                    continuation.resume(returning: text)
+                    box.resume(returning: text)
                 }
             }
 
-            // Timeout guard
+            // Timeout guard: resume FIRST (no-op when already finished), then cancel —
+            // never depend on the framework delivering an error callback after cancel().
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                box.resume(throwing: SpeechProviderError.transcriptionFailed("timeout after \(Int(timeout))s"))
                 task.cancel()
             }
         }
@@ -97,6 +119,7 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
     // MARK: - Real-time Streaming Recognition (for preview during recording)
 
     func startStreamingRecognition() async -> AsyncStream<String> {
+        refreshRecognizerIfNeeded()
         stateLock.withLock { $0.finalResult = "" }
 
         // Check authorization and request if needed

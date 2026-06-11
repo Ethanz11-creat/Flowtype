@@ -6,10 +6,15 @@ import os
 
 /// Thread-safe box for resuming a CheckedContinuation exactly once,
 /// supporting cancellation of an underlying synchronous operation.
-private final class CancellableContinuationBox<T: Sendable>: @unchecked Sendable {
+/// Internal (not private): also used by AppleSpeechProvider and exercised by SelfTest.
+final class CancellableContinuationBox<T: Sendable>: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock<Void>()
     private var continuation: CheckedContinuation<T, Error>?
     private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.withLock { cancelled }
+    }
 
     func setContinuation(_ continuation: CheckedContinuation<T, Error>) {
         lock.withLock {
@@ -30,6 +35,15 @@ private final class CancellableContinuationBox<T: Sendable>: @unchecked Sendable
         }
     }
 
+    func resume(throwing error: Error) {
+        lock.withLock {
+            if let cont = continuation {
+                continuation = nil
+                cont.resume(throwing: error)
+            }
+        }
+    }
+
     func cancel() {
         lock.withLock {
             cancelled = true
@@ -46,6 +60,13 @@ final class QwenASRProvider: @unchecked Sendable {
 
     private nonisolated(unsafe) var model: Qwen3ASRModel?
     private let queue = DispatchQueue(label: "flowtype.qwen-asr")
+
+    /// Serial queue for the actual MLX inference. Qwen3ASRModel is not Sendable and its
+    /// transcribe call is synchronous and uncancellable — a cancelled session's inference
+    /// keeps running, so a follow-up session must QUEUE behind it, never run concurrently
+    /// against the same model instance. Separate from `queue`: isLoaded does a main-thread
+    /// queue.sync and must not block behind a multi-second inference.
+    private let inferenceQueue = DispatchQueue(label: "flowtype.qwen-asr.inference", qos: .userInitiated)
 
     var isLoaded: Bool {
         queue.sync { model != nil }
@@ -103,7 +124,9 @@ final class QwenASRProvider: @unchecked Sendable {
         let text: String = try await withTaskCancellationHandler(operation: {
             try await withCheckedThrowingContinuation { continuation in
                 box.setContinuation(continuation)
-                DispatchQueue.global(qos: .userInitiated).async {
+                inferenceQueue.async {
+                    // Cancelled while queued behind an earlier inference → skip the GPU work.
+                    guard !box.isCancelled else { return }
                     let result = currentModel.transcribe(
                         audio: samples,
                         sampleRate: sampleRate,

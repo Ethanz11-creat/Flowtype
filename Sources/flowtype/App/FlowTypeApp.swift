@@ -43,6 +43,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             setenv("HF_ENDPOINT", endpoint, 1)
         }
         EnvMigration.migrateIfNeeded()
+        // If a previous session crashed / was killed mid-recording, the system default
+        // input device may still point at FlowType's configured mic. Restore it.
+        AudioRecorder.restorePendingDeviceIfNeeded()
         StatusBarController.shared.setup()
 
         AppLogger.log("[AppDelegate] Setting up global hotkey...")
@@ -83,6 +86,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         ConfigurationStore.shared.flushPendingSave()
+        // Cmd+Q mid-recording never reaches stopRecording's device restore; the
+        // sentinel-based static restore covers it (no-op when nothing was overridden).
+        AudioRecorder.restorePendingDeviceIfNeeded()
         AppLogger.log("[AppDelegate] App will terminate")
     }
 

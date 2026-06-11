@@ -116,6 +116,18 @@ final class AudioRecorder: @unchecked Sendable {
                     AppLogger.log("[AudioRecorder] Failed to save original device: \(originalResult)")
                     originalDeviceID = kAudioObjectUnknown
                 }
+                // Crash safety: persist the original device's UID BEFORE changing the
+                // system default, so a crash/kill mid-recording can be repaired at next
+                // launch via restorePendingDeviceIfNeeded(). Store the UID, not the
+                // AudioObjectID — numeric IDs are not stable across launches.
+                if originalDeviceID != kAudioObjectUnknown {
+                    if let originalUID = AudioDeviceEnumerator.deviceUID(for: originalDeviceID) {
+                        UserDefaults.standard.set(originalUID, forKey: Self.pendingRestoreKey)
+                        AppLogger.log("[AudioRecorder] Persisted device-restore sentinel (uid=\(originalUID))")
+                    } else {
+                        AppLogger.log("[AudioRecorder] Could not resolve original device UID; crash-restore sentinel not written")
+                    }
+                }
                 // Set requested device
                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
                 var mutableAudioDeviceID = audioDeviceID
@@ -130,6 +142,8 @@ final class AudioRecorder: @unchecked Sendable {
                 if setResult != noErr {
                     AppLogger.log("[AudioRecorder] Failed to set default input device: \(setResult), falling back")
                     originalDeviceID = kAudioObjectUnknown
+                    // The system default was never changed — no restore owed.
+                    UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
                 }
             } else {
                 AppLogger.log("[AudioRecorder] Requested device \(requestedDeviceID) not found, using default")
@@ -146,10 +160,14 @@ final class AudioRecorder: @unchecked Sendable {
             channels: 1,
             interleaved: false
         ) else {
+            // We may have already switched the system default device above; this throw
+            // skips stopRecording, so restore here or the switch leaks.
+            restoreOriginalDeviceIfNeeded()
             throw AudioRecorderError.formatCreationFailed
         }
 
         guard let converter = AVAudioConverter(from: inputFormat, to: format) else {
+            restoreOriginalDeviceIfNeeded()
             throw AudioRecorderError.formatCreationFailed
         }
 
@@ -282,33 +300,72 @@ final class AudioRecorder: @unchecked Sendable {
         engine = nil
 
         // Restore original default input device if we changed it
-        if originalDeviceID != kAudioObjectUnknown {
-            var propertyAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
-            var mutableOriginalID = originalDeviceID
-            let restoreResult = AudioObjectSetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject),
-                &propertyAddress,
-                0,
-                nil,
-                deviceIDSize,
-                &mutableOriginalID
-            )
-            if restoreResult != noErr {
-                AppLogger.log("[AudioRecorder] Failed to restore original input device: \(restoreResult)")
-            } else {
-                AppLogger.log("[AudioRecorder] Restored original input device")
-            }
-            originalDeviceID = kAudioObjectUnknown
-        }
+        restoreOriginalDeviceIfNeeded()
 
         stateLock.withLock {
             _isStopping = false
         }
+    }
+
+    // MARK: - Default input device restore (crash safety)
+
+    /// UserDefaults key holding the UID of the original system default input device
+    /// while it is temporarily overridden. Key present on disk ⇒ a restore is owed.
+    private static let pendingRestoreKey = "flowtype.pendingInputDeviceRestoreUID"
+
+    /// Restores the system default input device if startRecording changed it.
+    /// Covers in-process paths: normal stop, cancel, freeze auto-stop, and the
+    /// formatCreationFailed throws in startRecording. Clears the persisted sentinel
+    /// on success; keeps it on failure so the next launch retries.
+    private nonisolated func restoreOriginalDeviceIfNeeded() {
+        guard originalDeviceID != kAudioObjectUnknown else { return }
+        let restoreResult = Self.setSystemDefaultInputDevice(originalDeviceID)
+        if restoreResult != noErr {
+            AppLogger.log("[AudioRecorder] Failed to restore original input device: \(restoreResult)")
+        } else {
+            AppLogger.log("[AudioRecorder] Restored original input device")
+            UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
+        }
+        originalDeviceID = kAudioObjectUnknown
+    }
+
+    /// Crash/quit recovery: if a previous session (or the current one, on Cmd+Q while
+    /// recording) left the system default input device overridden, restore it from the
+    /// persisted UID sentinel. Clears the sentinel whether or not the restore succeeds —
+    /// the original device may have been unplugged, and a stale sentinel must not
+    /// clobber a default the user has since chosen by hand.
+    static func restorePendingDeviceIfNeeded() {
+        guard let uid = UserDefaults.standard.string(forKey: pendingRestoreKey) else { return }
+        defer { UserDefaults.standard.removeObject(forKey: pendingRestoreKey) }
+        AppLogger.log("[AudioRecorder] Pending input-device restore found (uid=\(uid))")
+        guard let deviceID = AudioDeviceEnumerator.findDeviceID(uid: uid) else {
+            AppLogger.log("[AudioRecorder] Pending restore: device not found (unplugged?); clearing sentinel")
+            return
+        }
+        let result = setSystemDefaultInputDevice(deviceID)
+        if result == noErr {
+            AppLogger.log("[AudioRecorder] Pending restore: system default input device restored")
+        } else {
+            AppLogger.log("[AudioRecorder] Pending restore failed: \(result); clearing sentinel")
+        }
+    }
+
+    /// Sets the system-wide default input device. Returns the CoreAudio status.
+    private static func setSystemDefaultInputDevice(_ deviceID: AudioObjectID) -> OSStatus {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var mutableDeviceID = deviceID
+        return AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            UInt32(MemoryLayout<AudioObjectID>.size),
+            &mutableDeviceID
+        )
     }
 
     /// Take accumulated raw Float32 samples and clear the buffer.

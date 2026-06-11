@@ -116,4 +116,22 @@ enum AudioDeviceEnumerator {
         let devices = availableInputDevices()
         return devices.first(where: { $0.id == uid })?.audioObjectID
     }
+
+    /// Returns the stable CoreAudio UID for a device ID, or nil if the query fails.
+    /// (Numeric AudioObjectIDs are not stable across launches; UIDs are.)
+    static func deviceUID(for deviceID: AudioObjectID) -> String? {
+        var uidAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var uidSize = UInt32(MemoryLayout<CFString?>.size)
+        var uid: CFString?
+        let result = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+        guard result == noErr, let deviceUID = uid as String? else {
+            AppLogger.log("[AudioDevice] Failed to get UID for device \(deviceID): \(result)")
+            return nil
+        }
+        return deviceUID
+    }
 }
