@@ -85,6 +85,22 @@ class WindowManager: ObservableObject {
     private static var cachedKeyDownTime = MainThreadCachedValue<Date?>(nil)
     private static let nonModifierHoldThreshold: TimeInterval = 0.2
 
+    /// Edge tracking for modifier trigger keys: a tap is a clean press+release. Any
+    /// non-modifier keyDown while the trigger is held (Cmd+C, Cmd+V, …) marks the hold
+    /// as a shortcut chord, not a tap — otherwise two quick shortcuts would start
+    /// recording and a single shortcut would kill an active recording.
+    private static var cachedTriggerWasDown = MainThreadCachedValue<Bool>(false)
+    private static var cachedSawOtherKeyDuringHold = MainThreadCachedValue<Bool>(false)
+
+    /// Edge machine for modifier-trigger flagsChanged events.
+    /// Press edge starts a clean hold; release edge records a tap only if the hold stayed
+    /// clean; a repeated same-state event (another modifier moved while held) is a no-op.
+    nonisolated static func modifierTapAction(isDownNow: Bool, wasDown: Bool, sawOtherKey: Bool) -> (recordTap: Bool, resetSawOtherKey: Bool) {
+        if isDownNow && !wasDown { return (recordTap: false, resetSawOtherKey: true) }
+        if !isDownNow && wasDown { return (recordTap: !sawOtherKey, resetSawOtherKey: false) }
+        return (recordTap: false, resetSawOtherKey: false)
+    }
+
     init() {
         let view = AnyView(
             CapsuleView()
@@ -141,6 +157,10 @@ class WindowManager: ObservableObject {
             AppLogger.log("[WindowManager] Executing debounced reload...")
             Self.cachedTriggerKey.value = self.triggerKey
             Self.cachedInteractionMode.value = ConfigurationStore.shared.current.interactionMode
+            // Stale edge state across a tap rebuild could turn the next unrelated
+            // flagsChanged into a phantom release-tap — start the new tap clean.
+            Self.cachedTriggerWasDown.value = false
+            Self.cachedSawOtherKeyDuringHold.value = false
             self.eventTapHealthTimer.cancel()
             if let tap = self.eventTapPort {
                 CGEvent.tapEnable(tap: tap, enable: false)
@@ -242,6 +262,14 @@ class WindowManager: ObservableObject {
                 return nil
             }
 
+            // Any other key pressed while the trigger modifier is held → this hold is a
+            // shortcut chord (Cmd+C …), not a tap. Poison it so the release records nothing.
+            if cachedTriggerKey.value.isModifier,
+               let triggerFlag = cachedTriggerKey.value.cgEventFlag,
+               (event.flags.rawValue & triggerFlag.rawValue) != 0 {
+                cachedSawOtherKeyDuringHold.value = true
+            }
+
             return Unmanaged.passRetained(event)
         }
 
@@ -301,9 +329,19 @@ class WindowManager: ObservableObject {
             isTriggerKeyNow = false
         }
 
-        if isTriggerKeyNow {
-            AppLogger.log("[EventTap] Trigger key pressed (flags=0x\(String(flags.rawValue, radix: 16)), trigger=\(cachedTriggerKey.value.displayName))")
+        let wasDown = cachedTriggerWasDown.value
+        cachedTriggerWasDown.value = isTriggerKeyNow
+        let action = modifierTapAction(isDownNow: isTriggerKeyNow,
+                                       wasDown: wasDown,
+                                       sawOtherKey: cachedSawOtherKeyDuringHold.value)
+        if action.resetSawOtherKey {
+            cachedSawOtherKeyDuringHold.value = false
+        }
+        if action.recordTap {
+            AppLogger.log("[EventTap] Trigger key tap (clean press+release, trigger=\(cachedTriggerKey.value.displayName))")
             OptionTapDetector.shared.recordTap()
+        } else if !isTriggerKeyNow && wasDown {
+            AppLogger.log("[EventTap] Trigger key release suppressed (shortcut chord during hold)")
         }
 
         return Unmanaged.passRetained(event)
