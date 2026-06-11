@@ -212,7 +212,13 @@ actor LLMService {
                 }
 
                 var lastError: Error?
+                // Latency cap: each attempt may wait up to timeoutSeconds, so trying more
+                // than 2 providers would leave the user staring at the capsule for minutes.
                 let maxAttempts = min(chain.count, 2)
+                if chain.count > maxAttempts {
+                    AppLogger.log("[LLMService] \(chain.count - maxAttempts) provider(s) beyond the 2-attempt latency cap will not be tried")
+                }
+                let delivery = DeliveryState()
                 for i in 0..<maxAttempts {
                     let resolved = chain[i]
                     do {
@@ -226,15 +232,20 @@ actor LLMService {
                             userMessage: validatedText,
                             maxTokens: maxTokens,
                             timeoutSeconds: timeoutSeconds,
-                            continuation: continuation
+                            continuation: continuation,
+                            delivery: delivery
                         )
                         return // Success — streamRequest finished normally
                     } catch {
                         lastError = error
                         AppLogger.log("[LLMService] Provider \(resolved.provider.name) failed: \(error)")
-                        if i < maxAttempts - 1 {
-                            AppLogger.log("[LLMService] Falling back to next provider...")
+                        guard Self.shouldFailover(hasYielded: delivery.hasYielded, attemptIndex: i, maxAttempts: maxAttempts) else {
+                            if delivery.hasYielded {
+                                AppLogger.log("[LLMService] Content already delivered — not failing over (a retry would duplicate text)")
+                            }
+                            break
                         }
+                        AppLogger.log("[LLMService] Falling back to next provider...")
                     }
                 }
 
@@ -248,6 +259,50 @@ actor LLMService {
         }
     }
 
+    /// Tracks delivery progress across the streaming task, the failover loop and the
+    /// inactivity watchdog. Once content has reached the consumer, failing over would
+    /// replay the full response and duplicate text — `hasYielded` gates that decision.
+    final class DeliveryState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var yielded = false
+        private var lastActivity = Date()
+
+        var hasYielded: Bool {
+            lock.lock(); defer { lock.unlock() }
+            return yielded
+        }
+        func markYielded() {
+            lock.lock(); defer { lock.unlock() }
+            yielded = true
+            lastActivity = Date()
+        }
+        func touch() {
+            lock.lock(); defer { lock.unlock() }
+            lastActivity = Date()
+        }
+        func idleSeconds(now: Date = Date()) -> TimeInterval {
+            lock.lock(); defer { lock.unlock() }
+            return now.timeIntervalSince(lastActivity)
+        }
+    }
+
+    /// A failed attempt may fall back to the next provider only while nothing has been
+    /// delivered downstream yet.
+    nonisolated static func shouldFailover(hasYielded: Bool, attemptIndex: Int, maxAttempts: Int) -> Bool {
+        !hasYielded && attemptIndex < maxAttempts - 1
+    }
+
+    /// Watchdog verdict. Idle limit catches stalled streams. Before the first content
+    /// token there is ALSO a hard cap (3× limit): a gateway that keeps the connection
+    /// alive with heartbeats but never produces a token must not stall polish forever —
+    /// it has to fail while failover (gated on hasYielded == false) is still reachable.
+    /// After the first token, healthy slow streams run uncapped; idle detection suffices.
+    nonisolated static func watchdogShouldTimeout(idleSeconds: TimeInterval, attemptElapsed: TimeInterval, hasYielded: Bool, limit: TimeInterval) -> Bool {
+        if idleSeconds > limit { return true }
+        if !hasYielded && attemptElapsed > limit * 3 { return true }
+        return false
+    }
+
     private static func streamRequest(
         apiKey: String,
         baseURL: String,
@@ -257,7 +312,8 @@ actor LLMService {
         userMessage: String,
         maxTokens: Int,
         timeoutSeconds: UInt64,
-        continuation: AsyncThrowingStream<String, Error>.Continuation
+        continuation: AsyncThrowingStream<String, Error>.Continuation,
+        delivery: DeliveryState
     ) async throws {
         guard let url = validatedAPIURL(baseURL: baseURL) else {
             throw LLMError.apiError("Invalid Base URL")
@@ -309,10 +365,12 @@ actor LLMService {
                 var yieldedAny = false
                 var decodeFailures = 0
                 for try await line in bytes.lines {
+                    delivery.touch() // any inbound frame counts as liveness for the watchdog
                     switch parseSSELine(line, decodeFailures: &decodeFailures) {
                     case .content(let content):
                         if !content.isEmpty {
                             yieldedAny = true
+                            delivery.markYielded()
                             continuation.yield(content)
                         }
                     case .done:
@@ -338,9 +396,23 @@ actor LLMService {
                 continuation.finish()
             }
 
+            // Inactivity watchdog: a healthy slow stream keeps touching the clock, so long
+            // outputs are not cut off mid-flight; a stalled stream times out within
+            // timeoutSeconds of its last frame. Transport-level hangs are additionally
+            // covered by request.timeoutInterval. See watchdogShouldTimeout for the
+            // pre-first-token hard cap that keeps heartbeat-only streams from hanging polish.
             group.addTask {
-                try await Task.sleep(nanoseconds: timeoutSeconds * 1_000_000_000)
-                throw LLMError.timeout
+                delivery.touch()
+                let attemptStart = Date()
+                while true {
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    if Self.watchdogShouldTimeout(idleSeconds: delivery.idleSeconds(),
+                                                  attemptElapsed: Date().timeIntervalSince(attemptStart),
+                                                  hasYielded: delivery.hasYielded,
+                                                  limit: TimeInterval(timeoutSeconds)) {
+                        throw LLMError.timeout
+                    }
+                }
             }
 
             try await group.next()!
