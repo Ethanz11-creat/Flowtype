@@ -10,8 +10,8 @@ final class ConfigurationTests: XCTestCase {
         XCTAssertEqual(config.maxRecordingDuration, 600)
         XCTAssertEqual(config.temperature, 0.3)
         XCTAssertEqual(config.maxTokens, 2048)
-        XCTAssertTrue(config.enableFillerStrip)
-        XCTAssertTrue(config.enableTermCorrection)
+        XCTAssertTrue(config.enableAudioFeedback)
+        XCTAssertTrue(config.storeTranscriptText)
         XCTAssertFalse(config.hasCompletedOnboarding)
         XCTAssertNil(config.microphoneDeviceID)
     }
