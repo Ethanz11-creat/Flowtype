@@ -101,6 +101,9 @@ final class SessionController: ObservableObject {
 
         errorDismissTask?.cancel()
         errorDismissTask = nil
+        // Starting fresh from .error/.notice must not carry over the previous
+        // session's recovery state (suspended payload, error actions).
+        clearSuspension()
 
         activeSessionID = newID
 
@@ -295,9 +298,10 @@ final class SessionController: ObservableObject {
                 // Polish is an OPTIONAL enhancement — its failure must NOT discard the already-recognized
                 // text or pop intrusive buttons. Degrade: keep the raw ASR text in history (marked .raw),
                 // show a gentle auto-dismissing notice, do NOT inject. Other stages keep the error+recovery UI.
-                if recovery.failedStage == "Polish", !(recovery.error is CancellationError), let raw = recovery.rawText, !raw.isEmpty {
-                    context.rawTranscript = raw
-                    context.finalText = raw
+                if recovery.failedStage == PolishStage.stageName, !(recovery.error is CancellationError), let raw = recovery.rawText, !raw.isEmpty {
+                    let texts = SessionController.degradedPolishTexts(payload: payload, recoveryRaw: raw)
+                    context.rawTranscript = texts.raw
+                    context.finalText = texts.final
                     context.polishFailed = true
                     self.saveHistory(context: context)
                     AppLogger.log("[SessionController#\(context.sessionID)] Polish failed → raw kept in history, no injection")
@@ -412,6 +416,17 @@ final class SessionController: ObservableObject {
         (usePolish && !polishFailed) ? .polish : .raw
     }
 
+    /// Texts to store when Polish fails and we degrade to history-only. The recovery context's
+    /// rawText is the PRE-PostProcess transcript; the suspended payload's `.processed` text carries
+    /// the punctuation/term fixes the user already benefits from on the success path — prefer it
+    /// for finalText so degraded history matches polish-disabled history in quality.
+    nonisolated static func degradedPolishTexts(payload: StagePayload, recoveryRaw: String) -> (raw: String, final: String) {
+        if case .processed(let processed, _) = payload, !processed.isEmpty {
+            return (recoveryRaw, processed)
+        }
+        return (recoveryRaw, recoveryRaw)
+    }
+
     private func saveHistory(context: SessionContext) {
         let durationMs: UInt64?
         if let recStart = context.recordingStartTime {
@@ -448,17 +463,52 @@ final class SessionController: ObservableObject {
     }
 
     private func detectAndAddCorrections(raw: String, final: String) {
-        // Simple word-level diff: find words in final that are not in raw
+        for word in SessionController.correctionCandidates(raw: raw, final: final) {
+            DictionaryStore.shared.addAutoDetected(phrase: word)
+        }
+    }
+
+    /// Sentence punctuation for the auto-dictionary guard. Word-interior ASCII tech
+    /// characters (Node.js, tree-sitter, C#, snake_case, C++) are NOT sentence punctuation —
+    /// they must stay enrollable. CJK 标点（，。？！、…）remain in the set, which is what
+    /// rejects unsegmented Chinese sentences.
+    private nonisolated static let sentencePunctuation: CharacterSet = {
+        var set = CharacterSet.punctuationCharacters
+        set.remove(charactersIn: ".-_#+")
+        return set
+    }()
+
+    /// Sentence-edge punctuation stripped from token boundaries before diffing.
+    /// Deliberately excludes # _ - + so "C#" keeps its #; a trailing . or 。 is
+    /// sentence-final and safe to strip (interior dots as in Node.js are untouched).
+    private nonisolated static let edgePunctuation = CharacterSet(charactersIn: "，。？！、；：…,.!?;:()[]{}（）【】「」『』\"'\u{201C}\u{201D}\u{2018}\u{2019}")
+
+    /// Word-level diff for auto-detected dictionary corrections: words in `final` absent from `raw`.
+    /// Whitespace tokenization means an unsegmented Chinese sentence arrives as ONE token — without
+    /// the guards below, PostProcess adding a single 。 would enroll the whole sentence as a "term",
+    /// permanently polluting the ASR bias context (composeASRContext caps at 50 phrases / 300 chars).
+    nonisolated static func correctionCandidates(raw: String, final: String) -> [String] {
         let rawWords = raw.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         let finalWords = final.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
 
-        let rawSet = Set(rawWords.map { $0.lowercased() })
-        for word in finalWords where word.count >= 2 {
+        // Edge punctuation is trimmed on BOTH sides of the diff so "world." matches "world"
+        // and a sentence that merely gained a trailing 。 still matches its raw form.
+        let rawSet = Set(rawWords.map { $0.trimmingCharacters(in: Self.edgePunctuation).lowercased() })
+        var candidates: [String] = []
+        for token in finalWords {
+            let word = token.trimmingCharacters(in: Self.edgePunctuation)
+            guard word.count >= 2 else { continue }
+            // Interior sentence punctuation means this token is a sentence, not a term.
+            if word.rangeOfCharacter(from: Self.sentencePunctuation) != nil { continue }
+            // Genuine Chinese tech terms are short; longer CJK runs are sentence fragments.
+            let containsCJK = word.unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }
+            if containsCJK && word.count > 7 { continue }
             let lower = word.lowercased()
             if !rawSet.contains(lower) {
-                DictionaryStore.shared.addAutoDetected(phrase: word)
+                candidates.append(word)
             }
         }
+        return candidates
     }
 
     // MARK: - Reset

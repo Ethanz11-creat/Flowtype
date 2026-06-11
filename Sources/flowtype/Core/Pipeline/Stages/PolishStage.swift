@@ -8,7 +8,11 @@ import Foundation
 /// Output: `.polished(String, raw: String)`
 final class PolishStage: PipelineStage, @unchecked Sendable {
 
-    var name: String { "Polish" }
+    /// Single source of truth for the stage name: the orchestrator's polish-degrade
+    /// special case matches on it, so a rename must stay in sync at compile time.
+    static let stageName = "Polish"
+
+    var name: String { Self.stageName }
 
     private let llmService = LLMService()
 
