@@ -82,6 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        ConfigurationStore.shared.flushPendingSave()
         AppLogger.log("[AppDelegate] App will terminate")
     }
 

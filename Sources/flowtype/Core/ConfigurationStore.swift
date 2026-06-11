@@ -146,6 +146,17 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
     }
 
+    /// Write `current` to disk immediately, cancelling any pending debounced save.
+    /// Must be called on app termination — otherwise a change made within the 0.5s
+    /// debounce window (including a just-saved API key) is silently lost.
+    func flushPendingSave() {
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        if let data = try? JSONEncoder().encode(current) {
+            defaults.set(data, forKey: defaultsKey)
+        }
+    }
+
     // MARK: - Provider API Key Helpers
 
     func keychainKey(for providerID: UUID) -> String {

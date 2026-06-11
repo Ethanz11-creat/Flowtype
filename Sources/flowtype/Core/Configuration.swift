@@ -188,25 +188,30 @@ struct Configuration: Codable, Equatable {
     /// threat model is other local processes, not the network.
     var providerAPIKeys: [String: String] = [:]
 
-    // Backward-compatible computed properties (active provider)
+    // Backward-compatible computed properties (active provider).
+    // Setters fall back to the first provider when none is active — matching the
+    // read-side fallback in LLMService — instead of silently dropping the write.
+    private var activeOrFirstProviderIndex: Int? {
+        llmProviders.firstIndex(where: \.isActive) ?? llmProviders.indices.first
+    }
     var llmProvider: String {
         get { llmProviders.first(where: \.isActive)?.provider ?? "" }
         set {
-            guard let idx = llmProviders.firstIndex(where: \.isActive) else { return }
+            guard let idx = activeOrFirstProviderIndex else { return }
             llmProviders[idx].provider = newValue
         }
     }
     var llmBaseURL: String {
         get { llmProviders.first(where: \.isActive)?.baseURL ?? "" }
         set {
-            guard let idx = llmProviders.firstIndex(where: \.isActive) else { return }
+            guard let idx = activeOrFirstProviderIndex else { return }
             llmProviders[idx].baseURL = newValue
         }
     }
     var llmModel: String {
         get { llmProviders.first(where: \.isActive)?.model ?? "" }
         set {
-            guard let idx = llmProviders.firstIndex(where: \.isActive) else { return }
+            guard let idx = activeOrFirstProviderIndex else { return }
             llmProviders[idx].model = newValue
         }
     }
@@ -216,7 +221,8 @@ struct Configuration: Codable, Equatable {
             return providerAPIKeys[id.uuidString] ?? ""
         }
         set {
-            guard let id = llmProviders.first(where: \.isActive)?.id else { return }
+            guard let idx = activeOrFirstProviderIndex else { return }
+            let id = llmProviders[idx].id
             if newValue.isEmpty { providerAPIKeys.removeValue(forKey: id.uuidString) }
             else { providerAPIKeys[id.uuidString] = newValue }
         }

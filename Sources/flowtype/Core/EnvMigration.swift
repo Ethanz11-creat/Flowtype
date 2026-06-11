@@ -22,7 +22,9 @@ enum EnvMigration {
         // Env migration: update the active (first) provider, or create one if none exist
         var activeProvider = config.llmProviders.first ?? LLMProvider.defaultSiliconFlow(isActive: true)
         if let apiKey = env["SILICONFLOW_API_KEY"], !apiKey.isEmpty {
-            ConfigurationStore.shared.saveProviderAPIKey(apiKey, for: activeProvider.id)
+            // Write into the local snapshot — going through the store here would be undone
+            // by the final save(config) below, which replaces `current` with this snapshot.
+            config.providerAPIKeys[activeProvider.id.uuidString] = apiKey
             didMigrate = true
         }
         if let baseURL = env["SILICONFLOW_BASE_URL"], !baseURL.isEmpty {
@@ -72,7 +74,7 @@ enum EnvMigration {
         var activeProvider = newConfig.llmProviders.first ?? LLMProvider.defaultSiliconFlow(isActive: true)
 
         if let apiKey = old.apiKey, !apiKey.isEmpty {
-            ConfigurationStore.shared.saveProviderAPIKey(apiKey, for: activeProvider.id)
+            newConfig.providerAPIKeys[activeProvider.id.uuidString] = apiKey
         }
         if let baseURL = old.baseURL, !baseURL.isEmpty {
             activeProvider.baseURL = baseURL
