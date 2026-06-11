@@ -59,6 +59,7 @@ struct ProviderEditSheet: View {
     @Binding var provider: LLMProvider
     @Binding var apiKey: String
     var existingProviders: [LLMProvider]
+    var hadStoredKey: Bool = false
     var onSave: () -> Void
     var onCancel: () -> Void
 
@@ -83,6 +84,12 @@ struct ProviderEditSheet: View {
                 model: $provider.model,
                 modelPlaceholder: "例如：deepseek-ai/DeepSeek-V3"
             )
+
+            if hadStoredKey && apiKey.isEmpty {
+                Text("保存时将删除已保存的 API Key")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
 
             // Validation / test error display
             if let error = validationError {

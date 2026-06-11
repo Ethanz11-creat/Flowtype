@@ -6,6 +6,7 @@ struct OnboardingView: View {
     @State private var hasAccessibility = false
     @State private var hasMicrophone = false
     @State private var micCheckDone = false
+    @State private var showAccessibilityHint = false
     @ObservedObject private var modelState = QwenModelState.shared
     @StateObject private var store = ConfigurationStore.shared
 
@@ -113,6 +114,12 @@ struct OnboardingView: View {
 
             Spacer()
 
+            if showAccessibilityHint && !hasAccessibility {
+                Text("需要先授予辅助功能权限，或点击「跳过」")
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+
             HStack {
                 Button("跳过") {
                     withAnimation { step = 2 }
@@ -132,7 +139,10 @@ struct OnboardingView: View {
                 Button(action: {
                     hasAccessibility = PermissionHelper.checkAccessibility()
                     if hasAccessibility {
+                        showAccessibilityHint = false
                         withAnimation { step = 2 }
+                    } else {
+                        showAccessibilityHint = true
                     }
                 }) {
                     Text("继续")

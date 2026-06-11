@@ -17,6 +17,10 @@ extension SettingsPage {
     }
 
     func startEditing(_ provider: LLMProvider) {
+        // Populate drafts before presenting so the sheet's first frame shows current values
+        draftProvider = provider
+        draftApiKey = ConfigurationStore.shared.loadProviderAPIKey(provider.id) ?? ""
+        editingHadStoredKey = !draftApiKey.isEmpty
         editingProvider = provider
     }
 

@@ -7,6 +7,7 @@ struct StylePage: View {
     @State private var showImportSheet = false
     @State private var newName = ""
     @State private var newPrompt = ""
+    @State private var importExportError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,6 +18,14 @@ struct StylePage: View {
         .sheet(isPresented: $showNewSheet) { newPackSheet }
         .sheet(item: $editingPack) { pack in
             editPackSheet(pack)
+        }
+        .alert("操作失败", isPresented: Binding(
+            get: { importExportError != nil },
+            set: { if !$0 { importExportError = nil } }
+        )) {
+            Button("好") { importExportError = nil }
+        } message: {
+            Text(importExportError ?? "")
         }
     }
 
@@ -35,9 +44,13 @@ struct StylePage: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .fileImporter(isPresented: $showImportSheet, allowedContentTypes: [.json]) { result in
-                if case .success(let url) = result,
-                   let data = try? Data(contentsOf: url) {
-                    try? store.importFromJSON(data)
+                do {
+                    let url = try result.get()
+                    let data = try Data(contentsOf: url)
+                    try store.importFromJSON(data)
+                } catch {
+                    AppLogger.log("[StylePage] Import failed: \(error)")
+                    importExportError = "导入失败：\(error.localizedDescription)"
                 }
             }
 
@@ -225,13 +238,22 @@ struct StylePage: View {
     // MARK: - Export
 
     private func exportPack(_ pack: StylePack) {
-        guard let data = store.exportToJSON(id: pack.id) else { return }
+        guard let data = store.exportToJSON(id: pack.id) else {
+            AppLogger.log("[StylePage] Export failed: exportToJSON returned nil for \(pack.name)")
+            importExportError = "导出失败：无法生成 JSON 数据"
+            return
+        }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(pack.name).json"
         panel.allowedContentTypes = [.json]
         panel.begin { response in
             if response == .OK, let url = panel.url {
-                try? data.write(to: url)
+                do {
+                    try data.write(to: url)
+                } catch {
+                    AppLogger.log("[StylePage] Export failed: \(error)")
+                    importExportError = "导出失败：\(error.localizedDescription)"
+                }
             }
         }
     }

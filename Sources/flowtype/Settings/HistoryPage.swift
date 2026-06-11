@@ -249,16 +249,24 @@ struct HistoryPage: View {
         }
     }
 
-    private func formatDate(_ date: Date) -> String {
+    private static let listDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MM/dd HH:mm"
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private static let fullDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    private func formatDate(_ date: Date) -> String {
+        Self.listDateFormatter.string(from: date)
     }
 
     private func formatDateFull(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.string(from: date)
+        Self.fullDateFormatter.string(from: date)
     }
 
     private func exportSessions() {

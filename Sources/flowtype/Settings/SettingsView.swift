@@ -13,6 +13,7 @@ struct SettingsPage: View {
     @State var editingProvider: LLMProvider? = nil
     @State var draftProvider = LLMProvider(name: "", provider: "SiliconFlow", baseURL: "https://api.siliconflow.cn/v1", model: "", isActive: false)
     @State var draftApiKey = ""
+    @State var editingHadStoredKey = false
 
     var body: some View {
         ScrollView {
@@ -122,6 +123,7 @@ struct SettingsPage: View {
                 provider: $draftProvider,
                 apiKey: $draftApiKey,
                 existingProviders: store.current.llmProviders.filter { $0.id != provider.id },
+                hadStoredKey: editingHadStoredKey,
                 onSave: {
                     if let idx = store.current.llmProviders.firstIndex(where: { $0.id == provider.id }) {
                         store.current.llmProviders[idx] = draftProvider
@@ -141,6 +143,7 @@ struct SettingsPage: View {
             .onAppear {
                 draftProvider = provider
                 draftApiKey = ConfigurationStore.shared.loadProviderAPIKey(provider.id) ?? ""
+                editingHadStoredKey = !draftApiKey.isEmpty
             }
         }
     }
