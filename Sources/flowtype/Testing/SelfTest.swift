@@ -159,6 +159,9 @@ enum SelfTest {
         r.eq(detectLanguageTag("hello world"), "en", "lang: latin → en")
         r.eq(detectLanguageTag("hello 你好世界吗"), "mixed", "lang: mixed → mixed")
         r.eq(detectLanguageTag("   "), nil, "lang: blank → nil")
+        r.eq(detectLanguageTag("こんにちは、ありがとうございます"), "ja", "lang: kana → ja")
+        r.eq(detectLanguageTag("日本語を勉強しています"), "ja", "lang: kanji+kana mix → ja")
+        r.eq(detectLanguageTag("안녕하세요 반갑습니다"), "ko", "lang: hangul → ko")
         // old DictationSession JSON (no new keys) still decodes
         let oldSession = Data(#"{"id":"x","createdAt":"2026-01-01T00:00:00Z","rawTranscript":"a","finalText":"a","polishMode":"raw","durationMs":1000}"#.utf8)
         let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
@@ -263,6 +266,9 @@ enum SelfTest {
         print("=== FlowType --self-test ===")
         testLLMURL(r)            // B1
         testSSEParse(r)          // B8
+        testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
+        testModifierTapMachine(r) // modifier-trigger edge machine + detector window
+        testContinuationBox(r)   // exactly-once continuation resume (ASR providers)
         testConfigCorrupt(r)     // B9
         testInjectionSegmentation(r) // injection helpers
         testASRWiring(r)         // ASR language + context
@@ -272,8 +278,12 @@ enum SelfTest {
         testStatFormatting(r)    // StatFormatting pure formatters
         testPolishModeMigration(r) // history mode raw/polish + legacy decode
         testHistoryMode(r)         // polish-degrade → history label .raw
+        testPolishDegradeTexts(r)  // polish-degrade → keep PostProcess text + stage-name sync
+        testCorrectionCandidates(r) // dictionary auto-detect: CJK sentence pollution guards
+        testLLMWatchdogVerdict(r)  // LLM watchdog: idle + pre-first-token hard cap
         testCharCountSemantics(r)  // charCount grapheme-cluster semantics (CJK parity)
         testProviderAPIKeyLocal(r) // local API-key storage round-trip
+        testConfigFlushAndSetterFallback(r) // flush-on-quit + setter fallback + stale-snapshot trap
         testFunFact(r)             // fun-fact footer clauses
         testInjectionDecision(r)   // delivery decision: classifyFocus + decideInjection
         testAppearanceConfig(r)    // appearance pref round-trip + legacy default
@@ -341,6 +351,114 @@ enum SelfTest {
         var df2 = 0
         _ = parseSSELine("data: {not valid json}", decodeFailures: &df2)
         r.eq(df2, 1, "B8 malformed JSON counted as decode failure")
+    }
+
+    // MARK: - CancellableContinuationBox: exactly-once resume across racing callbacks
+
+    static func testContinuationBox(_ r: Reporter) {
+        final class Slot: @unchecked Sendable { var value: String? }
+
+        // Exactly-once: late second resume and late cancel are no-ops, not crashes.
+        let box1 = CancellableContinuationBox<String>()
+        let slot1 = Slot()
+        let installed1 = DispatchSemaphore(value: 0)
+        let done1 = DispatchSemaphore(value: 0)
+        Task.detached {
+            do {
+                slot1.value = try await withCheckedThrowingContinuation { c in
+                    box1.setContinuation(c)
+                    installed1.signal()
+                }
+            } catch {
+                slot1.value = "error"
+            }
+            done1.signal()
+        }
+        guard installed1.wait(timeout: .now() + 5) == .success else {
+            r.check(false, "box: continuation install timed out"); return
+        }
+        box1.resume(returning: "first")
+        box1.resume(returning: "second")
+        box1.resume(throwing: CancellationError())
+        box1.cancel()
+        guard done1.wait(timeout: .now() + 5) == .success else {
+            r.check(false, "box: resume wait timed out"); return
+        }
+        r.eq(slot1.value, "first", "box: resumes exactly once with the first value")
+
+        // Cancel before the continuation is installed → immediate CancellationError.
+        let box2 = CancellableContinuationBox<String>()
+        box2.cancel()
+        r.check(box2.isCancelled, "box: isCancelled reflects cancel (inference-skip gate)")
+        let slot2 = Slot()
+        let done2 = DispatchSemaphore(value: 0)
+        Task.detached {
+            do {
+                _ = try await withCheckedThrowingContinuation { box2.setContinuation($0) }
+                slot2.value = "returned"
+            } catch is CancellationError {
+                slot2.value = "cancelled"
+            } catch {
+                slot2.value = "other"
+            }
+            done2.signal()
+        }
+        guard done2.wait(timeout: .now() + 5) == .success else {
+            r.check(false, "box: cancel-before-set wait timed out"); return
+        }
+        r.eq(slot2.value, "cancelled", "box: cancel-before-set resumes with CancellationError")
+        r.check(!CancellableContinuationBox<String>().isCancelled, "box: fresh box is not cancelled")
+    }
+
+    // MARK: - Modifier-trigger tap machine: shortcut chords must not count as taps
+
+    static func testModifierTapMachine(_ r: Reporter) {
+        var a = WindowManager.modifierTapAction(isDownNow: true, wasDown: false, sawOtherKey: true)
+        r.check(!a.recordTap && a.resetSawOtherKey, "tap-machine: press edge records nothing and starts a clean hold")
+        a = WindowManager.modifierTapAction(isDownNow: false, wasDown: true, sawOtherKey: false)
+        r.check(a.recordTap && !a.resetSawOtherKey, "tap-machine: clean release records a tap")
+        a = WindowManager.modifierTapAction(isDownNow: false, wasDown: true, sawOtherKey: true)
+        r.check(!a.recordTap, "tap-machine: chord-poisoned release (Cmd+C) records nothing")
+        a = WindowManager.modifierTapAction(isDownNow: true, wasDown: true, sawOtherKey: false)
+        r.check(!a.recordTap && !a.resetSawOtherKey, "tap-machine: held-state repeat (Cmd+Shift press) is a no-op")
+        a = WindowManager.modifierTapAction(isDownNow: false, wasDown: false, sawOtherKey: false)
+        r.check(!a.recordTap, "tap-machine: idle flagsChanged is a no-op")
+
+        // Detector window behaviour (synchronous double-tap callback, injected timestamps).
+        final class Box: @unchecked Sendable { var doubles = 0 }
+        let box = Box()
+        let det = OptionTapDetector.shared
+        det.onDoubleTap = { box.doubles += 1 }
+        det.onSingleTap = { }
+        let t0 = Date()
+        det.recordTap(at: t0)
+        det.recordTap(at: t0.addingTimeInterval(0.1))
+        r.eq(box.doubles, 1, "tap-machine: two taps within window → double-tap")
+        det.recordTap(at: t0.addingTimeInterval(1.0))
+        det.recordTap(at: t0.addingTimeInterval(2.0))
+        r.eq(box.doubles, 1, "tap-machine: taps outside window do not double")
+        det.onDoubleTap = nil
+        det.onSingleTap = nil
+    }
+
+    // MARK: - LLM failover guards: no provider retry after content delivery + inactivity watchdog
+
+    static func testLLMFailoverGuards(_ r: Reporter) {
+        r.check(LLMService.shouldFailover(hasYielded: false, attemptIndex: 0, maxAttempts: 2),
+                "failover: clean failure → try next provider")
+        r.check(!LLMService.shouldFailover(hasYielded: true, attemptIndex: 0, maxAttempts: 2),
+                "failover: content delivered → never fail over (would duplicate text)")
+        r.check(!LLMService.shouldFailover(hasYielded: false, attemptIndex: 1, maxAttempts: 2),
+                "failover: last attempt → no fallback")
+
+        let d = LLMService.DeliveryState()
+        r.check(!d.hasYielded, "watchdog: starts un-yielded")
+        d.touch()
+        r.check(d.idleSeconds(now: Date()) < 1, "watchdog: just-touched clock reads ~0 idle")
+        r.check(d.idleSeconds(now: Date().addingTimeInterval(31)) > 30, "watchdog: 31s without frames exceeds a 30s limit")
+        d.markYielded()
+        r.check(d.hasYielded, "watchdog: markYielded sets delivered flag")
+        r.check(d.idleSeconds(now: Date()) < 1, "watchdog: markYielded also counts as activity")
     }
 
     // MARK: - B9: corrupt persisted config is backed up, not silently discarded
@@ -563,6 +681,63 @@ enum SelfTest {
         r.check(SessionController.historyMode(usePolish: false, polishFailed: false) == .raw, "history: raw request → .raw")
     }
 
+    // MARK: - Polish degrade: history must keep the POST-process text, not the pre-process raw
+
+    static func testPolishDegradeTexts(_ r: Reporter) {
+        let t1 = SessionController.degradedPolishTexts(payload: .processed("你好，世界。", raw: "你好世界"), recoveryRaw: "你好世界")
+        r.eq(t1.final, "你好，世界。", "degrade: finalText keeps PostProcess punctuation")
+        r.eq(t1.raw, "你好世界", "degrade: rawTranscript stays the true raw")
+
+        let t2 = SessionController.degradedPolishTexts(payload: .transcript("x"), recoveryRaw: "fallback")
+        r.eq(t2.final, "fallback", "degrade: non-.processed payload falls back to recovery raw")
+
+        let t3 = SessionController.degradedPolishTexts(payload: .processed("", raw: "r"), recoveryRaw: "r")
+        r.eq(t3.final, "r", "degrade: empty processed text falls back to recovery raw")
+
+        // The degrade special case matches on the stage name — keep them in sync.
+        r.check(PolishStage().name == PolishStage.stageName, "degrade: PolishStage.name matches stageName constant")
+    }
+
+    // MARK: - Dictionary auto-detect: unsegmented Chinese sentences must not enroll as "terms"
+
+    static func testCorrectionCandidates(_ r: Reporter) {
+        r.check(SessionController.correctionCandidates(raw: "你好世界", final: "你好，世界。").isEmpty,
+                "corrections: punctuated Chinese sentence is not a candidate")
+        r.check(SessionController.correctionCandidates(raw: "我想把这个改成深色模式", final: "我现在想把这个界面改成深色模式").isEmpty,
+                "corrections: long CJK run (sentence fragment) is not a candidate")
+        r.eq(SessionController.correctionCandidates(raw: "use postgres now", final: "use PostgreSQL now"), ["PostgreSQL"],
+             "corrections: English term diff still detected")
+        r.eq(SessionController.correctionCandidates(raw: "用 快配 部署", final: "用 Kafka 部署"), ["Kafka"],
+             "corrections: short term in spaced context still detected")
+        r.check(SessionController.correctionCandidates(raw: "same text", final: "same text").isEmpty,
+                "corrections: identical text yields nothing")
+        // Review regression: tech terms with interior ASCII punctuation must stay enrollable
+        // (tech_terms.json itself maps "node js" → "Node.js").
+        r.eq(SessionController.correctionCandidates(raw: "用 node js 写", final: "用 Node.js 写"), ["Node.js"],
+             "corrections: dotted tech term (Node.js) is a candidate")
+        r.eq(SessionController.correctionCandidates(raw: "用 tree sitter 解析", final: "用 tree-sitter 解析"), ["tree-sitter"],
+             "corrections: hyphenated tech term is a candidate")
+        r.eq(SessionController.correctionCandidates(raw: "学 csharp 吧", final: "学 C# 吧"), ["C#"],
+             "corrections: trailing # survives edge trimming")
+        r.eq(SessionController.correctionCandidates(raw: "连 wifi 不上", final: "连 Wi-Fi, 不上"), ["Wi-Fi"],
+             "corrections: trailing comma trimmed off a tech term")
+        r.check(SessionController.correctionCandidates(raw: "hello world", final: "hello world.").isEmpty,
+                "corrections: sentence-final period does not create a candidate")
+        r.check(SessionController.correctionCandidates(raw: "你好世界", final: "你好世界。").isEmpty,
+                "corrections: trailing 。 alone does not enroll the sentence")
+    }
+
+    // MARK: - LLM watchdog verdict: idle limit + pre-first-token hard cap
+
+    static func testLLMWatchdogVerdict(_ r: Reporter) {
+        let f = LLMService.watchdogShouldTimeout
+        r.check(f(31, 31, false, 30), "watchdog: 31s idle → timeout")
+        r.check(!f(5, 80, false, 30), "watchdog: heartbeats keep it alive under the 90s pre-token cap")
+        r.check(f(5, 91, false, 30), "watchdog: heartbeat-only stream hits the 3× hard cap (failover stays reachable)")
+        r.check(!f(5, 600, true, 30), "watchdog: healthy long stream after first token is never cut")
+        r.check(f(31, 600, true, 30), "watchdog: stall after first token still times out")
+    }
+
     // MARK: - charCount grapheme-cluster semantics
 
     /// Documents that SessionRecord.charCount uses Swift grapheme-cluster count (.count), so CJK
@@ -591,6 +766,54 @@ enum SelfTest {
         let back = try! JSONDecoder().decode(Configuration.self, from: data)
         r.check(back.providerAPIKeys[pid.uuidString] == "sk-test-123", "key: persists across encode/decode (local)")
         r.check(back.llmApiKey == "sk-test-123", "key: still readable after reload")
+    }
+
+    // MARK: - Debounced save: flush-on-quit + provider setter fallback
+
+    static func testConfigFlushAndSetterFallback(_ r: Reporter) {
+        let suite = "FlowTypeSelfTest.\(UUID().uuidString)"
+        guard let ud = UserDefaults(suiteName: suite) else {
+            r.check(false, "flush: could not create test suite"); return
+        }
+        defer { ud.removePersistentDomain(forName: suite) }
+
+        // A save inside the 0.5s debounce window must survive quit. Self-test never pumps
+        // the main run loop, so the debounced write below stays pending — same as quitting.
+        let store = ConfigurationStore(defaults: ud)
+        var c = store.current
+        c.maxRecordingDuration = 120
+        store.save(c)
+        let onDisk0 = ud.data(forKey: "flowtype.config").flatMap { try? JSONDecoder().decode(Configuration.self, from: $0) }
+        r.check(onDisk0?.maxRecordingDuration != 120, "flush: debounced write still pending (precondition)")
+        store.flushPendingSave()
+        let onDisk1 = ud.data(forKey: "flowtype.config").flatMap { try? JSONDecoder().decode(Configuration.self, from: $0) }
+        r.eq(onDisk1?.maxRecordingDuration, 120, "flush: flushPendingSave persists the pending change")
+
+        // EnvMigration regression: a store-routed key write is undone by a later save of a
+        // stale snapshot — which is why migration writes keys into its snapshot directly.
+        let pid = UUID()
+        var c2 = store.current
+        c2.llmProviders = [LLMProvider(id: pid, name: "P", provider: "X", baseURL: "https://x", model: "m", isActive: true)]
+        let staleSnapshot = c2
+        store.save(c2)
+        store.saveProviderAPIKey("sk-k", for: pid)
+        store.save(staleSnapshot)
+        r.check(store.loadProviderAPIKey(pid) == nil,
+                "flush: stale-snapshot save overwrites store-written key (EnvMigration must write into snapshot)")
+
+        // Setter fallback: with no active provider the write lands on the first provider
+        // (matching LLMService's read-side fallback) instead of being silently dropped.
+        var c3 = Configuration()
+        let pid3 = UUID()
+        c3.llmProviders = [LLMProvider(id: pid3, name: "P", provider: "X", baseURL: "https://x", model: "m", isActive: false)]
+        c3.llmApiKey = "sk-fallback"
+        r.check(c3.providerAPIKeys[pid3.uuidString] == "sk-fallback", "key: setter falls back to first provider when none active")
+        c3.llmModel = "m2"
+        r.eq(c3.llmProviders[0].model, "m2", "key: llmModel setter falls back to first provider")
+        var empty = Configuration()
+        empty.llmProviders = []
+        empty.llmApiKey = "sk-x"
+        r.check(empty.providerAPIKeys.isEmpty, "key: setter with zero providers is a no-op")
     }
 
     // MARK: - Fun-fact footer
