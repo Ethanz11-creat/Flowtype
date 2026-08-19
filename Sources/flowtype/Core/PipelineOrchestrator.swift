@@ -23,9 +23,9 @@ final class SessionController: ObservableObject {
 
     private let pipeline: [PipelineStage]
     private let observers: [SessionObserver]
-    private let speechRouter = SpeechRouter.shared
+    private let asrRegistry = ASRProviderRegistry.shared
 
-    var qwenProvider: QwenASRProvider { speechRouter.qwenProvider }
+    var qwenProvider: QwenASRProvider { asrRegistry.qwenLocalProvider }
 
     // MARK: - Published State
 
@@ -105,6 +105,9 @@ final class SessionController: ObservableObject {
         // session's recovery state (suspended payload, error actions).
         clearSuspension()
 
+        currentTask?.cancel()
+        currentTask = nil
+
         activeSessionID = newID
 
         // Create session context
@@ -171,7 +174,15 @@ final class SessionController: ObservableObject {
             AppLogger.log("[SessionController#\(activeSessionID)] Final preview: \(previewText.count) chars")
         }
 
-        let providerName = speechRouter.qwenProvider.isLoaded ? "Qwen3-ASR" : "AppleSpeech"
+        let activeProvider = asrRegistry.activeTranscriptionProvider
+        let providerName: String
+        if let qwen = activeProvider as? QwenASRProvider, qwen.isLoaded {
+            providerName = qwen.displayName
+        } else if activeProvider is CloudASRProvider {
+            providerName = activeProvider.displayName
+        } else {
+            providerName = asrRegistry.applePreviewProvider.displayName
+        }
         transition(to: .processing(provider: providerName), context: context)
     }
 
@@ -315,6 +326,12 @@ final class SessionController: ObservableObject {
                     self.transition(to: .error(recovery.error.localizedDescription), context: context)
                 }
 
+            case .notice(let message):
+                // Gentle degradation (no error UI): e.g. ASR had no provider available or
+                // recognized no speech. transition(to: .notice) auto-dismisses after ~2.2s.
+                AppLogger.log("[SessionController#\(context.sessionID)] Stage returned notice: \(message)")
+                self.transition(to: .notice(message), context: context)
+
             case .complete:
                 self.transition(to: .idle, context: context)
             }
@@ -435,7 +452,15 @@ final class SessionController: ObservableObject {
             durationMs = nil
         }
         let mode: PolishMode = SessionController.historyMode(usePolish: context.usePolish, polishFailed: context.polishFailed)
-        let sttBackend = speechRouter.qwenProvider.isLoaded ? "qwen" : "apple"
+        let activeProvider = asrRegistry.activeTranscriptionProvider
+        let sttBackend: String
+        if activeProvider is QwenASRProvider, asrRegistry.qwenLocalProvider.isLoaded {
+            sttBackend = "qwen"
+        } else if activeProvider is CloudASRProvider {
+            sttBackend = "cloud"
+        } else {
+            sttBackend = "apple"
+        }
         let session = DictationSession(
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,

@@ -2,16 +2,14 @@ import Foundation
 
 // MARK: - ASRStage
 
-/// Pipeline stage that performs batch ASR transcription using Qwen3-ASR
-/// with AppleSpeech fallback.
+/// Pipeline stage that performs batch ASR transcription using the active provider
+/// (local Qwen3-ASR or cloud ASR) with AppleSpeech preview fallback.
 ///
 /// Input: `.audio(samples: [Float], previewText: String)`
 /// Output: `.transcript(String)`
 final class ASRStage: PipelineStage, @unchecked Sendable {
 
     var name: String { "ASR" }
-
-    private let speechRouter = SpeechRouter.shared
 
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
         let sessionID = context.sessionID
@@ -44,27 +42,38 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         AppLogger.log("[ASRStage#\(sessionID)] Raw samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
 
         var finalASRText = ""
+        var providerFailed = false
 
-        // 1. Try Qwen3-ASR batch transcription if loaded and samples exist
-        if speechRouter.qwenProvider.isLoaded && !rawSamples.isEmpty {
-            AppLogger.log("[ASRStage#\(sessionID)] Using Qwen3-ASR batch transcription")
+        let provider = await ASRProviderRegistry.shared.activeTranscriptionProviderAsync()
+        let providerAvailable = await provider.isAvailable
+
+        if providerAvailable && !rawSamples.isEmpty {
+            AppLogger.log("[ASRStage#\(sessionID)] Using \(provider.displayName) for batch transcription")
             await MainActor.run {
-                context.statePublisher.send(.processing(provider: "Qwen3-ASR"))
+                context.statePublisher.send(.processing(provider: provider.displayName))
             }
 
-            let asrLanguage = ConfigurationStore.shared.current.asrLanguage
-            let asrPhrases = await MainActor.run { DictionaryStore.shared.enabledPhrases }
-            let asrContext = composeASRContext(asrPhrases)
             let asrStart = Date()
             do {
-                finalASRText = try await speechRouter.qwenProvider.transcribe(
-                    samples: rawSamples,
-                    language: asrLanguage.qwenLanguageCode,
-                    context: asrContext
-                )
-                AppLogger.log("[ASRStage#\(sessionID)] Qwen3-ASR completed in \(String(format: "%.2f", Date().timeIntervalSince(asrStart)))s: \(finalASRText.count) chars")
+                if let qwenProvider = provider as? QwenASRProvider {
+                    let asrLanguage = await MainActor.run { ConfigurationStore.shared.current.asrLanguage }
+                    let asrPhrases = await MainActor.run { DictionaryStore.shared.enabledPhrases }
+                    let asrContext = composeASRContext(asrPhrases)
+                    finalASRText = try await qwenProvider.transcribe(
+                        samples: rawSamples,
+                        language: asrLanguage.qwenLanguageCode,
+                        context: asrContext
+                    )
+                } else {
+                    let audioData = rawSamples.withUnsafeBytes { Data($0) }
+                    // Cloud STT is upload + remote inference; a fixed 30s is too tight for
+                    // long recordings on slow links. Scale with duration, bounded 30–120s.
+                    let cloudTimeout = min(120.0, max(30.0, audioDuration * 3 + 15))
+                    finalASRText = try await provider.transcribe(audioData: audioData, timeout: cloudTimeout)
+                }
+                AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) completed in \(String(format: "%.2f", Date().timeIntervalSince(asrStart)))s: \(finalASRText.count) chars")
             } catch is CancellationError {
-                AppLogger.log("[ASRStage#\(sessionID)] Qwen3-ASR cancelled")
+                AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) cancelled")
                 return .suspend(ErrorRecoveryContext(
                     failedStage: name,
                     error: CancellationError(),
@@ -72,19 +81,39 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                     retryable: false
                 ))
             } catch {
-                AppLogger.log("[ASRStage#\(sessionID)] Qwen3-ASR failed: \(error)")
+                AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) failed: \(error)")
                 finalASRText = ""
+                providerFailed = true
             }
         }
 
-        // 2. Fallback to AppleSpeech preview text if Qwen failed or returned empty
         if finalASRText.isEmpty, !localPreviewText.isEmpty {
             AppLogger.log("[ASRStage#\(sessionID)] Using AppleSpeech preview as fallback")
             finalASRText = localPreviewText
         }
 
-        // 3. No speech recognized → end the session quietly (idle + hide capsule), NOT an error.
         guard !finalASRText.isEmpty else {
+            if !providerAvailable {
+                let noticeMsg: String
+                if provider.id == "cloud-asr" {
+                    noticeMsg = "云端 ASR 未就绪，请在设置中配置 API Key"
+                } else {
+                    noticeMsg = "本地模型未加载，请在设置中下载模型"
+                }
+                AppLogger.log("[ASRStage#\(sessionID)] Provider not available, showing gentle notice: \(noticeMsg)")
+                // A missing provider alongside silence is not a hard error — guide the
+                // user with a purple auto-dismissing notice instead of a red error card.
+                return .notice(noticeMsg)
+            }
+            if providerFailed {
+                AppLogger.log("[ASRStage#\(sessionID)] Provider failed and no preview available — surfacing error")
+                return .suspend(ErrorRecoveryContext(
+                    failedStage: name,
+                    error: ASRStageError.transcriptionFailed(message: "语音识别失败，请检查网络连接或重试"),
+                    rawText: nil,
+                    retryable: true
+                ))
+            }
             AppLogger.log("[ASRStage#\(sessionID)] No speech recognized — ending session quietly")
             return .complete
         }
@@ -93,8 +122,16 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
     }
 }
 
-// MARK: - ASRStage Errors
-
-enum ASRStageError: Error {
+enum ASRStageError: Error, LocalizedError {
     case invalidPayload
+    case transcriptionFailed(message: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPayload:
+            return "无效的输入数据"
+        case .transcriptionFailed(let msg):
+            return msg
+        }
+    }
 }

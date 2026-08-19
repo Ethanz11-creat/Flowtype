@@ -270,6 +270,7 @@ enum SelfTest {
         testModifierTapMachine(r) // modifier-trigger edge machine + detector window
         testContinuationBox(r)   // exactly-once continuation resume (ASR providers)
         testConfigCorrupt(r)     // B9
+        testInjectionEdgeCases(r) // injection edge cases: emoji/newlines/config/continuation
         testInjectionSegmentation(r) // injection helpers
         testASRWiring(r)         // ASR language + context
         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
@@ -298,6 +299,10 @@ enum SelfTest {
         testStatsRepository(r)     // StatsRepository boundary fold: legacy/session/boundary
         testJSONMigration(r)       // JSONMigration: idempotent import + sttBackend tagging
         testPrivacyConfig(r)       // storeTranscriptText: round-trip + legacy default true
+        testASRConfig(r)           // ASR engine config: round-trip + legacy default
+        testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
+        testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
+        testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -851,6 +856,244 @@ enum SelfTest {
         let legacy = Data(#"{"asrLanguage":"zh"}"#.utf8)
         let dflt = try? JSONDecoder().decode(Configuration.self, from: legacy)
         r.check(dflt?.storeTranscriptText == true, "config: storeTranscriptText defaults true on legacy JSON")
+    }
+
+    // MARK: - ASR engine config: round-trip + legacy default
+
+    static func testASRConfig(_ r: Reporter) {
+        var cfg = Configuration()
+        cfg.asrEngine = .cloud
+        cfg.selectedLocalModelID = "test-model-id"
+        cfg.customLocalModelPath = "/tmp/custom-model"
+        if let data = try? JSONEncoder().encode(cfg),
+           let back = try? JSONDecoder().decode(Configuration.self, from: data) {
+            r.eq(back.asrEngine, .cloud, "asrcfg: asrEngine round-trips .cloud")
+            r.eq(back.selectedLocalModelID, "test-model-id", "asrcfg: selectedLocalModelID round-trips")
+            r.eq(back.customLocalModelPath, "/tmp/custom-model", "asrcfg: customLocalModelPath round-trips")
+        } else {
+            r.check(false, "asrcfg: encode/decode round-trip failed")
+        }
+        let legacy = Data("{\"asrLanguage\":\"zh\"}".utf8)
+        let decoded = try? JSONDecoder().decode(Configuration.self, from: legacy)
+        r.eq(decoded?.asrEngine, .local, "asrcfg: legacy missing key → asrEngine .local")
+        r.eq(decoded?.selectedLocalModelID, nil, "asrcfg: legacy missing key → selectedLocalModelID nil")
+        r.eq(decoded?.customLocalModelPath, nil, "asrcfg: legacy missing key → customLocalModelPath nil")
+        r.eq(decoded?.cloudASRConfig.providers.count, 1, "asrcfg: legacy missing key → cloudASRConfig has default SiliconFlow provider")
+        r.eq(decoded?.cloudASRConfig.providers.first?.provider, "SiliconFlow", "asrcfg: default provider is SiliconFlow")
+        r.eq(decoded?.cloudASRConfig.providers.first?.model, "", "asrcfg: default model is empty (user must select)")
+    }
+
+    // MARK: - HardwareProfiler: memory tier classification
+
+    static func testHardwareProfiler(_ r: Reporter) {
+        r.eq(HardwareProfiler.tier(forMemoryGB: 7), .low, "profiler: 7GB → low")
+        r.eq(HardwareProfiler.tier(forMemoryGB: 8), .low, "profiler: 8GB → low")
+        r.eq(HardwareProfiler.tier(forMemoryGB: 15), .mid, "profiler: 15GB → mid")
+        r.eq(HardwareProfiler.tier(forMemoryGB: 23), .mid, "profiler: 23GB → mid")
+        r.eq(HardwareProfiler.tier(forMemoryGB: 24), .high, "profiler: 24GB → high")
+        r.eq(HardwareProfiler.tier(forMemoryGB: 64), .high, "profiler: 64GB → high")
+        r.check(HardwareProfiler.currentMemoryBytes() > 0, "profiler: current memory bytes > 0")
+    }
+
+    // MARK: - ModelPreset: preset catalog + tier recommendation
+
+    static func testModelPreset(_ r: Reporter) {
+        r.check(ModelPreset.allPresets.count >= 2, "preset: at least 2 presets")
+        r.eq(ModelPreset.recommendedModel(for: .low).id, "qwen3-0.6b-4bit", "preset: low → 0.6b")
+        r.eq(ModelPreset.recommendedModel(for: .mid).id, "qwen3-1.7b-4bit", "preset: mid → 1.7b (recommended for ≥12GB)")
+        r.eq(ModelPreset.recommendedModel(for: .high).id, "qwen3-1.7b-4bit", "preset: high → 1.7b")
+        r.check(ModelPreset.preset(forID: "qwen3-0.6b-4bit") != nil, "preset: lookup by id works")
+        r.check(ModelPreset.preset(forID: "nonexistent") == nil, "preset: unknown id → nil")
+        let high = ModelPreset.allPresets.first { $0.id == "qwen3-1.7b-4bit" }!
+        r.check(high.recommendedTiers.contains(.high), "preset: 1.7b recommended for high")
+        r.check(high.recommendedTiers.contains(.mid), "preset: 1.7b recommended for mid")
+        r.check(!high.recommendedTiers.contains(.low), "preset: 1.7b not recommended for low")
+    }
+
+    // MARK: - CustomModelScanner: validateModelDirectory error cases + success
+
+    static func testCustomModelScanner(_ r: Reporter) {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("flowtype-scannertest-\(UUID().uuidString)", isDirectory: true)
+        try? fm.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: base) }
+
+        func write(_ name: String, _ bytes: Int, in dir: URL) {
+            fm.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data(count: bytes))
+        }
+
+        let minBytes: Int64 = 100 * 1024
+
+        // 1. Non-existent directory → .directoryNotFound
+        let ghost = base.appendingPathComponent("does-not-exist")
+        do {
+            _ = try CustomModelScanner.validateModelDirectory(ghost, minBytes: minBytes)
+            r.check(false, "scanner: non-existent dir should throw")
+        } catch let error as ModelScanError {
+            if case .directoryNotFound = error {
+                r.check(true, "scanner: non-existent dir → .directoryNotFound")
+            } else {
+                r.check(false, "scanner: non-existent dir → wrong error: \(error.localizedDescription)")
+            }
+        } catch {
+            r.check(false, "scanner: non-existent dir → unexpected error type")
+        }
+
+        // 2. Directory with only config.json → .missingTokenizer
+        let dir2 = base.appendingPathComponent("tok-missing")
+        try? fm.createDirectory(at: dir2, withIntermediateDirectories: true)
+        write("config.json", 10, in: dir2)
+        do {
+            _ = try CustomModelScanner.validateModelDirectory(dir2, minBytes: minBytes)
+            r.check(false, "scanner: missing tokenizer should throw")
+        } catch let error as ModelScanError {
+            if case .missingTokenizer = error {
+                r.check(true, "scanner: only config → .missingTokenizer")
+            } else {
+                r.check(false, "scanner: only config → wrong error: \(error.localizedDescription)")
+            }
+        } catch {
+            r.check(false, "scanner: only config → unexpected error type")
+        }
+
+        // 3. config + tokenizer + small weights (< minBytes) → .weightsTooSmall
+        let dir3 = base.appendingPathComponent("weights-small")
+        try? fm.createDirectory(at: dir3, withIntermediateDirectories: true)
+        write("config.json", 10, in: dir3)
+        write("tokenizer.json", 10, in: dir3)
+        write("model.safetensors", 1024, in: dir3)
+        do {
+            _ = try CustomModelScanner.validateModelDirectory(dir3, minBytes: minBytes)
+            r.check(false, "scanner: small weights should throw")
+        } catch let error as ModelScanError {
+            if case .weightsTooSmall = error {
+                r.check(true, "scanner: config+tok+small weights → .weightsTooSmall")
+            } else {
+                r.check(false, "scanner: small weights → wrong error: \(error.localizedDescription)")
+            }
+        } catch {
+            r.check(false, "scanner: small weights → unexpected error type")
+        }
+
+        // 4. config + tokenizer + large weights (≥ minBytes) → success
+        let dir4 = base.appendingPathComponent("weights-large")
+        try? fm.createDirectory(at: dir4, withIntermediateDirectories: true)
+        write("config.json", 10, in: dir4)
+        write("tokenizer.json", 10, in: dir4)
+        write("model.safetensors", 200 * 1024, in: dir4)
+        do {
+            let info = try CustomModelScanner.validateModelDirectory(dir4, minBytes: minBytes)
+            r.check(info.sizeBytes >= minBytes, "scanner: large weights → success, sizeBytes ≥ minBytes")
+            r.eq(info.url.path, dir4.path, "scanner: success returns correct url")
+        } catch {
+            r.check(false, "scanner: large weights should succeed, got: \(error.localizedDescription)")
+        }
+
+        // 5. Alternate tokenizer form: tokenizer_config.json + vocab.json
+        let dir5 = base.appendingPathComponent("alt-tokenizer")
+        try? fm.createDirectory(at: dir5, withIntermediateDirectories: true)
+        write("config.json", 10, in: dir5)
+        write("tokenizer_config.json", 10, in: dir5)
+        write("vocab.json", 10, in: dir5)
+        write("model.safetensors", 200 * 1024, in: dir5)
+        do {
+            _ = try CustomModelScanner.validateModelDirectory(dir5, minBytes: minBytes)
+            r.check(true, "scanner: tokenizer_config.json+vocab.json accepted as tokenizer")
+        } catch {
+            r.check(false, "scanner: alt tokenizer should succeed, got: \(error.localizedDescription)")
+        }
+
+        // 6. Missing config → .missingConfig
+        let dir6 = base.appendingPathComponent("config-missing")
+        try? fm.createDirectory(at: dir6, withIntermediateDirectories: true)
+        write("tokenizer.json", 10, in: dir6)
+        write("model.safetensors", 200 * 1024, in: dir6)
+        do {
+            _ = try CustomModelScanner.validateModelDirectory(dir6, minBytes: minBytes)
+            r.check(false, "scanner: missing config should throw")
+        } catch let error as ModelScanError {
+            if case .missingConfig = error {
+                r.check(true, "scanner: no config → .missingConfig")
+            } else {
+                r.check(false, "scanner: no config → wrong error: \(error.localizedDescription)")
+            }
+        } catch {
+            r.check(false, "scanner: no config → unexpected error type")
+        }
+    }
+
+    // MARK: - Injection edge cases: emoji/surrogate safety, newline boundaries, config defaults, continuation double-error
+
+    static func testInjectionEdgeCases(_ r: Reporter) {
+        let emojiChunks = KeyboardInjector.chunk("a🌍b", size: 2)
+        r.eq(emojiChunks.joined(), "a🌍b", "inject-edge: emoji chunk round-trips intact")
+        for piece in emojiChunks {
+            let units = Array(piece.utf16)
+            for (i, unit) in units.enumerated() {
+                if (0xD800...0xDBFF).contains(unit) {
+                    r.check(i + 1 < units.count && (0xDC00...0xDFFF).contains(units[i + 1]),
+                           "inject-edge: high surrogate paired in chunk '\(piece)'")
+                }
+            }
+        }
+        let helloChunks = KeyboardInjector.chunk("hello 🌍 world", size: 5)
+        r.eq(helloChunks.joined(), "hello 🌍 world", "inject-edge: emoji sentence round-trips at size=5")
+
+        r.eq(KeyboardInjector.normalizeNewlines(""), "", "inject-edge: normalizeNewlines empty → empty")
+        r.eq(KeyboardInjector.normalizeNewlines("abc"), "abc", "inject-edge: normalizeNewlines no newlines → unchanged")
+        r.eq(KeyboardInjector.normalizeNewlines("a\nb"), "a\nb", "inject-edge: normalizeNewlines all LF → unchanged")
+        r.eq(KeyboardInjector.normalizeNewlines("a\r\nb\rc\nd"), "a\nb\nc\nd", "inject-edge: normalizeNewlines mixed CRLF/CR/LF → all LF")
+        r.eq(KeyboardInjector.normalizeNewlines("line\r\n"), "line\n", "inject-edge: normalizeNewlines CRLF at end → LF")
+        r.eq(KeyboardInjector.normalizeNewlines("\r\n\r\n"), "\n\n", "inject-edge: normalizeNewlines consecutive CRLFs → LFs")
+
+        r.eq(KeyboardInjector.splitIntoLineSegments(""), [""], "inject-edge: split empty → [\"\"]")
+        r.eq(KeyboardInjector.splitIntoLineSegments("\n"), ["", ""], "inject-edge: split single newline → [\"\", \"\"]")
+        r.eq(KeyboardInjector.splitIntoLineSegments("\nabc"), ["", "abc"], "inject-edge: split leading newline")
+        r.eq(KeyboardInjector.splitIntoLineSegments("abc\n"), ["abc", ""], "inject-edge: split trailing newline")
+        r.eq(KeyboardInjector.splitIntoLineSegments("\n\n"), ["", "", ""], "inject-edge: split consecutive newlines")
+        r.eq(KeyboardInjector.splitIntoLineSegments("\n\nabc"), ["", "", "abc"], "inject-edge: split two leading newlines")
+
+        let cfg = Configuration()
+        r.eq(cfg.asrEngine, .local, "inject-edge: default asrEngine == .local")
+        r.eq(cfg.hasCompletedOnboarding, false, "inject-edge: default hasCompletedOnboarding == false")
+        r.eq(cfg.selectedLocalModelID, nil, "inject-edge: default selectedLocalModelID == nil")
+        r.check(!cfg.cloudASRConfig.providers.isEmpty, "inject-edge: default cloudASRConfig has providers")
+        r.check(cfg.cloudASRConfig.providerAPIKeys.isEmpty, "inject-edge: default cloudASRConfig has no API keys")
+        if let activeProvider = cfg.cloudASRConfig.activeProvider {
+            r.eq(activeProvider.model, "", "inject-edge: default cloud ASR provider model is empty")
+        } else {
+            r.check(false, "inject-edge: default cloudASRConfig has active provider")
+        }
+
+        final class Slot: @unchecked Sendable { var value: String? }
+        let box = CancellableContinuationBox<String>()
+        let slot = Slot()
+        let installed = DispatchSemaphore(value: 0)
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            do {
+                slot.value = try await withCheckedThrowingContinuation { c in
+                    box.setContinuation(c)
+                    installed.signal()
+                }
+            } catch is CancellationError {
+                slot.value = "cancelled"
+            } catch {
+                slot.value = "error"
+            }
+            done.signal()
+        }
+        guard installed.wait(timeout: .now() + 5) == .success else {
+            r.check(false, "inject-edge: continuation install timed out"); return
+        }
+        struct TestError: Error {}
+        box.resume(throwing: TestError())
+        box.resume(throwing: TestError())
+        box.cancel()
+        guard done.wait(timeout: .now() + 5) == .success else {
+            r.check(false, "inject-edge: resume wait timed out"); return
+        }
+        r.eq(slot.value, "error", "inject-edge: first error resume wins, double error+cancel are no-ops")
     }
 
     // MARK: - Injection segmentation (B-inject)

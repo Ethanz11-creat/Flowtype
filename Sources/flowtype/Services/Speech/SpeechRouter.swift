@@ -1,5 +1,6 @@
 import Foundation
 
+@available(*, deprecated, message: "Use ASRProviderRegistry instead")
 final class SpeechRouter: @unchecked Sendable {
     static let shared = SpeechRouter()
 
@@ -7,7 +8,7 @@ final class SpeechRouter: @unchecked Sendable {
     let fallbackProvider: AppleSpeechProvider
 
     private init() {
-        self.qwenProvider = QwenASRProvider()
-        self.fallbackProvider = AppleSpeechProvider()
+        self.qwenProvider = ASRProviderRegistry.shared.qwenLocalProvider
+        self.fallbackProvider = ASRProviderRegistry.shared.applePreviewProvider
     }
 }

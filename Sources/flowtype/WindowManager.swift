@@ -442,12 +442,9 @@ class WindowManager: ObservableObject {
             panel.animator().setFrameOrigin(NSPoint(x: origin.x, y: origin.y - Self.slideOffset))
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            // The completion fires on the main runloop; assert that to satisfy isolation.
             MainActor.assumeIsolated {
                 guard let panel = self?.panel else { return }
-                // A new session may have started during the animation — only finish hiding if the
-                // session is still idle, otherwise leave the freshly-shown capsule alone.
-                if SessionController.shared.sessionState == .idle {
+                if panel.alphaValue < 0.05 {
                     panel.orderOut(nil)
                     panel.alphaValue = 1
                 }

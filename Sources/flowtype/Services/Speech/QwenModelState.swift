@@ -17,7 +17,6 @@ enum QwenModelStatus: Equatable {
     }
 }
 
-/// Thread-safe download progress → speed (MB/s) + ETA + stall detection.
 final class ProgressTracker: @unchecked Sendable {
     private let lock = NSLock()
     private var lastTick = Date()
@@ -53,33 +52,59 @@ final class QwenModelState: ObservableObject {
 
     @Published private(set) var status: QwenModelStatus = .notLoaded
 
-    /// Load ladder: specified folder / known caches (offline, zero network) → download (mirror +
-    /// stall watchdog + retry). Forcing offlineMode when a complete local copy exists is what
-    /// stops the occasional per-launch network-revalidation hang.
     func loadModel(provider: QwenASRProvider) async {
         guard !status.isLoading else { return }
         if provider.isLoaded { status = .ready; return }
 
         let cfg = ConfigurationStore.shared.current
-        let configured = cfg.localModelPath
-            .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
+        let tier = HardwareProfiler.currentTier()
+        let activePreset = ModelPreset.preset(forID: cfg.selectedLocalModelID)
+            ?? ModelPreset.recommendedModel(for: tier)
 
-        // 0 + 1: offline-first — specified folder, then known caches. Zero network.
-        if let local = ModelLocator.firstCompleteLocalCopy(configured: configured) {
+        if let resolved = ModelLocator.resolveActiveModel(config: cfg) {
             status = .loading
             do {
-                try await provider.loadModel(cacheDir: local, offlineMode: true)
+                try await provider.loadModel(
+                    modelId: resolved.modelId,
+                    cacheDir: resolved.directory,
+                    offlineMode: true
+                )
                 status = .ready
-                AppLogger.log("[ModelProvision] Loaded offline from \(local.path)")
+                AppLogger.log("[ModelProvision] Loaded offline from \(resolved.directory.path) (modelId=\(resolved.modelId))")
                 return
             } catch {
-                AppLogger.log("[ModelProvision] Offline load from \(local.path) failed (\(error)); falling through to download")
+                AppLogger.log("[ModelProvision] Offline load from \(resolved.directory.path) failed (\(error)); falling through to download")
             }
         }
 
-        // 2: download via the chosen endpoint, with stall watchdog + retry.
+        // Auto mode (selectedLocalModelID == nil) must still download a model —
+        // `activePreset` above already falls back to the hardware-recommended model.
+        // Only gate on onboarding: a fresh user may not have chosen a model yet but
+        // still needs the local engine to work out of the box.
+        guard cfg.hasCompletedOnboarding else {
+            status = .notLoaded
+            AppLogger.log("[ModelProvision] Skipping auto-download: onboarding not complete")
+            return
+        }
+
         applyDownloadEndpoint(cfg.downloadSource)
-        await downloadWithRetry(provider: provider, maxAttempts: 3)
+        await downloadWithRetry(provider: provider, preset: activePreset, maxAttempts: 3)
+    }
+
+    func handleDownloadCompleted(preset: ModelPreset) async {
+        let provider = ASRProviderRegistry.shared.qwenLocalProvider
+        if provider.isLoaded {
+            provider.unloadModel()
+        }
+        status = .loading
+        do {
+            try await provider.loadPreset(preset)
+            status = .ready
+            AppLogger.log("[ModelProvision] Auto-loaded downloaded preset \(preset.id)")
+        } catch {
+            status = .notLoaded
+            AppLogger.log("[ModelProvision] Auto-load failed for \(preset.id): \(error)")
+        }
     }
 
     private func applyDownloadEndpoint(_ source: DownloadSource) {
@@ -91,17 +116,23 @@ final class QwenModelState: ObservableObject {
         }
     }
 
-    private func downloadWithRetry(provider: QwenASRProvider, maxAttempts: Int) async {
-        let totalBytes = 680.0 * 1024 * 1024
+    private func downloadWithRetry(provider: QwenASRProvider, preset: ModelPreset, maxAttempts: Int) async {
+        let totalBytes = Double(preset.expectedSizeBytes)
+        let destDir = preset.localDirectory()
+        let fm = FileManager.default
+        try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
         for attempt in 1...maxAttempts {
             status = .downloading(progress: 0, speedMBps: 0, etaSeconds: 0)
             let progress = ProgressTracker()
             let loadTask = Task { [provider] in
-                try await provider.loadModel(offlineMode: false) { @Sendable p, _ in
+                try await provider.loadModel(
+                    modelId: preset.repoId,
+                    cacheDir: destDir,
+                    offlineMode: false
+                ) { @Sendable p, _ in
                     let snap = progress.update(fraction: p, totalBytes: totalBytes)
                     Task { @MainActor in
-                        // Only a genuine in-progress download may write progress — never resurrect
-                        // .downloading over a .stalled / .loading banner from a late callback.
                         guard case .downloading = QwenModelState.shared.status else { return }
                         if p >= 1.0 {
                             QwenModelState.shared.status = .loading
@@ -111,7 +142,6 @@ final class QwenModelState: ObservableObject {
                     }
                 }
             }
-            // Watchdog: no byte progress for 30 s → cancel this attempt (the real "下载不动" fix).
             let watchdog = Task { [weak self] in
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(5))
@@ -130,9 +160,10 @@ final class QwenModelState: ObservableObject {
                 return
             } catch {
                 watchdog.cancel()
+                provider.unloadModel()
                 AppLogger.log("[ModelProvision] Download attempt \(attempt) failed: \(error)")
                 if attempt < maxAttempts {
-                    try? await Task.sleep(for: .seconds(Double(attempt * 10)))   // 10s / 20s backoff
+                    try? await Task.sleep(for: .seconds(Double(attempt * 10)))
                 } else {
                     status = .error(reason: "下载失败或停滞。可重试，或在设置里「指定已下载的模型文件夹」。", retryable: true)
                 }

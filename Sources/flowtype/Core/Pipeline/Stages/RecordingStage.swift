@@ -128,6 +128,10 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             return .continue(.audio(samples: rawSamples, previewText: finalPreviewText))
         } catch {
             AppLogger.log("[RecordingStage#\(sessionID)] Recording failed: \(error)")
+            previewTask?.cancel()
+            cleanup()
+            _ = appleSpeechProvider.stopStreamingRecognition()
+            _ = audioRecorder.takeAccumulatedSamples()
             return .suspend(ErrorRecoveryContext(
                 failedStage: name,
                 error: error,

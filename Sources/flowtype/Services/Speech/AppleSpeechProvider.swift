@@ -3,8 +3,15 @@ import Foundation
 import AVFoundation
 import os
 
-final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
+final class AppleSpeechProvider: ASRProvider, @unchecked Sendable {
     var name: String { "AppleSpeech" }
+    let id = "apple-preview"
+    let displayName = "Apple 语音预览"
+    nonisolated let supportsStreaming = true
+
+    var isAvailable: Bool {
+        get async { await MainActor.run { AppleSpeechProvider.isAvailable() } }
+    }
 
     private var recognizer: SFSpeechRecognizer?
     private let stateLock = OSAllocatedUnfairLock<SpeechState>(uncheckedState: SpeechState())
@@ -57,8 +64,9 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
 
     // MARK: - SpeechProvider Protocol
 
-    /// One-shot offline recognition from WAV data.
-    /// Writes data to a temp file and uses SFSpeechURLRecognitionRequest with on-device recognition.
+    /// One-shot offline recognition from raw Float32 PCM samples (the `SpeechProvider` contract).
+    /// Encodes them to a WAV container, writes to a temp file, then uses
+    /// `SFSpeechURLRecognitionRequest` with on-device recognition.
     func transcribe(audioData: Data, timeout: TimeInterval = 20) async throws -> String {
         refreshRecognizerIfNeeded()
         guard let recognizer = recognizer,
@@ -70,10 +78,15 @@ final class AppleSpeechProvider: SpeechProvider, @unchecked Sendable {
 
         AppLogger.log("[AppleSpeechProvider] transcribe: starting with \(audioData.count) bytes")
 
-        // Write WAV data to a temporary file
+        // audioData is raw Float32 PCM per the SpeechProvider contract — encode a WAV
+        // container so SFSpeechURLRecognitionRequest can decode it.
+        guard let wavData = WAVEncoder.encode(samples: audioData, sampleRate: 16000) else {
+            throw SpeechProviderError.transcriptionFailed("空音频数据")
+        }
+
         let tmpDir = FileManager.default.temporaryDirectory
         let tmpFile = tmpDir.appendingPathComponent("flowtype_apple_speech_\(UUID().uuidString).wav")
-        try audioData.write(to: tmpFile)
+        try wavData.write(to: tmpFile)
         // §10 audio-never-persists: this is the ONLY audio FlowType ever writes to disk. The defer fires on
         // EVERY exit of transcribe(...) — normal return (isFinal), thrown error / no-result, and the timeout
         // guard below (which cancels the task → resumes the continuation → returns here). Never persist it.

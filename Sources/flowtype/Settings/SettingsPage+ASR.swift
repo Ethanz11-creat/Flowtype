@@ -12,13 +12,26 @@ extension SettingsPage {
                 Spacer()
             }
 
-            Text("Flowtype 使用本地 Qwen3-ASR 模型进行语音识别，AppleSpeech 作为兜底方案。所有识别均在本地完成，无需联网。")
+            Text("Flowtype 支持本地和云端两种语音识别引擎。本地识别使用 Qwen3-ASR 模型，完全离线运行；云端识别通过 OpenAI 兼容接口调用云端 ASR 服务。录音中实时预览使用 Apple Speech，始终在本地完成。")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
-            QwenModelStatusCard()
+            Picker("", selection: $store.current.asrEngine) {
+                Text("本地识别").tag(ASREngineType.local)
+                Text("云端识别").tag(ASREngineType.cloud)
+            }
+            .pickerStyle(.segmented)
+
+            switch store.current.asrEngine {
+            case .local:
+                LocalModelPicker()
+                ASRModelStatusCard()
+            case .cloud:
+                CloudASRProviderList()
+                ASRModelStatusCard()
+            }
 
             // Language selector
             HStack {
@@ -60,6 +73,10 @@ extension SettingsPage {
             .onAppear {
                 refreshDevices()
             }
+
+            Text("录音中实时预览使用 Apple Speech，始终在本地完成")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
         }
         .padding(.horizontal, 4)
     }

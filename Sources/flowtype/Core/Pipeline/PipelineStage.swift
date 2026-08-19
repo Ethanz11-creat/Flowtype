@@ -24,6 +24,10 @@ enum StageResult {
     /// Suspend the pipeline for error recovery.
     case suspend(ErrorRecoveryContext)
 
+    /// Degrade gently: no buttons, auto-dismissing notice. Used when a stage can't
+    /// proceed but the situation isn't an error (e.g. no provider available / no speech).
+    case notice(String)
+
     /// Pipeline completed successfully.
     case complete
 }

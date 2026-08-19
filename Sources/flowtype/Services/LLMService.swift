@@ -115,12 +115,17 @@ actor LLMService {
             let k = config.providerAPIKeys[id.uuidString]
             return (k?.isEmpty == false) ? k : nil
         }
+        func isValid(_ provider: LLMProvider) -> Bool {
+            let model = provider.model.trimmingCharacters(in: .whitespacesAndNewlines)
+            let baseURL = provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !model.isEmpty && !baseURL.isEmpty
+        }
         let providers = config.llmProviders
         var result: [(provider: LLMProvider, apiKey: String)] = []
-        if let active = providers.first(where: \.isActive), let apiKey = key(active.id) {
+        if let active = providers.first(where: { $0.isActive && isValid($0) }), let apiKey = key(active.id) {
             result.append((active, apiKey))
         }
-        for provider in providers where !provider.isActive {
+        for provider in providers where !provider.isActive && isValid(provider) {
             if let apiKey = key(provider.id) { result.append((provider, apiKey)) }
         }
         return result

@@ -63,8 +63,15 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 try await KeyboardInjector.insertText(text)
                 AppLogger.log("[InjectionStage#\(sessionID)] Injected in \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
                 return .complete
+            } catch is CancellationError {
+                AppLogger.log("[InjectionStage#\(sessionID)] Injection cancelled")
+                return .suspend(ErrorRecoveryContext(
+                    failedStage: name,
+                    error: CancellationError(),
+                    rawText: text,
+                    retryable: false
+                ))
             } catch {
-                // Never lose text: a failed/blocked injection falls back to clipboard + sound.
                 AppLogger.log("[InjectionStage#\(sessionID)] Injection failed (\(error)); falling back to clipboard")
                 await copyToClipboard(text)
                 return .complete

@@ -109,6 +109,25 @@ enum AppearancePreference: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum ASREngineType: String, Codable, CaseIterable, Identifiable {
+    case local = "local"
+    case cloud = "cloud"
+
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .local: return "本地识别（离线）"
+        case .cloud: return "云端识别（联网）"
+        }
+    }
+}
+
+enum HardwareTier: String, Codable {
+    case low   // <12GB
+    case mid   // 12GB-24GB
+    case high  // ≥24GB
+}
+
 // MARK: - Provider Presets
 
 struct ProviderPreset: Identifiable, Hashable {
@@ -123,6 +142,32 @@ struct ProviderPreset: Identifiable, Hashable {
     static let custom = ProviderPreset(name: "自定义", baseURL: "", isCustom: true)
 
     static let all: [ProviderPreset] = [.siliconFlow, .openAI, .azure, .custom]
+}
+
+// MARK: - LLM Model Presets
+
+struct LLMModelPreset: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let modelId: String
+
+    static let deepseekV3 = LLMModelPreset(
+        id: "deepseek-v3",
+        name: "DeepSeek-V3 (通用，推荐)",
+        modelId: "deepseek-ai/DeepSeek-V3"
+    )
+    static let qwen2572b = LLMModelPreset(
+        id: "qwen25-72b",
+        name: "Qwen2.5-72B-Instruct",
+        modelId: "Qwen/Qwen2.5-72B-Instruct"
+    )
+    static let glm4 = LLMModelPreset(
+        id: "glm-4",
+        name: "GLM-4",
+        modelId: "THUDM/glm-4"
+    )
+
+    static let siliconFlowModels: [LLMModelPreset] = [.deepseekV3, .qwen2572b, .glm4]
 }
 
 // MARK: - LLM Provider
@@ -150,9 +195,75 @@ struct LLMProvider: Codable, Equatable, Identifiable {
             name: "默认配置",
             provider: "SiliconFlow",
             baseURL: "https://api.siliconflow.cn/v1",
-            model: "deepseek-ai/DeepSeek-V3",
+            model: LLMModelPreset.deepseekV3.modelId,
             isActive: isActive
         )
+    }
+}
+
+// MARK: - Cloud ASR Model Presets
+
+struct CloudASRModelPreset: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let modelId: String
+
+    static let senseVoiceSmall = CloudASRModelPreset(
+        id: "sensevoice-small",
+        name: "SenseVoiceSmall (多语言，推荐)",
+        modelId: "FunAudioLLM/SenseVoiceSmall"
+    )
+    static let teleSpeechASR = CloudASRModelPreset(
+        id: "telespeech-asr",
+        name: "TeleSpeechASR (中文)",
+        modelId: "TeleAI/TeleSpeechASR"
+    )
+
+    static let siliconFlowModels: [CloudASRModelPreset] = [.senseVoiceSmall, .teleSpeechASR]
+}
+
+// MARK: - Cloud ASR Provider
+
+struct CloudASRProviderConfig: Codable, Equatable, Identifiable {
+    let id: UUID
+    var name: String
+    var provider: String
+    var baseURL: String
+    var model: String
+    var isActive: Bool
+
+    init(id: UUID = UUID(), name: String, provider: String, baseURL: String, model: String, isActive: Bool = false) {
+        self.id = id
+        self.name = name
+        self.provider = provider
+        self.baseURL = baseURL
+        self.model = model
+        self.isActive = isActive
+    }
+
+    static func defaultSiliconFlow(id: UUID = UUID(), isActive: Bool = true) -> CloudASRProviderConfig {
+        CloudASRProviderConfig(
+            id: id,
+            name: "硅基流动",
+            provider: "SiliconFlow",
+            baseURL: "https://api.siliconflow.cn/v1",
+            model: "",
+            isActive: isActive
+        )
+    }
+}
+
+struct CloudASRConfig: Codable, Equatable {
+    var providers: [CloudASRProviderConfig] = []
+    var providerAPIKeys: [String: String] = [:]
+
+    static let defaultSiliconFlow = CloudASRConfig(
+        providers: [.defaultSiliconFlow()],
+        providerAPIKeys: [:]
+    )
+
+    var activeProvider: CloudASRProviderConfig? {
+        providers.first(where: \.isActive) ?? providers.first
     }
 }
 
@@ -250,6 +361,12 @@ struct Configuration: Codable, Equatable {
     var localModelPath: String? = nil          // user-specified model folder (offline load)
     var downloadSource: DownloadSource = .auto
 
+    // ASR engine selection
+    var asrEngine: ASREngineType = .local
+    var cloudASRConfig: CloudASRConfig = .defaultSiliconFlow
+    var selectedLocalModelID: String? = nil
+    var customLocalModelPath: String? = nil
+
     // Constants
     let temperature: Double = 0.3
     let maxTokens: Int = 2048
@@ -297,6 +414,12 @@ struct Configuration: Codable, Equatable {
         )
     }
 
+    var effectiveCloudASRConfig: (provider: CloudASRProviderConfig, apiKey: String)? {
+        guard let provider = cloudASRConfig.activeProvider else { return nil }
+        let key = cloudASRConfig.providerAPIKeys[provider.id.uuidString] ?? ""
+        return (provider, key)
+    }
+
     // MARK: - Default
 
     init() {}
@@ -327,6 +450,10 @@ struct Configuration: Codable, Equatable {
         appearancePreference = (try? c.decode(AppearancePreference.self, forKey: .appearancePreference)) ?? d.appearancePreference
         localModelPath = (try? c.decode(String?.self, forKey: .localModelPath)) ?? d.localModelPath
         downloadSource = (try? c.decode(DownloadSource.self, forKey: .downloadSource)) ?? d.downloadSource
+        asrEngine = (try? c.decode(ASREngineType.self, forKey: .asrEngine)) ?? d.asrEngine
+        cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
+        selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
+        customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
         storeTranscriptText = (try? c.decodeIfPresent(Bool.self, forKey: .storeTranscriptText)) ?? true
         providerAPIKeys = (try? c.decodeIfPresent([String: String].self, forKey: .providerAPIKeys)) ?? [:]
 
@@ -364,6 +491,10 @@ extension Configuration {
         case appearancePreference
         case localModelPath
         case downloadSource
+        case asrEngine
+        case cloudASRConfig
+        case selectedLocalModelID
+        case customLocalModelPath
         case storeTranscriptText
         case providerAPIKeys
         // Legacy keys (for migration only, not stored properties)
@@ -387,6 +518,10 @@ extension Configuration {
         try container.encode(appearancePreference, forKey: .appearancePreference)
         try container.encode(localModelPath, forKey: .localModelPath)
         try container.encode(downloadSource, forKey: .downloadSource)
+        try container.encode(asrEngine, forKey: .asrEngine)
+        try container.encode(cloudASRConfig, forKey: .cloudASRConfig)
+        try container.encode(selectedLocalModelID, forKey: .selectedLocalModelID)
+        try container.encode(customLocalModelPath, forKey: .customLocalModelPath)
         try container.encode(storeTranscriptText, forKey: .storeTranscriptText)
         try container.encode(providerAPIKeys, forKey: .providerAPIKeys)
     }

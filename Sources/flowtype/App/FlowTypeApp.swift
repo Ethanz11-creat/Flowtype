@@ -61,8 +61,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Load the ASR model in the background regardless of onboarding state — onboarding's
-        // own load (if any) dedups via QwenModelState, so this never double-loads.
+        // Load the ASR model in the background: checks for already-downloaded models and loads
+        // them offline; auto-download of the hardware-recommended model is skipped only if onboarding is incomplete.
         Task {
             await loadQwenASRModel()
         }
@@ -94,10 +94,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func loadQwenASRModel() async {
-        let provider = await SessionController.shared.qwenProvider
+        let provider = SessionController.shared.qwenProvider
         AppLogger.log("[AppDelegate] Loading Qwen3-ASR model...")
         await QwenModelState.shared.loadModel(provider: provider)
-        if case .ready = await QwenModelState.shared.status {
+        if case .ready = QwenModelState.shared.status {
             AppLogger.log("[AppDelegate] Qwen3-ASR model loaded successfully")
         } else {
             AppLogger.log("[AppDelegate] Qwen3-ASR model loading failed")

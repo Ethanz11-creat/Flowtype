@@ -55,10 +55,16 @@ final class CancellableContinuationBox<T: Sendable>: @unchecked Sendable {
     }
 }
 
-final class QwenASRProvider: @unchecked Sendable {
+final class QwenASRProvider: ASRProvider, @unchecked Sendable {
     let name: String = "QwenASR"
+    let id = "qwen-local"
+    let displayName = "本地 ASR (Qwen)"
+    nonisolated let supportsStreaming = false
+
+    var isAvailable: Bool { get async { isLoaded } }
 
     private nonisolated(unsafe) var model: Qwen3ASRModel?
+    private nonisolated(unsafe) var loadedModelId: String?
     private let queue = DispatchQueue(label: "flowtype.qwen-asr")
 
     /// Serial queue for the actual MLX inference. Qwen3ASRModel is not Sendable and its
@@ -75,7 +81,7 @@ final class QwenASRProvider: @unchecked Sendable {
     // MARK: - Model Lifecycle
 
     func loadModel(
-        modelId: String = "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+        modelId: String,
         cacheDir: URL? = nil,
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
@@ -89,6 +95,7 @@ final class QwenASRProvider: @unchecked Sendable {
         )
         queue.sync {
             model = loaded
+            loadedModelId = modelId
         }
         AppLogger.log("[QwenASR] Model loaded successfully")
     }
@@ -96,8 +103,25 @@ final class QwenASRProvider: @unchecked Sendable {
     func unloadModel() {
         queue.sync {
             model = nil
+            loadedModelId = nil
         }
         AppLogger.log("[QwenASR] Model unloaded")
+    }
+
+    func loadPreset(_ preset: ModelPreset, progressHandler: ((Double, String) -> Void)? = nil) async throws {
+        let alreadyLoaded = queue.sync { loadedModelId == preset.repoId && model != nil }
+        if alreadyLoaded { return }
+        if isLoaded {
+            unloadModel()
+        }
+        let dir = preset.localDirectory()
+        let offline = ModelLocator.validateComplete(dir, minBytes: ModelLocator.minValidBytes(for: preset))
+        try await loadModel(
+            modelId: preset.repoId,
+            cacheDir: dir,
+            offlineMode: offline,
+            progressHandler: progressHandler
+        )
     }
 
     // MARK: - Transcription
@@ -146,24 +170,20 @@ final class QwenASRProvider: @unchecked Sendable {
     // MARK: - SpeechProvider Conformance (Data-based)
 
     func transcribe(audioData: Data, timeout: TimeInterval = 300) async throws -> String {
-        let samples = Self.wavDataToFloat32(audioData)
+        let samples = Self.rawFloat32ToSamples(audioData)
         return try await transcribe(samples: samples)
     }
 
     // MARK: - Helpers
 
-    static func wavDataToFloat32(_ data: Data) -> [Float] {
-        let headerSize = 44
-        guard data.count > headerSize else { return [] }
-        let pcmData = data.subdata(in: headerSize..<data.count)
-        let sampleCount = pcmData.count / 2
-        var samples = [Float](repeating: 0, count: sampleCount)
-        pcmData.withUnsafeBytes { buffer in
-            let int16Ptr = buffer.bindMemory(to: Int16.self)
-            for i in 0..<sampleCount {
-                samples[i] = Float(int16Ptr[i]) / 32768.0
-            }
+    /// Decodes the `SpeechProvider` contract format — raw little-endian Float32 PCM
+    /// samples — back into `[Float]`. (No WAV header; providers receive raw samples.)
+    static func rawFloat32ToSamples(_ data: Data) -> [Float] {
+        let sampleCount = data.count / MemoryLayout<Float>.size
+        guard sampleCount > 0 else { return [] }
+        return data.withUnsafeBytes { buffer in
+            let ptr = buffer.bindMemory(to: Float.self)
+            return Array(UnsafeBufferPointer(start: ptr.baseAddress, count: sampleCount))
         }
-        return samples
     }
 }

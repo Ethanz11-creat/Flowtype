@@ -53,6 +53,104 @@ func normalizeBaseURL(_ url: String) -> String {
     return result
 }
 
+// MARK: - Model Picker Field
+
+struct LLMModelPickerField: View {
+    let title: String
+    @Binding var model: String
+    let providerName: String
+    let baseURL: String
+
+    @State private var isCustomModel: Bool
+
+    init(title: String, model: Binding<String>, providerName: String, baseURL: String) {
+        self.title = title
+        self._model = model
+        self.providerName = providerName
+        self.baseURL = baseURL
+
+        let presetIds = Set(LLMModelPreset.siliconFlowModels.map(\.modelId))
+        let m = model.wrappedValue
+        self._isCustomModel = State(initialValue: !m.isEmpty && !presetIds.contains(m))
+    }
+
+    private var isSiliconFlow: Bool {
+        providerName == "SiliconFlow" || baseURL.contains("siliconflow.cn")
+    }
+
+    private var pickerSelection: Binding<String> {
+        Binding(
+            get: {
+                if isCustomModel { return "__custom__" }
+                return model
+            },
+            set: { newValue in
+                if newValue == "__custom__" {
+                    isCustomModel = true
+                    model = ""
+                } else {
+                    isCustomModel = false
+                    model = newValue
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+
+            if isSiliconFlow {
+                Picker("", selection: pickerSelection) {
+                    Text("请选择模型...").tag("")
+                    ForEach(LLMModelPreset.siliconFlowModels) { preset in
+                        Text(preset.name).tag(preset.modelId)
+                    }
+                    Divider()
+                    Text("自定义模型 ID...").tag("__custom__")
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isCustomModel {
+                    TextField("输入模型 ID", text: $model)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, design: .monospaced))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        )
+                }
+
+                if model.isEmpty && !isCustomModel {
+                    Text("请选择一个 LLM 润色模型")
+                        .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                }
+            } else {
+                TextField("例如：deepseek-ai/DeepSeek-V3", text: $model)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, design: .monospaced))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                    )
+            }
+        }
+    }
+}
+
 // MARK: - Provider Edit Sheet
 
 struct ProviderEditSheet: View {
@@ -75,15 +173,69 @@ struct ProviderEditSheet: View {
             Text(provider.name.isEmpty ? "添加 Provider" : "编辑 Provider")
                 .font(.system(size: 16, weight: .semibold))
 
-            ServiceConfigCard(
-                title: provider.name.isEmpty ? "新 Provider" : provider.name,
-                subtitle: "配置大语言模型服务商",
-                provider: $provider.provider,
-                baseURL: $provider.baseURL,
-                apiKey: $apiKey,
-                model: $provider.model,
-                modelPlaceholder: "例如：deepseek-ai/DeepSeek-V3"
-            )
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(provider.name.isEmpty ? "新 Provider" : provider.name)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("配置大语言模型服务商（需用户自行配置 API Key）")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("服务商")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                    ProviderPicker(provider: $provider.provider, baseURL: $provider.baseURL)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("名称")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                    TextField("例如：我的 SiliconFlow", text: $provider.name)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Base URL")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                    TextField("https://api.siliconflow.cn/v1", text: $provider.baseURL)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12, design: .monospaced))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color(nsColor: .textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        )
+                }
+
+                SecureKeyField(title: "API Key（需用户自行配置）", key: $apiKey)
+
+                LLMModelPickerField(
+                    title: "模型 ID",
+                    model: $provider.model,
+                    providerName: provider.provider,
+                    baseURL: provider.baseURL
+                )
+            }
+            .padding(16)
+            .glassCard()
 
             if hadStoredKey && apiKey.isEmpty {
                 Text("保存时将删除已保存的 API Key")
@@ -91,7 +243,6 @@ struct ProviderEditSheet: View {
                     .foregroundColor(.secondary)
             }
 
-            // Validation / test error display
             if let error = validationError {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -106,7 +257,6 @@ struct ProviderEditSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
-            // Test status display
             switch testStatus {
             case .idle:
                 EmptyView()
@@ -168,16 +318,13 @@ struct ProviderEditSheet: View {
     private func attemptSave() async {
         validationError = nil
 
-        // Step 1: Validation
         if let error = validateProvider(provider, existingProviders: existingProviders) {
             validationError = error.localizedDescription
             return
         }
 
-        // Normalize base URL
         provider.baseURL = normalizeBaseURL(provider.baseURL)
 
-        // Step 2: Connection test (skip if API key is empty)
         if !apiKey.isEmpty {
             testStatus = .testing
             let service = LLMService()
@@ -185,7 +332,6 @@ struct ProviderEditSheet: View {
             switch result {
             case .success:
                 testStatus = .success
-                // Small delay so user sees success
                 try? await Task.sleep(nanoseconds: 300_000_000)
             case .failure(let error):
                 let msg = error.userFriendlyMessage
@@ -198,7 +344,6 @@ struct ProviderEditSheet: View {
         onSave()
     }
 
-    /// Explicit "测试连接" — validate + ping the provider, show the result, do NOT save.
     private func testOnly() async {
         validationError = nil
         if let error = validateProvider(provider, existingProviders: existingProviders) {
