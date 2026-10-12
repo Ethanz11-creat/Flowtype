@@ -16,13 +16,17 @@ enum ModelLocator {
                 && fm.fileExists(atPath: dir.appendingPathComponent("vocab.json").path))
         guard hasTokenizer else { return false }
         guard let items = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return false }
+        // Sum all shards — a sharded model (multiple `*.safetensors` files each below
+        // the threshold) is still complete once the total meets `minBytes`. Matches
+        // CustomModelScanner.validateModelDirectory; single-file models are unaffected.
+        var totalSize: Int64 = 0
         for st in items where st.pathExtension == "safetensors" {
             let real = st.resolvingSymlinksInPath()
-            if let size = (try? fm.attributesOfItem(atPath: real.path)[.size]) as? Int64, size >= minBytes {
-                return true
+            if let size = (try? fm.attributesOfItem(atPath: real.path)[.size]) as? Int64 {
+                totalSize += size
             }
         }
-        return false
+        return totalSize >= minBytes
     }
 
     static func knownCacheDirs() -> [URL] {

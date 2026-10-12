@@ -67,25 +67,37 @@ struct ASRModelStatusCard: View {
     }
 
     private var cloudStatusView: some View {
+        let provider = store.current.cloudASRConfig.activeProvider
         let hasAPIKey: Bool
-        if let provider = store.current.cloudASRConfig.activeProvider {
+        if let provider {
             hasAPIKey = !(store.current.cloudASRConfig.providerAPIKeys[provider.id.uuidString] ?? "").isEmpty
         } else {
             hasAPIKey = false
         }
 
         let available = cloudAvailable ?? false
-        let configured = hasAPIKey && available
+        let statusText: String
+        if available {
+            statusText = "已配置"
+        } else if !hasAPIKey {
+            statusText = "未配置 API Key"
+        } else if let provider, provider.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            statusText = "未选择模型"
+        } else if let provider, provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            statusText = "未配置 Base URL"
+        } else {
+            statusText = "未配置"
+        }
 
         return HStack(spacing: 8) {
-            Image(systemName: configured ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            Image(systemName: available ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .font(.system(size: 16))
-                .foregroundColor(configured ? .green : .orange)
+                .foregroundColor(available ? .green : .orange)
             VStack(alignment: .leading, spacing: 2) {
-                Text(configured ? "已配置" : "未配置 API Key")
+                Text(statusText)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(configured ? .green : .orange)
-                if let provider = store.current.cloudASRConfig.activeProvider {
+                    .foregroundColor(available ? .green : .orange)
+                if let provider {
                     Text("\(provider.name) · \(provider.model)")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
