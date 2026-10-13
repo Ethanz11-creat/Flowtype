@@ -6,17 +6,11 @@ final class ASRProviderRegistry: @unchecked Sendable {
 
     let qwenLocalProvider: QwenASRProvider
     let cloudProvider: CloudASRProvider
-    /// 仅用于录音中的实时预览与「全部候选失败」时的文本兜底，不是路由候选。
-    let applePreviewProvider: AppleSpeechProvider
 
     private init() {
         self.qwenLocalProvider = QwenASRProvider()
         self.cloudProvider = CloudASRProvider()
-        self.applePreviewProvider = AppleSpeechProvider()
     }
-
-    var routingCandidates: [ASRProvider] { [qwenLocalProvider, cloudProvider] }
-    var previewProvider: AppleSpeechProvider { applePreviewProvider }
 
     func provider(forID id: String) -> ASRProvider? {
         switch id {

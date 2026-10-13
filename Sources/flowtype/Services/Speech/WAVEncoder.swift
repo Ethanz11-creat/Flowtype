@@ -6,8 +6,8 @@ import Foundation
 /// - `CloudASRProvider` (multipart upload to an OpenAI-compatible speech endpoint)
 /// - `AppleSpeechProvider` (`SFSpeechURLRecognitionRequest` needs a real WAV file)
 ///
-/// `samples` is the `SpeechProvider.transcribe(audioData:)` contract format — raw
-/// Float32 samples, NOT a WAV container.
+/// `samples` is raw little-endian Float32 PCM at 16 kHz mono (NOT a WAV container);
+/// this encoder wraps those samples in a WAV container.
 enum WAVEncoder {
     static func encode(samples: Data, sampleRate: Int) -> Data? {
         let floatCount = samples.count / MemoryLayout<Float>.stride

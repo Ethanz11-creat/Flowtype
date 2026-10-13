@@ -17,12 +17,15 @@ final class AXContextProvider: ContextProvider, @unchecked Sendable {
         let focusedApp = elementAttribute(system, kAXFocusedApplicationAttribute as CFString)
         let focusedElement = focusedApp.flatMap { elementAttribute($0, kAXFocusedUIElementAttribute as CFString) }
 
-        var elementText: String? = focusedElement.flatMap { collectElementText($0) }
+        // 安全输入（密码）字段：不采集任何元素派生内容（值、选中文本、标题）。
+        if let element = focusedElement, isSecure(element) {
+            AppLogger.log("[AXContext] Secure field focused — skipping element context")
+            return nil
+        }
+
+        let elementText = focusedElement.flatMap { collectElementText($0) }
         let selectedText = focusedElement.flatMap { stringAttribute($0, kAXSelectedTextAttribute as CFString) }
         let url = focusedApp.flatMap { stringAttribute($0, kAXDocumentAttribute as CFString) }
-
-        // 只在没有更精确信号时才用 URL（避免把无关页面 URL 当上下文）。
-        if elementText == nil && selectedText == nil { elementText = url }
 
         if elementText == nil && selectedText == nil && url == nil && appName == nil { return nil }
         return ForegroundContext(appName: appName, elementText: elementText,

@@ -467,7 +467,7 @@ final class SessionController: ObservableObject {
         session.asrMs = context.asrMs
         session.polishMs = context.polishMs
         session.injectMs = context.injectMs
-        if context.hasInjected, let stopAt = context.stopRecordingAt {
+        if let stopAt = context.stopRecordingAt, context.injectMs != nil {
             session.stopToInjectMs = Int(Date().timeIntervalSince(stopAt) * 1000)
         }
         HistoryStore.shared.append(session, storeText: ConfigurationStore.shared.current.storeTranscriptText)
