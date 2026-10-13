@@ -304,6 +304,7 @@ enum SelfTest {
         testProviderContextCompose(r) // ASRContext → provider prompt hint
         testASRBackendLabel(r)     // context.usedProviderID → history backend label
         testRouterEWMA(r)          // ASR router health: EWMA update math
+        testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
@@ -1191,5 +1192,28 @@ enum SelfTest {
         var v = 0.0
         for _ in 0..<5 { v = updateLatencyEWMA(previous: v, sample: 5000) }
         r.check(v > ASRRoutingThresholds.cloudLatencyMs, "ewma: sustained slow samples exceed threshold")
+    }
+
+    // MARK: - Foreground context assembly (pure)
+
+    static func testContextAssembly(_ r: Reporter) {
+        r.check(buildContextText(nil) == nil, "ctx-asm: nil → nil")
+        r.check(buildContextText(ForegroundContext(appName: nil, elementText: nil, url: nil, selectedText: nil)) == nil,
+                "ctx-asm: all-nil → nil")
+        r.eq(buildContextText(ForegroundContext(appName: "Xcode", elementText: "func main()", url: nil, selectedText: nil)),
+             "func main()", "ctx-asm: elementText is primary signal")
+        r.eq(buildContextText(ForegroundContext(appName: "Terminal", elementText: nil, url: nil, selectedText: "git log")),
+             "git log", "ctx-asm: selectedText included when no elementText")
+        r.eq(buildContextText(ForegroundContext(appName: "Safari", elementText: nil, url: "https://docs.swift.org", selectedText: nil)),
+             "https://docs.swift.org", "ctx-asm: url included when nothing else")
+        let both = buildContextText(ForegroundContext(appName: "X", elementText: "code", url: "https://x", selectedText: "sel"))
+        r.eq(both, "code\nsel\nhttps://x", "ctx-asm: elementText > selectedText > url order")
+        let long = ForegroundContext(appName: nil, elementText: String(repeating: "z", count: 5000), url: nil, selectedText: nil)
+        r.eq((buildContextText(long) ?? "").count, 1200, "ctx-asm: bounded to 1200 chars")
+        // 密钥脱敏：上下文里不得出现 Bearer / sk- / sf- 形态的串
+        r.check(!redactContextSecrets("Authorization: Bearer sk-abcdefghij123456").contains("sk-abcdefghij123456"),
+                "ctx-asm: sk- token redacted")
+        r.check(!redactContextSecrets("key=sf-abcdefghij123456").contains("sf-abcdefghij123456"),
+                "ctx-asm: sf- token redacted")
     }
 }
