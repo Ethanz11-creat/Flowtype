@@ -131,12 +131,3 @@ enum ASRStageError: Error, LocalizedError {
         }
     }
 }
-
-/// 候选链语义：依次尝试，首个成功即停；失败则继续下一个。
-/// 纯函数（无副作用），与 `ASRStage.execute` 中的候选链循环语义一致，便于单测。
-func firstSuccessfulProviderID(chain: [String], attempt: (String) -> Bool) -> String? {
-    for provider in chain {
-        if attempt(provider) { return provider }
-    }
-    return nil
-}

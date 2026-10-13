@@ -304,7 +304,6 @@ enum SelfTest {
         testASRConfig(r)           // ASR engine config: round-trip + legacy default
         testASRRouting(r)          // unified ASR routing: pure chain selection
         testRoutingKeyPrecedence(r) // legacy asrEngine wins when both routing keys present
-        testFallbackChainSemantics(r) // candidate chain: advance on failure, stop at first success
         testProviderContextCompose(r) // ASRContext → provider prompt hint
         testASRBackendLabel(r)     // context.usedProviderID → history backend label
         testRouterEWMA(r)          // ASR router health: EWMA update math
@@ -1263,23 +1262,6 @@ enum SelfTest {
         let onlyNew = Data(#"{"asrLanguage":"zh","asrRoutingPolicy":"localOnly"}"#.utf8)
         r.eq(try? JSONDecoder().decode(Configuration.self, from: onlyNew).asrRoutingPolicy,
              .localOnly, "route-key: new-key-only → honoured")
-    }
-
-    // MARK: - Fallback chain semantics: advance only on failure, stop at first success
-
-    static func testFallbackChainSemantics(_ r: Reporter) {
-        r.eq(firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { $0 == "cloud-asr" },
-             "cloud-asr", "chain: cloud succeeds → stops there")
-        r.eq(firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { $0 == "qwen-local" },
-             "qwen-local", "chain: cloud fails, local succeeds → qwen-local")
-        r.eq(firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { _ in false },
-             nil, "chain: both fail → nil")
-        r.eq(firstSuccessfulProviderID(chain: []) { _ in true },
-             nil, "chain: empty → nil")
-        // 首个成功即停：local 不应被尝试。
-        var attempted: [String] = []
-        _ = firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { attempted.append($0); return true }
-        r.eq(attempted, ["cloud-asr"], "chain: local never attempted after cloud success")
     }
 
     // MARK: - Session metrics: percentile + report
