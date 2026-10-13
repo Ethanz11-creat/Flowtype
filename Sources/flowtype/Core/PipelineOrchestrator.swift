@@ -84,6 +84,7 @@ final class SessionController: ObservableObject {
 
         // 本地模型常驻暖机：避免每轮首字都付冷加载代价。
         Task { @MainActor in
+            ASRRouter.shared.startProbing()
             let cfg = ConfigurationStore.shared.current
             guard cfg.asrRoutingPolicy != .cloudOnly else { return }
             await QwenModelState.shared.loadModel(provider: asrRegistry.qwenLocalProvider)

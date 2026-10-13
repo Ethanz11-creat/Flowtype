@@ -309,6 +309,7 @@ enum SelfTest {
         testFallbackReasonClassification(r) // provider failure → aggregatable fallback reason
         testASRCapabilityContract(r) // provider capability contract (router requiresNetwork gate)
         testRouterEWMA(r)          // ASR router health: EWMA update math
+        testCloudProbe(r)          // cloud host probe: endpoint parse + effective latency + cold-start chain
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
         testSessionMetrics(r)      // percentile + metrics report
@@ -1244,6 +1245,62 @@ enum SelfTest {
         var v = 0.0
         for _ in 0..<5 { v = updateLatencyEWMA(previous: v, sample: 5000) }
         r.check(v > ASRRoutingThresholds.cloudLatencyMs, "ewma: sustained slow samples exceed threshold")
+    }
+
+    // MARK: - Cloud probe: endpoint parsing + cold-start effective latency
+
+    static func testCloudProbe(_ r: Reporter) {
+        // 1. probeEndpoint: https + host + port 解析（纯函数）。
+        let sf = CloudProbe.probeEndpoint(fromBaseURL: "https://api.siliconflow.cn/v1")
+        r.eq(sf?.host, "api.siliconflow.cn", "probe: SiliconFlow host parsed")
+        r.eq(sf?.port, 443, "probe: default port 443 when absent")
+
+        let custom = CloudProbe.probeEndpoint(fromBaseURL: "https://api.openai.com:8443/v1")
+        r.eq(custom?.host, "api.openai.com", "probe: custom-port host parsed")
+        r.eq(custom?.port, 8443, "probe: explicit port honoured")
+
+        let padded = CloudProbe.probeEndpoint(fromBaseURL: "  https://x.example/v1  ")
+        r.eq(padded?.host, "x.example", "probe: surrounding whitespace trimmed")
+        r.eq(padded?.port, 443, "probe: trimmed url still gets default port")
+
+        r.check(CloudProbe.probeEndpoint(fromBaseURL: "http://x.example/v1") == nil, "probe: non-https → nil")
+        r.check(CloudProbe.probeEndpoint(fromBaseURL: "api.siliconflow.cn") == nil, "probe: scheme-less → nil")
+        r.check(CloudProbe.probeEndpoint(fromBaseURL: "") == nil, "probe: empty → nil")
+
+        // 2. effectiveCloudLatency: 真实 EWMA 优先于探测值，探测只在冷启动补位。
+        r.eq(effectiveCloudLatency(ewma: 0, probe: 5000), 5000, "probe: cold + slow probe → slow")
+        r.eq(effectiveCloudLatency(ewma: 1200, probe: 5000), 1200, "probe: real EWMA wins over probe")
+        r.eq(effectiveCloudLatency(ewma: 0, probe: nil), 0, "probe: no sample → healthy default (0)")
+        r.eq(effectiveCloudLatency(ewma: 0, probe: 200), 200, "probe: cold + fast probe → fast")
+
+        // 3. probeIsFresh: TTL 过期判定。
+        let now = Date()
+        r.check(!probeIsFresh(sampledAt: nil, now: now, ttl: 30), "probe: nil sample → stale")
+        r.check(probeIsFresh(sampledAt: now.addingTimeInterval(-10), now: now, ttl: 30), "probe: 10s old < 30s ttl → fresh")
+        r.check(!probeIsFresh(sampledAt: now.addingTimeInterval(-40), now: now, ttl: 30), "probe: 40s old > 30s ttl → stale")
+
+        // 4. 组合：冷启动无真实样本时，慢探测必须让路由改选本地优先。
+        let slowCold = ASRRoutingInputs(
+            policy: .auto,
+            localAvailable: true,
+            cloudAvailable: true,
+            networkReachable: true,
+            cloudLatencyEWMA: effectiveCloudLatency(ewma: 0, probe: 5000),
+            cloudConsecutiveFailures: 0
+        )
+        r.eq(selectASRChain(slowCold), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "probe: cold + slow probe → local-first (predict slowness before first request)")
+
+        let fastCold = ASRRoutingInputs(
+            policy: .auto,
+            localAvailable: true,
+            cloudAvailable: true,
+            networkReachable: true,
+            cloudLatencyEWMA: effectiveCloudLatency(ewma: 0, probe: 200),
+            cloudConsecutiveFailures: 0
+        )
+        r.eq(selectASRChain(fastCold), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
+             "probe: cold + fast probe → cloud-first (unchanged healthy path)")
     }
 
     // MARK: - Foreground context assembly (pure)
