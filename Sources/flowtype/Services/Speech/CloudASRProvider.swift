@@ -82,7 +82,14 @@ actor CloudASRProvider: ASRProvider {
     nonisolated let id = "cloud-asr"
     nonisolated let name = "CloudASR"
     nonisolated let displayName = "云端 ASR"
-    nonisolated let supportsStreaming = false
+    nonisolated let capabilities = ASRCapabilities(
+        supportsLanguageHint: true,
+        supportsContextHint: true,   // 以 `prompt` 字段尽力下发（见 Q3：云端默认带上下文）
+        requiresNetwork: true,
+        location: .cloud,
+        maxAudioDuration: nil,
+        estimatedWarmLatencyMs: 2000
+    )
 
     var isAvailable: Bool {
         get async {
@@ -94,7 +101,15 @@ actor CloudASRProvider: ASRProvider {
         }
     }
 
-    func transcribe(audioData: Data, timeout: TimeInterval) async throws -> String {
+    func transcribe(_ request: ASRRequest) async throws -> ASRResult {
+        let start = Date()
+        let audioData = request.samples.withUnsafeBytes { Data($0) }
+        let text = try await transcribe(audioData: audioData, timeout: request.timeout, context: request.context)
+        let ms = Int(Date().timeIntervalSince(start) * 1000)
+        return ASRResult(text: text, providerID: id, latencyMs: ms)
+    }
+
+    func transcribe(audioData: Data, timeout: TimeInterval, context: ASRContext?) async throws -> String {
         let config = await MainActor.run { ConfigurationStore.shared.current }
 
         guard let effective = config.effectiveCloudASRConfig else {
@@ -126,6 +141,12 @@ actor CloudASRProvider: ASRProvider {
         appendFormField(name: "model", value: provider.model)
         appendFormField(name: "response_format", value: "json")
         appendFormField(name: "temperature", value: "0.0")
+
+        // 云端默认携带上下文（用户可在设置中关闭）。后端不支持该字段时会被忽略。
+        // Task A3 wires Configuration.cloudASRSendContext here.
+        if true, let prompt = composeProviderContext(context) {
+            appendFormField(name: "prompt", value: prompt)
+        }
 
         if let langCode = config.asrLanguage.qwenLanguageCode {
             appendFormField(name: "language", value: langCode)

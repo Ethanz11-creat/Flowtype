@@ -3,15 +3,10 @@ import Foundation
 import AVFoundation
 import os
 
-final class AppleSpeechProvider: ASRProvider, @unchecked Sendable {
+final class AppleSpeechProvider: @unchecked Sendable {
     var name: String { "AppleSpeech" }
     let id = "apple-preview"
     let displayName = "Apple 语音预览"
-    nonisolated let supportsStreaming = true
-
-    var isAvailable: Bool {
-        get async { await MainActor.run { AppleSpeechProvider.isAvailable() } }
-    }
 
     private var recognizer: SFSpeechRecognizer?
     private let stateLock = OSAllocatedUnfairLock<SpeechState>(uncheckedState: SpeechState())

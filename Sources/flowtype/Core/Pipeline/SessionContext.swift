@@ -52,6 +52,20 @@ final class SessionContext {
     /// Set when LLM polish failed and we degraded to keeping the raw ASR text (history then marks it .raw).
     var polishFailed: Bool = false
 
+    /// 本轮实际使用的 ASR provider id（由 ASRStage 写入），用于历史与指标。
+    var usedProviderID: String?
+
+    /// 前台上下文文本（由 ContextStage / ContextProvider 写入；nil 表示未采集）。
+    var foregroundContextText: String?
+
+    /// 用户停止录音的时刻（用于 stopToInjectMs）。
+    var stopRecordingAt: Date?
+
+    /// 各段耗时（毫秒）。
+    var asrMs: Int?
+    var polishMs: Int?
+    var injectMs: Int?
+
     /// Guard to prevent double-injection.
     var hasInjected: Bool = false
 

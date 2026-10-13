@@ -59,7 +59,14 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
     let name: String = "QwenASR"
     let id = "qwen-local"
     let displayName = "本地 ASR (Qwen)"
-    nonisolated let supportsStreaming = false
+    nonisolated let capabilities = ASRCapabilities(
+        supportsLanguageHint: true,
+        supportsContextHint: true,
+        requiresNetwork: false,
+        location: .onDevice,
+        maxAudioDuration: nil,
+        estimatedWarmLatencyMs: 1500
+    )
 
     var isAvailable: Bool { get async { isLoaded } }
 
@@ -167,23 +174,17 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
         return text
     }
 
-    // MARK: - SpeechProvider Conformance (Data-based)
+    // MARK: - ASRProvider Conformance
 
-    func transcribe(audioData: Data, timeout: TimeInterval = 300) async throws -> String {
-        let samples = Self.rawFloat32ToSamples(audioData)
-        return try await transcribe(samples: samples)
-    }
-
-    // MARK: - Helpers
-
-    /// Decodes the `SpeechProvider` contract format — raw little-endian Float32 PCM
-    /// samples — back into `[Float]`. (No WAV header; providers receive raw samples.)
-    static func rawFloat32ToSamples(_ data: Data) -> [Float] {
-        let sampleCount = data.count / MemoryLayout<Float>.size
-        guard sampleCount > 0 else { return [] }
-        return data.withUnsafeBytes { buffer in
-            let ptr = buffer.bindMemory(to: Float.self)
-            return Array(UnsafeBufferPointer(start: ptr.baseAddress, count: sampleCount))
-        }
+    func transcribe(_ request: ASRRequest) async throws -> ASRResult {
+        let start = Date()
+        let text = try await transcribe(
+            samples: request.samples,
+            sampleRate: request.sampleRate,
+            language: request.language,
+            context: composeProviderContext(request.context)
+        )
+        let ms = Int(Date().timeIntervalSince(start) * 1000)
+        return ASRResult(text: text, providerID: id, latencyMs: ms)
     }
 }

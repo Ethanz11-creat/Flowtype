@@ -302,6 +302,7 @@ enum SelfTest {
         testASRConfig(r)           // ASR engine config: round-trip + legacy default
         testASRRouting(r)          // unified ASR routing: pure chain selection
         testProviderContextCompose(r) // ASRContext → provider prompt hint
+        testASRBackendLabel(r)     // context.usedProviderID → history backend label
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
@@ -1157,6 +1158,15 @@ enum SelfTest {
         r.eq((composeProviderContext(ASRContext(phrases: [], foreground: longFG)) ?? "").count, 1200,
              "ctx: foreground truncated to 1200")
         r.check(composeProviderContext(ASRContext(phrases: [], foreground: "   ")) == nil, "ctx: blank foreground → nil")
+    }
+
+    // MARK: - ASR backend label mapping (replaces the old `as? QwenASRProvider` branches)
+
+    static func testASRBackendLabel(_ r: Reporter) {
+        r.eq(SessionController.backendLabel(forProviderID: "qwen-local"), "qwen", "backend: qwen-local → qwen")
+        r.eq(SessionController.backendLabel(forProviderID: "cloud-asr"), "cloud", "backend: cloud-asr → cloud")
+        r.eq(SessionController.backendLabel(forProviderID: nil), "apple", "backend: nil → apple (preview fallback)")
+        r.eq(SessionController.backendLabel(forProviderID: "unknown"), "apple", "backend: unknown id → apple")
     }
 
 }

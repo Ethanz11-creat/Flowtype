@@ -2,8 +2,8 @@ import Foundation
 
 // MARK: - ASRStage
 
-/// Pipeline stage that performs batch ASR transcription using the active provider
-/// (local Qwen3-ASR or cloud ASR) with AppleSpeech preview fallback.
+/// 纯编排：组装 `ASRRequest` → 按策略候选链依次尝试 → 收 `ASRResult`。
+/// 无任何 provider 类型判断；AppleSpeech 预览仅作最后兜底。
 ///
 /// Input: `.audio(samples: [Float], previewText: String)`
 /// Output: `.transcript(String)`
@@ -15,13 +15,11 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         let sessionID = context.sessionID
         AppLogger.log("[ASRStage#\(sessionID)] Processing phase started")
         let processingStartTime = Date()
-
         defer {
-            let totalProcessingTime = Date().timeIntervalSince(processingStartTime)
-            AppLogger.log("[ASRStage#\(sessionID)] Processing phase ended (total: \(String(format: "%.1f", totalProcessingTime))s)")
+            let total = Date().timeIntervalSince(processingStartTime)
+            AppLogger.log("[ASRStage#\(sessionID)] Processing phase ended (total: \(String(format: "%.1f", total))s)")
         }
 
-        // Extract input payload
         let rawSamples: [Float]
         let localPreviewText: String
         switch payload {
@@ -30,60 +28,61 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             localPreviewText = previewText
         default:
             AppLogger.log("[ASRStage#\(sessionID)] Unexpected payload: \(payload), expected .audio")
-            return .suspend(ErrorRecoveryContext(
-                failedStage: name,
-                error: ASRStageError.invalidPayload,
-                rawText: nil,
-                retryable: false
-            ))
+            return .suspend(ErrorRecoveryContext(failedStage: name, error: ASRStageError.invalidPayload,
+                                                 rawText: nil, retryable: false))
         }
 
         let audioDuration = Double(rawSamples.count) / 16000.0
         AppLogger.log("[ASRStage#\(sessionID)] Raw samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
 
+        let cfg = await MainActor.run { ConfigurationStore.shared.current }
+        let phrases = await MainActor.run { DictionaryStore.shared.enabledPhrases }
+        let foreground = await MainActor.run { context.foregroundContextText }
+        let request = ASRRequest(
+            samples: rawSamples,
+            sampleRate: 16000,
+            language: cfg.asrLanguage.qwenLanguageCode,
+            context: ASRContext(phrases: phrases, foreground: foreground),
+            timeout: min(120.0, max(30.0, audioDuration * 3 + 15))
+        )
+
+        let chain = await candidateChain()
+        AppLogger.log("[ASRStage#\(sessionID)] Candidate chain: \(chain.map(\.id))")
+
         var finalASRText = ""
         var providerFailed = false
+        var firstFailure: Error?
 
-        let provider = await ASRProviderRegistry.shared.activeTranscriptionProviderAsync()
-        let providerAvailable = await provider.isAvailable
-
-        if providerAvailable && !rawSamples.isEmpty {
-            AppLogger.log("[ASRStage#\(sessionID)] Using \(provider.displayName) for batch transcription")
-            await MainActor.run {
-                context.statePublisher.send(.processing(provider: provider.displayName))
-            }
-
-            let asrStart = Date()
-            do {
-                if let qwenProvider = provider as? QwenASRProvider {
-                    let asrLanguage = await MainActor.run { ConfigurationStore.shared.current.asrLanguage }
-                    let asrPhrases = await MainActor.run { DictionaryStore.shared.enabledPhrases }
-                    let asrContext = composeASRContext(asrPhrases)
-                    finalASRText = try await qwenProvider.transcribe(
-                        samples: rawSamples,
-                        language: asrLanguage.qwenLanguageCode,
-                        context: asrContext
-                    )
-                } else {
-                    let audioData = rawSamples.withUnsafeBytes { Data($0) }
-                    // Cloud STT is upload + remote inference; a fixed 30s is too tight for
-                    // long recordings on slow links. Scale with duration, bounded 30–120s.
-                    let cloudTimeout = min(120.0, max(30.0, audioDuration * 3 + 15))
-                    finalASRText = try await provider.transcribe(audioData: audioData, timeout: cloudTimeout)
+        if !rawSamples.isEmpty {
+            for provider in chain {
+                if Task.isCancelled {
+                    return .suspend(ErrorRecoveryContext(failedStage: name, error: CancellationError(),
+                                                         rawText: nil, retryable: false))
                 }
-                AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) completed in \(String(format: "%.2f", Date().timeIntervalSince(asrStart)))s: \(finalASRText.count) chars")
-            } catch is CancellationError {
-                AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) cancelled")
-                return .suspend(ErrorRecoveryContext(
-                    failedStage: name,
-                    error: CancellationError(),
-                    rawText: nil,
-                    retryable: false
-                ))
-            } catch {
-                AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) failed: \(error)")
-                finalASRText = ""
-                providerFailed = true
+                await MainActor.run {
+                    context.statePublisher.send(.processing(provider: provider.displayName))
+                }
+                let asrStart = Date()
+                do {
+                    let result = try await provider.transcribe(request)
+                    let elapsed = Date().timeIntervalSince(asrStart)
+                    AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) completed in \(String(format: "%.2f", elapsed))s: \(result.text.count) chars")
+                    finalASRText = result.text
+                    await MainActor.run {
+                        context.usedProviderID = result.providerID
+                        context.asrMs = result.latencyMs
+                    }
+                    // A4 接入 ASRRouter 后在此回写云端健康画像。
+                } catch is CancellationError {
+                    AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) cancelled")
+                    return .suspend(ErrorRecoveryContext(failedStage: name, error: CancellationError(),
+                                                         rawText: nil, retryable: false))
+                } catch {
+                    AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) failed: \(error)")
+                    if firstFailure == nil { firstFailure = error }
+                    providerFailed = true
+                    // A4 接入 ASRRouter 后在此记一次失败。
+                }
             }
         }
 
@@ -93,20 +92,14 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         }
 
         guard !finalASRText.isEmpty else {
-            if !providerAvailable {
-                let noticeMsg: String
-                if provider.id == "cloud-asr" {
-                    noticeMsg = "云端 ASR 未就绪，请在设置中配置 API Key"
-                } else {
-                    noticeMsg = "本地模型未加载，请在设置中下载模型"
-                }
-                AppLogger.log("[ASRStage#\(sessionID)] Provider not available, showing gentle notice: \(noticeMsg)")
-                // A missing provider alongside silence is not a hard error — guide the
-                // user with a purple auto-dismissing notice instead of a red error card.
+            if chain.isEmpty {
+                let noticeMsg = (cfg.asrEngine == .cloud)
+                    ? "云端 ASR 未就绪，请在设置中配置 API Key"
+                    : "本地模型未加载，请在设置中下载模型"
+                AppLogger.log("[ASRStage#\(sessionID)] No provider in chain, notice: \(noticeMsg)")
                 return .notice(noticeMsg)
             }
             if providerFailed {
-                AppLogger.log("[ASRStage#\(sessionID)] Provider failed and no preview available — surfacing error")
                 return .suspend(ErrorRecoveryContext(
                     failedStage: name,
                     error: ASRStageError.transcriptionFailed(message: "语音识别失败，请检查网络连接或重试"),
@@ -120,6 +113,23 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
 
         return .continue(.transcript(finalASRText))
     }
+
+    /// 临时候选链（Task A4 由 `ASRRouter` 取代）：按 legacy engine 过滤可用 provider。
+    /// Task A3（配置迁移）会把 `cfg.asrEngine` 换成 `cfg.asrRoutingPolicy`。
+    private func candidateChain() async -> [ASRProvider] {
+        let cfg = await MainActor.run { ConfigurationStore.shared.current }
+        let registry = ASRProviderRegistry.shared
+        let policy: ASRRoutingPolicy = (cfg.asrEngine == .cloud) ? .cloudOnly : .localOnly
+        let inputs = ASRRoutingInputs(
+            policy: policy,
+            localAvailable: registry.qwenLocalProvider.isLoaded,
+            cloudAvailable: await registry.cloudProvider.isAvailable,
+            networkReachable: true,          // A4 引入真实网络探测
+            cloudLatencyEWMA: 0,
+            cloudConsecutiveFailures: 0
+        )
+        return selectASRChain(inputs).compactMap { registry.provider(forID: $0) }
+    }
 }
 
 enum ASRStageError: Error, LocalizedError {
@@ -128,10 +138,8 @@ enum ASRStageError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidPayload:
-            return "无效的输入数据"
-        case .transcriptionFailed(let msg):
-            return msg
+        case .invalidPayload: return "无效的输入数据"
+        case .transcriptionFailed(let msg): return msg
         }
     }
 }

@@ -174,16 +174,9 @@ final class SessionController: ObservableObject {
             AppLogger.log("[SessionController#\(activeSessionID)] Final preview: \(previewText.count) chars")
         }
 
-        let activeProvider = asrRegistry.activeTranscriptionProvider
-        let providerName: String
-        if let qwen = activeProvider as? QwenASRProvider, qwen.isLoaded {
-            providerName = qwen.displayName
-        } else if activeProvider is CloudASRProvider {
-            providerName = activeProvider.displayName
-        } else {
-            providerName = asrRegistry.applePreviewProvider.displayName
-        }
-        transition(to: .processing(provider: providerName), context: context)
+        context.stopRecordingAt = Date()
+        // ASRStage 会随后用真实 provider 名刷新 .processing(provider:) 状态。
+        transition(to: .processing(provider: "识别中"), context: context)
     }
 
     func cancel() {
@@ -433,6 +426,15 @@ final class SessionController: ObservableObject {
         (usePolish && !polishFailed) ? .polish : .raw
     }
 
+    /// sttBackend 文案：不再依赖 provider 类型判断。
+    nonisolated static func backendLabel(forProviderID id: String?) -> String {
+        switch id {
+        case "qwen-local": return "qwen"
+        case "cloud-asr": return "cloud"
+        default: return "apple"
+        }
+    }
+
     /// Texts to store when Polish fails and we degrade to history-only. The recovery context's
     /// rawText is the PRE-PostProcess transcript; the suspended payload's `.processed` text carries
     /// the punctuation/term fixes the user already benefits from on the success path — prefer it
@@ -452,15 +454,7 @@ final class SessionController: ObservableObject {
             durationMs = nil
         }
         let mode: PolishMode = SessionController.historyMode(usePolish: context.usePolish, polishFailed: context.polishFailed)
-        let activeProvider = asrRegistry.activeTranscriptionProvider
-        let sttBackend: String
-        if activeProvider is QwenASRProvider, asrRegistry.qwenLocalProvider.isLoaded {
-            sttBackend = "qwen"
-        } else if activeProvider is CloudASRProvider {
-            sttBackend = "cloud"
-        } else {
-            sttBackend = "apple"
-        }
+        let sttBackend = SessionController.backendLabel(forProviderID: context.usedProviderID)
         let session = DictationSession(
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,

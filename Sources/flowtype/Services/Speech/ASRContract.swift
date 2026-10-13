@@ -56,3 +56,10 @@ func composeProviderContext(
     }
     return parts.isEmpty ? nil : parts.joined(separator: "\n")
 }
+
+enum SpeechProviderError: Error {
+    case transcriptionFailed(String)
+    case networkError(Error)
+    case notAvailable
+    case permissionDenied
+}
