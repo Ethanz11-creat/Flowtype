@@ -15,3 +15,7 @@ DerivedData/
 /FlowType
 *.dmg
 .superpowers/
+
+# Local debug artifacts
+/screenshots/
+/scripts/mouseutil
