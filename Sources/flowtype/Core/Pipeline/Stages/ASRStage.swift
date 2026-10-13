@@ -46,7 +46,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             timeout: min(120.0, max(30.0, audioDuration * 3 + 15))
         )
 
-        let chain = await candidateChain()
+        let chain = await ASRRouter.shared.selectChain()
         AppLogger.log("[ASRStage#\(sessionID)] Candidate chain: \(chain.map(\.id))")
 
         var finalASRText = ""
@@ -72,7 +72,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                         context.usedProviderID = result.providerID
                         context.asrMs = result.latencyMs
                     }
-                    // A4 接入 ASRRouter 后在此回写云端健康画像。
+                    await ASRRouter.shared.recordSuccess(providerID: result.providerID, latencyMs: result.latencyMs)
                 } catch is CancellationError {
                     AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) cancelled")
                     return .suspend(ErrorRecoveryContext(failedStage: name, error: CancellationError(),
@@ -81,7 +81,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                     AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) failed: \(error)")
                     if firstFailure == nil { firstFailure = error }
                     providerFailed = true
-                    // A4 接入 ASRRouter 后在此记一次失败。
+                    await ASRRouter.shared.recordFailure(providerID: provider.id)
                 }
             }
         }
@@ -118,22 +118,6 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         }
 
         return .continue(.transcript(finalASRText))
-    }
-
-    /// 临时候选链（Task A4 由 `ASRRouter` 取代）：按路由策略过滤可用 provider。
-    private func candidateChain() async -> [ASRProvider] {
-        let cfg = await MainActor.run { ConfigurationStore.shared.current }
-        let registry = ASRProviderRegistry.shared
-        let policy = cfg.asrRoutingPolicy
-        let inputs = ASRRoutingInputs(
-            policy: policy,
-            localAvailable: registry.qwenLocalProvider.isLoaded,
-            cloudAvailable: await registry.cloudProvider.isAvailable,
-            networkReachable: true,          // A4 引入真实网络探测
-            cloudLatencyEWMA: 0,
-            cloudConsecutiveFailures: 0
-        )
-        return selectASRChain(inputs).compactMap { registry.provider(forID: $0) }
     }
 }
 

@@ -303,6 +303,7 @@ enum SelfTest {
         testASRRouting(r)          // unified ASR routing: pure chain selection
         testProviderContextCompose(r) // ASRContext → provider prompt hint
         testASRBackendLabel(r)     // context.usedProviderID → history backend label
+        testRouterEWMA(r)          // ASR router health: EWMA update math
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
@@ -1176,6 +1177,20 @@ enum SelfTest {
         r.eq(SessionController.backendLabel(forProviderID: "cloud-asr"), "cloud", "backend: cloud-asr → cloud")
         r.eq(SessionController.backendLabel(forProviderID: nil), "apple", "backend: nil → apple (preview fallback)")
         r.eq(SessionController.backendLabel(forProviderID: "unknown"), "apple", "backend: unknown id → apple")
+    }
+
+    // MARK: - ASR router health: latency EWMA
+
+    static func testRouterEWMA(_ r: Reporter) {
+        // 首个样本（previous == 0）直接采用，避免从 0 缓慢爬升
+        r.eq(updateLatencyEWMA(previous: 0, sample: 800), 800, "ewma: first sample taken directly")
+        // 后续样本按 alpha=0.3 加权
+        r.eq(updateLatencyEWMA(previous: 1000, sample: 2000), 1300, "ewma: alpha 0.3 blend")
+        r.eq(updateLatencyEWMA(previous: 1000, sample: 0), 700, "ewma: fast sample pulls average down")
+        // 单调性：连续慢样本必须把均值推过阈值
+        var v = 0.0
+        for _ in 0..<5 { v = updateLatencyEWMA(previous: v, sample: 5000) }
+        r.check(v > ASRRoutingThresholds.cloudLatencyMs, "ewma: sustained slow samples exceed threshold")
     }
 
 }
