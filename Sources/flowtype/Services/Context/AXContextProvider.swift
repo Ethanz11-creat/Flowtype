@@ -45,14 +45,24 @@ final class AXContextProvider: ContextProvider, @unchecked Sendable {
         return s
     }
 
+    /// 元素是否为安全输入（密码）字段。读取 role/subrole，命中即不可采集其值。
+    private func isSecure(_ element: AXUIElement) -> Bool {
+        isSecureFocus(role: stringAttribute(element, kAXRoleAttribute as CFString),
+                      subrole: stringAttribute(element, kAXSubroleAttribute as CFString))
+    }
+
     /// 焦点元素自身文本，其次回退到其父级（多数编辑器把文本放在嵌套的 AXTextArea 上）。
+    /// 焦点或其父级为安全输入字段时直接返回 nil——绝不读取其值。
     private func collectElementText(_ element: AXUIElement) -> String? {
+        if isSecure(element) { return nil }
         if let v = stringAttribute(element, kAXValueAttribute as CFString) { return v }
         if let v = stringAttribute(element, kAXTitleAttribute as CFString) { return v }
         var parent: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parent) == .success,
            let p = parent, CFGetTypeID(p) == AXUIElementGetTypeID() {
-            return stringAttribute((p as! AXUIElement), kAXValueAttribute as CFString)
+            let parentElement = p as! AXUIElement
+            if isSecure(parentElement) { return nil }
+            return stringAttribute(parentElement, kAXValueAttribute as CFString)
         }
         return nil
     }

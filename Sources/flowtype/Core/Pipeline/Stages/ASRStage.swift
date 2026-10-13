@@ -51,7 +51,6 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
 
         var finalASRText = ""
         var providerFailed = false
-        var firstFailure: Error?
 
         if !rawSamples.isEmpty {
             for provider in chain {
@@ -80,7 +79,6 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                                                          rawText: nil, retryable: false))
                 } catch {
                     AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) failed: \(error)")
-                    if firstFailure == nil { firstFailure = error }
                     providerFailed = true
                     ASRRouter.shared.recordFailure(providerID: provider.id)
                 }
@@ -132,4 +130,13 @@ enum ASRStageError: Error, LocalizedError {
         case .transcriptionFailed(let msg): return msg
         }
     }
+}
+
+/// 候选链语义：依次尝试，首个成功即停；失败则继续下一个。
+/// 纯函数（无副作用），与 `ASRStage.execute` 中的候选链循环语义一致，便于单测。
+func firstSuccessfulProviderID(chain: [String], attempt: (String) -> Bool) -> String? {
+    for provider in chain {
+        if attempt(provider) { return provider }
+    }
+    return nil
 }

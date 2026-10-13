@@ -26,6 +26,14 @@ func buildContextText(_ ctx: ForegroundContext?, maxChars: Int = 1200) -> String
     return String(redactContextSecrets(joined).prefix(maxChars))
 }
 
+/// 焦点处于安全输入（密码）字段时，绝不可采集其值。
+/// macOS 的安全输入字段以 subrole（AXSecureTextField）标识；防御性地也接受 role 命中。
+func isSecureFocus(role: String?, subrole: String?) -> Bool {
+    if subrole == "AXSecureTextField" { return true }
+    if role == "AXSecureTextField" { return true }
+    return false
+}
+
 /// 去除上下文里可能出现的凭据形态，避免随云端请求外泄。
 func redactContextSecrets(_ text: String) -> String {
     var out = text

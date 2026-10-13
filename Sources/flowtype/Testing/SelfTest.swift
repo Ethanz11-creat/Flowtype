@@ -303,10 +303,13 @@ enum SelfTest {
         testPrivacyConfig(r)       // storeTranscriptText: round-trip + legacy default true
         testASRConfig(r)           // ASR engine config: round-trip + legacy default
         testASRRouting(r)          // unified ASR routing: pure chain selection
+        testRoutingKeyPrecedence(r) // legacy asrEngine wins when both routing keys present
+        testFallbackChainSemantics(r) // candidate chain: advance on failure, stop at first success
         testProviderContextCompose(r) // ASRContext → provider prompt hint
         testASRBackendLabel(r)     // context.usedProviderID → history backend label
         testRouterEWMA(r)          // ASR router health: EWMA update math
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
+        testSecureFocus(r)         // secure (password) focus → never collect value
         testSessionMetrics(r)      // percentile + metrics report
         testMetricsSchema(r)       // v4 metrics columns persist
         testCloudContextToggle(r)  // cloud context opt-out default + round-trip
@@ -1229,6 +1232,54 @@ enum SelfTest {
                 "ctx-asm: sk- token redacted")
         r.check(!redactContextSecrets("key=sf-abcdefghij123456").contains("sf-abcdefghij123456"),
                 "ctx-asm: sf- token redacted")
+    }
+
+    // MARK: - Secure focus: password fields must never be collected
+
+    static func testSecureFocus(_ r: Reporter) {
+        r.check(isSecureFocus(role: "AXTextField", subrole: "AXSecureTextField"),
+                "secure: secure subrole → true")
+        r.check(isSecureFocus(role: "AXSecureTextField", subrole: nil),
+                "secure: secure role (defensive) → true")
+        r.check(isSecureFocus(role: "AXSecureTextField", subrole: "AXSecureTextField"),
+                "secure: both secure → true")
+        r.check(!isSecureFocus(role: "AXTextField", subrole: nil),
+                "secure: normal AXTextField → false")
+        r.check(!isSecureFocus(role: nil, subrole: nil),
+                "secure: nil/nil → false")
+    }
+
+    // MARK: - Routing key precedence: legacy asrEngine wins when both keys present
+
+    static func testRoutingKeyPrecedence(_ r: Reporter) {
+        // 兼容旧配置：当 asrEngine 与新 asrRoutingPolicy 同时存在时，旧键优先（保持老用户行为）。
+        let both1 = Data(#"{"asrLanguage":"zh","asrEngine":"cloud","asrRoutingPolicy":"localOnly"}"#.utf8)
+        r.eq(try? JSONDecoder().decode(Configuration.self, from: both1).asrRoutingPolicy,
+             .cloudOnly, "route-key: legacy asrEngine=cloud wins over policy=localOnly")
+        let both2 = Data(#"{"asrLanguage":"zh","asrEngine":"local","asrRoutingPolicy":"cloudOnly"}"#.utf8)
+        r.eq(try? JSONDecoder().decode(Configuration.self, from: both2).asrRoutingPolicy,
+             .localOnly, "route-key: legacy asrEngine=local wins over policy=cloudOnly")
+        // 仅有新键时按其取值。
+        let onlyNew = Data(#"{"asrLanguage":"zh","asrRoutingPolicy":"localOnly"}"#.utf8)
+        r.eq(try? JSONDecoder().decode(Configuration.self, from: onlyNew).asrRoutingPolicy,
+             .localOnly, "route-key: new-key-only → honoured")
+    }
+
+    // MARK: - Fallback chain semantics: advance only on failure, stop at first success
+
+    static func testFallbackChainSemantics(_ r: Reporter) {
+        r.eq(firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { $0 == "cloud-asr" },
+             "cloud-asr", "chain: cloud succeeds → stops there")
+        r.eq(firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { $0 == "qwen-local" },
+             "qwen-local", "chain: cloud fails, local succeeds → qwen-local")
+        r.eq(firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { _ in false },
+             nil, "chain: both fail → nil")
+        r.eq(firstSuccessfulProviderID(chain: []) { _ in true },
+             nil, "chain: empty → nil")
+        // 首个成功即停：local 不应被尝试。
+        var attempted: [String] = []
+        _ = firstSuccessfulProviderID(chain: ["cloud-asr", "qwen-local"]) { attempted.append($0); return true }
+        r.eq(attempted, ["cloud-asr"], "chain: local never attempted after cloud success")
     }
 
     // MARK: - Session metrics: percentile + report
