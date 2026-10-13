@@ -81,6 +81,18 @@ final class AppDatabase: @unchecked Sendable {
                 WHERE rawTranscript IS NOT NULL AND trim(rawTranscript, \(ws)) <> ''
                 """)
         }
+        // v4: per-session ASR metrics (content-free) for latency/fallback observability.
+        m.registerMigration("v4_metrics") { db in
+            try db.alter(table: "session") { t in
+                t.add(column: "asrProviderID", .text)
+                t.add(column: "usedFallback", .boolean).notNull().defaults(to: false)
+                t.add(column: "fallbackReason", .text)
+                t.add(column: "asrMs", .integer).notNull().defaults(to: 0)
+                t.add(column: "polishMs", .integer).notNull().defaults(to: 0)
+                t.add(column: "injectMs", .integer).notNull().defaults(to: 0)
+                t.add(column: "stopToInjectMs", .integer).notNull().defaults(to: 0)
+            }
+        }
         return m
     }
 }

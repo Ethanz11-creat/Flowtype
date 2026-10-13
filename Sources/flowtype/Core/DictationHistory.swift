@@ -34,6 +34,15 @@ struct DictationSession: Codable, Identifiable {
     let language: String?            // "zh" / "en" / "mixed" (CJK heuristic)
     let sttBackend: String?
 
+    // MARK: - Metrics (no content)
+    var asrProviderID: String?
+    var usedFallback: Bool = false
+    var fallbackReason: String?
+    var asrMs: Int?
+    var polishMs: Int?
+    var injectMs: Int?
+    var stopToInjectMs: Int?
+
     init(rawTranscript: String, finalText: String, polishMode: PolishMode,
          durationMs: UInt64?, recordingMs: UInt64? = nil,
          appName: String? = nil, appBundleID: String? = nil, language: String? = nil,
@@ -49,6 +58,7 @@ struct DictationSession: Codable, Identifiable {
         self.appBundleID = appBundleID
         self.language = language
         self.sttBackend = sttBackend
+        self.usedFallback = false
     }
 
     init(id: String, createdAt: Date, rawTranscript: String, finalText: String, polishMode: PolishMode,
@@ -58,6 +68,7 @@ struct DictationSession: Codable, Identifiable {
         self.rawTranscript = rawTranscript; self.finalText = finalText; self.polishMode = polishMode
         self.durationMs = durationMs; self.recordingMs = recordingMs
         self.appName = appName; self.appBundleID = appBundleID; self.language = language; self.sttBackend = sttBackend
+        self.usedFallback = false
     }
 }
 

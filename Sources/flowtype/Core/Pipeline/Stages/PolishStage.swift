@@ -69,6 +69,7 @@ final class PolishStage: PipelineStage, @unchecked Sendable {
                 }
             }
             if !accumulated.isEmpty && accumulated != text {
+                await MainActor.run { context.polishMs = Int(Date().timeIntervalSince(startTime) * 1000) }
                 polishedText = accumulated
                 AppLogger.log("[PolishStage#\(sessionID)] LLM polished in \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s: \(accumulated.count) chars")
             } else {

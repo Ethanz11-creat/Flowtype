@@ -455,7 +455,7 @@ final class SessionController: ObservableObject {
         }
         let mode: PolishMode = SessionController.historyMode(usePolish: context.usePolish, polishFailed: context.polishFailed)
         let sttBackend = SessionController.backendLabel(forProviderID: context.usedProviderID)
-        let session = DictationSession(
+        var session = DictationSession(
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,
             polishMode: mode,
@@ -466,6 +466,13 @@ final class SessionController: ObservableObject {
             language: detectLanguageTag(context.finalText),
             sttBackend: sttBackend
         )
+        session.asrProviderID = context.usedProviderID
+        session.asrMs = context.asrMs
+        session.polishMs = context.polishMs
+        session.injectMs = context.injectMs
+        if let stopAt = context.stopRecordingAt {
+            session.stopToInjectMs = Int(Date().timeIntervalSince(stopAt) * 1000)
+        }
         HistoryStore.shared.append(session, storeText: ConfigurationStore.shared.current.storeTranscriptText)
 
         // Auto-detect corrections for dictionary

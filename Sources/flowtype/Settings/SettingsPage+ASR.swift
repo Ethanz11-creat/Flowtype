@@ -79,6 +79,20 @@ extension SettingsPage {
                 refreshDevices()
             }
 
+            HStack {
+                Text("性能指标")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button("复制指标报告") {
+                    let report = SessionMetrics.report(HistoryStore.shared.sessions)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(report, forType: .string)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
             Text("录音中实时预览使用 Apple Speech，始终在本地完成")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)

@@ -61,6 +61,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
         case .inject:
             do {
                 try await KeyboardInjector.insertText(text)
+                await MainActor.run { context.injectMs = Int(Date().timeIntervalSince(startTime) * 1000) }
                 AppLogger.log("[InjectionStage#\(sessionID)] Injected in \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
                 return .complete
             } catch is CancellationError {

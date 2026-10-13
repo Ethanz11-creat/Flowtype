@@ -305,6 +305,8 @@ enum SelfTest {
         testASRBackendLabel(r)     // context.usedProviderID → history backend label
         testRouterEWMA(r)          // ASR router health: EWMA update math
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
+        testSessionMetrics(r)      // percentile + metrics report
+        testMetricsSchema(r)       // v4 metrics columns persist
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
@@ -1215,5 +1217,45 @@ enum SelfTest {
                 "ctx-asm: sk- token redacted")
         r.check(!redactContextSecrets("key=sf-abcdefghij123456").contains("sf-abcdefghij123456"),
                 "ctx-asm: sf- token redacted")
+    }
+
+    // MARK: - Session metrics: percentile + report
+
+    static func testSessionMetrics(_ r: Reporter) {
+        r.check(percentile([], 0.5) == nil, "metrics: empty → nil")
+        r.eq(percentile([100], 0.5), 100, "metrics: single value")
+        r.eq(percentile([10, 20, 30, 40, 50], 0.5), 30, "metrics: p50 of odd set")
+        r.eq(percentile([10, 20, 30, 40], 0.5), 30, "metrics: p50 nearest-rank of even set")
+        r.eq(percentile([10, 20, 30, 40], 0.95), 40, "metrics: p95 clamps to max")
+        r.eq(percentile([10, 20, 30, 40], 0.0), 10, "metrics: p0 → min")
+
+        var s = DictationSession(rawTranscript: "a", finalText: "a", polishMode: .raw,
+                                 durationMs: 2000, recordingMs: 1000, appName: nil,
+                                 appBundleID: nil, language: "zh", sttBackend: "cloud")
+        s.stopToInjectMs = 1500
+        s.asrProviderID = "cloud-asr"
+        s.usedFallback = false
+        let txt = SessionMetrics.report([s])
+        r.check(txt.contains("p50"), "metrics: report contains p50")
+        r.check(txt.contains("1500"), "metrics: report contains the sample value")
+    }
+
+    static func testMetricsSchema(_ r: Reporter) {
+        guard let db = try? AppDatabase.inMemory() else { r.check(false, "metrics-db"); return }
+        var s = DictationSession(rawTranscript: "hi", finalText: "hi", polishMode: .raw,
+                                 durationMs: 2000, recordingMs: 1000, appName: "A",
+                                 appBundleID: nil, language: "en", sttBackend: "cloud")
+        s.stopToInjectMs = 1420
+        s.asrProviderID = "cloud-asr"
+        s.usedFallback = true
+        s.fallbackReason = "network"
+        s.asrMs = 900
+        var rec = SessionRecord(from: s)
+        try? db.dbQueue.write { try rec.insert($0) }
+        let back = (try? db.dbQueue.read { try SessionRecord.fetchAll($0) })?.first
+        r.eq(back?.stopToInjectMs, 1420, "metrics: stopToInjectMs persisted")
+        r.eq(back?.usedFallback, true, "metrics: usedFallback persisted")
+        r.eq(back?.fallbackReason, "network", "metrics: fallbackReason persisted")
+        r.eq(back?.asrProviderID, "cloud-asr", "metrics: asrProviderID persisted")
     }
 }

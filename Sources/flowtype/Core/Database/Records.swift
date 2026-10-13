@@ -15,6 +15,13 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
     var sttBackend: String
     var rawTranscript: String?
     var finalText: String?
+    var asrProviderID: String?
+    var usedFallback: Bool
+    var fallbackReason: String?
+    var asrMs: Int64
+    var polishMs: Int64
+    var injectMs: Int64
+    var stopToInjectMs: Int64
 
     init(from s: DictationSession) {
         self.id = s.id
@@ -32,10 +39,17 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         self.sttBackend = s.sttBackend ?? "legacy"   // migrated old rows have no backend
         self.rawTranscript = s.rawTranscript
         self.finalText = s.finalText
+        self.asrProviderID = s.asrProviderID
+        self.usedFallback = s.usedFallback
+        self.fallbackReason = s.fallbackReason
+        self.asrMs = Int64(s.asrMs ?? 0)
+        self.polishMs = Int64(s.polishMs ?? 0)
+        self.injectMs = Int64(s.injectMs ?? 0)
+        self.stopToInjectMs = Int64(s.stopToInjectMs ?? 0)
     }
 
     func toDictationSession() -> DictationSession {
-        DictationSession(id: id,
+        var session = DictationSession(id: id,
                          createdAt: Date(timeIntervalSince1970: startedAt),
                          rawTranscript: rawTranscript ?? "",
                          finalText: finalText ?? "",
@@ -44,6 +58,14 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
                          recordingMs: recordingMs > 0 ? UInt64(recordingMs) : nil,
                          appName: appName, appBundleID: appBundleID,
                          language: language, sttBackend: sttBackend)
+        session.asrProviderID = asrProviderID
+        session.usedFallback = usedFallback
+        session.fallbackReason = fallbackReason
+        session.asrMs = asrMs > 0 ? Int(asrMs) : nil
+        session.polishMs = polishMs > 0 ? Int(polishMs) : nil
+        session.injectMs = injectMs > 0 ? Int(injectMs) : nil
+        session.stopToInjectMs = stopToInjectMs > 0 ? Int(stopToInjectMs) : nil
+        return session
     }
 }
 
