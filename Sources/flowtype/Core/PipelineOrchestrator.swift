@@ -83,6 +83,13 @@ final class SessionController: ObservableObject {
     ) {
         self.pipeline = pipeline
         self.observers = observers
+
+        // 本地模型常驻暖机：避免每轮首字都付冷加载代价。
+        Task { @MainActor in
+            let cfg = ConfigurationStore.shared.current
+            guard cfg.asrRoutingPolicy != .cloudOnly else { return }
+            await QwenModelState.shared.loadModel(provider: asrRegistry.qwenLocalProvider)
+        }
     }
 
     // MARK: - Public API

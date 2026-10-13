@@ -45,7 +45,9 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
 
         // (.injecting is set by the orchestrator's pre-stage transition; the
         // statePublisher subscriber filters .injecting, so we don't re-send it.)
-        try? await Task.sleep(nanoseconds: 100_000_000) // let focus settle after the end-tap
+        // 让焦点在结束触发键之后稳定下来 —— 这个等待直接计入 stop→inject 延迟。
+        // 缩短到 50ms 后按指标 P95 观测再决定是否继续压缩。
+        try? await Task.sleep(nanoseconds: 50_000_000)
 
         // Decide from the focus at THIS moment (not from whether the app changed):
         // editable text → inject (even across an app switch); a non-text control or secure
