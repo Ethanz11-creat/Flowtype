@@ -36,7 +36,7 @@ struct DictationSession: Codable, Identifiable {
 
     // MARK: - Metrics (no content)
     var asrProviderID: String?
-    var usedFallback: Bool = false
+    var usedFallback: Bool?
     var fallbackReason: String?
     var asrMs: Int?
     var polishMs: Int?
@@ -58,7 +58,6 @@ struct DictationSession: Codable, Identifiable {
         self.appBundleID = appBundleID
         self.language = language
         self.sttBackend = sttBackend
-        self.usedFallback = false
     }
 
     init(id: String, createdAt: Date, rawTranscript: String, finalText: String, polishMode: PolishMode,
@@ -68,7 +67,6 @@ struct DictationSession: Codable, Identifiable {
         self.rawTranscript = rawTranscript; self.finalText = finalText; self.polishMode = polishMode
         self.durationMs = durationMs; self.recordingMs = recordingMs
         self.appName = appName; self.appBundleID = appBundleID; self.language = language; self.sttBackend = sttBackend
-        self.usedFallback = false
     }
 }
 

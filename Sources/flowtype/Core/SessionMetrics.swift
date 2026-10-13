@@ -17,7 +17,7 @@ enum SessionMetrics {
     static func report(_ sessions: [DictationSession]) -> String {
         let stopToInject = sessions.compactMap(\.stopToInjectMs)
         let asr = sessions.compactMap(\.asrMs)
-        let fallbacks = sessions.filter(\.usedFallback).count
+        let fallbacks = sessions.filter { $0.usedFallback == true }.count
         let cloud = sessions.filter { $0.asrProviderID == "cloud-asr" }.count
 
         func line(_ label: String, _ values: [Int]) -> String {

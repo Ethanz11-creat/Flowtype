@@ -166,8 +166,10 @@ enum SelfTest {
         let oldSession = Data(#"{"id":"x","createdAt":"2026-01-01T00:00:00Z","rawTranscript":"a","finalText":"a","polishMode":"raw","durationMs":1000}"#.utf8)
         let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
         let s = try? dec.decode(DictationSession.self, from: oldSession)
+        r.check(s != nil, "session: legacy JSON still decodes after new metric fields")
         r.eq(s?.recordingMs, nil, "session: legacy decodes, recordingMs nil")
         r.eq(s?.appName, nil, "session: legacy decodes, appName nil")
+        r.eq(s?.usedFallback, nil, "session: legacy decodes, usedFallback nil")
         // old DailyStats JSON (no new keys) → defaults
         let oldDaily = Data(#"{"date":"2026-01-01","totalDurationMs":1000,"totalWordCount":5,"sessionCount":1}"#.utf8)
         let d = try? JSONDecoder().decode(DailyStats.self, from: oldDaily)
@@ -1238,6 +1240,13 @@ enum SelfTest {
         let txt = SessionMetrics.report([s])
         r.check(txt.contains("p50"), "metrics: report contains p50")
         r.check(txt.contains("1500"), "metrics: report contains the sample value")
+
+        // legacy JSON without ANY of the seven new metric keys must still decode (non-nil, usedFallback nil)
+        let legacy = Data(#"{"id":"x","createdAt":"2026-01-01T00:00:00Z","rawTranscript":"a","finalText":"a","polishMode":"raw","durationMs":1000}"#.utf8)
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        let legacySession = try? dec.decode(DictationSession.self, from: legacy)
+        r.check(legacySession != nil, "metrics: legacy JSON decodes (no new keys)")
+        r.eq(legacySession?.usedFallback, nil, "metrics: legacy JSON → usedFallback nil (no throw)")
     }
 
     static func testMetricsSchema(_ r: Reporter) {

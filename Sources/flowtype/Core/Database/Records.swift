@@ -40,7 +40,7 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         self.rawTranscript = s.rawTranscript
         self.finalText = s.finalText
         self.asrProviderID = s.asrProviderID
-        self.usedFallback = s.usedFallback
+        self.usedFallback = s.usedFallback ?? false
         self.fallbackReason = s.fallbackReason
         self.asrMs = Int64(s.asrMs ?? 0)
         self.polishMs = Int64(s.polishMs ?? 0)
