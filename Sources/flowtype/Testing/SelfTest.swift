@@ -300,6 +300,8 @@ enum SelfTest {
         testJSONMigration(r)       // JSONMigration: idempotent import + sttBackend tagging
         testPrivacyConfig(r)       // storeTranscriptText: round-trip + legacy default true
         testASRConfig(r)           // ASR engine config: round-trip + legacy default
+        testASRRouting(r)          // unified ASR routing: pure chain selection
+        testProviderContextCompose(r) // ASRContext → provider prompt hint
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
@@ -1111,6 +1113,50 @@ enum SelfTest {
         let segs = KeyboardInjector.splitIntoLineSegments(KeyboardInjector.normalizeNewlines(text))
         let rebuilt = segs.map { KeyboardInjector.chunk($0, size: 8).joined() }.joined(separator: "\n")
         r.eq(rebuilt, KeyboardInjector.normalizeNewlines(text), "inject: segment+chunk round-trips")
+    }
+
+    // MARK: - Unified ASR routing: pure candidate-chain decision
+
+    static func testASRRouting(_ r: Reporter) {
+        func inputs(policy: ASRRoutingPolicy = .auto, local: Bool = true, cloud: Bool = true,
+                    net: Bool = true, lat: Double = 0, fails: Int = 0) -> ASRRoutingInputs {
+            ASRRoutingInputs(policy: policy, localAvailable: local, cloudAvailable: cloud,
+                             networkReachable: net, cloudLatencyEWMA: lat,
+                             cloudConsecutiveFailures: fails)
+        }
+        r.eq(selectASRChain(inputs()), ["cloud-asr", "qwen-local"], "route: auto healthy → cloud first")
+        r.eq(selectASRChain(inputs(net: false)), ["qwen-local", "cloud-asr"], "route: auto offline → local first")
+        r.eq(selectASRChain(inputs(lat: 5000)), ["qwen-local", "cloud-asr"], "route: auto slow cloud → local first")
+        r.eq(selectASRChain(inputs(fails: 2)), ["qwen-local", "cloud-asr"], "route: auto failing cloud → local first")
+        r.eq(selectASRChain(inputs(lat: 3000)), ["cloud-asr", "qwen-local"], "route: auto latency at threshold → cloud first")
+        r.eq(selectASRChain(inputs(cloud: false)), ["qwen-local"], "route: auto cloud missing → local only")
+        r.eq(selectASRChain(inputs(local: false)), ["cloud-asr"], "route: auto local missing → cloud only")
+        r.eq(selectASRChain(inputs(local: false, cloud: false)), [], "route: auto neither → empty")
+        r.eq(selectASRChain(inputs(policy: .localOnly)), ["qwen-local"], "route: localOnly → local")
+        r.eq(selectASRChain(inputs(policy: .localOnly, local: false)), [], "route: localOnly+unavailable → empty")
+        r.eq(selectASRChain(inputs(policy: .localOnly, net: false)), ["qwen-local"], "route: localOnly ignores network")
+        r.eq(selectASRChain(inputs(policy: .cloudOnly)), ["cloud-asr"], "route: cloudOnly → cloud")
+        r.eq(selectASRChain(inputs(policy: .cloudOnly, cloud: false)), [], "route: cloudOnly+unavailable → empty")
+
+        // policy round-trips and legacy display
+        let data = try! JSONEncoder().encode(ASRRoutingPolicy.auto)
+        r.eq(try? JSONDecoder().decode(ASRRoutingPolicy.self, from: data), .auto, "route: policy round-trips")
+        r.eq(ASRRoutingPolicy.allCases.count, 3, "route: exactly 3 policies")
+    }
+
+    // MARK: - ASRContext → provider prompt hint
+
+    static func testProviderContextCompose(_ r: Reporter) {
+        r.check(composeProviderContext(nil) == nil, "ctx: nil → nil")
+        r.check(composeProviderContext(ASRContext(phrases: [], foreground: nil)) == nil, "ctx: empty → nil")
+        r.eq(composeProviderContext(ASRContext(phrases: ["React"], foreground: nil)), "React", "ctx: phrases only")
+        r.eq(composeProviderContext(ASRContext(phrases: [], foreground: "func main()")), "func main()", "ctx: foreground only")
+        r.eq(composeProviderContext(ASRContext(phrases: ["React"], foreground: "func main()")),
+             "React\nfunc main()", "ctx: phrases then foreground")
+        let longFG = String(repeating: "x", count: 5000)
+        r.eq((composeProviderContext(ASRContext(phrases: [], foreground: longFG)) ?? "").count, 1200,
+             "ctx: foreground truncated to 1200")
+        r.check(composeProviderContext(ASRContext(phrases: [], foreground: "   ")) == nil, "ctx: blank foreground → nil")
     }
 
 }
