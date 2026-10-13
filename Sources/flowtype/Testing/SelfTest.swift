@@ -306,6 +306,8 @@ enum SelfTest {
         testRoutingKeyPrecedence(r) // legacy asrEngine wins when both routing keys present
         testProviderContextCompose(r) // ASRContext → provider prompt hint
         testASRBackendLabel(r)     // context.usedProviderID → history backend label
+        testFallbackReasonClassification(r) // provider failure → aggregatable fallback reason
+        testASRCapabilityContract(r) // provider capability contract (router requiresNetwork gate)
         testRouterEWMA(r)          // ASR router health: EWMA update math
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
@@ -1196,6 +1198,40 @@ enum SelfTest {
         r.eq(SessionController.backendLabel(forProviderID: "unknown"), "apple", "backend: unknown id → apple")
     }
 
+    // MARK: - Provider failure → aggregatable fallback reason (pure)
+
+    static func testFallbackReasonClassification(_ r: Reporter) {
+        r.eq(fallbackReason(for: CloudASRError.timeout), "timeout", "fallback: CloudASRError.timeout")
+        r.eq(fallbackReason(for: CloudASRError.networkError(NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotFindHost))),
+             "network", "fallback: CloudASRError.networkError")
+        r.eq(fallbackReason(for: CloudASRError.noAPIKey), "unavailable", "fallback: noAPIKey")
+        r.eq(fallbackReason(for: CloudASRError.noModel), "unavailable", "fallback: noModel")
+        r.eq(fallbackReason(for: CloudASRError.noActiveProvider), "unavailable", "fallback: noActiveProvider")
+        r.eq(fallbackReason(for: CloudASRError.invalidResponse), "error", "fallback: invalidResponse")
+        r.eq(fallbackReason(for: CloudASRError.apiError(statusCode: 500, message: "boom")), "error", "fallback: apiError")
+        r.eq(fallbackReason(for: CloudASRError.invalidURL("bad")), "error", "fallback: invalidURL")
+        r.eq(fallbackReason(for: CloudASRError.audioEncodingFailed), "error", "fallback: audioEncodingFailed")
+        r.eq(fallbackReason(for: SpeechProviderError.notAvailable), "unavailable", "fallback: SpeechProviderError.notAvailable")
+        r.eq(fallbackReason(for: NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)),
+             "network", "fallback: NSURLErrorDomain NSError")
+        r.eq(fallbackReason(for: SpeechProviderError.permissionDenied), "error", "fallback: SpeechProviderError.permissionDenied")
+        struct UnknownError: Error {}
+        r.eq(fallbackReason(for: UnknownError()), "error", "fallback: unknown error → error")
+    }
+
+    // MARK: - Provider capability contract (router's requiresNetwork gate depends on it)
+
+    static func testASRCapabilityContract(_ r: Reporter) {
+        let qwen = ASRProviderRegistry.shared.qwenLocalProvider
+        let cloud = ASRProviderRegistry.shared.cloudProvider
+        r.eq(qwen.id, ASRProviderID.qwenLocal, "caps: qwen id matches constant")
+        r.eq(qwen.capabilities.requiresNetwork, false, "caps: qwen-local is not network-backed")
+        r.eq(qwen.capabilities.location, .onDevice, "caps: qwen-local location onDevice")
+        r.eq(cloud.id, ASRProviderID.cloud, "caps: cloud id matches constant")
+        r.eq(cloud.capabilities.requiresNetwork, true, "caps: cloud requires network")
+        r.eq(cloud.capabilities.location, .cloud, "caps: cloud location cloud")
+    }
+
     // MARK: - ASR router health: latency EWMA
 
     static func testRouterEWMA(_ r: Reporter) {
@@ -1283,6 +1319,13 @@ enum SelfTest {
         let txt = SessionMetrics.report([s])
         r.check(txt.contains("p50"), "metrics: report contains p50")
         r.check(txt.contains("1500"), "metrics: report contains the sample value")
+        r.check(txt.contains("fallback: 0"), "metrics: report counts non-fallback as 0")
+
+        var fb = DictationSession(rawTranscript: "b", finalText: "b", polishMode: .raw,
+                                  durationMs: 2000, recordingMs: 1000, appName: nil,
+                                  appBundleID: nil, language: "zh", sttBackend: "qwen")
+        fb.usedFallback = true
+        r.check(SessionMetrics.report([fb]).contains("fallback: 1"), "metrics: report counts usedFallback == true")
 
         // legacy JSON without ANY of the seven new metric keys must still decode (non-nil, usedFallback nil)
         let legacy = Data(#"{"id":"x","createdAt":"2026-01-01T00:00:00Z","rawTranscript":"a","finalText":"a","polishMode":"raw","durationMs":1000}"#.utf8)
@@ -1309,5 +1352,15 @@ enum SelfTest {
         r.eq(back?.usedFallback, true, "metrics: usedFallback persisted")
         r.eq(back?.fallbackReason, "network", "metrics: fallbackReason persisted")
         r.eq(back?.asrProviderID, "cloud-asr", "metrics: asrProviderID persisted")
+
+        // nil/false case: a session that did NOT fall back round-trips as false / nil.
+        var plain = DictationSession(rawTranscript: "ok", finalText: "ok", polishMode: .raw,
+                                     durationMs: 1000, recordingMs: 800, appName: nil,
+                                     appBundleID: nil, language: "en", sttBackend: "qwen")
+        plain.usedFallback = nil
+        plain.fallbackReason = nil
+        let plainBack = SessionRecord(from: plain).toDictationSession()
+        r.eq(plainBack.usedFallback, false, "metrics: nil usedFallback → false round-trip")
+        r.eq(plainBack.fallbackReason, nil, "metrics: nil fallbackReason → nil round-trip")
     }
 }

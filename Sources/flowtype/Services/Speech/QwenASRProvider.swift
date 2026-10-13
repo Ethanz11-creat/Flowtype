@@ -57,15 +57,13 @@ final class CancellableContinuationBox<T: Sendable>: @unchecked Sendable {
 
 final class QwenASRProvider: ASRProvider, @unchecked Sendable {
     let name: String = "QwenASR"
-    let id = "qwen-local"
+    let id = ASRProviderID.qwenLocal
     let displayName = "本地 ASR (Qwen)"
     nonisolated let capabilities = ASRCapabilities(
         supportsLanguageHint: true,
         supportsContextHint: true,
         requiresNetwork: false,
-        location: .onDevice,
-        maxAudioDuration: nil,
-        estimatedWarmLatencyMs: 1500
+        location: .onDevice
     )
 
     var isAvailable: Bool { get async { isLoaded } }

@@ -12,8 +12,12 @@ struct ASRCapabilities: Sendable, Equatable {
     let supportsContextHint: Bool
     let requiresNetwork: Bool
     let location: ProviderLocation
-    let maxAudioDuration: TimeInterval?
-    let estimatedWarmLatencyMs: Int
+}
+
+/// provider 身份的唯一事实来源 —— 避免字符串字面量在多处漂移。
+enum ASRProviderID {
+    static let qwenLocal = "qwen-local"
+    static let cloud = "cloud-asr"
 }
 
 /// 一次识别所需的全部上下文，打包成一个值类型。
@@ -62,4 +66,24 @@ enum SpeechProviderError: Error {
     case networkError(Error)
     case notAvailable
     case permissionDenied
+}
+
+/// 把一次 provider 失败归类成可聚合的降级原因（不含内容）。
+func fallbackReason(for error: Error) -> String {
+    if let cloud = error as? CloudASRError {
+        switch cloud {
+        case .timeout: return "timeout"
+        case .networkError: return "network"
+        case .noAPIKey, .noModel, .noActiveProvider: return "unavailable"
+        case .invalidResponse, .apiError, .invalidURL, .audioEncodingFailed: return "error"
+        }
+    }
+    if let speech = error as? SpeechProviderError {
+        switch speech {
+        case .notAvailable: return "unavailable"
+        case .transcriptionFailed, .networkError, .permissionDenied: return "error"
+        }
+    }
+    if (error as NSError).domain == NSURLErrorDomain { return "network" }
+    return "error"
 }

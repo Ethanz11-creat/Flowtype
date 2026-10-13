@@ -32,24 +32,24 @@ enum ASRRoutingThresholds {
     static let cloudFailureStreak = 2
 }
 
-/// 纯决策：返回有序候选 provider id（"cloud-asr" / "qwen-local"）。
+/// 纯决策：返回有序候选 provider id（cloud-asr / qwen-local）。
 /// 空数组表示无候选可用 → ASRStage 走 notice / 预览兜底。
 func selectASRChain(_ input: ASRRoutingInputs) -> [String] {
     switch input.policy {
     case .localOnly:
-        return input.localAvailable ? ["qwen-local"] : []
+        return input.localAvailable ? [ASRProviderID.qwenLocal] : []
     case .cloudOnly:
-        return input.cloudAvailable ? ["cloud-asr"] : []
+        return input.cloudAvailable ? [ASRProviderID.cloud] : []
     case .auto:
         if input.localAvailable && input.cloudAvailable {
             // 产品默认：云端优先；网络不可达 / 云端延迟明显升高 / 连续失败 → 本地兜底。
             let cloudHealthy = input.networkReachable
                 && input.cloudConsecutiveFailures < ASRRoutingThresholds.cloudFailureStreak
                 && (input.cloudLatencyEWMA == 0 || input.cloudLatencyEWMA <= ASRRoutingThresholds.cloudLatencyMs)
-            return cloudHealthy ? ["cloud-asr", "qwen-local"] : ["qwen-local", "cloud-asr"]
+            return cloudHealthy ? [ASRProviderID.cloud, ASRProviderID.qwenLocal] : [ASRProviderID.qwenLocal, ASRProviderID.cloud]
         }
-        if input.localAvailable { return ["qwen-local"] }
-        if input.cloudAvailable { return ["cloud-asr"] }
+        if input.localAvailable { return [ASRProviderID.qwenLocal] }
+        if input.cloudAvailable { return [ASRProviderID.cloud] }
         return []
     }
 }

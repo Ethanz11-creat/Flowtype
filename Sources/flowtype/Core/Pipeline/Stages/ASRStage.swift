@@ -51,6 +51,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
 
         var finalASRText = ""
         var providerFailed = false
+        var firstFailure: Error?
 
         if !rawSamples.isEmpty {
             for provider in chain {
@@ -80,14 +81,27 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                 } catch {
                     AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) failed: \(error)")
                     providerFailed = true
+                    if firstFailure == nil { firstFailure = error }
                     ASRRouter.shared.recordFailure(providerID: provider.id)
                 }
+            }
+        }
+
+        if providerFailed, let failure = firstFailure {
+            let reason = fallbackReason(for: failure)
+            await MainActor.run {
+                context.usedFallback = true
+                context.fallbackReason = reason
             }
         }
 
         if finalASRText.isEmpty, !localPreviewText.isEmpty {
             AppLogger.log("[ASRStage#\(sessionID)] Using AppleSpeech preview as fallback")
             finalASRText = localPreviewText
+            await MainActor.run {
+                context.usedFallback = true
+                context.fallbackReason = "preview"
+            }
         }
 
         guard !finalASRText.isEmpty else {

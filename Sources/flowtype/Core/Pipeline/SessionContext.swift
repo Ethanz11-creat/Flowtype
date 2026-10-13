@@ -66,6 +66,11 @@ final class SessionContext {
     var polishMs: Int?
     var injectMs: Int?
 
+    /// 本轮是否发生降级（候选失败后改用后备，或最终用了 AppleSpeech 预览兜底）。
+    var usedFallback: Bool = false
+    /// 降级原因：`network` / `timeout` / `unavailable` / `error` / `preview`。
+    var fallbackReason: String?
+
     /// Guard to prevent double-injection.
     var hasInjected: Bool = false
 

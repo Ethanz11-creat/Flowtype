@@ -424,8 +424,8 @@ final class SessionController: ObservableObject {
     /// sttBackend 文案：不再依赖 provider 类型判断。
     nonisolated static func backendLabel(forProviderID id: String?) -> String {
         switch id {
-        case "qwen-local": return "qwen"
-        case "cloud-asr": return "cloud"
+        case ASRProviderID.qwenLocal: return "qwen"
+        case ASRProviderID.cloud: return "cloud"
         default: return "apple"
         }
     }
@@ -462,6 +462,8 @@ final class SessionController: ObservableObject {
             sttBackend: sttBackend
         )
         session.asrProviderID = context.usedProviderID
+        session.usedFallback = context.usedFallback
+        session.fallbackReason = context.fallbackReason
         session.asrMs = context.asrMs
         session.polishMs = context.polishMs
         session.injectMs = context.injectMs

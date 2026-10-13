@@ -32,7 +32,7 @@ final class ASRRouter: @unchecked Sendable {
     func snapshot() -> RouterHealthSnapshot { health.withLock { $0 } }
 
     func recordSuccess(providerID: String, latencyMs: Int) {
-        guard providerID == "cloud-asr" else { return }
+        guard ASRProviderRegistry.shared.provider(forID: providerID)?.capabilities.requiresNetwork == true else { return }
         health.withLock {
             $0.cloudLatencyEWMA = updateLatencyEWMA(previous: $0.cloudLatencyEWMA, sample: Double(latencyMs))
             $0.cloudConsecutiveFailures = 0
@@ -41,7 +41,7 @@ final class ASRRouter: @unchecked Sendable {
     }
 
     func recordFailure(providerID: String) {
-        guard providerID == "cloud-asr" else { return }
+        guard ASRProviderRegistry.shared.provider(forID: providerID)?.capabilities.requiresNetwork == true else { return }
         let n = health.withLock { s -> Int in s.cloudConsecutiveFailures += 1; return s.cloudConsecutiveFailures }
         AppLogger.log("[ASRRouter] cloud failure streak=\(n)")
     }

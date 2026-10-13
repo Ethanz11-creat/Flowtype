@@ -18,7 +18,7 @@ enum SessionMetrics {
         let stopToInject = sessions.compactMap(\.stopToInjectMs)
         let asr = sessions.compactMap(\.asrMs)
         let fallbacks = sessions.filter { $0.usedFallback == true }.count
-        let cloud = sessions.filter { $0.asrProviderID == "cloud-asr" }.count
+        let cloud = sessions.filter { $0.asrProviderID == ASRProviderID.cloud }.count
 
         func line(_ label: String, _ values: [Int]) -> String {
             guard let p50 = percentile(values, 0.5), let p95 = percentile(values, 0.95) else {

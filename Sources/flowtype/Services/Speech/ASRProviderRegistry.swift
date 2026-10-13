@@ -20,8 +20,8 @@ final class ASRProviderRegistry: @unchecked Sendable {
 
     func provider(forID id: String) -> ASRProvider? {
         switch id {
-        case "qwen-local": return qwenLocalProvider
-        case "cloud-asr": return cloudProvider
+        case ASRProviderID.qwenLocal: return qwenLocalProvider
+        case ASRProviderID.cloud: return cloudProvider
         default: return nil
         }
     }

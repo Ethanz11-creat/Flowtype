@@ -79,16 +79,14 @@ enum CloudASRError: Error, LocalizedError {
 }
 
 actor CloudASRProvider: ASRProvider {
-    nonisolated let id = "cloud-asr"
+    nonisolated let id = ASRProviderID.cloud
     nonisolated let name = "CloudASR"
     nonisolated let displayName = "云端 ASR"
     nonisolated let capabilities = ASRCapabilities(
         supportsLanguageHint: true,
         supportsContextHint: true,   // 以 `prompt` 字段尽力下发（见 Q3：云端默认带上下文）
         requiresNetwork: true,
-        location: .cloud,
-        maxAudioDuration: nil,
-        estimatedWarmLatencyMs: 2000
+        location: .cloud
     )
 
     var isAvailable: Bool {
@@ -143,11 +141,11 @@ actor CloudASRProvider: ASRProvider {
         appendFormField(name: "temperature", value: "0.0")
 
         // 云端默认携带上下文（用户可在设置中关闭）。后端不支持该字段时会被忽略。
-        if config.cloudASRSendContext, let prompt = composeProviderContext(context) {
+        if capabilities.supportsContextHint, config.cloudASRSendContext, let prompt = composeProviderContext(context) {
             appendFormField(name: "prompt", value: prompt)
         }
 
-        if let langCode = config.asrLanguage.qwenLanguageCode {
+        if capabilities.supportsLanguageHint, let langCode = config.asrLanguage.qwenLanguageCode {
             appendFormField(name: "language", value: langCode)
         }
 
