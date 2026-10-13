@@ -35,9 +35,18 @@ func isSecureFocus(role: String?, subrole: String?) -> Bool {
 }
 
 /// 去除上下文里可能出现的凭据形态，避免随云端请求外泄。
+///
+/// 模式必须带左侧词边界：上下文文本会被喂进 ASR 提示词来偏向技术词，若 `sk-` 不带边界，
+/// 普通标识符会被误伤（`disk-partitioning` → `di[REDACTED]`），反而损害识别准确率。
+/// `Bearer` 则要求 token 至少 20 个字符，避免吞掉 `Bearer authentication` 这类正常文字。
 func redactContextSecrets(_ text: String) -> String {
     var out = text
-    for pattern in [#"sk-[A-Za-z0-9_-]{8,}"#, #"sf-[A-Za-z0-9_-]{8,}"#, #"Bearer\s+[A-Za-z0-9._-]{8,}"#] {
+    let patterns = [
+        #"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{8,}"#,
+        #"(?<![A-Za-z0-9])sf-[A-Za-z0-9_-]{8,}"#,
+        #"Bearer\s+[A-Za-z0-9._~+/-]{20,}"#,
+    ]
+    for pattern in patterns {
         if let re = try? NSRegularExpression(pattern: pattern) {
             out = re.stringByReplacingMatches(in: out, range: NSRange(out.startIndex..., in: out),
                                               withTemplate: "[REDACTED]")

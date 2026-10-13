@@ -1267,6 +1267,15 @@ enum SelfTest {
                 "ctx-asm: sk- token redacted")
         r.check(!redactContextSecrets("key=sf-abcdefghij123456").contains("sf-abcdefghij123456"),
                 "ctx-asm: sf- token redacted")
+        // 反向保护：词内 `sk-`/`sf-` 不得被误伤。上下文会喂进 ASR 提示词偏向技术词，
+        // 过度脱敏会把标识符打残（disk-partitioning → di[REDACTED]），反而降低技术词命中率。
+        r.eq(redactContextSecrets("disk-partitioning task-something desk-organizer"),
+             "disk-partitioning task-something desk-organizer",
+             "ctx-asm: identifiers containing sk- are preserved")
+        r.eq(redactContextSecrets("please use Bearer authentication"), "please use Bearer authentication",
+             "ctx-asm: prose after Bearer is not redacted")
+        r.check(!redactContextSecrets("Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abcdefgh").contains("eyJhbGciOiJIUzI1NiJ9"),
+                "ctx-asm: long Bearer token still redacted")
     }
 
     // MARK: - Secure focus: password fields must never be collected
