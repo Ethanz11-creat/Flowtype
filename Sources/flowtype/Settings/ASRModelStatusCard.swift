@@ -7,16 +7,20 @@ struct ASRModelStatusCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            switch store.current.asrEngine {
-            case .local:
+            switch store.current.asrRoutingPolicy {
+            case .localOnly:
                 localStatusView
-            case .cloud:
+            case .cloudOnly:
+                cloudStatusView
+            case .auto:
+                localStatusView
+                Divider().opacity(0.3)
                 cloudStatusView
             }
         }
         .padding(14)
         .glassCard(cornerRadius: 10)
-        .task(id: store.current.asrEngine) {
+        .task(id: store.current.asrRoutingPolicy) {
             await refreshCloudStatus()
         }
         .onChange(of: store.current.cloudASRConfig) { _, _ in
@@ -112,7 +116,7 @@ struct ASRModelStatusCard: View {
     }
 
     private func refreshCloudStatus() async {
-        guard store.current.asrEngine == .cloud else { return }
+        guard store.current.asrRoutingPolicy != .localOnly else { cloudAvailable = nil; return }
         let provider = ASRProviderRegistry.shared.cloudProvider
         cloudAvailable = await provider.isAvailable
     }

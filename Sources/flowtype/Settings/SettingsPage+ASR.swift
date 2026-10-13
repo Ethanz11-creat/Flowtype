@@ -12,23 +12,28 @@ extension SettingsPage {
                 Spacer()
             }
 
-            Text("Flowtype 支持本地和云端两种语音识别引擎。本地识别使用 Qwen3-ASR 模型，完全离线运行；云端识别通过 OpenAI 兼容接口调用云端 ASR 服务。录音中实时预览使用 Apple Speech，始终在本地完成。")
+            Text("Flowtype 同时支持本地（Qwen3-ASR，离线）与云端（OpenAI 兼容接口）识别。自动模式下默认优先云端，网络不佳时无感切换到本地兜底；断网时本地路径可用且音频不出设备。")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Picker("", selection: $store.current.asrEngine) {
-                Text("本地识别").tag(ASREngineType.local)
-                Text("云端识别").tag(ASREngineType.cloud)
+            Picker("", selection: $store.current.asrRoutingPolicy) {
+                ForEach(ASRRoutingPolicy.allCases) { policy in
+                    Text(policy.displayName).tag(policy)
+                }
             }
             .pickerStyle(.segmented)
 
-            switch store.current.asrEngine {
-            case .local:
+            switch store.current.asrRoutingPolicy {
+            case .localOnly:
                 LocalModelPicker()
                 ASRModelStatusCard()
-            case .cloud:
+            case .cloudOnly:
+                CloudASRProviderList()
+                ASRModelStatusCard()
+            case .auto:
+                LocalModelPicker()
                 CloudASRProviderList()
                 ASRModelStatusCard()
             }

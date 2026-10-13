@@ -93,9 +93,15 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
 
         guard !finalASRText.isEmpty else {
             if chain.isEmpty {
-                let noticeMsg = (cfg.asrEngine == .cloud)
-                    ? "云端 ASR 未就绪，请在设置中配置 API Key"
-                    : "本地模型未加载，请在设置中下载模型"
+                let noticeMsg: String
+                switch cfg.asrRoutingPolicy {
+                case .cloudOnly:
+                    noticeMsg = "云端 ASR 未就绪，请在设置中配置 API Key"
+                case .localOnly:
+                    noticeMsg = "本地模型未加载，请在设置中下载模型"
+                case .auto:
+                    noticeMsg = "语音识别暂不可用，请在设置中配置云端服务或下载本地模型"
+                }
                 AppLogger.log("[ASRStage#\(sessionID)] No provider in chain, notice: \(noticeMsg)")
                 return .notice(noticeMsg)
             }
@@ -114,12 +120,11 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         return .continue(.transcript(finalASRText))
     }
 
-    /// 临时候选链（Task A4 由 `ASRRouter` 取代）：按 legacy engine 过滤可用 provider。
-    /// Task A3（配置迁移）会把 `cfg.asrEngine` 换成 `cfg.asrRoutingPolicy`。
+    /// 临时候选链（Task A4 由 `ASRRouter` 取代）：按路由策略过滤可用 provider。
     private func candidateChain() async -> [ASRProvider] {
         let cfg = await MainActor.run { ConfigurationStore.shared.current }
         let registry = ASRProviderRegistry.shared
-        let policy: ASRRoutingPolicy = (cfg.asrEngine == .cloud) ? .cloudOnly : .localOnly
+        let policy = cfg.asrRoutingPolicy
         let inputs = ASRRoutingInputs(
             policy: policy,
             localAvailable: registry.qwenLocalProvider.isLoaded,

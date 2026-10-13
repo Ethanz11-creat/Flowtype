@@ -861,27 +861,36 @@ enum SelfTest {
         r.check(dflt?.storeTranscriptText == true, "config: storeTranscriptText defaults true on legacy JSON")
     }
 
-    // MARK: - ASR engine config: round-trip + legacy default
+    // MARK: - ASR routing policy config: round-trip + legacy engine migration
 
     static func testASRConfig(_ r: Reporter) {
         var cfg = Configuration()
-        cfg.asrEngine = .cloud
+        cfg.asrRoutingPolicy = .localOnly
+        cfg.cloudASRSendContext = false
         cfg.selectedLocalModelID = "test-model-id"
         cfg.customLocalModelPath = "/tmp/custom-model"
         if let data = try? JSONEncoder().encode(cfg),
            let back = try? JSONDecoder().decode(Configuration.self, from: data) {
-            r.eq(back.asrEngine, .cloud, "asrcfg: asrEngine round-trips .cloud")
+            r.eq(back.asrRoutingPolicy, .localOnly, "asrcfg: asrRoutingPolicy round-trips .localOnly")
+            r.eq(back.cloudASRSendContext, false, "asrcfg: cloudASRSendContext round-trips false")
             r.eq(back.selectedLocalModelID, "test-model-id", "asrcfg: selectedLocalModelID round-trips")
             r.eq(back.customLocalModelPath, "/tmp/custom-model", "asrcfg: customLocalModelPath round-trips")
         } else {
             r.check(false, "asrcfg: encode/decode round-trip failed")
         }
-        let legacy = Data("{\"asrLanguage\":\"zh\"}".utf8)
-        let decoded = try? JSONDecoder().decode(Configuration.self, from: legacy)
-        r.eq(decoded?.asrEngine, .local, "asrcfg: legacy missing key → asrEngine .local")
-        r.eq(decoded?.selectedLocalModelID, nil, "asrcfg: legacy missing key → selectedLocalModelID nil")
-        r.eq(decoded?.customLocalModelPath, nil, "asrcfg: legacy missing key → customLocalModelPath nil")
-        r.eq(decoded?.cloudASRConfig.providers.count, 1, "asrcfg: legacy missing key → cloudASRConfig has default SiliconFlow provider")
+        // legacy: asrEngine 存在 → 保持老用户行为
+        let legacyLocal = Data(#"{"asrLanguage":"zh","asrEngine":"local"}"#.utf8)
+        r.eq(try? JSONDecoder().decode(Configuration.self, from: legacyLocal).asrRoutingPolicy,
+             .localOnly, "asrcfg: legacy asrEngine=local → localOnly")
+        let legacyCloud = Data(#"{"asrLanguage":"zh","asrEngine":"cloud"}"#.utf8)
+        r.eq(try? JSONDecoder().decode(Configuration.self, from: legacyCloud).asrRoutingPolicy,
+             .cloudOnly, "asrcfg: legacy asrEngine=cloud → cloudOnly")
+        // 全新安装 → auto（云端优先）
+        let fresh = Data(#"{"asrLanguage":"zh"}"#.utf8)
+        let decoded = try? JSONDecoder().decode(Configuration.self, from: fresh)
+        r.eq(decoded?.asrRoutingPolicy, .auto, "asrcfg: missing key → auto")
+        r.eq(decoded?.cloudASRSendContext, true, "asrcfg: missing key → cloudASRSendContext true")
+        r.eq(decoded?.cloudASRConfig.providers.count, 1, "asrcfg: legacy missing key → default SiliconFlow provider")
         r.eq(decoded?.cloudASRConfig.providers.first?.provider, "SiliconFlow", "asrcfg: default provider is SiliconFlow")
         r.eq(decoded?.cloudASRConfig.providers.first?.model, "", "asrcfg: default model is empty (user must select)")
     }
@@ -1057,7 +1066,7 @@ enum SelfTest {
         r.eq(KeyboardInjector.splitIntoLineSegments("\n\nabc"), ["", "", "abc"], "inject-edge: split two leading newlines")
 
         let cfg = Configuration()
-        r.eq(cfg.asrEngine, .local, "inject-edge: default asrEngine == .local")
+        r.eq(cfg.asrRoutingPolicy, .auto, "inject-edge: default asrRoutingPolicy == .auto")
         r.eq(cfg.hasCompletedOnboarding, false, "inject-edge: default hasCompletedOnboarding == false")
         r.eq(cfg.selectedLocalModelID, nil, "inject-edge: default selectedLocalModelID == nil")
         r.check(!cfg.cloudASRConfig.providers.isEmpty, "inject-edge: default cloudASRConfig has providers")

@@ -109,6 +109,7 @@ enum AppearancePreference: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// 旧字段（仅用于向后兼容解码；运行时使用 `ASRRoutingPolicy`）。
 enum ASREngineType: String, Codable, CaseIterable, Identifiable {
     case local = "local"
     case cloud = "cloud"
@@ -118,6 +119,14 @@ enum ASREngineType: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .local: return "本地识别（离线）"
         case .cloud: return "云端识别（联网）"
+        }
+    }
+
+    /// legacy → 新策略：保持老用户既有行为。
+    var asRoutingPolicy: ASRRoutingPolicy {
+        switch self {
+        case .local: return .localOnly
+        case .cloud: return .cloudOnly
         }
     }
 }
@@ -361,8 +370,10 @@ struct Configuration: Codable, Equatable {
     var localModelPath: String? = nil          // user-specified model folder (offline load)
     var downloadSource: DownloadSource = .auto
 
-    // ASR engine selection
-    var asrEngine: ASREngineType = .local
+    // ASR routing policy (replaces the legacy binary asrEngine switch)
+    var asrRoutingPolicy: ASRRoutingPolicy = .auto
+    /// 云端请求是否携带前台上下文（默认开启；设置中可关闭）。
+    var cloudASRSendContext: Bool = true
     var cloudASRConfig: CloudASRConfig = .defaultSiliconFlow
     var selectedLocalModelID: String? = nil
     var customLocalModelPath: String? = nil
@@ -450,7 +461,12 @@ struct Configuration: Codable, Equatable {
         appearancePreference = (try? c.decode(AppearancePreference.self, forKey: .appearancePreference)) ?? d.appearancePreference
         localModelPath = (try? c.decode(String?.self, forKey: .localModelPath)) ?? d.localModelPath
         downloadSource = (try? c.decode(DownloadSource.self, forKey: .downloadSource)) ?? d.downloadSource
-        asrEngine = (try? c.decode(ASREngineType.self, forKey: .asrEngine)) ?? d.asrEngine
+        if let legacyEngine = try? c.decode(ASREngineType.self, forKey: .asrEngine) {
+            asrRoutingPolicy = legacyEngine.asRoutingPolicy          // 老用户保持原行为
+        } else {
+            asrRoutingPolicy = (try? c.decode(ASRRoutingPolicy.self, forKey: .asrRoutingPolicy)) ?? d.asrRoutingPolicy
+        }
+        cloudASRSendContext = (try? c.decodeIfPresent(Bool.self, forKey: .cloudASRSendContext)) ?? true
         cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
@@ -492,6 +508,8 @@ extension Configuration {
         case localModelPath
         case downloadSource
         case asrEngine
+        case asrRoutingPolicy
+        case cloudASRSendContext
         case cloudASRConfig
         case selectedLocalModelID
         case customLocalModelPath
@@ -518,7 +536,8 @@ extension Configuration {
         try container.encode(appearancePreference, forKey: .appearancePreference)
         try container.encode(localModelPath, forKey: .localModelPath)
         try container.encode(downloadSource, forKey: .downloadSource)
-        try container.encode(asrEngine, forKey: .asrEngine)
+        try container.encode(asrRoutingPolicy, forKey: .asrRoutingPolicy)
+        try container.encode(cloudASRSendContext, forKey: .cloudASRSendContext)
         try container.encode(cloudASRConfig, forKey: .cloudASRConfig)
         try container.encode(selectedLocalModelID, forKey: .selectedLocalModelID)
         try container.encode(customLocalModelPath, forKey: .customLocalModelPath)
