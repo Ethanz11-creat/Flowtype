@@ -18,7 +18,8 @@ final class AXContextProvider: ContextProvider, @unchecked Sendable {
         let focusedElement = focusedApp.flatMap { elementAttribute($0, kAXFocusedUIElementAttribute as CFString) }
 
         // 安全输入（密码）字段：不采集任何元素派生内容（值、选中文本、标题）。
-        if let element = focusedElement, isSecure(element) {
+        // 与 collectElementText 使用同一判定（含父级），避免两处守卫不一致。
+        if let element = focusedElement, isSecureIncludingParent(element) {
             AppLogger.log("[AXContext] Secure field focused — skipping element context")
             return nil
         }
@@ -54,19 +55,21 @@ final class AXContextProvider: ContextProvider, @unchecked Sendable {
                       subrole: stringAttribute(element, kAXSubroleAttribute as CFString))
     }
 
+    /// 元素自身或其父级是否为安全输入字段。
+    /// 多数 App 把安全字段嵌在外层容器内，只看自身会漏判，故采集前统一用本判定。
+    private func isSecureIncludingParent(_ element: AXUIElement) -> Bool {
+        if isSecure(element) { return true }
+        guard let parent = elementAttribute(element, kAXParentAttribute as CFString) else { return false }
+        return isSecure(parent)
+    }
+
     /// 焦点元素自身文本，其次回退到其父级（多数编辑器把文本放在嵌套的 AXTextArea 上）。
     /// 焦点或其父级为安全输入字段时直接返回 nil——绝不读取其值。
     private func collectElementText(_ element: AXUIElement) -> String? {
-        if isSecure(element) { return nil }
+        if isSecureIncludingParent(element) { return nil }
         if let v = stringAttribute(element, kAXValueAttribute as CFString) { return v }
         if let v = stringAttribute(element, kAXTitleAttribute as CFString) { return v }
-        var parent: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parent) == .success,
-           let p = parent, CFGetTypeID(p) == AXUIElementGetTypeID() {
-            let parentElement = p as! AXUIElement
-            if isSecure(parentElement) { return nil }
-            return stringAttribute(parentElement, kAXValueAttribute as CFString)
-        }
-        return nil
+        guard let parent = elementAttribute(element, kAXParentAttribute as CFString) else { return nil }
+        return stringAttribute(parent, kAXValueAttribute as CFString)
     }
 }
