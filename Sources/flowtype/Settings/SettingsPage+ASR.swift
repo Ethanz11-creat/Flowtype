@@ -93,7 +93,17 @@ extension SettingsPage {
                 .controlSize(.small)
             }
 
-            Text("录音中实时预览使用 Apple Speech，始终在本地完成")
+            HStack {
+                Text("云端发送上下文")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Toggle("", isOn: $store.current.cloudASRSendContext)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(store.current.asrRoutingPolicy == .localOnly)
+            }
+            Text("开启后，云端识别会携带前台上下文以提升技术词命中率；音频与上下文仅在走云端路径时离开设备。")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }

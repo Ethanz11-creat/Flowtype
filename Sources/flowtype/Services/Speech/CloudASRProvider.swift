@@ -143,8 +143,7 @@ actor CloudASRProvider: ASRProvider {
         appendFormField(name: "temperature", value: "0.0")
 
         // 云端默认携带上下文（用户可在设置中关闭）。后端不支持该字段时会被忽略。
-        // Task A3 wires Configuration.cloudASRSendContext here.
-        if true, let prompt = composeProviderContext(context) {
+        if config.cloudASRSendContext, let prompt = composeProviderContext(context) {
             appendFormField(name: "prompt", value: prompt)
         }
 

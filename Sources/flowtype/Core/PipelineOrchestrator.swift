@@ -31,7 +31,6 @@ final class SessionController: ObservableObject {
 
     @Published private(set) var sessionState: SessionState = .idle
     @Published private(set) var spectrum: [Float] = []
-    @Published private(set) var previewText: String = ""
     @Published private(set) var lastErrorRawText: String?
     @Published private(set) var errorActions: [ErrorAction] = []
 
@@ -61,7 +60,6 @@ final class SessionController: ObservableObject {
 
     private var stateCancellable: AnyCancellable?
     private var spectrumCancellable: AnyCancellable?
-    private var previewCancellable: AnyCancellable?
 
     // MARK: - Computed
 
@@ -125,7 +123,6 @@ final class SessionController: ObservableObject {
         currentContext = context
 
         // Reset state
-        previewText = ""
         spectrum = []
 
         // Subscribe to state publisher for intermediate updates from stages
@@ -142,16 +139,12 @@ final class SessionController: ObservableObject {
                 self.transition(to: state, context: ctx)
             }
 
-        // Subscribe to real-time spectrum/preview publishers (avoids 1Hz timer polling)
+        // Subscribe to real-time spectrum publisher (avoids 1Hz timer polling)
         spectrumCancellable = context.spectrumPublisher
             .sink { [weak self] spec in
                 self?.spectrum = spec
             }
-        previewCancellable = context.previewTextPublisher
-            .sink { [weak self] text in
-                guard let self else { return }
-                self.previewText = text
-            }
+        // 录音中不再向 UI 推送预览文字（预览仅作 ASR 失败时的内部兜底）。
 
         transition(to: .recording(elapsedSeconds: 0), context: context)
         startRecordingTimer()
@@ -175,11 +168,6 @@ final class SessionController: ObservableObject {
 
         currentTask?.cancel()
         currentTask = nil
-
-        // Flush any pending preview text
-        if !previewText.isEmpty {
-            AppLogger.log("[SessionController#\(activeSessionID)] Final preview: \(previewText.count) chars")
-        }
 
         context.stopRecordingAt = Date()
         // ASRStage 会随后用真实 provider 名刷新 .processing(provider:) 状态。
@@ -554,8 +542,6 @@ final class SessionController: ObservableObject {
         stateCancellable = nil
         spectrumCancellable?.cancel()
         spectrumCancellable = nil
-        previewCancellable?.cancel()
-        previewCancellable = nil
         lastErrorRawText = nil
         errorActions = []
         suspendedContext = nil
@@ -566,7 +552,6 @@ final class SessionController: ObservableObject {
         errorDismissTask?.cancel()
         errorDismissTask = nil
         stopRecordingTimer()
-        previewText = ""
         spectrum = []
         WindowManager.shared.hide()
     }

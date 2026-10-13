@@ -77,14 +77,11 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             let previewStream = await appleSpeechProvider.startStreamingRecognition()
             AppLogger.log("[RecordingStage#\(sessionID)] AppleSpeech preview started")
 
-            // Consume preview stream and update preview text in real time
+            // AppleSpeech 预览仅作内部兜底文本：不再上屏（产品判断：不做中间文本展示）。
             previewTask = Task { [weak self] in
                 guard self != nil else { return }
                 for await text in previewStream {
-                    await MainActor.run {
-                        context.currentPreviewText = text
-                        context.previewTextPublisher.send(text)
-                    }
+                    await MainActor.run { context.currentPreviewText = text }
                 }
             }
 

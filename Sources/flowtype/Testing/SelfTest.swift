@@ -309,6 +309,7 @@ enum SelfTest {
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSessionMetrics(r)      // percentile + metrics report
         testMetricsSchema(r)       // v4 metrics columns persist
+        testCloudContextToggle(r)  // cloud context opt-out default + round-trip
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
@@ -899,6 +900,15 @@ enum SelfTest {
         r.eq(decoded?.cloudASRConfig.providers.count, 1, "asrcfg: legacy missing key → default SiliconFlow provider")
         r.eq(decoded?.cloudASRConfig.providers.first?.provider, "SiliconFlow", "asrcfg: default provider is SiliconFlow")
         r.eq(decoded?.cloudASRConfig.providers.first?.model, "", "asrcfg: default model is empty (user must select)")
+    }
+
+    // MARK: - Cloud context opt-out
+
+    static func testCloudContextToggle(_ r: Reporter) {
+        r.check(Configuration().cloudASRSendContext, "ctx-toggle: default is true (cloud carries context)")
+        var c = Configuration(); c.cloudASRSendContext = false
+        let back = try? JSONDecoder().decode(Configuration.self, from: JSONEncoder().encode(c))
+        r.check(back?.cloudASRSendContext == false, "ctx-toggle: false round-trips")
     }
 
     // MARK: - HardwareProfiler: memory tier classification

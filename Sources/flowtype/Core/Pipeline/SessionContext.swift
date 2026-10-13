@@ -17,10 +17,10 @@ import AppKit
 ///    (`.idle → .recording → .processing → ...`). These are coarse-grained,
 ///    stage-driven transitions observed by both `SessionController` and `SessionObserver`s.
 ///
-/// 2. **Continuous real-time data** — `spectrumPublisher` and `previewTextPublisher`
-///    stream high-frequency updates directly from `RecordingStage` to `SessionController`.
+/// 2. **Continuous real-time data** — `spectrumPublisher`
+///    streams high-frequency updates directly from `RecordingStage` to `SessionController`.
 ///    This bypasses the 1-second timer polling that was used in the initial refactor,
-///    providing responsive spectrum visualization and preview text updates at the
+///    providing responsive spectrum visualization at the
 ///    native frequency of the audio buffer callbacks.
 ///
 /// Stages write real-time data to both the stored property (`currentSpectrum`)
@@ -78,13 +78,11 @@ final class SessionContext {
     var currentSpectrum: [Float] = []
 
     /// Current AppleSpeech preview text (updated by RecordingStage during recording).
+    /// 不再上屏，仅作 ASR 全部候选失败时的内部兜底来源。
     var currentPreviewText: String = ""
 
     /// Publisher for real-time spectrum updates (bypasses 1s timer polling).
     let spectrumPublisher = PassthroughSubject<[Float], Never>()
-
-    /// Publisher for real-time preview text updates (bypasses 1s timer polling).
-    let previewTextPublisher = PassthroughSubject<String, Never>()
 
     // MARK: - Initialization
 

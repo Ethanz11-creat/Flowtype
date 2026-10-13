@@ -89,13 +89,13 @@ struct CapsuleView: View {
         case .idle:
             return ""
         case .recording:
-            return session.previewText.isEmpty ? "正在听写..." : session.previewText
+            return "正在听写..."
         case .processing:
-            return session.previewText.isEmpty ? "识别中..." : session.previewText
+            return "识别中..."
         case .polishing(let preview):
-            return preview.isEmpty ? (session.previewText.isEmpty ? "润色中..." : session.previewText) : preview
+            return preview.isEmpty ? "润色中..." : preview
         case .injecting:
-            return session.previewText.isEmpty ? "输入中..." : session.previewText
+            return "输入中..."
         case .notice:
             return ""
         case .error(let msg):
