@@ -72,7 +72,8 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                         context.usedProviderID = result.providerID
                         context.asrMs = result.latencyMs
                     }
-                    await ASRRouter.shared.recordSuccess(providerID: result.providerID, latencyMs: result.latencyMs)
+                    ASRRouter.shared.recordSuccess(providerID: result.providerID, latencyMs: result.latencyMs)
+                    break
                 } catch is CancellationError {
                     AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) cancelled")
                     return .suspend(ErrorRecoveryContext(failedStage: name, error: CancellationError(),
@@ -81,7 +82,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                     AppLogger.log("[ASRStage#\(sessionID)] \(provider.displayName) failed: \(error)")
                     if firstFailure == nil { firstFailure = error }
                     providerFailed = true
-                    await ASRRouter.shared.recordFailure(providerID: provider.id)
+                    ASRRouter.shared.recordFailure(providerID: provider.id)
                 }
             }
         }

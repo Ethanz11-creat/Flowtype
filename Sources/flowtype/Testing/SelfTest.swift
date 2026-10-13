@@ -1192,5 +1192,4 @@ enum SelfTest {
         for _ in 0..<5 { v = updateLatencyEWMA(previous: v, sample: 5000) }
         r.check(v > ASRRoutingThresholds.cloudLatencyMs, "ewma: sustained slow samples exceed threshold")
     }
-
 }
