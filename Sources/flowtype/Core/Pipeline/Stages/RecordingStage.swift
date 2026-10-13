@@ -15,6 +15,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
     private let audioRecorder = AudioRecorder()
     private let appleSpeechProvider = AppleSpeechProvider()
+    private let contextProvider: ContextProvider = AXContextProvider()
 
     /// Set from the audio heartbeat thread when the mic stops delivering buffers
     /// (device unplugged / Bluetooth disconnect) so the stage can fail explicitly
@@ -55,6 +56,14 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             let deviceID = ConfigurationStore.shared.current.microphoneDeviceID
             let output = try await audioRecorder.startRecording(deviceID: deviceID)
             AppLogger.log("[RecordingStage#\(sessionID)] AudioRecorder started")
+
+            // 采集一次前台上下文（失败则静默跳过，不阻断录音）。
+            // 本地优先与云端策略都采集：本地 Qwen 直接用（不上传），云端可能随请求发送。
+            if let fg = await contextProvider.collect(),
+               let text = buildContextText(fg) {
+                await MainActor.run { context.foregroundContextText = text }
+                AppLogger.log("[RecordingStage#\(sessionID)] Foreground context: \(text.count) chars")
+            }
 
             // Detect a mid-recording freeze (device gone) so we can surface an error.
             audioRecorder.onRecordingFrozen = { [weak self] in
