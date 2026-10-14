@@ -9,17 +9,13 @@ struct RouterHealthSnapshot: Sendable, Equatable {
     var networkReachable: Bool = true
     var probeLatencyMs: Double? = nil
     var probeSampledAt: Date? = nil
+    /// 采样过但握手失败（与"从未采样"区分）。
+    var probeFailed: Bool = false
 }
 
 /// 指数移动平均：`previous == 0` 表示未知，直接采用首个样本。
 func updateLatencyEWMA(previous: Double, sample: Double, alpha: Double = 0.3) -> Double {
     previous == 0 ? sample : previous * (1 - alpha) + sample * alpha
-}
-
-/// 决策用的云端延迟估计：真实请求的 EWMA 是地面真相，优先；
-/// 没有真实样本时用探测值（0 表示未知 ⇒ 视为健康）。
-func effectiveCloudLatency(ewma: Double, probe: Double?) -> Double {
-    ewma != 0 ? ewma : (probe ?? 0)
 }
 
 /// 探测样本是否仍在有效期内。
@@ -119,8 +115,10 @@ final class ASRRouter: @unchecked Sendable {
             localAvailable: localAvailable,
             cloudAvailable: cloudAvailable,
             networkReachable: snap.networkReachable,
-            cloudLatencyEWMA: effectiveCloudLatency(ewma: snap.cloudLatencyEWMA, probe: snap.probeLatencyMs),
-            cloudConsecutiveFailures: snap.cloudConsecutiveFailures
+            cloudLatencyEWMA: snap.cloudLatencyEWMA,
+            cloudConsecutiveFailures: snap.cloudConsecutiveFailures,
+            cloudProbeMs: snap.probeLatencyMs,
+            cloudProbeFailed: snap.probeFailed
         )
         return selectASRChain(inputs).compactMap { ASRProviderRegistry.shared.provider(forID: $0) }
     }

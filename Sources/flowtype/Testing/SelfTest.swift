@@ -1267,11 +1267,13 @@ enum SelfTest {
         r.check(CloudProbe.probeEndpoint(fromBaseURL: "api.siliconflow.cn") == nil, "probe: scheme-less → nil")
         r.check(CloudProbe.probeEndpoint(fromBaseURL: "") == nil, "probe: empty → nil")
 
-        // 2. effectiveCloudLatency: 真实 EWMA 优先于探测值，探测只在冷启动补位。
-        r.eq(effectiveCloudLatency(ewma: 0, probe: 5000), 5000, "probe: cold + slow probe → slow")
-        r.eq(effectiveCloudLatency(ewma: 1200, probe: 5000), 1200, "probe: real EWMA wins over probe")
-        r.eq(effectiveCloudLatency(ewma: 0, probe: nil), 0, "probe: no sample → healthy default (0)")
-        r.eq(effectiveCloudLatency(ewma: 0, probe: 200), 200, "probe: cold + fast probe → fast")
+        // 2. 量纲隔离：探测值有自己的阈值，绝不与整轮请求延迟共用同一个槽位/阈值。
+        //    核心不变式 —— 探测值域是 [0, timeout*1000)，必须能越过"慢握手"阈值，
+        //    否则探测在数学上永远无法触发（这正是本次修复的 bug）。
+        r.check(ASRRouterProbeConfig.timeout * 1000 > ASRRoutingThresholds.cloudProbeHandshakeMs,
+                "probe: producible value range must exceed the slow-handshake threshold")
+        r.check(ASRRoutingThresholds.cloudProbeHandshakeMs < ASRRoutingThresholds.cloudLatencyMs,
+                "probe: handshake threshold calibrated below the request-latency threshold")
 
         // 3. probeIsFresh: TTL 过期判定。
         let now = Date()
@@ -1279,28 +1281,26 @@ enum SelfTest {
         r.check(probeIsFresh(sampledAt: now.addingTimeInterval(-10), now: now, ttl: 30), "probe: 10s old < 30s ttl → fresh")
         r.check(!probeIsFresh(sampledAt: now.addingTimeInterval(-40), now: now, ttl: 30), "probe: 40s old > 30s ttl → stale")
 
-        // 4. 组合：冷启动无真实样本时，慢探测必须让路由改选本地优先。
-        let slowCold = ASRRoutingInputs(
-            policy: .auto,
-            localAvailable: true,
-            cloudAvailable: true,
-            networkReachable: true,
-            cloudLatencyEWMA: effectiveCloudLatency(ewma: 0, probe: 5000),
-            cloudConsecutiveFailures: 0
-        )
-        r.eq(selectASRChain(slowCold), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
-             "probe: cold + slow probe → local-first (predict slowness before first request)")
-
-        let fastCold = ASRRoutingInputs(
-            policy: .auto,
-            localAvailable: true,
-            cloudAvailable: true,
-            networkReachable: true,
-            cloudLatencyEWMA: effectiveCloudLatency(ewma: 0, probe: 200),
-            cloudConsecutiveFailures: 0
-        )
-        r.eq(selectASRChain(fastCold), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
-             "probe: cold + fast probe → cloud-first (unchanged healthy path)")
+        // 4. 路由组合：冷启动时探测真正参与决策（用生产可达的握手值，非 5000 之类不可达值）。
+        func cold(probe: Double?, failed: Bool = false, ewma: Double = 0) -> ASRRoutingInputs {
+            ASRRoutingInputs(policy: .auto, localAvailable: true, cloudAvailable: true,
+                             networkReachable: true, cloudLatencyEWMA: ewma,
+                             cloudConsecutiveFailures: 0,
+                             cloudProbeMs: probe, cloudProbeFailed: failed)
+        }
+        r.eq(selectASRChain(cold(probe: 900)), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "probe: cold + producible 900ms handshake → local-first")
+        r.eq(selectASRChain(cold(probe: 200)), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
+             "probe: cold + fast 200ms handshake → cloud-first")
+        r.eq(selectASRChain(cold(probe: ASRRoutingThresholds.cloudProbeHandshakeMs)),
+             [ASRProviderID.cloud, ASRProviderID.qwenLocal],
+             "probe: cold + handshake exactly at threshold → cloud-first (边界含等号)")
+        r.eq(selectASRChain(cold(probe: nil)), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
+             "probe: never sampled → existing healthy default (unchanged)")
+        r.eq(selectASRChain(cold(probe: nil, failed: true)), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "probe: sampled but failed → negative signal → local-first")
+        r.eq(selectASRChain(cold(probe: 900, ewma: 1200)), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
+             "probe: real EWMA is ground truth → slow probe ignored once a real sample exists")
     }
 
     // MARK: - Foreground context assembly (pure)

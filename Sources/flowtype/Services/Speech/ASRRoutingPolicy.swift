@@ -23,12 +23,39 @@ struct ASRRoutingInputs: Equatable, Sendable {
     let localAvailable: Bool
     let cloudAvailable: Bool
     let networkReachable: Bool
-    let cloudLatencyEWMA: Double       // ms；0 = 未知（视为健康）
+    let cloudLatencyEWMA: Double       // 整轮请求延迟（毫秒）；0 = 未知（视为健康）
     let cloudConsecutiveFailures: Int
+    /// TCP+TLS 握手探测值（毫秒）。nil = 未采样，或采样失败（由 `cloudProbeFailed` 区分）。
+    let cloudProbeMs: Double?
+    /// 采样过但握手失败 —— 网络可达前提下的负证据，不可与"从未采样"混为一谈。
+    let cloudProbeFailed: Bool
+
+    init(policy: ASRRoutingPolicy,
+         localAvailable: Bool,
+         cloudAvailable: Bool,
+         networkReachable: Bool,
+         cloudLatencyEWMA: Double,
+         cloudConsecutiveFailures: Int,
+         cloudProbeMs: Double? = nil,
+         cloudProbeFailed: Bool = false) {
+        self.policy = policy
+        self.localAvailable = localAvailable
+        self.cloudAvailable = cloudAvailable
+        self.networkReachable = networkReachable
+        self.cloudLatencyEWMA = cloudLatencyEWMA
+        self.cloudConsecutiveFailures = cloudConsecutiveFailures
+        self.cloudProbeMs = cloudProbeMs
+        self.cloudProbeFailed = cloudProbeFailed
+    }
 }
 
 enum ASRRoutingThresholds {
+    /// 阈值的标定对象 = 整轮云端请求延迟（EWMA 的采样对象），量级为秒。
     static let cloudLatencyMs: Double = 3000
+    /// 阈值的标定对象 = TCP+TLS 握手耗时（探测的采样对象），量级为百毫秒。
+    /// 健康链路实测 85–191ms；按 ~3× 取 600ms 判"明显变慢"。
+    /// 两者量纲不同，绝不可共用同一个阈值。
+    static let cloudProbeHandshakeMs: Double = 600
     static let cloudFailureStreak = 2
 }
 
@@ -42,11 +69,30 @@ func selectASRChain(_ input: ASRRoutingInputs) -> [String] {
         return input.cloudAvailable ? [ASRProviderID.cloud] : []
     case .auto:
         if input.localAvailable && input.cloudAvailable {
-            // 产品默认：云端优先；网络不可达 / 云端延迟明显升高 / 连续失败 → 本地兜底。
+            // 产品默认：云端优先；下列任一成立则改走本地兜底：
+            // 网络不可达 / 整轮延迟明显升高 / 连续失败 / 冷启动时握手探测判慢或失败。
+            let coldStart = input.cloudLatencyEWMA == 0
+            // 真实请求延迟是地面真相；探测只在没有真实样本时才参与。
+            let requestHealthy = coldStart
+                || input.cloudLatencyEWMA <= ASRRoutingThresholds.cloudLatencyMs
+
+            let probeHealthy: Bool
+            if !coldStart {
+                probeHealthy = true          // 有真实样本 → 探测不参与
+            } else if input.cloudProbeFailed {
+                probeHealthy = false         // 采了但失败 → 负证据
+            } else if let probe = input.cloudProbeMs {
+                probeHealthy = probe <= ASRRoutingThresholds.cloudProbeHandshakeMs
+            } else {
+                probeHealthy = true          // 从未采样 → 沿用"未知视为健康"
+            }
+
             let cloudHealthy = input.networkReachable
                 && input.cloudConsecutiveFailures < ASRRoutingThresholds.cloudFailureStreak
-                && (input.cloudLatencyEWMA == 0 || input.cloudLatencyEWMA <= ASRRoutingThresholds.cloudLatencyMs)
-            return cloudHealthy ? [ASRProviderID.cloud, ASRProviderID.qwenLocal] : [ASRProviderID.qwenLocal, ASRProviderID.cloud]
+                && requestHealthy
+                && probeHealthy
+            return cloudHealthy ? [ASRProviderID.cloud, ASRProviderID.qwenLocal]
+                                : [ASRProviderID.qwenLocal, ASRProviderID.cloud]
         }
         if input.localAvailable { return [ASRProviderID.qwenLocal] }
         if input.cloudAvailable { return [ASRProviderID.cloud] }
