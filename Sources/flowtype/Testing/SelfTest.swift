@@ -264,7 +264,8 @@ enum SelfTest {
         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
     }
 
-    static func runAndExit() -> Never {
+    @MainActor
+    static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
         testLLMURL(r)            // B1
@@ -325,11 +326,94 @@ enum SelfTest {
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
+        await testStageOwnership(r) // actual async wrapper, before/during cancellation
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
 
     // MARK: - Session experience: readiness and ownership contract
+
+    /// Deterministic rendezvous for a stage that completes only when the test
+    /// releases it. No timing sleeps, microphone, provider, or controller setup.
+    private actor StageRendezvous {
+        private(set) var invocationCount = 0
+        private var entered: CheckedContinuation<Void, Never>?
+        private var finish: CheckedContinuation<Void, Never>?
+
+        func invoke(suspend: Bool) async {
+            invocationCount += 1
+            entered?.resume()
+            entered = nil
+            if suspend {
+                await withCheckedContinuation { finish = $0 }
+            }
+        }
+
+        func waitForInvocation() async {
+            if invocationCount > 0 { return }
+            await withCheckedContinuation { entered = $0 }
+        }
+
+        func release() {
+            finish?.resume()
+            finish = nil
+        }
+    }
+
+    private struct SuspensibleStage: PipelineStage {
+        let name = "Self-test stage"
+        let rendezvous: StageRendezvous
+        var suspend = false
+
+        func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+            await rendezvous.invoke(suspend: suspend)
+            return .continue(.transcript("complete transcript"))
+        }
+    }
+
+    @MainActor
+    static func testStageOwnership(_ r: Reporter) async {
+        let cancelledContext = SessionContext(sessionID: 101)
+        cancelledContext.cancel()
+        let skipped = StageRendezvous()
+        let skippedResult = await SuspensibleStage(rendezvous: skipped)
+            .executeIfOwned(payload: .empty, context: cancelledContext)
+        r.eq(await skipped.invocationCount, 0,
+             "stage ownership: cancelled before execution never invokes underlying stage")
+        if case .complete = skippedResult {
+            r.check(true, "stage ownership: cancelled before execution completes quietly")
+        } else {
+            r.check(false, "stage ownership: cancelled before execution propagated a result")
+        }
+
+        let suspendedContext = SessionContext(sessionID: 102)
+        let suspended = StageRendezvous()
+        let suspendedStage = SuspensibleStage(rendezvous: suspended, suspend: true)
+        let task = Task {
+            let result = await suspendedStage.executeIfOwned(payload: .empty, context: suspendedContext)
+            if case .complete = result { return true }
+            return false
+        }
+        await suspended.waitForInvocation()
+        suspendedContext.cancel()
+        await suspended.release()
+        r.check(await task.value,
+                "stage ownership: cancellation during suspended execution suppresses continue")
+        r.eq(await suspended.invocationCount, 1,
+             "stage ownership: suspended underlying stage ran exactly once")
+
+        let activeContext = SessionContext(sessionID: 103)
+        let active = StageRendezvous()
+        let activeResult = await SuspensibleStage(rendezvous: active)
+            .executeIfOwned(payload: .empty, context: activeContext)
+        if case .continue(.transcript(let text)) = activeResult {
+            r.eq(text, "complete transcript", "stage ownership: active execution preserves payload")
+        } else {
+            r.check(false, "stage ownership: active execution did not propagate continue")
+        }
+        r.eq(await active.invocationCount, 1,
+             "stage ownership: active execution invokes underlying stage once")
+    }
 
     static func testSessionExperience(_ r: Reporter) {
         r.eq(SessionController.stateForAudioReadiness(isReady: false), .preparing,

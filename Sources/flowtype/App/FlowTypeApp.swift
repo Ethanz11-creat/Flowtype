@@ -5,9 +5,10 @@ import AppKit
 /// before launching the GUI; otherwise hands off to the SwiftUI app.
 @main
 enum FlowTypeMain {
-    static func main() {
+    @MainActor
+    static func main() async {
         if CommandLine.arguments.contains("--self-test") {
-            SelfTest.runAndExit()
+            await SelfTest.runAndExit()
         }
         FlowTypeApp.main()
     }
