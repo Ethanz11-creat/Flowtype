@@ -5,6 +5,7 @@ import os
 /// 健康画像快照（可测的纯数据部分）。
 struct RouterHealthSnapshot: Sendable, Equatable {
     var cloudLatencyEWMA: Double = 0
+    var cloudLatencySampledAt: Date? = nil
     var cloudConsecutiveFailures: Int = 0
     var networkReachable: Bool = true
     var probeLatencyMs: Double? = nil
@@ -20,10 +21,22 @@ func updateLatencyEWMA(previous: Double, sample: Double, alpha: Double = 0.3) ->
     previous == 0 ? sample : previous * (1 - alpha) + sample * alpha
 }
 
-/// 探测样本是否仍在有效期内。
-func probeIsFresh(sampledAt: Date?, now: Date, ttl: TimeInterval) -> Bool {
+/// 一次延迟采样是否仍在有效期内（探测样本与真实请求 EWMA 共用同一时间语义）。
+func sampleIsFresh(sampledAt: Date?, now: Date, ttl: TimeInterval) -> Bool {
     guard let sampledAt else { return false }
     return now.timeIntervalSince(sampledAt) < ttl
+}
+
+/// 对**真实请求**延迟样本做过期处置，策略是**非对称**的：
+/// - 新鲜：原样使用。
+/// - 过期且"慢"：仍然有效 —— 保守（走本地）不需要新鲜证据。若过期即清零，
+///   "握手快但服务端慢"的链路会在 cloud/local 之间来回振荡（握手探测看不见服务端处理耗时，
+///   而云端 ASR 的延迟大头正来自推理）。
+/// - 过期且"快"：不再可信，降级为未知（0），交给握手探测按当前链路重新判定。
+func agedLatencySample(_ ewma: Double, sampledAt: Date?, now: Date, ttl: TimeInterval) -> Double {
+    guard ewma != 0 else { return 0 }
+    if sampleIsFresh(sampledAt: sampledAt, now: now, ttl: ttl) { return ewma }
+    return ewma > ASRRoutingThresholds.cloudLatencyMs ? ewma : 0
 }
 
 /// 一次 NWPath 观测的可比对特征。链路特征变化 ⇒ 旧延迟/探测样本来自另一条链路，必须作废。
@@ -58,6 +71,7 @@ func invalidateLinkSamples(_ state: RouterHealthSnapshot) -> RouterHealthSnapsho
     next.probeSampledAt = nil
     next.probeFailed = false
     next.cloudLatencyEWMA = 0
+    next.cloudLatencySampledAt = nil
     return next
 }
 
@@ -69,6 +83,8 @@ enum ASRRouterProbeConfig {
     /// 必须**严格小于** `interval`：采样时刻晚于 tick，若两者相等，下一个 tick 会因
     /// "未过期"被跳过，实际退化成每两拍才探测一次（有效周期翻倍到 ~60s）。
     static let ttl: TimeInterval = interval * 0.6
+    /// 真实请求延迟样本的有效期。超过它，陈旧的"快"样本不再可信；陈旧的"慢"样本依然有效。
+    static let latencyTtl: TimeInterval = 300
 }
 
 /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
@@ -125,6 +141,7 @@ final class ASRRouter: @unchecked Sendable {
         guard ASRProviderRegistry.shared.provider(forID: providerID)?.capabilities.requiresNetwork == true else { return }
         health.withLock {
             $0.cloudLatencyEWMA = updateLatencyEWMA(previous: $0.cloudLatencyEWMA, sample: Double(latencyMs))
+            $0.cloudLatencySampledAt = Date()
             $0.cloudConsecutiveFailures = 0
         }
         AppLogger.log("[ASRRouter] cloud EWMA=\(Int(health.withLock { $0.cloudLatencyEWMA }))ms")
@@ -168,7 +185,7 @@ final class ASRRouter: @unchecked Sendable {
         guard let endpoint = CloudProbe.probeEndpoint(fromBaseURL: effective.provider.baseURL) else { return }
         let snap = snapshot()
         guard shouldProbeCloud(path: snap.pathSignature, policy: cfg.asrRoutingPolicy) else { return }
-        if !force, probeIsFresh(sampledAt: snap.probeSampledAt, now: Date(), ttl: ASRRouterProbeConfig.ttl) { return }
+        if !force, sampleIsFresh(sampledAt: snap.probeSampledAt, now: Date(), ttl: ASRRouterProbeConfig.ttl) { return }
 
         let ms = await CloudProbe.measureLatency(host: endpoint.host,
                                                 port: endpoint.port,
@@ -196,7 +213,11 @@ final class ASRRouter: @unchecked Sendable {
             localAvailable: localAvailable,
             cloudAvailable: cloudAvailable,
             networkReachable: snap.networkReachable,
-            cloudLatencyEWMA: snap.cloudLatencyEWMA,
+            // 陈旧的"快"样本降级为未知，交给探测按当前链路重判；陈旧的"慢"样本依然否决云端。
+            cloudLatencyEWMA: agedLatencySample(snap.cloudLatencyEWMA,
+                                                sampledAt: snap.cloudLatencySampledAt,
+                                                now: Date(),
+                                                ttl: ASRRouterProbeConfig.latencyTtl),
             cloudConsecutiveFailures: snap.cloudConsecutiveFailures,
             cloudProbeMs: snap.probeLatencyMs,
             cloudProbeFailed: snap.probeFailed

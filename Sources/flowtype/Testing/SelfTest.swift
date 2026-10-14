@@ -312,6 +312,7 @@ enum SelfTest {
         testCloudProbe(r)          // cloud host probe: endpoint parse + threshold isolation + cold-start chain
         testPathChangeDetection(r) // network switch must invalidate the cached probe sample
         testLinkSampleInvalidation(r) // which samples die on a link change (probe + stale EWMA)
+        testAgedLatencySample(r)   // EWMA TTL: stale fast sample re-decided by the probe
         testProbeGating(r)         // when the probe is allowed to spend a handshake at all
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
@@ -1278,11 +1279,11 @@ enum SelfTest {
         r.check(ASRRoutingThresholds.cloudProbeHandshakeMs < ASRRoutingThresholds.cloudLatencyMs,
                 "probe: handshake threshold calibrated below the request-latency threshold")
 
-        // 3. probeIsFresh: TTL 过期判定。
+        // 3. sampleIsFresh: TTL 过期判定（探测与 EWMA 共用）。
         let now = Date()
-        r.check(!probeIsFresh(sampledAt: nil, now: now, ttl: 30), "probe: nil sample → stale")
-        r.check(probeIsFresh(sampledAt: now.addingTimeInterval(-10), now: now, ttl: 30), "probe: 10s old < 30s ttl → fresh")
-        r.check(!probeIsFresh(sampledAt: now.addingTimeInterval(-40), now: now, ttl: 30), "probe: 40s old > 30s ttl → stale")
+        r.check(!sampleIsFresh(sampledAt: nil, now: now, ttl: 30), "probe: nil sample → stale")
+        r.check(sampleIsFresh(sampledAt: now.addingTimeInterval(-10), now: now, ttl: 30), "probe: 10s old < 30s ttl → fresh")
+        r.check(!sampleIsFresh(sampledAt: now.addingTimeInterval(-40), now: now, ttl: 30), "probe: 40s old > 30s ttl → stale")
 
         // 4. 路由组合：冷启动时探测真正参与决策（用生产可达的握手值，非 5000 之类不可达值）。
         func cold(probe: Double?, failed: Bool = false, ewma: Double = 0) -> ASRRoutingInputs {
@@ -1352,6 +1353,7 @@ enum SelfTest {
     static func testLinkSampleInvalidation(_ r: Reporter) {
         var stale = RouterHealthSnapshot()
         stale.cloudLatencyEWMA = 4200          // 旧链路测到的整轮延迟
+        stale.cloudLatencySampledAt = Date()
         stale.probeLatencyMs = 150             // 旧链路测到的握手
         stale.probeSampledAt = Date()
         stale.probeFailed = true
@@ -1360,11 +1362,48 @@ enum SelfTest {
 
         let next = invalidateLinkSamples(stale)
         r.eq(next.cloudLatencyEWMA, 0, "invalidate: stale request latency dropped on link change")
+        r.eq(next.cloudLatencySampledAt, nil, "invalidate: request-latency timestamp dropped")
         r.eq(next.probeLatencyMs, nil, "invalidate: probe latency dropped")
         r.eq(next.probeSampledAt, nil, "invalidate: probe timestamp dropped")
         r.check(!next.probeFailed, "invalidate: probe failure flag dropped")
         r.eq(next.cloudConsecutiveFailures, 1, "invalidate: failure streak preserved (link-agnostic evidence)")
         r.check(next.networkReachable, "invalidate: reachability preserved (owned by the path monitor)")
+    }
+
+    // MARK: - Aged latency sample (EWMA TTL, asymmetric)
+
+    static func testAgedLatencySample(_ r: Reporter) {
+        let now = Date()
+        let ttl: TimeInterval = 300
+        let fresh = now.addingTimeInterval(-10)
+        let stale = now.addingTimeInterval(-9999)
+
+        r.eq(agedLatencySample(0, sampledAt: nil, now: now, ttl: ttl), 0, "ewma-ttl: no sample → unknown")
+        r.eq(agedLatencySample(1200, sampledAt: fresh, now: now, ttl: ttl), 1200, "ewma-ttl: fresh fast sample kept")
+        r.eq(agedLatencySample(4200, sampledAt: fresh, now: now, ttl: ttl), 4200, "ewma-ttl: fresh slow sample kept")
+
+        // 非对称的关键：保守不需要新鲜证据 —— 陈旧的"慢"样本依旧否决云端。
+        // 若有过期即清零，则"握手快但服务端慢"的链路上会在 cloud/local 之间振荡。
+        r.eq(agedLatencySample(4200, sampledAt: stale, now: now, ttl: ttl), 4200,
+             "ewma-ttl: stale SLOW sample still blocks cloud (caution needs no fresh evidence)")
+
+        // 陈旧的"快"样本不再可信 → 降级为未知，由握手探测重新判定（这正是被报告的缺口）。
+        r.eq(agedLatencySample(1200, sampledAt: stale, now: now, ttl: ttl), 0,
+             "ewma-ttl: stale FAST sample → unknown so the probe can re-decide")
+
+        // 端到端组合：陈旧快样本 + 探测判慢 → 本地优先。
+        let inputs = ASRRoutingInputs(
+            policy: .auto, localAvailable: true, cloudAvailable: true, networkReachable: true,
+            cloudLatencyEWMA: agedLatencySample(1200, sampledAt: stale, now: now, ttl: ttl),
+            cloudConsecutiveFailures: 0,
+            cloudProbeMs: 900
+        )
+        r.eq(selectASRChain(inputs), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "ewma-ttl: stale fast EWMA + slow probe → local-first (the reported gap)")
+
+        // 边界：恰好到期视为过期（与 sampleIsFresh 的 < 语义一致）。
+        r.eq(agedLatencySample(1200, sampledAt: now.addingTimeInterval(-ttl), now: now, ttl: ttl), 0,
+             "ewma-ttl: exactly at ttl → stale")
     }
 
     // MARK: - Foreground context assembly (pure)
