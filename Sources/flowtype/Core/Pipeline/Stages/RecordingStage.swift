@@ -57,6 +57,22 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             let output = try await audioRecorder.startRecording(deviceID: deviceID)
             AppLogger.log("[RecordingStage#\(sessionID)] AudioRecorder started")
 
+            if await MainActor.run(body: { context.isCancelled }) {
+                audioRecorder.stopRecording()
+                return .complete
+            }
+
+            // Install the readiness callback immediately after capture starts so
+            // the first valid PCM buffer, including one that arrives while
+            // foreground context is being collected, gates the UI transition.
+            audioRecorder.onAudioBuffer = { [weak self] buffer in
+                self?.appleSpeechProvider.appendAudioBuffer(buffer)
+                guard buffer.frameLength > 0 else { return }
+                Task { @MainActor in
+                    context.markReady()
+                }
+            }
+
             // 采集一次前台上下文（失败则静默跳过，不阻断录音）。
             // 本地优先与云端策略都采集：本地 Qwen 直接用（不上传），云端可能随请求发送。
             if let fg = await contextProvider.collect(),
@@ -71,9 +87,6 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             }
 
             // 3. Start AppleSpeech real-time preview streaming
-            audioRecorder.onAudioBuffer = { [weak self] buffer in
-                self?.appleSpeechProvider.appendAudioBuffer(buffer)
-            }
             let previewStream = await appleSpeechProvider.startStreamingRecognition()
             AppLogger.log("[RecordingStage#\(sessionID)] AppleSpeech preview started")
 
@@ -131,6 +144,9 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             let rawSamples = audioRecorder.takeAccumulatedSamples()
             let audioDuration = Double(rawSamples.count) / 16000.0
             AppLogger.log("[RecordingStage#\(sessionID)] Recording cancelled, samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
+            if await MainActor.run(body: { context.isCancelled }) {
+                return .complete
+            }
             return .continue(.audio(samples: rawSamples, previewText: finalPreviewText))
         } catch {
             AppLogger.log("[RecordingStage#\(sessionID)] Recording failed: \(error)")
@@ -138,6 +154,9 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             cleanup()
             _ = appleSpeechProvider.stopStreamingRecognition()
             _ = audioRecorder.takeAccumulatedSamples()
+            if await MainActor.run(body: { context.isCancelled }) {
+                return .complete
+            }
             return .suspend(ErrorRecoveryContext(
                 failedStage: name,
                 error: error,

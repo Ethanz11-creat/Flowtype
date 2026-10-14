@@ -44,6 +44,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
                 switch state {
                 case .idle:
                     self.updateIdleTooltip()
+                case .preparing:
+                    self.statusItem?.button?.toolTip = "FlowType — 正在准备麦克风..."
                 case .recording:
                     self.statusItem?.button?.toolTip = "FlowType — 录音中..."
                 case .processing:

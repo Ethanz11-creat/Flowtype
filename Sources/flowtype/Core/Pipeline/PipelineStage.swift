@@ -64,3 +64,17 @@ protocol PipelineStage: Sendable {
     /// - Returns: A `StageResult` directing the orchestrator how to proceed.
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult
 }
+
+extension PipelineStage {
+    /// Runs a stage only while its session still owns the pipeline. A cancellation
+    /// that races with a stage's async work is converted into `.complete`, which
+    /// lets the controller finish quietly without advancing a stale result.
+    func executeIfOwned(payload: StagePayload, context: SessionContext) async -> StageResult {
+        let cancelledBefore = await MainActor.run { context.isCancelled }
+        guard !cancelledBefore else { return .complete }
+
+        let result = await execute(payload: payload, context: context)
+        let cancelledAfter = await MainActor.run { context.isCancelled }
+        return cancelledAfter ? .complete : result
+    }
+}

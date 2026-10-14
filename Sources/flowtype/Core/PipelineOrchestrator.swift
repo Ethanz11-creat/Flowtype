@@ -7,6 +7,7 @@ import Combine
 
 enum SessionState: Equatable {
     case idle
+    case preparing
     case recording(elapsedSeconds: Int)
     case processing(provider: String)
     case polishing(preview: String)
@@ -60,11 +61,17 @@ final class SessionController: ObservableObject {
 
     private var stateCancellable: AnyCancellable?
     private var spectrumCancellable: AnyCancellable?
+    private var readinessCancellable: AnyCancellable?
 
     // MARK: - Computed
 
     var isRecording: Bool {
         if case .recording = sessionState { return true }
+        return false
+    }
+
+    var isPreparing: Bool {
+        if case .preparing = sessionState { return true }
         return false
     }
 
@@ -113,6 +120,7 @@ final class SessionController: ObservableObject {
 
         currentTask?.cancel()
         currentTask = nil
+        currentContext?.cancel()
 
         activeSessionID = newID
 
@@ -136,8 +144,23 @@ final class SessionController: ObservableObject {
             }
             .sink { [weak self] state in
                 guard let self else { return }
-                guard let ctx = self.currentContext, ctx.sessionID == newID else { return }
+                guard let ctx = self.currentContext,
+                      Self.shouldAcceptEvent(activeSessionID: self.activeSessionID,
+                                             eventSessionID: newID,
+                                             isCancelled: ctx.isCancelled) else { return }
                 self.transition(to: state, context: ctx)
+            }
+
+        readinessCancellable = context.readinessPublisher
+            .sink { [weak self] in
+                guard let self,
+                      let ctx = self.currentContext,
+                      Self.shouldAcceptEvent(activeSessionID: self.activeSessionID,
+                                             eventSessionID: newID,
+                                             isCancelled: ctx.isCancelled),
+                      ctx.isReady else { return }
+                self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx)
+                self.startRecordingTimer()
             }
 
         // Subscribe to real-time spectrum publisher (avoids 1Hz timer polling)
@@ -147,8 +170,7 @@ final class SessionController: ObservableObject {
             }
         // 录音中不再向 UI 推送预览文字（预览仅作 ASR 失败时的内部兜底）。
 
-        transition(to: .recording(elapsedSeconds: 0), context: context)
-        startRecordingTimer()
+        transition(to: Self.stateForAudioReadiness(isReady: false), context: context)
         WindowManager.shared.showWindow()
 
         executeStage(at: 0, payload: .empty, context: context)
@@ -156,6 +178,16 @@ final class SessionController: ObservableObject {
 
     func endRecording(withPolish: Bool) {
         AppLogger.log("[SessionController#\(activeSessionID)] endRecording called, withPolish=\(withPolish)")
+
+        if isPreparing {
+            guard let context = currentContext else { return }
+            context.cancel()
+            currentTask?.cancel()
+            currentTask = nil
+            resetToIdle()
+            AppLogger.log("[SessionController#\(activeSessionID)] stop during preparation — capture cancelled")
+            return
+        }
 
         guard isRecording else {
             AppLogger.log("[SessionController#\(activeSessionID)] endRecording: not recording, ignoring")
@@ -178,6 +210,9 @@ final class SessionController: ObservableObject {
     func cancel() {
         AppLogger.log("[SessionController#\(activeSessionID)] cancel called, state=\(sessionState)")
 
+        currentContext?.cancel()
+        // Invalidate ownership before cancellation can resume a stage on another executor.
+        activeSessionID = 0
         currentTask?.cancel()
         currentTask = nil
 
@@ -263,9 +298,9 @@ final class SessionController: ObservableObject {
 
         let task = Task { [weak self] in
             guard let self else { return }
-            let result = await stage.execute(payload: payload, context: context)
+            let result = await stage.executeIfOwned(payload: payload, context: context)
 
-            guard self.activeSessionID == context.sessionID else {
+            guard self.activeSessionID == context.sessionID, !context.isCancelled else {
                 AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, ignoring stage result")
                 return
             }
@@ -345,6 +380,10 @@ final class SessionController: ObservableObject {
         // Hide the capsule when the session finishes normally (slides down). resetToIdle()
         // covers the cancel/error paths; the normal .complete → .idle path needs this.
         if case .idle = newState {
+            // A completed session is no longer allowed to publish readiness/state
+            // events. Invalidate ownership before any late callback can resurrect it.
+            context.cancel()
+            activeSessionID = 0
             WindowManager.shared.hide()
         }
 
@@ -538,6 +577,7 @@ final class SessionController: ObservableObject {
     // MARK: - Reset
 
     private func resetToIdle() {
+        currentContext?.cancel()
         sessionState = .idle
         activeSessionID = 0
         currentContext = nil
@@ -545,6 +585,8 @@ final class SessionController: ObservableObject {
         stateCancellable = nil
         spectrumCancellable?.cancel()
         spectrumCancellable = nil
+        readinessCancellable?.cancel()
+        readinessCancellable = nil
         lastErrorRawText = nil
         errorActions = []
         suspendedContext = nil
@@ -570,6 +612,20 @@ final class SessionController: ObservableObject {
 // MARK: - ErrorAction
 
 extension SessionController {
+    nonisolated static let stateBeforeAudioReady: SessionState = .preparing
+    nonisolated static let stateAfterAudioReady: SessionState = .recording(elapsedSeconds: 0)
+
+    nonisolated static func stateForAudioReadiness(isReady: Bool,
+                                                   elapsedSeconds: Int = 0) -> SessionState {
+        isReady ? .recording(elapsedSeconds: elapsedSeconds) : .preparing
+    }
+
+    nonisolated static func shouldAcceptEvent(activeSessionID: UInt64,
+                                               eventSessionID: UInt64,
+                                               isCancelled: Bool) -> Bool {
+        activeSessionID != 0 && activeSessionID == eventSessionID && !isCancelled
+    }
+
     enum ErrorAction: Equatable, Hashable {
         case retry
         case copyRaw
@@ -592,6 +648,7 @@ extension SessionState {
     var statusColor: Color {
         switch self {
         case .idle:       return Color.white.opacity(0.5)
+        case .preparing:  return Color(red: 0.5, green: 0.3, blue: 1.0)
         case .recording:  return Color(red: 0.5, green: 0.3, blue: 1.0)
         case .processing: return .blue
         case .polishing:  return Color(red: 0.8, green: 0.4, blue: 0.9)
@@ -604,6 +661,7 @@ extension SessionState {
     var statusTitle: String {
         switch self {
         case .idle:                      return "准备就绪"
+        case .preparing:                 return "正在准备..."
         case .recording:                 return "Listening..."
         case .processing(let provider):  return "\(provider)..."
         case .polishing:                 return "润色中..."

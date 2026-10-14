@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// Lightweight, dependency-free self-tests that run WITHOUT Xcode / XCTest.
 ///
@@ -323,8 +324,47 @@ enum SelfTest {
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
+        testSessionExperience(r)   // readiness, cancellation, and stale session ownership
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
+    }
+
+    // MARK: - Session experience: readiness and ownership contract
+
+    static func testSessionExperience(_ r: Reporter) {
+        r.eq(SessionController.stateForAudioReadiness(isReady: false), .preparing,
+              "session: before first valid PCM buffer → preparing")
+        r.eq(SessionController.stateForAudioReadiness(isReady: true), .recording(elapsedSeconds: 0),
+              "session: first valid PCM buffer → recording")
+        r.check(SessionController.shouldAcceptEvent(activeSessionID: 7, eventSessionID: 7, isCancelled: false),
+                "session: active session accepts its own event")
+        r.check(!SessionController.shouldAcceptEvent(activeSessionID: 7, eventSessionID: 6, isCancelled: false),
+                "session: stale session event is rejected")
+        r.check(!SessionController.shouldAcceptEvent(activeSessionID: 7, eventSessionID: 7, isCancelled: true),
+                "session: cancelled session event is rejected")
+        r.check(!SessionController.shouldAcceptEvent(activeSessionID: 0, eventSessionID: 7, isCancelled: false),
+                "session: stop invalidates ownership before late result")
+
+        let contextChecks: (initial: Bool, emittedOnce: Bool, cancelled: Bool) = MainActor.assumeIsolated {
+            let context = SessionContext(sessionID: 8)
+            var readinessEvents = 0
+            let subscription = context.readinessPublisher.sink { _ in readinessEvents += 1 }
+            let initial = !context.isReady && !context.isCancelled
+            context.markReady()
+            context.markReady()
+            let emittedOnce = context.isReady && readinessEvents == 1
+            context.cancel()
+            context.markReady()
+            let cancelled = context.isCancelled && readinessEvents == 1
+            subscription.cancel()
+            return (initial, emittedOnce, cancelled)
+        }
+        r.check(contextChecks.initial,
+                "session: fresh context is neither ready nor cancelled")
+        r.check(contextChecks.emittedOnce,
+                "session: readiness emits once after first valid buffer")
+        r.check(contextChecks.cancelled,
+                "session: cancellation blocks late readiness events")
     }
 
     // MARK: - B1: validatedAPIURL must preserve the base path (e.g. /v1)

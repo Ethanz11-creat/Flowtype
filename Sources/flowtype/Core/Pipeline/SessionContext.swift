@@ -43,6 +43,16 @@ final class SessionContext {
     /// Publisher for state transitions (observed by UI and observers).
     let statePublisher: PassthroughSubject<SessionState, Never>
 
+    /// Emits once, after the first non-empty PCM buffer reaches the recording stage.
+    let readinessPublisher = PassthroughSubject<Void, Never>()
+
+    /// True after capture has produced a valid audio buffer.
+    private(set) var isReady = false
+
+    /// Cancellation is owned by the controller. Stages and callbacks must check it
+    /// before publishing state or advancing the pipeline.
+    private(set) var isCancelled = false
+
     /// Raw transcript from ASR before any post-processing.
     var rawTranscript: String = ""
 
@@ -91,8 +101,22 @@ final class SessionContext {
 
     // MARK: - Initialization
 
-    init(sessionID: UInt64, statePublisher: PassthroughSubject<SessionState, Never>) {
+    init(sessionID: UInt64,
+         statePublisher: PassthroughSubject<SessionState, Never> = PassthroughSubject()) {
         self.sessionID = sessionID
         self.statePublisher = statePublisher
+    }
+
+    /// Marks microphone capture ready exactly once. Late callbacks after cancellation
+    /// are ignored, so an old session cannot make a new UI session look recording.
+    func markReady() {
+        guard !isCancelled, !isReady else { return }
+        isReady = true
+        readinessPublisher.send(())
+    }
+
+    /// Invalidates all future stage results and readiness/state callbacks.
+    func cancel() {
+        isCancelled = true
     }
 }

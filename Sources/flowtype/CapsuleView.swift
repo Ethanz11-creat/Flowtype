@@ -88,6 +88,8 @@ struct CapsuleView: View {
         switch session.sessionState {
         case .idle:
             return ""
+        case .preparing:
+            return "正在准备麦克风..."
         case .recording:
             return "正在听写..."
         case .processing:
