@@ -59,6 +59,8 @@
 **Interfaces:**
 - Produce an injectable transport with text/binary send and async receive; production implementation wraps URLSessionWebSocketTask.
 - Adapter must enforce start ack before audio, ordered queue/drain, finish once, task ID filtering, start/final timeouts, task-failed/close errors, and cancellation.
+- Synchronous capture ingress `seal()` closes accepted-buffer sequence; `finish()` awaits all prior accepted buffers and in-flight send before finish-task. One serial send pump avoids actor reentrant sends; queued+inflight count to 5s bound.
+- Validate endpoint WSS/host/port/no credentials/no unresolved placeholder before connection; do not log request key. Test startup timeout-before-waiter, cancel-before-start and stop during suspended last binary send.
 
 - [ ] Add fake transport tests for handshake ordering, bounded queued audio, finish drain, final after finish, timeout, malformed events, and cancellation.
 - [ ] Run self-test RED before adapter implementation.
@@ -86,6 +88,9 @@
 - Capture explicit ordered PCM closure before engine starts, retain all complete samples; allow realtime start in parallel with capture/context. Extend stopped cleanup to distinguish finish vs cancellation.
 - Settings expose protocol kind and Paraformer preset; save Key in cloudASRConfig.providerAPIKeys (actual existing ASR key location, separate from LLM keys). Test button must not send paid silence for realtime; label configuration validation honestly.
 - If stop budget expires after full ASR exists, deliver full raw. No text means error. Retry creates a new realtime task or uses stored batch/local samples, not stale finish handle.
+- For a WSS profile without a live handle, implement saved-audio transcription by fresh session + bounded sequential chunks/drain; never send WSS config to HTTP and never bulk overflow live queue.
+- Deadline completion uses single-resume owner/unstructured cancellable producer, not task-group join on synchronous Qwen/AX. LLM receives deadline and termination cancellation; no next-provider attempt after cancelled.
+- Snapshot capture-start route once; carry it through stop/final rather than reserving half-open twice.
 
 - [ ] Test localOnly/no-key no socket, cloud start during capture, queue overflow, bounded stop, realtime failure to local, and one winner.
 - [ ] Run self-test RED.

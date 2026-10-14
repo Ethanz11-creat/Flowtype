@@ -8,7 +8,7 @@
 
 ## 接口与配置
 
-现有 ASRProvider.transcribe 保留整段协议，新增 RealtimeASRSession：start / append PCM / finish / cancel 生命周期。独立 DashScope adapter 用 URLSessionWebSocketTask；test socket 注入只存在于测试。CloudASRProviderConfig 新增 protocolKind（openAICompatible 默认，dashScopeRealtime 可选）；独立 model/baseURL 预设 paraformer-realtime-v2 与 wss://dashscope.aliyuncs.com/api-ws/v1/inference。已有配置继续是 HTTP，不擅自转 WS；设置可添加实时 provider 和 Key，连接测试仅做协议/握手验证，不假装识别质量验证。
+现有 ASRProvider.transcribe 保留整段协议，新增 RealtimeASRSession：start / append PCM / finish / cancel 生命周期。独立 DashScope adapter 用 URLSessionWebSocketTask；test socket 注入只存在于测试。CloudASRProviderConfig 新增 protocolKind（openAICompatible 默认，dashScopeRealtime 可选）；独立 model/baseURL 预设 paraformer-realtime-v2 与 wss://dashscope.aliyuncs.com/api-ws/v1/inference。已有配置继续是 HTTP，不擅自转 WS；设置可添加实时 provider 和 Key，连接测试默认仅做本地配置验证，并明确这不是云端连接成功；只有用户真实录音才验证服务，不假装识别质量验证。
 
 run-task 发送后等 task-started 才发 PCM16 LE mono 16k 二进制；finish-task 后继续收结果直至 task-finished。task_id 精确匹配；task-failed、畸形消息和断线产生结构化错误；未知非错误事件忽略。官方 Paraformer 无 sentence_id；以 begin_time 为键替换 revisions（FlowType 的明确归并策略），sentence_end=true 才提交该句；task-finished 不随意把未定稿 partial 当完整句。end_time 可 null；最终文本按 begin_time 排序。句子/重放有去重，迟到事件在 cancel 后丢弃。
 
@@ -16,13 +16,13 @@ run-task 发送后等 task-started 才发 PCM16 LE mono 16k 二进制；finish-t
 
 ## Pipeline 接线与预算
 
-RecordingStage 在采音时根据路由/配置选择是否开启实时会话，与 AX 采集并行，不等云端 ready 才录音。完整 Float32 留在现有录音缓冲。localOnly 和本地主选不启用 WS；实时主选无可用实时配置时沿用 HTTP。SessionContext 持有会话对象与 start configuration snapshot，ASRStage finish 已开启会话并只消费其最终文本。云端失败/断线立即关闭；停止后优先尝试本地，不把失败实时会话再重试三次。未启动实时的 HTTP 主路径在 auto 且本地可用时一次请求即回退。
+RecordingStage 在采音时根据路由/配置选择是否开启实时会话，与 AX 采集并行，不等云端 ready 才录音。完整 Float32 留在现有录音缓冲。localOnly 和本地主选不启用 WS；活动profile为HTTP时沿用HTTP；活动WSS profile不得退到HTTP。没有live handle时通过新realtime task分段发送完整saved audio，限速/排空避免瞬间超出live queue；配置无效则返回可操作错误。SessionContext 持有会话对象与 start configuration snapshot，ASRStage finish 已开启会话并只消费其最终文本。云端失败/断线立即关闭；停止后优先尝试本地，不把失败实时会话再重试三次。未启动实时的 HTTP 主路径在 auto 且本地可用时一次请求即回退。
 
 新增 monotonic CompletionBudget，从停止开始总计 20 秒（到可交付文本，不含长文本系统落字耗时）。auto 且本地就绪时云端最终/HTTP 首尝试最多 5 秒，随后本地使用剩余预算；cloudOnly/无本地时云端最多剩余 20 秒。润色最多 min(3秒, 剩余预算)。超时取消等待者；Qwen 同步推理不可中止 GPU 时结果仍被抛弃，新推理保持串行。到期已有完整 ASR 文本就交付原文；无文本产生可重试错误，音频保留到用户关闭/重录。网络恢复不自动重放用户取消会话。
 
 ## 健康恢复
 
-慢/失败的当前探测可否决新鲜快 EWMA；快探测不能推翻慢真实请求证据。云端被降到后备后每 60 秒最多允许一轮真实 half-open 请求（由下一轮用户会话触发，非后台音频上传）；请求失败继续本地，成功重置失败/旧慢样本，重新更新 EWMA。Endpoint/model/protocol 身份变化清空健康数据，in-flight 旧身份探测结果不得写回。网络变化同样 invalidation。强制策略不改变。计费/受限链路跳过 probe，路由不额外猜测费用偏好。
+慢/失败的当前探测可否决新鲜快 EWMA；快探测不能推翻慢真实请求证据。云端被降到后备后在capture-start路由时原子预留，每60秒最多允许一轮真实 half-open 请求（由下一轮用户会话触发，非后台音频上传）；请求失败继续本地，成功重置失败/旧慢样本，重新更新 EWMA。Endpoint/model/protocol 身份变化清空健康数据，in-flight 旧身份探测结果不得写回。网络变化同样 invalidation。强制策略不改变。计费/受限链路跳过 probe，路由不额外猜测费用偏好。
 
 ## 指标、限制与验收
 
@@ -40,3 +40,7 @@ RecordingStage 在采音时根据路由/配置选择是否开启实时会话，�
 - API Key 保留 Configuration.providerAPIKeys；新配置使用 decodeIfPresent，新历史字段 Optional。
 - 不新增自有云服务、账户或计费；采用 BYOK；不调用 Typeless 私有端点。
 - 每个任务提交前 swift build 和 swift run FlowType --self-test 双绿。纯逻辑与可注入服务自动测；麦克风、真实服务、AX、CGEvent 用人工矩阵，不把模拟测试称作真机通过。
+
+## Deadline / capture / identity 补充合同
+
+超时由单次完成owner返回，不使用等待不可合作子任务结束的task-group race；LLM底层producer/network随终止取消。采音入口同步seal后await已接受队列和in-flight send drain再finish，queued+inflight合计受5秒上限，stop/start/cancel各waiter都exactly-once。连接前验证WSS host/port、无userinfo/placeholder；TLS probe支持wss/https并检查port可转换。保存capture-start路由/config与health identity+network-generation token，success/failure/probe均丢弃旧token结果；half-open cooldown单调时钟，实时与batch延迟画像分开。
