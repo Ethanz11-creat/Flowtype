@@ -25,7 +25,9 @@ struct KeyboardInjector {
 
     // MARK: - Entry point: type the text (Shift+Return for newlines)
 
-    static func insertText(_ text: String) async throws {
+    static func insertText(_ text: String, context: SessionContext? = nil) async throws {
+        try Task.checkCancellation()
+        guard context?.isCancellationRequested != true else { throw CancellationError() }
         let canProceed = injectionLock.withLock { state in
             if state { return false }
             state = true
@@ -56,10 +58,10 @@ struct KeyboardInjector {
         let segments = splitIntoLineSegments(normalizeNewlines(text))
         for (i, segment) in segments.enumerated() {
             if i > 0 {
-                try await postShiftReturn(source: source)
+                try await postShiftReturn(source: source, context: context)
             }
             for piece in chunk(segment, size: chunkSize) {
-                try await postUnicode(piece, source: source)
+                try await postUnicode(piece, source: source, context: context)
             }
         }
     }
@@ -89,7 +91,7 @@ struct KeyboardInjector {
 
     // MARK: - Low-level CGEvent posting
 
-    private static func postUnicode(_ s: String, source: CGEventSource) async throws {
+    private static func postUnicode(_ s: String, source: CGEventSource, context: SessionContext?) async throws {
         guard !s.isEmpty else { return }
         let utf16 = Array(s.utf16)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
@@ -98,13 +100,14 @@ struct KeyboardInjector {
         }
         keyDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
         keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
-        keyDown.post(tap: .cghidEventTap)
-        try await Task.sleep(nanoseconds: interEventDelayNs)
-        keyUp.post(tap: .cghidEventTap)
-        try await Task.sleep(nanoseconds: interEventDelayNs)
+        try postIfActive(context: context) {
+            keyDown.post(tap: .cghidEventTap)
+            keyUp.post(tap: .cghidEventTap)
+        }
+        try await Task.sleep(nanoseconds: interEventDelayNs * 2)
     }
 
-    private static func postShiftReturn(source: CGEventSource) async throws {
+    private static func postShiftReturn(source: CGEventSource, context: SessionContext?) async throws {
         let returnKey: CGKeyCode = 0x24 // kVK_Return
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false) else {
@@ -112,10 +115,20 @@ struct KeyboardInjector {
         }
         down.flags = .maskShift
         up.flags   = .maskShift
-        down.post(tap: .cghidEventTap)
-        try await Task.sleep(nanoseconds: interEventDelayNs)
-        up.post(tap: .cghidEventTap)
-        try await Task.sleep(nanoseconds: interEventDelayNs)
+        try postIfActive(context: context) {
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+        try await Task.sleep(nanoseconds: interEventDelayNs * 2)
+    }
+
+    /// Serialize each balanced key pair with session cancellation. The synchronous
+    /// pair avoids leaving a key held when cancellation occurs between down/up.
+    static func postIfActive(context: SessionContext?, action: () -> Void) throws {
+        try Task.checkCancellation()
+        if let context {
+            guard context.performIfActive(action) else { throw CancellationError() }
+        } else { action() }
     }
 
     // MARK: - Focus detection

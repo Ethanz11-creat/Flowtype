@@ -1,105 +1,86 @@
 import Foundation
 
-// MARK: - PolishStage
+/// Full-text fallback preserves PostProcess corrections; raw is only a last resort.
+func polishFallbackText(processed: String, raw: String) -> String {
+    processed.isEmpty ? raw : processed
+}
 
-/// Pipeline stage that optionally polishes text via LLM streaming API.
-///
-/// Input: `.processed(String, raw: String)`
-/// Output: `.polished(String, raw: String)`
+/// Optional enhancement: only a completed stream may replace the processed text.
 final class PolishStage: PipelineStage, @unchecked Sendable {
-
-    /// Single source of truth for the stage name: the orchestrator's polish-degrade
-    /// special case matches on it, so a rename must stay in sync at compile time.
     static let stageName = "Polish"
-
     var name: String { Self.stageName }
 
     private let llmService = LLMService()
+    private let streamFactory: (@Sendable (String, Configuration) async -> AsyncThrowingStream<String, Error>)?
+    private let configuration: @MainActor @Sendable () -> Configuration
+    private let deadlineSeconds: TimeInterval
+
+    init(configuration: @escaping @MainActor @Sendable () -> Configuration = { ConfigurationStore.shared.current },
+         deadlineSeconds: TimeInterval = 3,
+         streamFactory: (@Sendable (String, Configuration) async -> AsyncThrowingStream<String, Error>)? = nil) {
+        self.configuration = configuration
+        self.deadlineSeconds = deadlineSeconds
+        self.streamFactory = streamFactory
+    }
 
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
-        let sessionID = context.sessionID
-        AppLogger.log("[PolishStage#\(sessionID)] Started")
-        let startTime = Date()
-
-        // Extract input payload
-        let text: String
-        let rawText: String
-        switch payload {
-        case .processed(let processedText, let raw):
-            text = processedText
-            rawText = raw
-        default:
-            AppLogger.log("[PolishStage#\(sessionID)] Unexpected payload: \(payload), expected .processed")
-            return .suspend(ErrorRecoveryContext(
-                failedStage: name,
-                error: PolishStageError.invalidPayload,
-                rawText: nil,
-                retryable: false
-            ))
+        guard case .processed(let processed, let raw) = payload else {
+            return .suspend(ErrorRecoveryContext(failedStage: name, error: PolishStageError.invalidPayload,
+                                                rawText: nil, retryable: false))
         }
-
-        // Check if polish is enabled
+        let fallback = polishFallbackText(processed: processed, raw: raw)
+        func cancelled() -> StageResult {
+            .suspend(ErrorRecoveryContext(failedStage: name, error: CancellationError(), rawText: raw, retryable: false))
+        }
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
         let usePolish = await MainActor.run { context.usePolish }
-        guard usePolish else {
-            AppLogger.log("[PolishStage#\(sessionID)] Polish disabled, passing through")
-            return .continue(.polished(text, raw: rawText))
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        guard usePolish else { return .continue(.polished(fallback, raw: raw)) }
+
+        let config = await configuration()
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        guard LLMService.hasAvailableProvider(config: config) else {
+            await MainActor.run { if !context.isCancelled { context.polishFailed = true } }
+            return .continue(.polished(fallback, raw: raw))
         }
-
-        // Compose system prompt (must be done on MainActor)
-        let composedPrompt = await MainActor.run {
-            LLMService.composeSystemPrompt(fallback: ConfigurationStore.shared.current.systemPrompt)
-        }
-
-        AppLogger.log("[PolishStage#\(sessionID)] Starting LLM polish")
-
-        // Start polishing state
-        await MainActor.run {
-            context.statePublisher.send(.polishing(preview: ""))
-        }
-
-        var polishedText: String? = nil
+        let prompt = await MainActor.run { LLMService.composeSystemPrompt(fallback: config.systemPrompt) }
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        await MainActor.run { if !context.isCancelled { context.statePublisher.send(.polishing(preview: "")) } }
+        let start = Date()
         do {
-            let config = await MainActor.run { ConfigurationStore.shared.current }
-            let stream = await llmService.polishText(text, systemPrompt: composedPrompt, config: config)
-            var accumulated = ""
-            for try await chunk in stream {
-                accumulated += chunk
-                await MainActor.run {
-                    context.statePublisher.send(.polishing(preview: accumulated))
+            let result = try await withAsyncDeadline(seconds: deadlineSeconds) { [self] in
+                try Task.checkCancellation()
+                let stream = if let streamFactory {
+                    await streamFactory(fallback, config)
+                } else {
+                    await llmService.polishText(fallback, systemPrompt: prompt, config: config)
                 }
+                try Task.checkCancellation()
+                var completeText = ""
+                for try await chunk in stream {
+                    try Task.checkCancellation()
+                    guard !context.isCancellationRequested else { throw CancellationError() }
+                    completeText += chunk
+                }
+                try Task.checkCancellation()
+                return completeText
             }
-            if !accumulated.isEmpty && accumulated != text {
-                await MainActor.run { context.polishMs = Int(Date().timeIntervalSince(startTime) * 1000) }
-                polishedText = accumulated
-                AppLogger.log("[PolishStage#\(sessionID)] LLM polished in \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s: \(accumulated.count) chars")
-            } else {
-                AppLogger.log("[PolishStage#\(sessionID)] LLM returned empty/same, using raw")
-            }
-        } catch is CancellationError {
-            AppLogger.log("[PolishStage#\(sessionID)] LLM polish cancelled")
-            return .suspend(ErrorRecoveryContext(
-                failedStage: name,
-                error: CancellationError(),
-                rawText: rawText,
-                retryable: false
-            ))
+            guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+            await MainActor.run { if !context.isCancelled { context.polishMs = Int(Date().timeIntervalSince(start) * 1000) } }
+            let final = result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? fallback : result
+            return .continue(.polished(final, raw: raw))
         } catch {
-            AppLogger.log("[PolishStage#\(sessionID)] LLM polish failed: \(error)")
-            return .suspend(ErrorRecoveryContext(
-                failedStage: name,
-                error: error,
-                rawText: rawText,
-                retryable: true
-            ))
+            guard !(error is CancellationError), !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+            await MainActor.run {
+                guard !context.isCancelled else { return }
+                context.polishFailed = true
+                context.completionNotice = error is AsyncDeadlineError ? "整理超时 · 已输入识别结果" : "整理失败 · 已输入识别结果"
+                context.polishMs = Int(Date().timeIntervalSince(start) * 1000)
+            }
+            AppLogger.log("[PolishStage#\(context.sessionID)] Degraded to complete processed text: \(error)")
+            return .continue(.polished(fallback, raw: raw))
         }
-
-        let finalText = polishedText ?? text
-        return .continue(.polished(finalText, raw: rawText))
     }
 }
 
-// MARK: - PolishStage Errors
-
-enum PolishStageError: Error {
-    case invalidPayload
-}
+enum PolishStageError: Error { case invalidPayload }

@@ -47,7 +47,11 @@ enum LLMError: Error {
 
 actor LLMService {
 
-    init() {}
+    private let makeSession: @Sendable () -> URLSession
+
+    init(makeSession: @escaping @Sendable () -> URLSession = { URLSession(configuration: .ephemeral) }) {
+        self.makeSession = makeSession
+    }
 
     static func shouldPolish(_ text: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,15 +114,15 @@ actor LLMService {
     // MARK: - Provider Resolution
 
     /// Resolve providers + keys from a config SNAPSHOT (no shared-state read off the actor — see polishText).
-    private func resolveProviderChain(config: Configuration) -> [(provider: LLMProvider, apiKey: String)] {
+    nonisolated private static func resolveProviderChain(config: Configuration) -> [(provider: LLMProvider, apiKey: String)] {
         func key(_ id: UUID) -> String? {
             let k = config.providerAPIKeys[id.uuidString]
-            return (k?.isEmpty == false) ? k : nil
+            return (k?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? k : nil
         }
         func isValid(_ provider: LLMProvider) -> Bool {
             let model = provider.model.trimmingCharacters(in: .whitespacesAndNewlines)
             let baseURL = provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            return !model.isEmpty && !baseURL.isEmpty
+            return !model.isEmpty && validatedAPIURL(baseURL: baseURL) != nil
         }
         let providers = config.llmProviders
         var result: [(provider: LLMProvider, apiKey: String)] = []
@@ -129,6 +133,10 @@ actor LLMService {
             if let apiKey = key(provider.id) { result.append((provider, apiKey)) }
         }
         return result
+    }
+
+    nonisolated static func hasAvailableProvider(config: Configuration) -> Bool {
+        !resolveProviderChain(config: config).isEmpty
     }
 
     // MARK: - Connection Test
@@ -198,68 +206,90 @@ actor LLMService {
     ) -> AsyncThrowingStream<String, Error> {
         let temperature = config.temperature
 
-        return AsyncThrowingStream { continuation in
-            Task {
-                guard let validatedText = Self.shouldPolish(text) else {
-                    continuation.finish()
-                    return
-                }
-                if systemPrompt.isEmpty {
-                    AppLogger.log("[LLMService] WARNING: systemPrompt is empty, skipping")
-                    continuation.finish()
-                    return
-                }
+        let session = makeSession()
+        return Self.producerOwnedStream(cancelTransport: { session.invalidateAndCancel() }) { continuation in
+            guard let validatedText = Self.shouldPolish(text) else {
+                continuation.finish()
+                return
+            }
+            if systemPrompt.isEmpty {
+                AppLogger.log("[LLMService] WARNING: systemPrompt is empty, skipping")
+                continuation.finish()
+                return
+            }
 
-                let chain = self.resolveProviderChain(config: config)
-                guard !chain.isEmpty else {
-                    continuation.finish(throwing: LLMError.apiError("请在设置中配置 LLM API Key"))
-                    return
-                }
+            let chain = Self.resolveProviderChain(config: config)
+            guard !chain.isEmpty else {
+                continuation.finish(throwing: LLMError.apiError("请在设置中配置 LLM API Key"))
+                return
+            }
 
-                var lastError: Error?
-                // Latency cap: each attempt may wait up to timeoutSeconds, so trying more
-                // than 2 providers would leave the user staring at the capsule for minutes.
-                let maxAttempts = min(chain.count, 2)
-                if chain.count > maxAttempts {
-                    AppLogger.log("[LLMService] \(chain.count - maxAttempts) provider(s) beyond the 2-attempt latency cap will not be tried")
-                }
-                let delivery = DeliveryState()
-                for i in 0..<maxAttempts {
-                    let resolved = chain[i]
-                    do {
-                        AppLogger.log("[LLMService] Trying provider \(resolved.provider.name) (attempt \(i+1)/\(maxAttempts))")
-                        try await Self.streamRequest(
-                            apiKey: resolved.apiKey,
-                            baseURL: resolved.provider.baseURL,
-                            model: resolved.provider.model,
-                            temperature: temperature,
-                            systemPrompt: systemPrompt,
-                            userMessage: validatedText,
-                            maxTokens: maxTokens,
-                            timeoutSeconds: timeoutSeconds,
-                            continuation: continuation,
-                            delivery: delivery
-                        )
-                        return // Success — streamRequest finished normally
-                    } catch {
-                        lastError = error
-                        AppLogger.log("[LLMService] Provider \(resolved.provider.name) failed: \(error)")
-                        guard Self.shouldFailover(hasYielded: delivery.hasYielded, attemptIndex: i, maxAttempts: maxAttempts) else {
-                            if delivery.hasYielded {
-                                AppLogger.log("[LLMService] Content already delivered — not failing over (a retry would duplicate text)")
-                            }
-                            break
+            var lastError: Error?
+            // Latency cap: each attempt may wait up to timeoutSeconds, so trying more
+            // than 2 providers would leave the user staring at the capsule for minutes.
+            let maxAttempts = min(chain.count, 2)
+            if chain.count > maxAttempts {
+                AppLogger.log("[LLMService] \(chain.count - maxAttempts) provider(s) beyond the 2-attempt latency cap will not be tried")
+            }
+            let delivery = DeliveryState()
+            for i in 0..<maxAttempts {
+                guard !Task.isCancelled else { continuation.finish(throwing: CancellationError()); return }
+                let resolved = chain[i]
+                do {
+                    AppLogger.log("[LLMService] Trying provider \(resolved.provider.name) (attempt \(i+1)/\(maxAttempts))")
+                    try await Self.streamRequest(
+                        apiKey: resolved.apiKey,
+                        baseURL: resolved.provider.baseURL,
+                        model: resolved.provider.model,
+                        temperature: temperature,
+                        systemPrompt: systemPrompt,
+                        userMessage: validatedText,
+                        maxTokens: maxTokens,
+                        timeoutSeconds: timeoutSeconds,
+                        continuation: continuation,
+                        delivery: delivery,
+                        session: session
+                    )
+                    return // Success — streamRequest finished normally
+                } catch {
+                    guard !Task.isCancelled else { continuation.finish(throwing: CancellationError()); return }
+                    lastError = error
+                    AppLogger.log("[LLMService] Provider \(resolved.provider.name) failed: \(error)")
+                    guard Self.shouldFailover(hasYielded: delivery.hasYielded, attemptIndex: i, maxAttempts: maxAttempts) else {
+                        if delivery.hasYielded {
+                            AppLogger.log("[LLMService] Content already delivered — not failing over (a retry would duplicate text)")
                         }
-                        AppLogger.log("[LLMService] Falling back to next provider...")
+                        break
                     }
+                    AppLogger.log("[LLMService] Falling back to next provider...")
                 }
+            }
 
-                // All attempts exhausted
-                if let lastError = lastError {
-                    continuation.finish(throwing: lastError)
-                } else {
-                    continuation.finish(throwing: LLMError.apiError("所有 Provider 均不可用"))
-                }
+            // All attempts exhausted
+            if let lastError = lastError {
+                continuation.finish(throwing: lastError)
+            } else {
+                continuation.finish(throwing: LLMError.apiError("所有 Provider 均不可用"))
+            }
+        }
+    }
+
+    /// The stream owns its producer and transport. Consumer cancellation/timeout
+    /// terminates both, even when URLSession's bytes iterator is stalled.
+    nonisolated static func producerOwnedStream(
+        cancelTransport: @escaping @Sendable () -> Void,
+        produce: @escaping @Sendable (AsyncThrowingStream<String, Error>.Continuation) async -> Void
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let producer = Task {
+                await withTaskCancellationHandler {
+                    guard !Task.isCancelled else { continuation.finish(throwing: CancellationError()); return }
+                    await produce(continuation)
+                } onCancel: { cancelTransport() }
+            }
+            continuation.onTermination = { @Sendable _ in
+                producer.cancel()
+                cancelTransport()
             }
         }
     }
@@ -318,7 +348,8 @@ actor LLMService {
         maxTokens: Int,
         timeoutSeconds: UInt64,
         continuation: AsyncThrowingStream<String, Error>.Continuation,
-        delivery: DeliveryState
+        delivery: DeliveryState,
+        session: URLSession
     ) async throws {
         guard let url = validatedAPIURL(baseURL: baseURL) else {
             throw LLMError.apiError("Invalid Base URL")
@@ -346,7 +377,7 @@ actor LLMService {
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 request.httpBody = requestBody
 
-                let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                let (bytes, response) = try await session.bytes(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse else {
                     throw LLMError.apiError("Non-HTTP response")
@@ -370,6 +401,7 @@ actor LLMService {
                 var yieldedAny = false
                 var decodeFailures = 0
                 for try await line in bytes.lines {
+                    try Task.checkCancellation()
                     delivery.touch() // any inbound frame counts as liveness for the watchdog
                     switch parseSSELine(line, decodeFailures: &decodeFailures) {
                     case .content(let content):

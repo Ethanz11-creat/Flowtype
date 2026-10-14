@@ -8,6 +8,7 @@ import SwiftUI
 class FloatingPanel: NSPanel {
     private var isDragging = false
     private var initialLocation: NSPoint = .zero
+    private let capsuleMask = CAShapeLayer()
     private nonisolated(unsafe) var monitors: [Any] = []
 
     init(view: AnyView) {
@@ -29,19 +30,9 @@ class FloatingPanel: NSPanel {
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
 
-        // Apply capsule mask so the window itself is capsule-shaped
-        let cornerRadius: CGFloat = 35
-        let capsulePath = CGPath(
-            roundedRect: NSRect(x: 0, y: 0, width: 240, height: 70),
-            cornerWidth: cornerRadius,
-            cornerHeight: cornerRadius,
-            transform: nil
-        )
-        let maskLayer = CAShapeLayer()
-        maskLayer.path = capsulePath
-        hostingView.layer?.mask = maskLayer
-
+        hostingView.layer?.mask = capsuleMask
         self.contentView = hostingView
+        setCapsuleSize(NSSize(width: 240, height: 70))
 
         setupDragMonitors()
     }
@@ -54,6 +45,17 @@ class FloatingPanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    /// Keep the window and its hit-testable mask in sync with the recovery layout.
+    /// Resizing preserves the capsule center and never activates the panel.
+    func setCapsuleSize(_ size: NSSize) {
+        let centerX = frame.midX
+        setContentSize(size)
+        setFrameOrigin(NSPoint(x: centerX - size.width / 2, y: frame.minY))
+        capsuleMask.frame = NSRect(origin: .zero, size: size)
+        capsuleMask.path = CGPath(roundedRect: NSRect(origin: .zero, size: size),
+                                 cornerWidth: size.height / 2, cornerHeight: size.height / 2, transform: nil)
+    }
 
     // MARK: - Drag via event monitors (avoids intercepting SwiftUI gestures)
 

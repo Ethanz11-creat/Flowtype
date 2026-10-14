@@ -7,9 +7,9 @@ import QuartzCore
 
 // MARK: - Option Tap Detector
 
-/// Standalone tap detector that lives outside @MainActor isolation.
-/// All access is serialized on the main thread (CGEventTap dispatches via
-/// DispatchQueue.main.async, Timer fires on the runloop that created it).
+/// Standalone tap detector kept synchronous on the main run loop.
+/// Hotkey callbacks route live session actions with MainActor.assumeIsolated;
+/// its timer fires on the same main run loop, without a queued dispatch hop.
 final class OptionTapDetector: @unchecked Sendable {
     static let shared = OptionTapDetector()
 
@@ -399,6 +399,7 @@ class WindowManager: ObservableObject {
 
     func showWindow() {
         guard let panel = panel else { return }
+        panel.setCapsuleSize(SessionController.shared.sessionState.capsuleSize)
         guard let screen = NSScreen.main else {
             panel.alphaValue = 1
             panel.orderFront(nil)
@@ -407,7 +408,7 @@ class WindowManager: ObservableObject {
         // Already visible — don't replay the slide-in animation (e.g. .polishing → .notice).
         if panel.isVisible { return }
 
-        let targetX = screen.visibleFrame.midX - 120   // half the 240pt capsule width
+        let targetX = screen.visibleFrame.midX - panel.frame.width / 2
         let targetY = screen.visibleFrame.minY + 40
 
         // Start just below the resting position, fully transparent, then slide up + fade in.

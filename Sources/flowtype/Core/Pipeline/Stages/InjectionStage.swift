@@ -1,105 +1,90 @@
 import Foundation
 import AppKit
 
-// MARK: - InjectionStage
-
-/// Pipeline stage that injects text into the active application.
-///
-/// Input: `.polished(String, raw: String)`
-/// Output: `.complete`
+/// One terminal delivery. Every external effect owns a cancellation gate.
 final class InjectionStage: PipelineStage, @unchecked Sendable {
-
     var name: String { "Injection" }
+    private let settle: @Sendable () async throws -> Void
+    private let focus: @MainActor @Sendable () -> FocusSignals
+    private let inject: @Sendable (String, SessionContext) async throws -> Void
+    private let copy: @MainActor @Sendable (String) -> Void
+
+    init(settle: @escaping @Sendable () async throws -> Void = { try await Task.sleep(nanoseconds: 50_000_000) },
+         focus: @escaping @MainActor @Sendable () -> FocusSignals = { KeyboardInjector.currentFocusSignals() },
+         inject: @escaping @Sendable (String, SessionContext) async throws -> Void = { text, context in
+             try await KeyboardInjector.insertText(text, context: context)
+         },
+         copy: @escaping @MainActor @Sendable (String) -> Void = { text in
+             NSPasteboard.general.clearContents()
+             NSPasteboard.general.setString(text, forType: .string)
+             SoundFeedback.playCopiedToClipboard()
+         }) {
+        self.settle = settle
+        self.focus = focus
+        self.inject = inject
+        self.copy = copy
+    }
 
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
-        let sessionID = context.sessionID
-        AppLogger.log("[InjectionStage#\(sessionID)] Started")
-        let startTime = Date()
-
-        let text: String
-        switch payload {
-        case .polished(let polishedText, _):
-            text = polishedText
-        default:
-            AppLogger.log("[InjectionStage#\(sessionID)] Unexpected payload: \(payload), expected .polished")
-            return .suspend(ErrorRecoveryContext(
-                failedStage: name,
-                error: InjectionStageError.invalidPayload,
-                rawText: nil,
-                retryable: false
-            ))
+        guard case .polished(let text, _) = payload else {
+            return .suspend(ErrorRecoveryContext(failedStage: name, error: InjectionStageError.invalidPayload, rawText: nil, retryable: false))
         }
-
-        guard !text.isEmpty else {
-            AppLogger.log("[InjectionStage#\(sessionID)] Empty text, nothing to inject")
-            return .complete
-        }
-
-        // Guard against double injection
-        let hasInjected = await MainActor.run { context.hasInjected }
-        guard !hasInjected else {
-            AppLogger.log("[InjectionStage#\(sessionID)] Duplicate injection blocked")
-            return .complete
-        }
-        await MainActor.run { context.hasInjected = true }
-
-        // (.injecting is set by the orchestrator's pre-stage transition; the
-        // statePublisher subscriber filters .injecting, so we don't re-send it.)
-        // 让焦点在结束触发键之后稳定下来 —— 这个等待直接计入 stop→inject 延迟。
-        // 缩短到 50ms 后按指标 P95 观测再决定是否继续压缩。
-        try? await Task.sleep(nanoseconds: 50_000_000)
-
-        // Decide from the focus at THIS moment (not from whether the app changed):
-        // editable text → inject (even across an app switch); a non-text control or secure
-        // input → clipboard + sound; AX-blind apps (terminals/Electron) fail open to inject.
-        let signals = await MainActor.run { KeyboardInjector.currentFocusSignals() }
-        let decision = decideInjection(signals)
-        AppLogger.log("[InjectionStage#\(sessionID)] signals=\(signals) → \(decision)")
-
-        switch decision {
-        case .clipboard:
-            await copyToClipboard(text)
-            return .complete
-        case .inject:
-            do {
-                try await KeyboardInjector.insertText(text)
-                await MainActor.run { context.injectMs = Int(Date().timeIntervalSince(startTime) * 1000) }
-                AppLogger.log("[InjectionStage#\(sessionID)] Injected in \(String(format: "%.2f", Date().timeIntervalSince(startTime)))s")
-                return .complete
-            } catch is CancellationError {
-                AppLogger.log("[InjectionStage#\(sessionID)] Injection cancelled")
-                return .suspend(ErrorRecoveryContext(
-                    failedStage: name,
-                    error: CancellationError(),
-                    rawText: text,
-                    retryable: false
-                ))
-            } catch {
-                AppLogger.log("[InjectionStage#\(sessionID)] Injection failed (\(error)); falling back to clipboard")
-                await copyToClipboard(text)
-                return .complete
+        let start = Date()
+        do {
+            try checkActive(context)
+            guard !text.isEmpty else { return .complete }
+            guard await MainActor.run(body: { !context.hasInjected }) else { return .complete }
+            try checkActive(context)
+            try await settle()
+            try checkActive(context)
+            let signals = await focus()
+            try checkActive(context)
+            let reserved = await MainActor.run {
+                guard !Task.isCancelled, !context.isCancelled, !context.hasInjected else { return false }
+                context.hasInjected = true
+                return true
             }
+            try checkActive(context)
+            guard reserved else { return .complete }
+            switch decideInjection(signals) {
+            case .clipboard:
+                try await copyToClipboard(text, context: context)
+            case .inject:
+                do {
+                    try checkActive(context)
+                    try await inject(text, context)
+                    try checkActive(context)
+                } catch {
+                    try checkActive(context)
+                    guard !(error is CancellationError) else { throw error }
+                    AppLogger.log("[InjectionStage] Injection failed; falling back to clipboard: \(error)")
+                    try await copyToClipboard(text, context: context)
+                }
+            }
+            try checkActive(context)
+            await MainActor.run { if !context.isCancelled { context.injectMs = Int(Date().timeIntervalSince(start) * 1000) } }
+            return .complete
+        } catch {
+            return .suspend(ErrorRecoveryContext(failedStage: name, error: error, rawText: text, retryable: false))
         }
     }
 
-    private func copyToClipboard(_ text: String) async {
-        await MainActor.run {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            SoundFeedback.playCopiedToClipboard()
+    private func checkActive(_ context: SessionContext) throws {
+        try Task.checkCancellation()
+        guard !context.isCancellationRequested else { throw CancellationError() }
+    }
+
+    private func copyToClipboard(_ text: String, context: SessionContext) async throws {
+        try checkActive(context)
+        let copied = await MainActor.run {
+            guard !Task.isCancelled else { return false }
+            return context.performIfActive { copy(text) }
         }
+        guard copied else { throw CancellationError() }
     }
 }
 
-// MARK: - InjectionStage Errors
-
 enum InjectionStageError: LocalizedError {
     case invalidPayload
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidPayload:
-            return "注入失败：无效的文本"
-        }
-    }
+    var errorDescription: String? { "注入失败：无效的文本" }
 }

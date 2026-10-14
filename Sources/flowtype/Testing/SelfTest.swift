@@ -331,9 +331,325 @@ enum SelfTest {
         testPolishOnStopConfig(r)  // default/migration and persisted opt-out
         testStableSessionPresentation(r) // no provider or streaming text in capsule
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
+        await testSessionRecoveryDelivery(r)
+        await testRecoveryActions(r)
+        await testPolishStreamTermination(r)
+        await testAsyncDeadline(r)
+        await testPolishDelivery(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
+    }
+
+    private final class DeliveryLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var entries: [String] = []
+        func append(_ text: String) { lock.lock(); entries.append(text); lock.unlock() }
+        var value: [String] { lock.lock(); defer { lock.unlock() }; return entries }
+    }
+
+    @MainActor
+    private final class TransitionLog: @preconcurrency SessionObserver {
+        var events: [String] = []
+        func sessionDidTransition(from oldState: SessionState, to newState: SessionState, context: SessionContext) {
+            if case .notice = newState { events.append("notice") }
+        }
+    }
+
+    private actor RetryLedger {
+        var polishRequests: [Bool] = []
+        func visit(_ polish: Bool) -> Bool { polishRequests.append(polish); return polishRequests.count == 1 }
+    }
+
+    private struct RetryASRStage: PipelineStage {
+        let name = "ASR"
+        let ledger: RetryLedger
+        func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+            let polish = await MainActor.run { context.usePolish }
+            if await ledger.visit(polish) {
+                return .suspend(ErrorRecoveryContext(failedStage: name, error: LLMError.invalidResponse, rawText: nil, retryable: true))
+            }
+            return .complete
+        }
+    }
+
+    private struct ProcessedStarter: PipelineStage {
+        let name = "Processed starter"
+        func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+            await MainActor.run { context.usePolish = true }
+            return .continue(.processed("你好，世界。", raw: "你好世界"))
+        }
+    }
+
+    @MainActor
+    private static func waitForSession(_ controller: SessionController, until predicate: (SessionState) -> Bool) async {
+        for _ in 0..<100 {
+            if predicate(controller.sessionState) { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @MainActor
+    static func testSessionRecoveryDelivery(_ r: Reporter) async {
+        let ledger = RetryLedger()
+        let quietEffects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+        let recovery = SessionController(pipeline: [RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects)
+        recovery.startRecording()
+        await waitForSession(recovery) { if case .error = $0 { return true }; return false }
+        let immediateLedger = RetryLedger()
+        let immediate = SessionController(pipeline: [RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects)
+        immediate.startRecording()
+        await waitForSession(immediate) { if case .error = $0 { return true }; return false }
+        immediate.retryFailedStage()
+        await waitForSession(immediate) { $0 == .idle }
+        r.eq(await immediateLedger.polishRequests, [false, false], "recovery: immediate ASR retry preserves configured polish flag")
+        immediate.cancel()
+        try? await Task.sleep(for: .seconds(5.2))
+        if case .error = recovery.sessionState { r.check(true, "recovery: actionable error persists beyond former five-second dismissal") }
+        else { r.check(false, "recovery: actionable error persists beyond former five-second dismissal") }
+        recovery.retryFailedStage()
+        await waitForSession(recovery) { $0 == .idle }
+        r.eq(await ledger.polishRequests, [false, false], "recovery: retry reruns ASR without forcing polish preference")
+        recovery.cancel()
+
+        var configured = Configuration()
+        configured.llmProviders = [.defaultSiliconFlow()]
+        configured.providerAPIKeys[configured.llmProviders[0].id.uuidString] = "test-key"
+        let config = configured
+        let log = TransitionLog()
+        let failure = PolishStage(configuration: { config }, streamFactory: { _, _ in
+            AsyncThrowingStream { $0.yield("partial"); $0.finish(throwing: LLMError.invalidResponse) }
+        })
+        let delivery = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
+                                     copy: { text in log.events.append("delivered:\(text)") })
+        let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in log.events.append("history") })
+        let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects)
+        session.startRecording()
+        await waitForSession(session) { if case .notice = $0 { return true }; return $0 == .idle }
+        r.eq(log.events, ["delivered:你好，世界。", "history", "notice"], "session: complete processed delivery precedes single history save and gentle notice")
+        session.cancel()
+    }
+
+    @MainActor
+    static func testRecoveryActions(_ r: Reporter) async {
+        let asr = ErrorRecoveryContext(failedStage: "ASR", error: LLMError.invalidResponse, rawText: nil, retryable: true)
+        r.eq(SessionController.buildErrorActions(from: asr).map(\.displayName), ["重试识别", "忽略"], "recovery: ASR retry label describes failed stage")
+        let processed = ErrorRecoveryContext(failedStage: "PostProcess", error: LLMError.invalidResponse, rawText: "完整文本", retryable: true)
+        r.eq(SessionController.buildErrorActions(from: processed).map(\.displayName), ["重试处理", "复制原文", "忽略"], "recovery: non-polish retry label and copy available text")
+        let empty = ErrorRecoveryContext(failedStage: "ASR", error: LLMError.invalidResponse, rawText: "", retryable: false)
+        r.eq(SessionController.buildErrorActions(from: empty).map(\.displayName), [], "recovery: nonactionable error exposes no action buttons")
+        let cancellation = ErrorRecoveryContext(failedStage: "ASR", error: CancellationError(), rawText: "stale", retryable: true)
+        r.eq(SessionController.buildErrorActions(from: cancellation).map(\.displayName), [], "recovery: cancellation exposes no stale retry or copy")
+    }
+
+    private final class HangingLLMProtocol: URLProtocol, @unchecked Sendable {
+        static let events = DeliveryLog()
+        override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "llm-test.invalid" }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        override func startLoading() {
+            Self.events.append("started")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"])!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data("data: {\"choices\":[{\"delta\":{\"content\":\"partial draft\"}}]}\n\n".utf8))
+            // No EOF: only cancellation may stop this transport.
+        }
+        override func stopLoading() { Self.events.append("stopped") }
+    }
+
+    @MainActor
+    static func testPolishStreamTermination(_ r: Reporter) async {
+        var configured = Configuration()
+        configured.llmProviders = [LLMProvider(name: "Test", provider: "custom", baseURL: "https://llm-test.invalid/v1", model: "test", isActive: true)]
+        configured.providerAPIKeys[configured.llmProviders[0].id.uuidString] = "test-key"
+        let config = configured
+        let service = LLMService(makeSession: {
+            let networkConfig = URLSessionConfiguration.ephemeral
+            networkConfig.protocolClasses = [HangingLLMProtocol.self]
+            return URLSession(configuration: networkConfig)
+        })
+        let timeout = PolishStage(configuration: { config }, deadlineSeconds: 0.1, streamFactory: { text, config in
+            await service.polishText(text, config: config)
+        })
+        let context = SessionContext(sessionID: 320)
+        context.usePolish = true
+        let start = Date()
+        let result = await timeout.execute(payload: .processed("完整处理结果。", raw: "完整处理结果"), context: context)
+        if case .continue(.polished(let final, _)) = result {
+            r.eq(final, "完整处理结果。", "polish: stalled real transport never delivers partial tokens")
+        } else { r.check(false, "polish: stalled real transport falls back") }
+        r.check(Date().timeIntervalSince(start) < 0.5, "polish: never-completing stream obeys whole deadline")
+        for _ in 0..<50 {
+            if HangingLLMProtocol.events.value.contains("stopped") { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        r.check(HangingLLMProtocol.events.value.contains("started"), "polish: transport producer actually started")
+        r.check(HangingLLMProtocol.events.value.contains("stopped"), "polish: deadline terminates stream producer and cancels network transport")
+        r.check(context.completionNotice != nil && context.polishFailed, "polish: deadline records notice for final-delivery completion")
+
+        let cancelledTransport = DeliveryLog()
+        let producer = StageRendezvous()
+        let cancellationStage = PolishStage(configuration: { config }, streamFactory: { _, _ in
+            LLMService.producerOwnedStream(cancelTransport: { cancelledTransport.append("cancelled") }) { continuation in
+                await producer.invoke(suspend: true)
+                continuation.finish()
+            }
+        })
+        let cancelContext = SessionContext(sessionID: 321)
+        cancelContext.usePolish = true
+        let task = Task { await cancellationStage.execute(payload: .processed("完整处理结果。", raw: "完整处理结果"), context: cancelContext) }
+        await producer.waitForInvocation()
+        cancelContext.cancel()
+        task.cancel()
+        let cancelled = await task.value
+        if case .suspend(let recovery) = cancelled { r.check(recovery.error is CancellationError, "polish: cancellation suspends without delivery") }
+        else { r.check(false, "polish: cancellation suspends without delivery") }
+        for _ in 0..<50 {
+            if !cancelledTransport.value.isEmpty { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        r.check(!cancelledTransport.value.isEmpty, "polish: consumer cancellation cleans producer-owned resources")
+        await producer.release()
+    }
+
+    @MainActor
+    static func testAsyncDeadline(_ r: Reporter) async {
+        let started = Date()
+        do {
+            _ = try await withAsyncDeadline(seconds: 0.02) {
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { continuation.resume(returning: "late") }
+                }
+            }
+            r.check(false, "deadline: timeout wins against uncooperative operation")
+        } catch {
+            r.check(error is AsyncDeadlineError, "deadline: timeout wins against uncooperative operation")
+        }
+        r.check(Date().timeIntervalSince(started) < 0.15, "deadline: does not join an uncooperative loser")
+        let task = Task {
+            try await withAsyncDeadline(seconds: 5) {
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { continuation.resume(returning: "late") }
+                }
+            }
+        }
+        await Task.yield()
+        let cancelledAt = Date()
+        task.cancel()
+        do { _ = try await task.value; r.check(false, "deadline: caller cancellation resumes promptly") }
+        catch { r.check(error is CancellationError, "deadline: caller cancellation resumes promptly") }
+        r.check(Date().timeIntervalSince(cancelledAt) < 0.15, "deadline: cancellation does not join operation")
+        do { r.eq(try await withAsyncDeadline(seconds: 1) { "complete" }, "complete", "deadline: successful operation completes once") }
+        catch { r.check(false, "deadline: successful operation completes once") }
+    }
+
+    // MARK: - Optional polish must deliver only complete text
+
+    @MainActor
+    static func testPolishDelivery(_ r: Reporter) async {
+        var configured = Configuration()
+        configured.llmProviders = [LLMProvider(name: "Test", provider: "custom", baseURL: "https://example.com/v1", model: "test", isActive: true)]
+        configured.providerAPIKeys[configured.llmProviders[0].id.uuidString] = "test-key"
+        let config = configured
+        func finalText(_ result: StageResult) -> String? {
+            if case .continue(.polished(let text, _)) = result { return text }
+            return nil
+        }
+        for chunks in [[], ["你好，世界。"], ["整理", "完成。"]] as [[String]] {
+            let stage = PolishStage(configuration: { config }, streamFactory: { _, _ in
+                AsyncThrowingStream { continuation in
+                    for chunk in chunks { continuation.yield(chunk) }
+                    continuation.finish()
+                }
+            })
+            let context = SessionContext(sessionID: 301)
+            context.usePolish = true
+            let result = await stage.execute(payload: .processed("你好，世界。", raw: "你好世界"), context: context)
+            r.eq(finalText(result), chunks == ["整理", "完成。"] ? "整理完成。" : "你好，世界。", "polish: empty/same/success keeps complete text")
+        }
+        let failing = PolishStage(configuration: { config }, streamFactory: { _, _ in
+            AsyncThrowingStream { continuation in
+                continuation.yield("不完整草稿")
+                continuation.finish(throwing: LLMError.apiError("offline"))
+            }
+        })
+        let failureContext = SessionContext(sessionID: 302)
+        failureContext.usePolish = true
+        let failed = await failing.execute(payload: .processed("你好，世界。", raw: "你好世界"), context: failureContext)
+        r.eq(finalText(failed), "你好，世界。", "polish: stream error discards partial draft and delivers processed text")
+        let noConfig = PolishStage(configuration: { Configuration() }, streamFactory: { _, _ in
+            AsyncThrowingStream { $0.finish(throwing: LLMError.apiError("must not request")) }
+        })
+        let noConfigContext = SessionContext(sessionID: 303)
+        noConfigContext.usePolish = true
+        r.eq(finalText(await noConfig.execute(payload: .processed("本地结果。", raw: "本地结果"), context: noConfigContext)), "本地结果。", "polish: missing LLM config passes through")
+        let cancelled = SessionContext(sessionID: 304)
+        cancelled.usePolish = true
+        cancelled.cancel()
+        let cancelledResult = await failing.execute(payload: .processed("你好，世界。", raw: "你好世界"), context: cancelled)
+        if case .suspend(let recovery) = cancelledResult {
+            r.check(recovery.error is CancellationError, "polish: cancelled context suspends without draft or fallback")
+        } else { r.check(false, "polish: cancelled context suspends without draft or fallback") }
+
+        let delivery = DeliveryLog()
+        for clipboard in [false, true] {
+            let context = SessionContext(sessionID: 305)
+            let stage = InjectionStage(settle: {
+                await context.cancel()
+            }, focus: { FocusSignals(secureInputActive: clipboard, focus: .blindOrUnknown) },
+            inject: { text, _ in delivery.append(text) }, copy: { text in delivery.append(text) })
+            _ = await stage.execute(payload: .polished("完整文本。", raw: "完整文本"), context: context)
+        }
+        r.eq(delivery.value, [], "injection: cancellation during focus settle prevents keyboard and clipboard effects")
+        let deliveredOnce = DeliveryLog()
+        let once = SessionContext(sessionID: 306)
+        let stage = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
+                                   inject: { text, _ in deliveredOnce.append(text) }, copy: { text in deliveredOnce.append(text) })
+        _ = await stage.execute(payload: .polished("只送一次。", raw: "只送一次"), context: once)
+        _ = await stage.execute(payload: .polished("只送一次。", raw: "只送一次"), context: once)
+        r.eq(deliveredOnce.value, ["只送一次。"], "injection: one terminal delivery across duplicate stage executions")
+        let concurrentContext = SessionContext(sessionID: 311)
+        let concurrentDeliveries = DeliveryLog()
+        let concurrentStage = InjectionStage(settle: { await Task.yield() },
+            focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
+            copy: { text in concurrentDeliveries.append(text) })
+        async let first = concurrentStage.execute(payload: .polished("并发只送一次。", raw: "并发只送一次"), context: concurrentContext)
+        async let second = concurrentStage.execute(payload: .polished("并发只送一次。", raw: "并发只送一次"), context: concurrentContext)
+        _ = await (first, second)
+        r.eq(concurrentDeliveries.value, ["并发只送一次。"], "injection: concurrent executions share one terminal delivery reservation")
+        once.finalText = "只送一次。"
+        r.check(once.claimHistorySave(), "history: delivered session claims terminal history save")
+        r.check(!once.claimHistorySave(), "history: notice then idle cannot save delivered history twice")
+        let unsent = SessionContext(sessionID: 307)
+        unsent.finalText = "取消文本。"
+        r.check(!unsent.claimHistorySave(), "history: undelivered text never creates terminal history")
+        unsent.hasInjected = true
+        unsent.cancel()
+        r.check(!unsent.claimHistorySave(), "history: cancelled context cannot claim history")
+
+        let events = DeliveryLog()
+        let cancelledBeforePost = SessionContext(sessionID: 308)
+        cancelledBeforePost.cancel()
+        do {
+            try KeyboardInjector.postIfActive(context: cancelledBeforePost) { events.append("posted") }
+            r.check(false, "keyboard: actual CGEvent posting gate rejects cancelled context")
+        } catch { r.check(error is CancellationError, "keyboard: actual CGEvent posting gate rejects cancelled context") }
+        r.eq(events.value, [], "keyboard: rejected post never executes its event side effect")
+        let postContext = SessionContext(sessionID: 309)
+        let posting = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            do { try KeyboardInjector.postIfActive(context: postContext) { events.append("posted") }; return false }
+            catch { return error is CancellationError }
+        }
+        r.check(await posting.value, "keyboard: actual posting gate rejects cancelled task even with active context")
+        r.eq(events.value, [], "keyboard: task cancellation posts no event")
+
+        let afterInject = SessionContext(sessionID: 310)
+        let cancelledDuringInject = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: false, focus: .blindOrUnknown) },
+            inject: { _, context in await context.cancel(); throw LLMError.invalidResponse },
+            copy: { text in events.append(text) })
+        _ = await cancelledDuringInject.execute(payload: .polished("禁止回退。", raw: "禁止回退"), context: afterInject)
+        r.eq(events.value, [], "injection: cancellation during keyboard await prevents clipboard fallback")
+        r.eq(polishFallbackText(processed: "", raw: "最后兜底"), "最后兜底", "polish: empty processed text falls back to complete raw text")
     }
 
     // MARK: - Stop gestures and final-only presentation

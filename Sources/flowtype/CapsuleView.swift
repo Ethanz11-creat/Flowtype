@@ -29,7 +29,8 @@ struct CapsuleView: View {
             Spacer()
         }
         .padding(.horizontal, 20)
-        .frame(width: 240, height: 70)
+        .frame(width: session.sessionState.capsuleSize.width,
+               height: session.sessionState.capsuleSize.height)
         .background(
             ZStack {
                 VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
@@ -113,9 +114,6 @@ struct CapsuleView: View {
 
     @ViewBuilder
     private var subtitleContent: some View {
-        // No action buttons on failure — they look intrusive. Every state (incl. errors/notices) shows a
-        // single gentle text line that auto-dismisses. Polish failures degrade to a notice + history entry;
-        // genuine errors show a brief message and slide away on their own.
         HStack(spacing: 4) {
             if let timer = recordingTimerText {
                 Text(timer)
@@ -128,6 +126,21 @@ struct CapsuleView: View {
                 .foregroundColor(statusColor.opacity(0.7))
                 .lineLimit(1)
                 .truncationMode(.head)
+        }
+        if case .error = session.sessionState, !session.errorActions.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(session.errorActions, id: \.self) { action in
+                    Button(action.displayName) {
+                        switch action {
+                        case .retry: session.retryFailedStage()
+                        case .copyRaw: session.copyRawText()
+                        case .dismiss: session.dismissError()
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 11, weight: .medium))
+                }
+            }
         }
     }
 

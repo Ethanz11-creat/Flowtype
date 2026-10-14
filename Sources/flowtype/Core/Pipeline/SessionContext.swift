@@ -79,8 +79,20 @@ final class SessionContext {
     /// Final text after all processing / polish, ready for injection.
     var finalText: String = ""
 
-    /// Set when LLM polish failed and we degraded to keeping the raw ASR text (history then marks it .raw).
+    /// Set when optional polish is unavailable or degraded (history then marks it .raw).
     var polishFailed: Bool = false
+
+    /// Displayed only after the terminal delivery succeeds.
+    var completionNotice: String?
+
+    private var historySaved = false
+
+    /// Completion can transition through a notice and then idle; persist only once.
+    func claimHistorySave() -> Bool {
+        guard !isCancelled, !historySaved, hasInjected, !finalText.isEmpty else { return false }
+        historySaved = true
+        return true
+    }
 
     /// 本轮实际使用的 ASR provider id（由 ASRStage 写入），用于历史与指标。
     var usedProviderID: String?

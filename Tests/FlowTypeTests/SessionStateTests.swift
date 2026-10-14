@@ -17,12 +17,12 @@ final class SessionStateTests: XCTestCase {
         XCTAssertNotEqual(e, f)
     }
 
-    /// Every state has a distinct status title (all 7 cases covered).
+    /// Processing phases intentionally share one stable title.
     func testStateStatusTitles() {
         XCTAssertEqual(SessionState.idle.statusTitle, "准备就绪")
         XCTAssertEqual(SessionState.recording(elapsedSeconds: 0).statusTitle, "Listening...")
-        XCTAssertEqual(SessionState.processing(provider: "Test").statusTitle, "Test...")
-        XCTAssertEqual(SessionState.polishing(preview: "").statusTitle, "润色中...")
+        XCTAssertEqual(SessionState.processing(provider: "Test").statusTitle, "处理中...")
+        XCTAssertEqual(SessionState.polishing(preview: "").statusTitle, "处理中...")
         XCTAssertEqual(SessionState.injecting.statusTitle, "输入中...")
         XCTAssertEqual(SessionState.notice("温和提示").statusTitle, "温和提示")
         XCTAssertEqual(SessionState.error("msg").statusTitle, "出错了")

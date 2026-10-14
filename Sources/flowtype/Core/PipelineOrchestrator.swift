@@ -16,6 +16,24 @@ enum SessionState: Equatable {
     case error(String)
 }
 
+/// External session effects are replaceable without changing pipeline ownership or transitions.
+@MainActor
+struct SessionEffects {
+    var prepare: @MainActor @Sendable () -> Void
+    var showWindow: @MainActor @Sendable () -> Void
+    var hideWindow: @MainActor @Sendable () -> Void
+    var saveHistory: (@MainActor @Sendable (SessionContext) -> Void)? = nil
+
+    static let live = SessionEffects(prepare: {
+        Task { @MainActor in
+            ASRRouter.shared.startProbing()
+            let cfg = ConfigurationStore.shared.current
+            guard cfg.asrRoutingPolicy != .cloudOnly else { return }
+            await QwenModelState.shared.loadModel(provider: ASRProviderRegistry.shared.qwenLocalProvider)
+        }
+    }, showWindow: { WindowManager.shared.showWindow() }, hideWindow: { WindowManager.shared.hide() })
+}
+
 // MARK: - Session Controller
 
 @MainActor
@@ -24,6 +42,7 @@ final class SessionController: ObservableObject {
 
     private let pipeline: [PipelineStage]
     private let observers: [SessionObserver]
+    private let effects: SessionEffects
     private let asrRegistry = ASRProviderRegistry.shared
 
     var qwenProvider: QwenASRProvider { asrRegistry.qwenLocalProvider }
@@ -84,18 +103,14 @@ final class SessionController: ObservableObject {
 
     init(
         pipeline: [PipelineStage] = PipelineRegistry.defaultPipeline(),
-        observers: [SessionObserver] = PipelineRegistry.defaultObservers()
+        observers: [SessionObserver] = PipelineRegistry.defaultObservers(),
+        effects: SessionEffects = .live
     ) {
         self.pipeline = pipeline
         self.observers = observers
 
-        // 本地模型常驻暖机：避免每轮首字都付冷加载代价。
-        Task { @MainActor in
-            ASRRouter.shared.startProbing()
-            let cfg = ConfigurationStore.shared.current
-            guard cfg.asrRoutingPolicy != .cloudOnly else { return }
-            await QwenModelState.shared.loadModel(provider: asrRegistry.qwenLocalProvider)
-        }
+        self.effects = effects
+        effects.prepare()
     }
 
     // MARK: - Public API
@@ -175,7 +190,7 @@ final class SessionController: ObservableObject {
         // 录音中不再向 UI 推送预览文字（预览仅作 ASR 失败时的内部兜底）。
 
         transition(to: Self.stateForAudioReadiness(isReady: false), context: context)
-        WindowManager.shared.showWindow()
+        effects.showWindow()
 
         executeStage(at: 0, payload: .empty, context: context)
     }
@@ -226,39 +241,40 @@ final class SessionController: ObservableObject {
         AppLogger.log("[SessionController] Cancelled — session reset to idle")
     }
 
-    func retryPolish() {
+    func retryFailedStage() {
         guard case .error = sessionState else {
-            AppLogger.log("[SessionController] retryPolish: not in error state")
+            AppLogger.log("[SessionController] retryFailedStage: not in error state")
             return
         }
         guard suspendedContext != nil else {
-            AppLogger.log("[SessionController] retryPolish: no recovery context")
+            AppLogger.log("[SessionController] retryFailedStage: no recovery context")
             return
         }
         guard let payload = suspendedPayload else {
-            AppLogger.log("[SessionController] retryPolish: no suspended payload")
+            AppLogger.log("[SessionController] retryFailedStage: no suspended payload")
             return
         }
         guard let stageIndex = suspendedStageIndex else {
-            AppLogger.log("[SessionController] retryPolish: no suspended stage index")
+            AppLogger.log("[SessionController] retryFailedStage: no suspended stage index")
             return
         }
         guard let context = currentContext else {
-            AppLogger.log("[SessionController] retryPolish: no current context")
+            AppLogger.log("[SessionController] retryFailedStage: no current context")
             return
         }
 
-        AppLogger.log("[SessionController#\(activeSessionID)] Retrying polish...")
+        AppLogger.log("[SessionController#\(activeSessionID)] Retrying failed stage...")
 
         errorDismissTask?.cancel()
         errorDismissTask = nil
 
         clearSuspension()
 
-        // Force polish on retry
-        context.usePolish = true
-        context.hasInjected = false
-
+        // Retry the suspended stage with the original session policy.
+        // A failed ASR attempt must not opt the user into polish.
+        let retryState: SessionState = pipeline[stageIndex].name == PolishStage.stageName
+            ? .polishing(preview: "") : .processing(provider: "识别中")
+        transition(to: retryState, context: context)
         executeStage(at: stageIndex, payload: payload, context: context)
     }
 
@@ -287,12 +303,12 @@ final class SessionController: ObservableObject {
     // MARK: - Orchestration
 
     private func executeStage(at index: Int, payload: StagePayload, context: SessionContext) {
-        guard activeSessionID == context.sessionID else {
+        guard activeSessionID == context.sessionID, !context.isCancelled else {
             AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, aborting pipeline")
             return
         }
         guard index < pipeline.count else {
-            return transition(to: .idle, context: context)
+            return finish(context: context)
         }
 
         let stage = pipeline[index]
@@ -329,31 +345,26 @@ final class SessionController: ObservableObject {
                 if let targetIndex = self.pipeline.firstIndex(where: { $0.name == targetName }) {
                     self.executeStage(at: targetIndex, payload: nextPayload, context: context)
                 } else {
-                    // Unknown skip target: fail the session (self-heals to .idle via the
-                    // .error auto-dismiss) instead of hanging permanently.
+                    // Invalid internal routing has no retry/copy recovery payload.
                     AppLogger.log("[SessionController] internal: unknown skip target '\(targetName)' — failing session \(context.sessionID)")
-                    self.transition(to: .error("internal: unknown stage '\(targetName)'"), context: context)
+                    self.transition(to: .notice("internal: unknown stage '\(targetName)'"), context: context)
                 }
 
             case .suspend(let recovery):
-                // Polish is an OPTIONAL enhancement — its failure must NOT discard the already-recognized
-                // text or pop intrusive buttons. Degrade: keep the raw ASR text in history (marked .raw),
-                // show a gentle auto-dismissing notice, do NOT inject. Other stages keep the error+recovery UI.
-                if recovery.failedStage == PolishStage.stageName, !(recovery.error is CancellationError), let raw = recovery.rawText, !raw.isEmpty {
-                    let texts = SessionController.degradedPolishTexts(payload: payload, recoveryRaw: raw)
-                    context.rawTranscript = texts.raw
-                    context.finalText = texts.final
-                    context.polishFailed = true
-                    self.saveHistory(context: context)
-                    AppLogger.log("[SessionController#\(context.sessionID)] Polish failed → raw kept in history, no injection")
-                    self.transition(to: .notice("润色失败 · 原文已存历史"), context: context)
+                if recovery.error is CancellationError {
+                    self.resetToIdle()
                 } else {
-                    self.suspendedContext = recovery
-                    self.suspendedPayload = payload
-                    self.suspendedStageIndex = index
-                    self.lastErrorRawText = recovery.rawText
-                    self.errorActions = self.buildErrorActions(from: recovery)
-                    self.transition(to: .error(recovery.error.localizedDescription), context: context)
+                    let actions = Self.buildErrorActions(from: recovery)
+                    if actions.isEmpty {
+                        self.transition(to: .notice(recovery.error.localizedDescription), context: context)
+                    } else {
+                        self.suspendedContext = recovery
+                        self.suspendedPayload = payload
+                        self.suspendedStageIndex = index
+                        self.lastErrorRawText = recovery.rawText
+                        self.errorActions = actions
+                        self.transition(to: .error(recovery.error.localizedDescription), context: context)
+                    }
                 }
 
             case .notice(let message):
@@ -363,24 +374,27 @@ final class SessionController: ObservableObject {
                 self.transition(to: .notice(message), context: context)
 
             case .complete:
-                self.transition(to: .idle, context: context)
+                self.finish(context: context)
             }
         }
 
         currentTask = task
     }
 
+    /// All terminal delivery paths converge here; no optional-stage failure saves early.
+    private func finish(context: SessionContext) {
+        guard activeSessionID == context.sessionID, !context.isCancelled else { return }
+        if context.hasInjected { saveHistory(context: context) }
+        let state = context.hasInjected ? context.completionNotice.map(SessionState.notice) ?? .idle : .idle
+        transition(to: state, context: context)
+    }
+
     // MARK: - State Transition
 
     private func transition(to newState: SessionState, context: SessionContext) {
         let oldState = sessionState
-
-        // Save history on successful completion
-        if case .idle = newState, case .injecting = oldState, !context.finalText.isEmpty {
-            saveHistory(context: context)
-        }
-
         sessionState = newState
+        if newState.showPanel { effects.showWindow() }
         observers.forEach { $0.sessionDidTransition(from: oldState, to: newState, context: context) }
 
         // Hide the capsule when the session finishes normally (slides down). resetToIdle()
@@ -390,12 +404,13 @@ final class SessionController: ObservableObject {
             // events. Invalidate ownership before any late callback can resurrect it.
             context.cancel()
             activeSessionID = 0
-            WindowManager.shared.hide()
+            effects.hideWindow()
         }
 
         // Auto-dismiss the gentle notice after ~2.2s (no buttons; slides away like a normal finish).
         if case .notice = newState {
-            WindowManager.shared.showWindow()
+            context.cancel()
+            activeSessionID = 0
             errorDismissTask?.cancel()
             let noticeSessionID = activeSessionID
             errorDismissTask = Task { @MainActor [weak self] in
@@ -407,29 +422,22 @@ final class SessionController: ObservableObject {
             }
         }
 
-        // Auto-dismiss error after 5 seconds
+        // Actionable recovery stays visible until retry, copy/dismiss, or a new session.
         if case .error = newState {
-            WindowManager.shared.showWindow()
             errorDismissTask?.cancel()
-            let errorSessionID = activeSessionID
-            errorDismissTask = Task { @MainActor [weak self] in
-                do {
-                    try await Task.sleep(nanoseconds: 5_000_000_000)
-                } catch { return }
-                guard let self else { return }
-                if case .error = self.sessionState, self.activeSessionID == errorSessionID {
-                    self.dismissError()
-                }
-            }
+            errorDismissTask = nil
         }
     }
 
     // MARK: - Error Actions
 
-    private func buildErrorActions(from recovery: ErrorRecoveryContext) -> [ErrorAction] {
+    nonisolated static func buildErrorActions(from recovery: ErrorRecoveryContext) -> [ErrorAction] {
+        guard !(recovery.error is CancellationError) else { return [] }
+        let hasText = recovery.rawText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        guard recovery.retryable || hasText else { return [] }
         var actions: [ErrorAction] = []
-        if recovery.retryable { actions.append(.retry) }
-        if recovery.rawText != nil { actions.append(.copyRaw) }
+        if recovery.retryable { actions.append(.retry(stage: recovery.failedStage)) }
+        if hasText { actions.append(.copyRaw) }
         actions.append(.dismiss)
         return actions
     }
@@ -481,18 +489,20 @@ final class SessionController: ObservableObject {
         }
     }
 
-    /// Texts to store when Polish fails and we degrade to history-only. The recovery context's
+    /// Compatibility text mapping for optional-polish failure. The recovery context's
     /// rawText is the PRE-PostProcess transcript; the suspended payload's `.processed` text carries
     /// the punctuation/term fixes the user already benefits from on the success path — prefer it
     /// for finalText so degraded history matches polish-disabled history in quality.
     nonisolated static func degradedPolishTexts(payload: StagePayload, recoveryRaw: String) -> (raw: String, final: String) {
         if case .processed(let processed, _) = payload, !processed.isEmpty {
-            return (recoveryRaw, processed)
+            return (recoveryRaw, polishFallbackText(processed: processed, raw: recoveryRaw))
         }
         return (recoveryRaw, recoveryRaw)
     }
 
     private func saveHistory(context: SessionContext) {
+        guard context.claimHistorySave() else { return }
+        if let saveHistory = effects.saveHistory { saveHistory(context); return }
         let durationMs: UInt64?
         if let recStart = context.recordingStartTime {
             durationMs = UInt64(Date().timeIntervalSince(recStart) * 1000)
@@ -610,7 +620,7 @@ final class SessionController: ObservableObject {
         errorDismissTask = nil
         stopRecordingTimer()
         spectrum = []
-        WindowManager.shared.hide()
+        effects.hideWindow()
     }
 
     // MARK: - Helpers
@@ -648,13 +658,19 @@ extension SessionController {
     }
 
     enum ErrorAction: Equatable, Hashable {
-        case retry
+        case retry(stage: String)
         case copyRaw
         case dismiss
 
         var displayName: String {
             switch self {
-            case .retry: return "重试润色"
+            case .retry(let stage):
+                switch stage {
+                case "ASR": return "重试识别"
+                case PolishStage.stageName: return "重试润色"
+                case "Injection": return "重试输入"
+                default: return "重试处理"
+                }
             case .copyRaw: return "复制原文"
             case .dismiss: return "忽略"
             }
@@ -665,6 +681,11 @@ extension SessionController {
 // MARK: - SessionState UI Properties
 
 extension SessionState {
+
+    var capsuleSize: NSSize {
+        if case .error = self { return NSSize(width: 320, height: 94) }
+        return NSSize(width: 240, height: 70)
+    }
 
     var statusColor: Color {
         switch self {
