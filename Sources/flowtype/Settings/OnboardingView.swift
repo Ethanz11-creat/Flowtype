@@ -445,9 +445,7 @@ struct OnboardingView: View {
     }
 
     private func teardownDemo() {
-        if demoSession.isRecording {
-            demoSession.cancel()
-        }
+        OnboardingPipeline.cancelDemo(demoSession)
     }
 
     private func completeOnboarding() {

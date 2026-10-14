@@ -327,10 +327,15 @@ enum SelfTest {
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
         testStopGestureTimeline(r) // first-release stop, pending taps, idle compatibility
         testNonModifierRepeat(r)
+        testNonModifierReleasePolicy(r)
         testAudioFeedbackTimeline(r)
         testPolishOnStopConfig(r)  // default/migration and persisted opt-out
+        testLegacySessionConfiguration(r) // pre-session settings and single-provider migration
         testStableSessionPresentation(r) // no provider or streaming text in capsule
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
+        await testOnboardingDemoDelivery(r) // notification-only final delivery, no active-app injection
+        await testOnboardingDeliveryCancellation(r)
+        await testOnboardingDemoTeardown(r)
         await testSessionRecoveryDelivery(r)
         await testRecoveryActions(r)
         await testPolishStreamCompleteness(r)
@@ -771,6 +776,25 @@ enum SelfTest {
              "gesture: first genuine key-down begins hold")
     }
 
+    static func testNonModifierReleasePolicy(_ r: Reporter) {
+        for state in [SessionState.preparing, .recording(elapsedSeconds: 1)] {
+            r.check(WindowManager.nonModifierReleaseAllowed(heldDuration: 0.01, sawOtherKey: false, state: state),
+                    "gesture release policy: short active release stops immediately (\(state))")
+            r.check(!WindowManager.nonModifierReleaseAllowed(heldDuration: 0.5, sawOtherKey: true, state: state),
+                    "gesture release policy: active chord cannot stop (\(state))")
+            r.check(!WindowManager.nonModifierReleaseAllowed(heldDuration: nil, sawOtherKey: false, state: state),
+                    "gesture release policy: orphan repeat/release cannot stop (\(state))")
+        }
+        r.check(!WindowManager.nonModifierReleaseAllowed(heldDuration: 0.01, sawOtherKey: false, state: .idle),
+                "gesture release policy: short idle press remains rejected")
+        r.check(WindowManager.nonModifierReleaseAllowed(heldDuration: 0.2, sawOtherKey: false, state: .idle),
+                "gesture release policy: idle hold threshold still permits start detector")
+        r.check(!WindowManager.nonModifierReleaseAllowed(heldDuration: 0.5, sawOtherKey: true, state: .idle),
+                "gesture release policy: idle chord cannot start")
+        r.check(!WindowManager.nonModifierReleaseAllowed(heldDuration: 0.5, sawOtherKey: false, state: .processing(provider: "test")),
+                "gesture release policy: completing session cannot start or stop")
+    }
+
     @MainActor
     static func testAudioFeedbackTimeline(_ r: Reporter) {
         var sounds: [AudioFeedbackObserver.Feedback] = []
@@ -822,6 +846,158 @@ enum SelfTest {
              SessionState.processing(provider: "cloud").statusTitle,
              "presentation: ASR and polish share one stable processing title")
         r.check(SessionState.preparing.showSpinner, "presentation: preparing visibly indicates work before audio readiness")
+    }
+
+    // MARK: - Compatibility with saved settings and the onboarding demo
+
+    static func testLegacySessionConfiguration(_ r: Reporter) {
+        // A pre-session, single-provider snapshot: no polishOnStop or new provider array.
+        // Existing tests cover the new default and routing/privacy/model migrations.
+        let fixture = Data(#"{"whisperLanguage":"en","triggerKey":"option","interactionMode":"toggle","enableAudioFeedback":false,"maxRecordingDuration":120,"hasCompletedOnboarding":true,"systemPrompt":"Keep my custom instruction.","llmProvider":"custom","llmBaseURL":"https://legacy.example/v1","llmModel":"saved-model"}"#.utf8)
+        guard let config = try? JSONDecoder().decode(Configuration.self, from: fixture) else {
+            r.check(false, "legacy session config: saved settings decode")
+            return
+        }
+        r.eq(config.asrLanguage, .en, "legacy session config: whisperLanguage keeps recognition language")
+        r.eq(config.triggerKey, .option, "legacy session config: selected trigger stays Option")
+        r.eq(config.interactionMode, .toggle, "legacy session config: toggle habit is preserved")
+        r.check(!config.enableAudioFeedback, "legacy session config: muted feedback stays muted")
+        r.eq(config.maxRecordingDuration, 120, "legacy session config: recording limit is preserved")
+        r.check(config.hasCompletedOnboarding, "legacy session config: completed onboarding does not reopen")
+        r.eq(config.systemPrompt, "Keep my custom instruction.", "legacy session config: custom prompt survives")
+        r.eq(config.llmProviders.count, 1, "legacy session config: single provider migrates once")
+        r.eq(config.llmProviders.first?.provider, "custom", "legacy session config: provider identity survives")
+        r.eq(config.llmProviders.first?.baseURL, "https://legacy.example/v1", "legacy session config: endpoint survives")
+        r.eq(config.llmProviders.first?.model, "saved-model", "legacy session config: model survives")
+        r.eq(config.llmProviders.first?.isActive, true, "legacy session config: migrated provider remains active")
+        let modernLanguage = Data(#"{"asrLanguage":"zh","whisperLanguage":"en"}"#.utf8)
+        r.eq(try? JSONDecoder().decode(Configuration.self, from: modernLanguage).asrLanguage, .zh,
+             "legacy session config: modern language wins over obsolete alias")
+    }
+
+    @MainActor
+    static func testOnboardingDemoDelivery(_ r: Reporter) async {
+        // Construct the real stage list but execute only its notification delivery
+        // stage. This never starts capture/models or touches clipboard/CGEvent.
+        let normal = PipelineRegistry.defaultPipeline()
+        let demo = OnboardingPipeline.makeStages()
+        r.eq(demo.map(\.name).dropLast(), normal.map(\.name).dropLast(),
+             "onboarding: capture, recognition, processing and polish stages stay unchanged")
+        r.check(!demo.contains { $0 is InjectionStage }, "onboarding: active-app injection is replaced")
+        guard let delivery = demo.last as? DemoInjectionStage else {
+            r.check(false, "onboarding: final stage is demo notification delivery")
+            return
+        }
+        let received = DeliveryLog()
+        let observer = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
+                                                              object: nil, queue: nil) { notification in
+            if let text = notification.object as? String { received.append(text) }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let context = SessionContext(sessionID: 401)
+        let intermediate = await delivery.execute(payload: .processed("中间文本", raw: "原文"), context: context)
+        if case .continue(.processed(let text, _)) = intermediate {
+            r.eq(text, "中间文本", "onboarding: nonfinal payload passes through unchanged")
+        } else { r.check(false, "onboarding: nonfinal payload passes through unchanged") }
+        r.eq(received.value, [], "onboarding: intermediate text never reaches demo editor")
+        r.check(!context.hasInjected, "onboarding: nonfinal payload does not claim delivery")
+        let finalText = "完整结果 🧪\n第二行。"
+        let result = await delivery.execute(payload: .polished(finalText, raw: "原始识别"), context: context)
+        if case .complete = result { r.check(true, "onboarding: final notification completes session") }
+        else { r.check(false, "onboarding: final notification completes session") }
+        r.eq(received.value, [finalText], "onboarding: demo editor receives complete final text verbatim")
+        r.check(context.hasInjected, "onboarding: final notification claims terminal delivery")
+        _ = await delivery.execute(payload: .polished("重复结果", raw: "原始识别"), context: context)
+        r.eq(received.value, [finalText], "onboarding: repeated completion cannot overwrite demo text")
+    }
+
+    private struct SuspendedDemoStage: PipelineStage {
+        let name = "Suspended demo"
+        let state: SessionState
+        let rendezvous: StageRendezvous
+        func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+            await MainActor.run {
+                switch state {
+                case .recording: context.markReady()
+                case .processing, .polishing: context.statePublisher.send(state)
+                default: break
+                }
+            }
+            await rendezvous.invoke(suspend: true)
+            return .continue(.polished("离开后迟到结果", raw: "原文"))
+        }
+    }
+
+    @MainActor
+    static func testOnboardingDeliveryCancellation(_ r: Reporter) async {
+        let received = DeliveryLog()
+        let observer = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
+                                                              object: nil, queue: nil) { notification in
+            if let text = notification.object as? String { received.append(text) }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let stage = DemoInjectionStage()
+        let cancelled = SessionContext(sessionID: 402)
+        cancelled.cancel()
+        let beforeContextCancel = received.value.count
+        _ = await stage.execute(payload: .polished("已取消", raw: "原文"), context: cancelled)
+        r.eq(received.value.count, beforeContextCancel, "onboarding delivery: cancelled context sends no notification")
+        r.check(!cancelled.hasInjected, "onboarding delivery: cancelled context does not reserve delivery")
+        let taskContext = SessionContext(sessionID: 403)
+        let beforeTaskCancel = received.value.count
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            _ = await stage.execute(payload: .polished("任务已取消", raw: "原文"), context: taskContext)
+        }
+        await task.value
+        r.eq(received.value.count, beforeTaskCancel, "onboarding delivery: cancelled task sends no notification")
+        r.check(!taskContext.hasInjected, "onboarding delivery: cancelled task does not reserve delivery")
+        let concurrent = SessionContext(sessionID: 404)
+        let beforeConcurrent = received.value.count
+        async let first = stage.execute(payload: .polished("完整并发结果", raw: "原文"), context: concurrent)
+        async let second = stage.execute(payload: .polished("完整并发结果", raw: "原文"), context: concurrent)
+        _ = await (first, second)
+        r.eq(Array(received.value.dropFirst(beforeConcurrent)), ["完整并发结果"],
+             "onboarding delivery: concurrent stage calls notify exactly once")
+        let reentrant = SessionContext(sessionID: 405)
+        let reentrantObserver = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
+                                                                       object: nil, queue: nil) { notification in
+            guard notification.object as? String == "observer cancels" else { return }
+            MainActor.assumeIsolated { reentrant.cancel() }
+        }
+        defer { NotificationCenter.default.removeObserver(reentrantObserver) }
+        let beforeReentrant = received.value.count
+        _ = await stage.execute(payload: .polished("observer cancels", raw: "raw"), context: reentrant)
+        r.check(reentrant.isCancelled, "onboarding delivery: observer can reenter cancellation without deadlock")
+        r.eq(received.value.count, beforeReentrant + 1, "onboarding delivery: reentrant observer sees only the reserved notification")
+    }
+
+    @MainActor
+    static func testOnboardingDemoTeardown(_ r: Reporter) async {
+        for state in [SessionState.preparing, .recording(elapsedSeconds: 0),
+                      .processing(provider: "test"), .polishing(preview: "")] {
+            let received = DeliveryLog()
+            let observer = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
+                                                                  object: nil, queue: nil) { notification in
+                if let text = notification.object as? String { received.append(text) }
+            }
+            defer { NotificationCenter.default.removeObserver(observer) }
+            let rendezvous = StageRendezvous()
+            let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+            let session = SessionController(pipeline: [SuspendedDemoStage(state: state, rendezvous: rendezvous),
+                                                       DemoInjectionStage()], observers: [], effects: effects)
+            session.startRecording()
+            await rendezvous.waitForInvocation()
+            r.eq(session.sessionState, state, "onboarding teardown: exercise actual suspended state (\(state))")
+            OnboardingPipeline.cancelDemo(session)
+            r.eq(session.sessionState, .idle, "onboarding teardown: leaving cancels active state immediately (\(state))")
+            await rendezvous.release()
+            await waitForSession(session) { $0 == .idle }
+            // Allow the released old stage task to reach the real controller ownership gate.
+            for _ in 0..<10 { await Task.yield() }
+            r.eq(received.value, [], "onboarding teardown: late completion sends no notification (\(state))")
+            session.cancel()
+        }
     }
 
     // MARK: - Session experience: readiness and ownership contract

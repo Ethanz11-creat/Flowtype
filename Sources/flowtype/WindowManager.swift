@@ -99,7 +99,7 @@ class WindowManager: ObservableObject {
 
     /// Cached key-down timestamp for non-modifier trigger keys to enforce press-and-hold.
     private static var cachedKeyDownTime = MainThreadCachedValue<Date?>(nil)
-    private static let nonModifierHoldThreshold: TimeInterval = 0.2
+    private nonisolated static let nonModifierHoldThreshold: TimeInterval = 0.2
 
     /// Edge tracking for modifier trigger keys: a tap is a clean press+release. Any
     /// non-modifier keyDown while the trigger is held (Cmd+C, Cmd+V, …) marks the hold
@@ -119,6 +119,16 @@ class WindowManager: ObservableObject {
 
     nonisolated static func nonModifierPressTime(current: Date?, now: Date, isRepeat: Bool) -> Date? {
         isRepeat ? current : (current ?? now)
+    }
+
+    nonisolated static func nonModifierReleaseAllowed(heldDuration: TimeInterval?, sawOtherKey: Bool,
+                                                     state: SessionState) -> Bool {
+        guard let heldDuration, !sawOtherKey else { return false }
+        switch state {
+        case .preparing, .recording: return true
+        case .idle, .error, .notice: return heldDuration >= nonModifierHoldThreshold
+        case .processing, .polishing, .injecting: return false
+        }
     }
 
     init() {
@@ -255,7 +265,9 @@ class WindowManager: ObservableObject {
 
         if type == .keyDown {
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
             if keyCode == 53 {
+                if cachedKeyDownTime.value != nil { cachedSawOtherKeyDuringHold.value = true }
                 let cancelled = MainActor.assumeIsolated {
                     OptionTapDetector.shared.cancelPendingTaps()
                     let controller = SessionController.shared
@@ -270,13 +282,21 @@ class WindowManager: ObservableObject {
             if !cachedTriggerKey.value.isModifier,
                let triggerKeyCode = cachedTriggerKey.value.keyCode,
                keyCode == Int64(triggerKeyCode) {
+                if cachedKeyDownTime.value == nil && !isRepeat {
+                    let modifiers: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift, .maskSecondaryFn]
+                    cachedSawOtherKeyDuringHold.value = !event.flags.intersection(modifiers).isEmpty
+                }
                 cachedKeyDownTime.value = nonModifierPressTime(
                     current: cachedKeyDownTime.value,
                     now: Date(),
-                    isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+                    isRepeat: isRepeat
                 )
                 AppLogger.log("[EventTap] Non-modifier trigger key down, waiting for hold threshold...")
                 return nil
+            }
+
+            if !cachedTriggerKey.value.isModifier, cachedKeyDownTime.value != nil {
+                cachedSawOtherKeyDuringHold.value = true
             }
 
             // Any other key pressed while the trigger modifier is held → this hold is a
@@ -295,22 +315,22 @@ class WindowManager: ObservableObject {
             if !cachedTriggerKey.value.isModifier,
                let triggerKeyCode = cachedTriggerKey.value.keyCode,
                keyCode == Int64(triggerKeyCode) {
-                // Check if held long enough
-                let holdDuration: TimeInterval
+                // Only idle start needs a hold; active clean release stops immediately.
+                let holdDuration: TimeInterval?
                 if let downTime = cachedKeyDownTime.value {
                     holdDuration = Date().timeIntervalSince(downTime)
                 } else {
-                    holdDuration = 0
+                    holdDuration = nil
                 }
                 cachedKeyDownTime.value = nil
-
-                guard holdDuration >= nonModifierHoldThreshold else {
-                    AppLogger.log("[EventTap] Non-modifier trigger key released too soon (\(String(format: "%.2f", holdDuration))s < \(nonModifierHoldThreshold)s), ignoring")
-                    return nil
-                }
+                let sawOtherKey = cachedSawOtherKeyDuringHold.value
+                cachedSawOtherKeyDuringHold.value = false
 
                 MainActor.assumeIsolated {
                     let controller = SessionController.shared
+                    guard nonModifierReleaseAllowed(heldDuration: holdDuration,
+                                                    sawOtherKey: sawOtherKey,
+                                                    state: controller.sessionState) else { return }
                     OptionTapDetector.shared.recordTap(state: controller.sessionState,
                                                        mode: cachedInteractionMode.value)
                 }
@@ -337,6 +357,10 @@ class WindowManager: ObservableObject {
         }
 
         let modifiers: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift, .maskSecondaryFn]
+        if !cachedTriggerKey.value.isModifier, cachedKeyDownTime.value != nil,
+           !flags.intersection(modifiers).isEmpty {
+            cachedSawOtherKeyDuringHold.value = true
+        }
         let hasOtherModifier = triggerFlag.map {
             flags.rawValue & modifiers.rawValue & ~$0.rawValue != 0
         } ?? false
