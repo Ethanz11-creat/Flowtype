@@ -12,6 +12,20 @@ final class ASRProviderRegistry: @unchecked Sendable {
         self.cloudProvider = CloudASRProvider()
     }
 
+    func realtimeCapabilities(for protocolKind: CloudASRProtocolKind) -> ASRCapabilities? {
+        protocolKind == .dashScopeRealtime ? DashScopeRealtimeASR.capabilities : nil
+    }
+
+    func makeRealtimeSession(configuration: RealtimeASRConfiguration,
+                             transport: any WebSocketTransport = URLSessionWebSocketTransport(),
+                             startTimeout: TimeInterval = 10,
+                             finalTimeout: TimeInterval = 10) -> RealtimeASRSessionHandle {
+        let session = DashScopeRealtimeASR(configuration: configuration, transport: transport,
+                                          startTimeout: startTimeout, finalTimeout: finalTimeout)
+        return RealtimeASRSessionHandle(session: session, ingress: session.ingress,
+                                        capabilities: DashScopeRealtimeASR.capabilities)
+    }
+
     func provider(forID id: String) -> ASRProvider? {
         switch id {
         case ASRProviderID.qwenLocal: return qwenLocalProvider

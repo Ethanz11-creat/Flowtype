@@ -307,6 +307,7 @@ enum SelfTest {
         testRealtimeASRContracts(r)
         testRealtimeAudioIngress(r)
         await testRealtimeIngressWakeups(r)
+        await testDashScopeRealtimeAdapter(r)
         testASRRouting(r)          // unified ASR routing: pure chain selection
         testRoutingKeyPrecedence(r) // legacy asrEngine wins when both routing keys present
         testProviderContextCompose(r) // ASRContext → provider prompt hint
@@ -1918,6 +1919,250 @@ enum SelfTest {
         }
         r.eq(count, 100, "ingress: concurrent callbacks preserve all accepted samples")
         r.check(ingress.isDrained, "ingress: concurrent callbacks drain exactly once")
+    }
+
+    /// Offline wire double injected into the production adapter, never a socket.
+    actor FakeRealtimeTransport: WebSocketTransport {
+        enum Frame: Equatable { case text(String), binary(Data) }
+        var request: URLRequest?
+        var frames: [Frame] = []
+        var closeCount = 0
+        var suspendedAction: String?
+        let suspendedBinaryIndex: Int
+        var sendWaiter: CheckedContinuation<Void, Error>?
+        var receiveWaiter: CheckedContinuation<WebSocketFrame, Error>?
+        var incoming: [WebSocketFrame] = []
+        var closed = false
+        var receiveCount = 0
+        var appendCompleted = false
+        func markAppendComplete() { appendCompleted = true }
+
+        init(suspendedAction: String? = nil, suspendedBinaryIndex: Int = 1) {
+            self.suspendedAction = suspendedAction
+            self.suspendedBinaryIndex = suspendedBinaryIndex
+        }
+        func connect(request: URLRequest) async throws {
+            if closed { throw CancellationError() }
+            self.request = request
+            if suspendedAction == "connect" {
+                try await withCheckedThrowingContinuation { sendWaiter = $0 }
+            }
+        }
+        func sendText(_ text: String) async throws {
+            if closed { throw CancellationError() }
+            frames.append(.text(text))
+            if suspendedAction.map({ text.contains($0) }) == true {
+                try await withCheckedThrowingContinuation { sendWaiter = $0 }
+            }
+        }
+        func sendBinary(_ data: Data) async throws {
+            if closed { throw CancellationError() }
+            frames.append(.binary(data))
+            if suspendedAction == "binary", binaryFrames().count == suspendedBinaryIndex {
+                try await withCheckedThrowingContinuation { sendWaiter = $0 }
+            }
+        }
+        func receive() async throws -> WebSocketFrame {
+            receiveCount += 1
+            if !incoming.isEmpty { return incoming.removeFirst() }
+            if closed { throw WebSocketTransportError.closed }
+            return try await withCheckedThrowingContinuation { receiveWaiter = $0 }
+        }
+        func close() async {
+            guard !closed else { return }
+            closed = true; closeCount += 1
+            receiveWaiter?.resume(throwing: WebSocketTransportError.closed); receiveWaiter = nil
+            sendWaiter?.resume(throwing: CancellationError()); sendWaiter = nil
+        }
+        func feed(_ text: String) {
+            if let waiter = receiveWaiter { receiveWaiter = nil; waiter.resume(returning: .text(text)) }
+            else if !closed { incoming.append(.text(text)) }
+        }
+        func releaseSend() {
+            suspendedAction = nil; sendWaiter?.resume(); sendWaiter = nil
+        }
+        func binaryFrames() -> [Data] { frames.compactMap { if case .binary(let d) = $0 { return d }; return nil } }
+        func actions() -> [String] {
+            frames.compactMap { frame in
+                guard case .text(let text) = frame,
+                      let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+                      let header = json["header"] as? [String: Any] else { return nil }
+                return header["action"] as? String
+            }
+        }
+    }
+
+    static func testDashScopeRealtimeAdapter(_ r: Reporter) async {
+        let id = "2bf83b9a-baeb-4fda-8d9a-123456789abc"
+        let configuration = try! RealtimeASRConfiguration(provider: .defaultParaformer(), apiKey: "fake-task2-key", language: nil)
+        func event(_ kind: String, taskID: String = id, sentence: String? = nil) -> String {
+            let payload = sentence.map { #"{"output":{"sentence":\#($0)}}"# } ?? "{}"
+            return #"{"header":{"task_id":"\#(taskID)","event":"\#(kind)"},"payload":\#(payload)}"#
+        }
+        func wait(_ predicate: @escaping @Sendable () async -> Bool) async throws {
+            try await withAsyncDeadline(seconds: 2) {
+                while !(await predicate()) { try Task.checkCancellation(); await Task.yield() }
+            }
+        }
+        func session(_ fake: FakeRealtimeTransport, start: Double = 1, final: Double = 1, limit: Int = 80_000) -> DashScopeRealtimeASR {
+            DashScopeRealtimeASR(configuration: configuration, transport: fake, ingress: RealtimeAudioIngress(maxPendingSamples: limit), taskID: id, startTimeout: start, finalTimeout: final)
+        }
+        do {
+            let fake = FakeRealtimeTransport(suspendedAction: "binary", suspendedBinaryIndex: 2)
+            let adapter = session(fake)
+            try adapter.ingress.enqueue(samples: [-1, 0])
+            try adapter.ingress.enqueue(samples: [1])
+            let started = Task { try await adapter.start() }
+            try await wait { await fake.actions().contains("run-task") }
+            r.eq(await fake.binaryFrames().count, 0, "adapter: no binary before task-started")
+            await fake.feed(event("task-started", taskID: "foreign"))
+            await fake.feed(#"{"header":{"task_id":"foreign","event":"result-generated"},"payload":"malformed foreign payload"}"#)
+            try await wait { await fake.receiveCount >= 3 }
+            r.eq(await fake.binaryFrames().count, 0, "adapter: foreign ack/payload cannot release or fail this task")
+            // A matching ack is the only event that releases queued audio.
+            await fake.feed(event("task-started"))
+            try await started.value
+            try await wait { await fake.binaryFrames().count == 2 }
+            r.eq(adapter.ingress.pendingSampleCount, 1, "adapter: in-flight audio retains queue budget")
+            adapter.ingress.seal()
+            let finished = Task { try await adapter.finish() }
+            let secondFinished = Task { try await adapter.finish() }
+            r.eq(await fake.actions(), ["run-task"], "adapter: finish waits for suspended last send")
+            await fake.releaseSend()
+            try await wait { await fake.actions().contains("finish-task") }
+            r.eq(await fake.binaryFrames(), [encodePCM16LE([-1, 0]), encodePCM16LE([1])], "adapter: ordered raw PCM drain")
+            await fake.feed(event("result-generated", sentence: #"{"begin_time":0,"end_time":null,"text":"最终。","heartbeat":false,"sentence_end":true}"#))
+            await fake.feed(event("result-generated", sentence: #"{"begin_time":100,"end_time":null,"text":"未确认","heartbeat":false,"sentence_end":false}"#))
+            await fake.feed(event("task-finished"))
+            let result = try await finished.value
+            r.eq(result.text, "最终。", "adapter: final after finish uses only finalized text")
+            r.eq(result.providerID, ASRProviderID.cloud, "adapter: preserves cloud routing identity")
+            r.eq(try await secondFinished.value, result, "adapter: concurrent finish shares terminal result")
+            r.eq(try await adapter.finish(), result, "adapter: repeated finish shares terminal result")
+            r.eq(await fake.actions(), ["run-task", "finish-task"], "adapter: sends finish exactly once")
+            r.eq(await fake.closeCount, 1, "adapter: successful completion closes socket once")
+            let request = await fake.request
+            r.eq(request?.value(forHTTPHeaderField: "Authorization"), "Bearer fake-task2-key", "adapter: in-memory key upgrade header")
+            r.eq(request?.url, configuration.endpoint, "adapter: immutable endpoint snapshot")
+        } catch { r.check(false, "adapter: handshake/drain/final test: \(error)") }
+
+        for mode in ["connect-timeout", "start-timeout", "timeout-before-waiter", "cancel-before-start", "caller-cancel-before-start", "caller-cancel-start", "cancel-handshake", "malformed", "missing-sentence", "failed", "close", "final-timeout", "caller-cancel-final", "overflow", "cancel-drain", "sync-overflow-drain", "sync-overflow-handshake", "failed-drain", "early-finished", "empty"] {
+            let fake = FakeRealtimeTransport(suspendedAction: mode == "connect-timeout" ? "connect" : ["timeout-before-waiter", "caller-cancel-start"].contains(mode) ? "run-task" : (["cancel-drain", "sync-overflow-drain", "failed-drain"].contains(mode) ? "binary" : nil))
+            let adapter = session(fake, start: 0.08, final: 0.08, limit: 2)
+            do {
+                if mode == "cancel-before-start" { await adapter.cancel() }
+                let started = Task {
+                    if mode == "caller-cancel-before-start" { withUnsafeCurrentTask { $0?.cancel() } }
+                    try await adapter.start()
+                }
+                if !["cancel-before-start", "caller-cancel-before-start"].contains(mode) {
+                    if mode == "connect-timeout" { try await wait { await fake.request != nil } }
+                    else { try await wait { await fake.actions().contains("run-task") } }
+                    switch mode {
+                    case "caller-cancel-start": started.cancel()
+                    case "sync-overflow-handshake":
+                        try? adapter.ingress.enqueue(samples: [0, 0, 0])
+                    case "cancel-handshake": await adapter.cancel()
+                    case "malformed": await fake.feed("not-json")
+                    case "missing-sentence": await fake.feed(event("result-generated"))
+                    case "failed": await fake.feed(#"{"header":{"task_id":"\#(id)","event":"task-failed","error_code":"CLIENT_ERROR","error_message":"fixture failure"},"payload":{}}"#)
+                    case "close": await fake.close()
+                    case "early-finished": await fake.feed(event("task-finished"))
+                    case "connect-timeout", "start-timeout", "timeout-before-waiter": break
+                    default: await fake.feed(event("task-started"))
+                    }
+                }
+                try await started.value
+                if mode == "overflow" {
+                    try await adapter.append(samples: [0, 0, 0])
+                } else {
+                    if ["cancel-drain", "sync-overflow-drain", "failed-drain"].contains(mode) {
+                        try adapter.ingress.enqueue(samples: [0])
+                        try await wait { await fake.binaryFrames().count == 1 }
+                        if mode == "sync-overflow-drain" { try? adapter.ingress.enqueue(samples: [0, 0]) }
+                    }
+                    let finished = Task { try await adapter.finish() }
+                    if mode == "cancel-drain" { await adapter.cancel() }
+                    if mode == "caller-cancel-final" {
+                        try await wait { await fake.actions().contains("finish-task") }
+                        finished.cancel()
+                    }
+                    if mode == "failed-drain" {
+                        await fake.feed(#"{"header":{"task_id":"\#(id)","event":"task-failed","error_code":"CLIENT_ERROR","error_message":"fixture failure"},"payload":{}}"#)
+                    }
+                    if mode == "empty" {
+                        try await wait { await fake.actions().contains("finish-task") }
+                        await fake.feed(event("task-finished"))
+                    }
+                    let result = try await finished.value
+                    r.check(mode == "empty" && result.text.isEmpty, "adapter: empty task is explicit empty result")
+                }
+                if mode != "empty" { r.check(false, "adapter: \(mode) must fail") }
+            } catch {
+                let expected: Bool
+                switch mode {
+                case "connect-timeout", "start-timeout", "timeout-before-waiter": expected = (error as? DashScopeRealtimeError) == .startTimeout
+                case "final-timeout": expected = (error as? DashScopeRealtimeError) == .finalTimeout
+                case "cancel-before-start", "caller-cancel-before-start", "caller-cancel-start", "cancel-handshake", "cancel-drain", "caller-cancel-final": expected = error is CancellationError
+                case "overflow", "sync-overflow-drain", "sync-overflow-handshake": expected = (error as? RealtimeAudioIngressError) == .overflow
+                case "failed", "failed-drain": expected = (error as? DashScopeRealtimeError) == .taskFailed(code: "CLIENT_ERROR", message: "fixture failure")
+                default: expected = error is DashScopeRealtimeError
+                }
+                r.check(expected, "adapter: \(mode) surfaces expected error: \(error)")
+            }
+            r.eq(await fake.closeCount, 1, "adapter: \(mode) owns transport cleanup")
+            if ["cancel-before-start", "caller-cancel-before-start"].contains(mode) { r.check(await fake.request == nil, "adapter: cancelled session never connects") }
+            r.eq(adapter.ingress.pendingSampleCount, 0, "adapter: \(mode) releases buffered audio")
+        }
+        for cancelAppend in [false, true] {
+            let fake = FakeRealtimeTransport(suspendedAction: "binary")
+            let adapter = session(fake, limit: 2)
+            do {
+                let started = Task { try await adapter.start() }
+                try await wait { await fake.actions().contains("run-task") }
+                await fake.feed(event("task-started"))
+                try await started.value
+                let appended = Task {
+                    try await adapter.append(samples: [0, 1])
+                    await fake.markAppendComplete()
+                }
+                try await wait { await fake.binaryFrames().count == 1 }
+                r.check(!(await fake.appendCompleted), "adapter: async append waits for actual binary completion")
+                if cancelAppend {
+                    appended.cancel()
+                    do { try await appended.value; r.check(false, "adapter: append caller cancellation fails") }
+                    catch { r.check(error is CancellationError, "adapter: append caller cancellation fails") }
+                } else {
+                    await fake.releaseSend()
+                    try await appended.value
+                    try await adapter.append(samples: [-1, 0])
+                    r.eq(await fake.binaryFrames().count, 2, "adapter: sequential saved-audio append stays inside bound")
+                    let finished = Task { try await adapter.finish() }
+                    try await wait { await fake.actions().contains("finish-task") }
+                    await fake.feed(event("task-finished"))
+                    _ = try await finished.value
+                }
+                r.eq(await fake.closeCount, 1, "adapter: append scenario releases transport")
+            } catch { r.check(false, "adapter: async append scenario: \(error)") }
+        }
+        let productionTransport = URLSessionWebSocketTransport()
+        do {
+            try await productionTransport.connect(request: URLRequest(url: URL(string: "https://example.com/ws")!))
+            r.check(false, "transport: rejects non-WSS locally")
+        } catch { r.eq(error as? RealtimeASRConfigurationError, .invalidEndpoint, "transport: rejects non-WSS locally") }
+        await productionTransport.close()
+        do {
+            try await productionTransport.connect(request: URLRequest(url: configuration.endpoint))
+            r.check(false, "transport: close-before-connect is persistent")
+        } catch { r.check(error is CancellationError, "transport: close-before-connect is persistent") }
+        r.check(ASRProviderRegistry.shared.realtimeCapabilities(for: .openAICompatible) == nil, "registry: HTTP has no realtime factory")
+        let handle = ASRProviderRegistry.shared.makeRealtimeSession(configuration: configuration, transport: FakeRealtimeTransport())
+        r.check(handle.capabilities.requiresNetwork && !handle.capabilities.supportsContextHint, "registry: realtime capabilities are explicit without casts")
+        await handle.session.cancel()
+        for endpoint in ["wss://example.com:0/ws", "wss://example.com:65536/ws", "wss://user@example.com/ws", "wss://{workspace}.example.com/ws", "wss://%7Bworkspace%7D.example.com/ws", "wss:///ws", "https://example.com/ws"] {
+            var provider = CloudASRProviderConfig.defaultParaformer(); provider.baseURL = endpoint
+            r.check((try? RealtimeASRConfiguration(provider: provider, apiKey: "fake", language: nil)) == nil, "adapter: rejects invalid endpoint locally: \(endpoint)")
+        }
     }
 
     // MARK: - Cloud context opt-out

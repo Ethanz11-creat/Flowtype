@@ -13,9 +13,7 @@ struct RealtimeASRConfiguration: Sendable, Equatable {
         guard provider.protocolKind == .dashScopeRealtime else {
             throw RealtimeASRConfigurationError.unsupportedProtocol
         }
-        guard let endpoint = URL(string: provider.baseURL), endpoint.scheme == "wss",
-              endpoint.host?.isEmpty == false, endpoint.user == nil, endpoint.password == nil,
-              !provider.baseURL.contains("{") && !provider.baseURL.contains("}") else {
+        guard isValidRealtimeEndpoint(provider.baseURL), let endpoint = URL(string: provider.baseURL) else {
             throw RealtimeASRConfigurationError.invalidEndpoint
         }
         guard !provider.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -30,6 +28,20 @@ struct RealtimeASRConfiguration: Sendable, Equatable {
         self.apiKey = apiKey
         self.language = language
     }
+}
+
+/// Reject malformed authority and unresolved workspace templates before upgrade.
+func isValidRealtimeEndpoint(_ value: String) -> Bool {
+    guard !value.contains(where: { $0.isWhitespace }),
+          let decoded = value.removingPercentEncoding,
+          !decoded.contains("{"), !decoded.contains("}"),
+          let components = URLComponents(string: value),
+          components.scheme?.lowercased() == "wss",
+          let host = components.host, !host.isEmpty,
+          components.user == nil, components.password == nil,
+          components.fragment == nil, components.url != nil else { return false }
+    if let port = components.port, !(1...65535).contains(port) { return false }
+    return true
 }
 
 enum RealtimeASRConfigurationError: Error, Equatable {
@@ -189,6 +201,9 @@ final class RealtimeAudioIngress: @unchecked Sendable {
 
     let maxPendingSamples: Int
     let wakeups: AsyncStream<Void>
+    /// Independent terminal signal; observing it never steals pump wakeups.
+    let failures: AsyncStream<RealtimeAudioIngressError>
+    private let failureContinuation: AsyncStream<RealtimeAudioIngressError>.Continuation
     private let continuation: AsyncStream<Void>.Continuation
     private let lock = NSLock()
     private var queue: [Chunk] = []
@@ -203,9 +218,12 @@ final class RealtimeAudioIngress: @unchecked Sendable {
         let stream = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         wakeups = stream.stream
         continuation = stream.continuation
+        let failures = AsyncStream<RealtimeAudioIngressError>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        self.failures = failures.stream
+        failureContinuation = failures.continuation
     }
 
-    deinit { continuation.finish() }
+    deinit { continuation.finish(); failureContinuation.finish() }
 
     var pendingSampleCount: Int { lock.withLock { pendingSamples } }
     var isDrained: Bool { lock.withLock { sealed && pendingSamples == 0 && failure == nil } }
@@ -217,6 +235,8 @@ final class RealtimeAudioIngress: @unchecked Sendable {
             guard !samples.isEmpty else { return }
             guard samples.count <= maxPendingSamples - pendingSamples else {
                 failure = .overflow
+                failureContinuation.yield(.overflow)
+                failureContinuation.finish()
                 queue.removeAll()
                 inFlight = nil
                 pendingSamples = 0
@@ -260,7 +280,11 @@ final class RealtimeAudioIngress: @unchecked Sendable {
 
     func cancel() {
         lock.withLock {
-            failure = .cancelled
+            if failure == nil {
+                failure = .cancelled
+                failureContinuation.yield(.cancelled)
+                failureContinuation.finish()
+            }
             sealed = true
             queue.removeAll()
             inFlight = nil
