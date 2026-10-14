@@ -1402,9 +1402,14 @@ enum SelfTest {
         r.eq(selectASRChain(inputs), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
              "ewma-ttl: stale fast EWMA + slow probe → local-first (the reported gap)")
 
-        // 边界：恰好到期视为过期（与 sampleIsFresh 的 < 语义一致）。
+        // 边界：恰好到期视为过期（与 sampleIsFresh 的 < 语义一致），两侧都要覆盖。
         r.eq(agedLatencySample(1200, sampledAt: now.addingTimeInterval(-ttl), now: now, ttl: ttl), 0,
-             "ewma-ttl: exactly at ttl → stale")
+             "ewma-ttl: exactly at ttl + fast → unknown")
+        r.eq(agedLatencySample(4200, sampledAt: now.addingTimeInterval(-ttl), now: now, ttl: ttl), 4200,
+             "ewma-ttl: exactly at ttl + slow → still kept")
+        // 阈值处的一致性：新鲜侧以 `<= 3000` 为健康，故过期侧只有 `> 3000` 才值得保留。
+        r.eq(agedLatencySample(ASRRoutingThresholds.cloudLatencyMs, sampledAt: stale, now: now, ttl: ttl), 0,
+             "ewma-ttl: stale sample exactly at latency threshold → unknown (matches fresh <= threshold = healthy)")
     }
 
     // MARK: - Production wiring: snapshot → aging → decision (pins selectChain's real path)
