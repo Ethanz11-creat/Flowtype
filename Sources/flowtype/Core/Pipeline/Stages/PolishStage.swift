@@ -47,13 +47,15 @@ final class PolishStage: PipelineStage, @unchecked Sendable {
         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
         await MainActor.run { if !context.isCancelled { context.statePublisher.send(.polishing(preview: "")) } }
         let start = Date()
+        let timeout = await MainActor.run { min(deadlineSeconds, context.completionBudget?.remainingSeconds ?? deadlineSeconds) }
         do {
-            let result = try await withAsyncDeadline(seconds: deadlineSeconds) { [self] in
+            guard timeout > 0 else { throw AsyncDeadlineError.timedOut }
+            let result = try await withAsyncDeadline(seconds: timeout) { [self] in
                 try Task.checkCancellation()
                 let stream = if let streamFactory {
                     await streamFactory(fallback, config)
                 } else {
-                    await llmService.polishText(fallback, systemPrompt: prompt, config: config)
+                    await llmService.polishText(fallback, systemPrompt: prompt, config: config, timeoutSeconds: timeout)
                 }
                 try Task.checkCancellation()
                 var completeText = ""

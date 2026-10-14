@@ -44,8 +44,16 @@ func isValidRealtimeEndpoint(_ value: String) -> Bool {
     return true
 }
 
-enum RealtimeASRConfigurationError: Error, Equatable {
+enum RealtimeASRConfigurationError: Error, Equatable, LocalizedError {
     case unsupportedProtocol, invalidEndpoint, missingModel, missingAPIKey
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedProtocol: return "请选择 DashScope 实时 WSS 协议"
+        case .invalidEndpoint: return "实时 ASR 地址必须为有效 WSS 地址，且不能包含账号、密码或占位符"
+        case .missingModel: return "请配置实时 ASR 模型，例如 paraformer-realtime-v2"
+        case .missingAPIKey: return "请配置云端 ASR API Key"
+        }
+    }
 }
 
 /// Raw signed PCM16 little-endian, without a WAV header. Negative full scale

@@ -58,6 +58,9 @@ final class AudioRecorder: @unchecked Sendable {
     /// Callback to forward real-time audio buffers to a streaming recognizer.
     var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)?
 
+    /// Ordered 16kHz mono Float32 callback captured before engine start.
+    var onPCMSamples: (@Sendable ([Float]) -> Void)?
+
     /// Called when no audio tap callbacks have been received for a while.
     var onRecordingFrozen: (() -> Void)?
 
@@ -233,6 +236,7 @@ final class AudioRecorder: @unchecked Sendable {
             }
         }
 
+        let pcmSink = onPCMSamples
         let spectrumStream = AsyncStream<[Float]> { continuation in
             guard self.isOwner(ownerID) else {
                 continuation.finish()
@@ -275,9 +279,12 @@ final class AudioRecorder: @unchecked Sendable {
                     let frames = Int(convertedBuffer.frameLength)
                     let samplesArray = Array(UnsafeBufferPointer(start: data, count: frames))
                     self.sampleLock.withLock {
+                        guard self.isRecording || self.isStopping else { return }
                         let remaining = Self.maxRawSamples - self.rawSamples.count
                         if remaining > 0 {
-                            self.rawSamples.append(contentsOf: samplesArray.prefix(remaining))
+                            let accepted = Array(samplesArray.prefix(remaining))
+                            self.rawSamples.append(contentsOf: accepted)
+                            pcmSink?(accepted)
                         }
                     }
 
@@ -349,13 +356,14 @@ final class AudioRecorder: @unchecked Sendable {
         engine?.inputNode.removeTap(onBus: 0)
         engine = nil
         onAudioBuffer = nil
+        onPCMSamples = nil
         onRecordingFrozen = nil
 
         // Restore original default input device if we changed it
         restoreOriginalDeviceIfNeeded()
 
-        stateLock.withLock {
-            _isStopping = false
+        sampleLock.withLock {
+            stateLock.withLock { _isStopping = false }
         }
     }
 
@@ -370,6 +378,7 @@ final class AudioRecorder: @unchecked Sendable {
     nonisolated func clearCallbacks(ownerID: UInt64) {
         guard isOwner(ownerID) else { return }
         onAudioBuffer = nil
+        onPCMSamples = nil
         onRecordingFrozen = nil
     }
 

@@ -113,6 +113,68 @@ final class SessionContext {
     /// 降级原因：`network` / `timeout` / `unavailable` / `error` / `preview`。
     var fallbackReason: String?
 
+    // MARK: - Capture-start ASR routing and realtime fan-out
+
+    /// Immutable route/config identity selected before the audio engine starts.
+    var captureRoute: ASRRouteSnapshot?
+    /// Live realtime handle owned by this session, if the capture-start route
+    /// selected a realtime profile. The ingress itself is synchronous and is
+    /// called from the audio callback without creating a Task per buffer.
+    var realtimeHandle: RealtimeASRSessionHandle?
+    var realtimeResult: ASRResult?
+    var realtimeFailureReason: String?
+    var completionBudget: CompletionBudget?
+
+    var realtimeStartTask: Task<Void, Error>?
+    private let realtimeFailureLock = OSAllocatedUnfairLock<String?>(initialState: nil)
+
+    /// Installs and starts the live session before capture. This never awaits
+    /// network readiness; the bounded ingress accepts early buffers.
+    func prepareRealtime(route: ASRRouteSnapshot,
+                         factory: RealtimeSessionFactory = liveRealtimeSessionFactory) {
+        guard !isCancelled else { return }
+        captureRoute = route
+        guard route.shouldStartRealtime, let cloud = route.cloudConfiguration else { return }
+        do {
+            let config = try RealtimeASRConfiguration(provider: cloud.provider, apiKey: cloud.apiKey, language: route.language)
+            let handle = factory(config)
+            realtimeHandle = handle
+            realtimeStartTask = Task { try await handle.session.start() }
+        } catch { realtimeFailureReason = error.localizedDescription }
+    }
+
+    /// A retry cannot reuse a terminated live handle.
+    func takeRealtimeAttempt() -> (RealtimeASRSessionHandle, Task<Void, Error>?)? {
+        guard let handle = realtimeHandle else { return nil }
+        realtimeHandle = nil
+        let start = realtimeStartTask
+        realtimeStartTask = nil
+        return (handle, start)
+    }
+
+    nonisolated func markRealtimeFailure(_ reason: String) {
+        realtimeFailureLock.withLock { current in
+            if current == nil { current = reason }
+        }
+    }
+
+    nonisolated func realtimeFailureSnapshot() -> String? {
+        realtimeFailureLock.withLock { $0 }
+    }
+
+    func syncRealtimeFailure() {
+        if let reason = realtimeFailureSnapshot() {
+            realtimeFailureReason = reason
+        }
+    }
+
+    func setRealtimeResult(_ result: ASRResult) {
+        guard !isCancelled else { return }
+        // Exactly one terminal winner per session.
+        guard realtimeResult == nil else { return }
+        realtimeResult = result
+    }
+
     /// Guard to prevent double-injection.
     var hasInjected: Bool = false
 
@@ -151,5 +213,10 @@ final class SessionContext {
     func cancel() {
         isCancelled = true
         cancellationLock.withLock { $0 = true }
+        realtimeHandle?.ingress.cancel()
+        realtimeStartTask?.cancel()
+        if let handle = realtimeHandle { Task { await handle.session.cancel() } }
+        realtimeHandle = nil
+        realtimeStartTask = nil
     }
 }

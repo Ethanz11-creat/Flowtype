@@ -220,10 +220,14 @@ final class SessionController: ObservableObject {
         context.usePolish = withPolish
         stopRecordingTimer()
 
+        // All stop-to-delivery work shares one monotonic 20 second budget.
+        // Stages derive their own bounded timeout from this snapshot.
+        context.completionBudget = CompletionBudget(seconds: 20)
+        context.stopRecordingAt = Date()
+
         currentTask?.cancel()
         currentTask = nil
 
-        context.stopRecordingAt = Date()
         // ASRStage 会随后用真实 provider 名刷新 .processing(provider:) 状态。
         transition(to: .processing(provider: "识别中"), context: context)
     }
@@ -270,6 +274,8 @@ final class SessionController: ObservableObject {
 
         clearSuspension()
 
+        context.completionBudget = CompletionBudget(seconds: 20)
+        context.realtimeResult = nil
         // Retry the suspended stage with the original session policy.
         // A failed ASR attempt must not opt the user into polish.
         let retryState: SessionState = pipeline[stageIndex].name == PolishStage.stageName

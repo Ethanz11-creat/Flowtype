@@ -22,6 +22,7 @@ enum CloudASRError: Error, LocalizedError {
     case noActiveProvider
     case invalidURL(String)
     case audioEncodingFailed
+    case unsupportedRealtimeTransport
 
     var statusCode: Int? {
         if case .apiError(let code, _) = self { return code }
@@ -74,11 +75,15 @@ enum CloudASRError: Error, LocalizedError {
             return detail
         case .audioEncodingFailed:
             return "音频编码失败"
+        case .unsupportedRealtimeTransport:
+            return "该服务商配置为实时 WSS，请在真实录音时验证"
         }
     }
 }
 
 actor CloudASRProvider: ASRProvider {
+    private let session: URLSession
+    init(session: URLSession = .shared) { self.session = session }
     nonisolated let id = ASRProviderID.cloud
     nonisolated let name = "CloudASR"
     nonisolated let displayName = "云端 ASR"
@@ -102,20 +107,34 @@ actor CloudASRProvider: ASRProvider {
     func transcribe(_ request: ASRRequest) async throws -> ASRResult {
         let start = Date()
         let audioData = request.samples.withUnsafeBytes { Data($0) }
-        let text = try await transcribe(audioData: audioData, timeout: request.timeout, context: request.context)
+        let text = try await transcribe(audioData: audioData, timeout: request.timeout, context: request.context,
+                                        configuration: request.cloudConfiguration, language: request.language)
         let ms = Int(Date().timeIntervalSince(start) * 1000)
         return ASRResult(text: text, providerID: id, latencyMs: ms)
     }
 
-    func transcribe(audioData: Data, timeout: TimeInterval, context: ASRContext?) async throws -> String {
-        let config = await MainActor.run { ConfigurationStore.shared.current }
-
-        guard let effective = config.effectiveCloudASRConfig else {
-            throw CloudASRError.noActiveProvider
+    func transcribe(audioData: Data, timeout: TimeInterval, context: ASRContext?,
+                    configuration snapshot: CloudASRRequestConfiguration? = nil, language: String? = nil) async throws -> String {
+        let effective: CloudASRRequestConfiguration?
+        if let snapshot {
+            effective = snapshot
+        } else {
+            effective = await MainActor.run {
+                let config = ConfigurationStore.shared.current
+                return config.effectiveCloudASRConfig.map {
+                    CloudASRRequestConfiguration(provider: $0.provider, apiKey: $0.apiKey, sendContext: config.cloudASRSendContext)
+                }
+            }
         }
 
+        guard let effective else { throw CloudASRError.noActiveProvider }
         let provider = effective.provider
         let apiKey = effective.apiKey
+
+        guard provider.protocolKind == .openAICompatible else {
+            // Never serialize a third-party WSS profile as HTTP multipart.
+            throw CloudASRError.unsupportedRealtimeTransport
+        }
 
         guard !apiKey.isEmpty else {
             throw CloudASRError.noAPIKey
@@ -141,11 +160,11 @@ actor CloudASRProvider: ASRProvider {
         appendFormField(name: "temperature", value: "0.0")
 
         // 云端默认携带上下文（用户可在设置中关闭）。后端不支持该字段时会被忽略。
-        if capabilities.supportsContextHint, config.cloudASRSendContext, let prompt = composeProviderContext(context) {
+        if capabilities.supportsContextHint, effective.sendContext, let prompt = composeProviderContext(context) {
             appendFormField(name: "prompt", value: prompt)
         }
 
-        if capabilities.supportsLanguageHint, let langCode = config.asrLanguage.qwenLanguageCode {
+        if capabilities.supportsLanguageHint, let langCode = language {
             appendFormField(name: "language", value: langCode)
         }
 
@@ -163,39 +182,8 @@ actor CloudASRProvider: ASRProvider {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
 
-        let maxAttempts = 3
-        var lastError: Error?
-        for attempt in 0..<maxAttempts {
-            do {
-                return try await executeTranscriptionRequest(request: request, logPrefix: "[CloudASR]")
-            } catch {
-                lastError = error
-                if attempt < maxAttempts - 1 && isRetryableError(error) {
-                    AppLogger.log("[CloudASR] Attempt \(attempt + 1) failed (\(error)), retrying in 500ms...")
-                    try? await Task.sleep(nanoseconds: 500_000_000)
-                } else {
-                    throw error
-                }
-            }
-        }
-        throw lastError ?? CloudASRError.networkError(NSError(domain: "CloudASR", code: -1))
-    }
-
-    private nonisolated func isRetryableError(_ error: Error) -> Bool {
-        if let asrError = error as? CloudASRError {
-            switch asrError {
-            case .networkError(let err):
-                return (err as NSError).domain == NSURLErrorDomain
-            case .timeout:
-                return true
-            case .apiError(let statusCode, _):
-                return statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504
-            case .noAPIKey, .noModel, .noActiveProvider, .invalidURL, .invalidResponse, .audioEncodingFailed:
-                return false
-            }
-        }
-        let nsError = error as NSError
-        return nsError.domain == NSURLErrorDomain
+        try Task.checkCancellation()
+        return try await executeTranscriptionRequest(request: request, logPrefix: "[CloudASR]")
     }
 
     func testConnection(provider: CloudASRProviderConfig, apiKey: String) async -> Result<String, CloudASRError> {
@@ -205,6 +193,17 @@ actor CloudASRProvider: ASRProvider {
 
         guard !provider.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .failure(.noModel)
+        }
+
+        if provider.protocolKind == .dashScopeRealtime {
+            do {
+                _ = try RealtimeASRConfiguration(provider: provider, apiKey: apiKey, language: nil)
+                return .success("配置有效；实时连接将在真实录音时验证")
+            } catch let error as RealtimeASRConfigurationError {
+                return .failure(.invalidURL(error.localizedDescription))
+            } catch {
+                return .failure(.invalidURL("实时 ASR 配置无效"))
+            }
         }
 
         let url: URL
@@ -292,7 +291,7 @@ actor CloudASRProvider: ASRProvider {
 
     private func executeTranscriptionRequest(request: URLRequest, logPrefix: String) async throws -> String {
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw CloudASRError.invalidResponse
@@ -341,9 +340,12 @@ actor CloudASRProvider: ASRProvider {
             } catch {
                 throw CloudASRError.invalidResponse
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as CloudASRError {
             throw error
         } catch {
+            try Task.checkCancellation()
             let nsError = error as NSError
             if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
                 throw CloudASRError.timeout

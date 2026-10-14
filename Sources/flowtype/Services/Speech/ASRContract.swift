@@ -33,6 +33,28 @@ struct ASRRequest: Sendable {
     let language: String?      // nil = 自动
     let context: ASRContext?
     let timeout: TimeInterval
+    /// Immutable capture-start provider snapshot. Batch providers must use this
+    /// value instead of reading mutable settings while a request is in flight.
+    let cloudConfiguration: CloudASRRequestConfiguration?
+
+    init(samples: [Float], sampleRate: Int, language: String?, context: ASRContext?,
+         timeout: TimeInterval, cloudConfiguration: CloudASRRequestConfiguration? = nil) {
+        self.samples = samples
+        self.sampleRate = sampleRate
+        self.language = language
+        self.context = context
+        self.timeout = timeout
+        self.cloudConfiguration = cloudConfiguration
+    }
+}
+
+/// Batch HTTP request identity captured at capture start. It deliberately
+/// contains the protocol discriminator so a realtime WSS profile can never be
+/// accidentally serialized as an HTTP multipart request.
+struct CloudASRRequestConfiguration: Sendable, Equatable {
+    let provider: CloudASRProviderConfig
+    let apiKey: String
+    let sendContext: Bool
 }
 
 /// 一次识别结果。
@@ -80,12 +102,15 @@ enum SpeechProviderError: Error {
 
 /// 把一次 provider 失败归类成可聚合的降级原因（不含内容）。
 func fallbackReason(for error: Error) -> String {
+    if error is AsyncDeadlineError { return "timeout" }
+    if let realtime = error as? DashScopeRealtimeError,
+       realtime == .startTimeout || realtime == .finalTimeout { return "timeout" }
     if let cloud = error as? CloudASRError {
         switch cloud {
         case .timeout: return "timeout"
         case .networkError: return "network"
         case .noAPIKey, .noModel, .noActiveProvider: return "unavailable"
-        case .invalidResponse, .apiError, .invalidURL, .audioEncodingFailed: return "error"
+        case .invalidResponse, .apiError, .invalidURL, .audioEncodingFailed, .unsupportedRealtimeTransport: return "error"
         }
     }
     if let speech = error as? SpeechProviderError {

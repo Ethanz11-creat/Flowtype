@@ -12,7 +12,7 @@ extension SettingsPage {
                 Spacer()
             }
 
-            Text("Flowtype 同时支持本地（Qwen3-ASR，离线）与云端（OpenAI 兼容接口）识别。自动模式下默认优先云端，网络不佳时无感切换到本地兜底；断网时本地路径可用且音频不出设备。")
+            Text("Flowtype 同时支持本地（Qwen3-ASR，离线）与云端（OpenAI 兼容接口 / Paraformer 实时）识别。自动模式下默认优先云端，网络不佳时无感切换到本地兜底；断网时本地路径可用且音频不出设备。")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
                 .lineLimit(nil)
@@ -103,7 +103,7 @@ extension SettingsPage {
                     .controlSize(.small)
                     .disabled(store.current.asrRoutingPolicy == .localOnly)
             }
-            Text("开启后，云端识别会携带前台上下文以提升技术词命中率；音频与上下文仅在走云端路径时离开设备。")
+            Text("开启后，支持上下文的 HTTP 云端识别会携带前台上下文；Paraformer 实时识别不发送上下文。音频仅在走云端路径时离开设备。")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }

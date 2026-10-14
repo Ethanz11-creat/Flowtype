@@ -18,8 +18,8 @@ final class ASRProviderRegistry: @unchecked Sendable {
 
     func makeRealtimeSession(configuration: RealtimeASRConfiguration,
                              transport: any WebSocketTransport = URLSessionWebSocketTransport(),
-                             startTimeout: TimeInterval = 10,
-                             finalTimeout: TimeInterval = 10) -> RealtimeASRSessionHandle {
+                             startTimeout: TimeInterval = 3,
+                             finalTimeout: TimeInterval = 20) -> RealtimeASRSessionHandle {
         let session = DashScopeRealtimeASR(configuration: configuration, transport: transport,
                                           startTimeout: startTimeout, finalTimeout: finalTimeout)
         return RealtimeASRSessionHandle(session: session, ingress: session.ingress,
@@ -33,4 +33,9 @@ final class ASRProviderRegistry: @unchecked Sendable {
         default: return nil
         }
     }
+}
+
+typealias RealtimeSessionFactory = @Sendable (RealtimeASRConfiguration) -> RealtimeASRSessionHandle
+let liveRealtimeSessionFactory: RealtimeSessionFactory = {
+    ASRProviderRegistry.shared.makeRealtimeSession(configuration: $0)
 }

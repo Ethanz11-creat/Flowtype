@@ -1,3 +1,4 @@
+import os
 import Foundation
 import Combine
 
@@ -308,6 +309,7 @@ enum SelfTest {
         testRealtimeAudioIngress(r)
         await testRealtimeIngressWakeups(r)
         await testDashScopeRealtimeAdapter(r)
+        await testRealtimePipelineIntegration(r)
         testASRRouting(r)          // unified ASR routing: pure chain selection
         testRoutingKeyPrecedence(r) // legacy asrEngine wins when both routing keys present
         testProviderContextCompose(r) // ASRContext → provider prompt hint
@@ -368,6 +370,8 @@ enum SelfTest {
 
     private actor RetryLedger {
         var polishRequests: [Bool] = []
+        var retryBudget: Double?
+        func recordBudget(_ value: Double?) { retryBudget = value }
         func visit(_ polish: Bool) -> Bool { polishRequests.append(polish); return polishRequests.count == 1 }
     }
 
@@ -377,8 +381,10 @@ enum SelfTest {
         func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
             let polish = await MainActor.run { context.usePolish }
             if await ledger.visit(polish) {
+                await MainActor.run { context.completionBudget = CompletionBudget(seconds: 0) }
                 return .suspend(ErrorRecoveryContext(failedStage: name, error: LLMError.invalidResponse, rawText: nil, retryable: true))
             }
+            await ledger.recordBudget(await MainActor.run { context.completionBudget?.remainingSeconds })
             return .complete
         }
     }
@@ -413,6 +419,7 @@ enum SelfTest {
         immediate.retryFailedStage()
         await waitForSession(immediate) { $0 == .idle }
         r.eq(await immediateLedger.polishRequests, [false, false], "recovery: immediate ASR retry preserves configured polish flag")
+        r.check((await immediateLedger.retryBudget ?? 0) > 19, "recovery: explicit retry renews expired completion budget")
         immediate.cancel()
         try? await Task.sleep(for: .seconds(5.2))
         if case .error = recovery.sessionState { r.check(true, "recovery: actionable error persists beyond former five-second dismissal") }
@@ -1836,6 +1843,292 @@ enum SelfTest {
         """.utf8)
         r.check((try? JSONDecoder().decode(ParaformerServerEvent.self, from: malformed)) == nil,
                 "realtime: malformed recognition cannot silently become empty success")
+    }
+
+    private final class BatchSnapshotProtocol: URLProtocol, @unchecked Sendable {
+        static let requests = OSAllocatedUnfairLock<[URLRequest]>(initialState: [])
+        override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "asr-snapshot.invalid" }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        override func startLoading() {
+            Self.requests.withLock { $0.append(request) }
+            let status = request.url!.path.contains("fail") ? 500 : 200
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(#"{"text":"batch full"}"#.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        override func stopLoading() {}
+    }
+
+    private final class PipelineASRFixture: ASRProvider, @unchecked Sendable {
+        let id: String
+        var displayName: String { "fixture" }
+        var capabilities: ASRCapabilities {
+            ASRCapabilities(supportsLanguageHint: true, supportsContextHint: true,
+                            requiresNetwork: id == ASRProviderID.cloud, location: id == ASRProviderID.cloud ? .cloud : .onDevice)
+        }
+        var isAvailable: Bool { true }
+        let requests = OSAllocatedUnfairLock<[ASRRequest]>(initialState: [])
+        var delay: Double
+        init(id: String, delay: Double = 0) { self.id = id; self.delay = delay }
+        func transcribe(_ request: ASRRequest) async throws -> ASRResult {
+            requests.withLock { $0.append(request) }
+            if delay > 0 {
+                // Deliberately ignores cancellation, like synchronous model inference.
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + delay) { continuation.resume() }
+                }
+            }
+            return ASRResult(text: "complete fixture", providerID: id, latencyMs: 1)
+        }
+    }
+
+    private actor PipelineRealtimeFixture: RealtimeASRSession {
+        var starts = 0
+        var finishes = 0
+        var cancels = 0
+        var chunks: [[Float]] = []
+        let fail: Bool
+        init(fail: Bool = false) { self.fail = fail }
+        func start() async throws { starts += 1 }
+        func append(samples: [Float]) async throws { chunks.append(samples) }
+        func finish() async throws -> ASRResult {
+            finishes += 1
+            if fail { throw DashScopeRealtimeError.transportClosed }
+            return ASRResult(text: "realtime complete", providerID: ASRProviderID.cloud, latencyMs: 1)
+        }
+        func cancel() async { cancels += 1 }
+    }
+
+    @MainActor
+    static func testRealtimePipelineIntegration(_ r: Reporter) async {
+        let budget = CompletionBudget(seconds: 20, nowNanoseconds: 1_000_000_000)
+        r.eq(budget.remainingSeconds(at: 6_000_000_000), 15, "completion budget: monotonic remaining")
+        r.eq(budget.remainingSeconds(at: 22_000_000_000), 0, "completion budget: expires at zero")
+        r.eq(completionStageTimeout(remaining: 17, cloud: true, policy: .auto, localAvailable: true), 5,
+             "completion budget: auto cloud capped at five seconds")
+        r.eq(completionStageTimeout(remaining: 17, cloud: false, policy: .auto, localAvailable: true), 17,
+             "completion budget: local gets remaining stop budget")
+        let provider = CloudASRProviderConfig.defaultParaformer(isActive: true)
+        var config = Configuration()
+        config.cloudASRConfig = CloudASRConfig(providers: [provider], providerAPIKeys: [:])
+        let noKey = makeASRRouteSnapshot(configuration: config, localAvailable: true, health: RouterHealthSnapshot())
+        r.check(!noKey.shouldStartRealtime, "capture route: no key opens no socket")
+        config.cloudASRConfig.providerAPIKeys[provider.id.uuidString] = "offline-fixture"
+        config.asrRoutingPolicy = .localOnly
+        let local = makeASRRouteSnapshot(configuration: config, localAvailable: true, health: RouterHealthSnapshot())
+        r.check(!local.shouldStartRealtime, "capture route: localOnly opens no socket")
+        config.asrRoutingPolicy = .auto
+        let cloud = makeASRRouteSnapshot(configuration: config, localAvailable: true, health: RouterHealthSnapshot())
+        r.check(cloud.shouldStartRealtime, "capture route: healthy realtime cloud starts during capture")
+        let validated = await CloudASRProvider().testConnection(provider: provider, apiKey: "offline-fixture")
+        if case .success(let message) = validated {
+            r.check(message.contains("配置") && !message.contains("连接成功"), "settings: realtime test is honest local validation")
+        } else { r.check(false, "settings: realtime validation succeeds without network") }
+        let opened = OSAllocatedUnfairLock(initialState: 0)
+        let never = PipelineRealtimeFixture()
+        let unopenedFactory: RealtimeSessionFactory = { _ in
+            opened.withLock { $0 += 1 }
+            return RealtimeASRSessionHandle(session: never, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
+        }
+        let localCapture = SessionContext(sessionID: 728)
+        localCapture.prepareRealtime(route: local, factory: unopenedFactory)
+        let noKeyCapture = SessionContext(sessionID: 729)
+        noKeyCapture.prepareRealtime(route: noKey, factory: unopenedFactory)
+        r.eq(opened.withLock { $0 }, 0, "capture: actual prepare path never creates localOnly/no-key socket")
+
+        let localProvider = PipelineASRFixture(id: ASRProviderID.qwenLocal)
+        let failedSession = PipelineRealtimeFixture(fail: true)
+        let failureHandle = RealtimeASRSessionHandle(session: failedSession, ingress: RealtimeAudioIngress(),
+                                                    capabilities: DashScopeRealtimeASR.capabilities)
+        let context = SessionContext(sessionID: 730)
+        context.prepareRealtime(route: cloud, factory: { _ in failureHandle })
+        context.completionBudget = CompletionBudget(seconds: 1)
+        let completeSamples: [Float] = [0.25, 0.5, 0.75]
+        let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in localProvider })
+        let failed = await stage.execute(payload: .audio(samples: completeSamples, previewText: ""), context: context)
+        if case .continue(.transcript(let text)) = failed {
+            r.eq(text, "complete fixture", "pipeline: realtime failure chooses full local result")
+        } else { r.check(false, "pipeline: realtime failure continues locally") }
+        r.eq(localProvider.requests.withLock { $0.first?.samples }, completeSamples,
+             "pipeline: fallback receives every original Float32 sample")
+        r.check(context.usedFallback, "pipeline: realtime fallback recorded")
+        r.check(context.realtimeHandle == nil, "pipeline: stale realtime handle consumed before retry")
+
+        let success = PipelineRealtimeFixture()
+        let winner = SessionContext(sessionID: 731)
+        winner.prepareRealtime(route: cloud, factory: { _ in
+            RealtimeASRSessionHandle(session: success, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
+        })
+        _ = await stage.execute(payload: .audio(samples: completeSamples, previewText: "preview partial"), context: winner)
+        r.eq(localProvider.requests.withLock { $0.count }, 1, "pipeline: realtime winner prevents second provider")
+        r.eq(winner.realtimeResult?.text, "realtime complete", "pipeline: only full realtime result stored")
+
+        let freshCount = OSAllocatedUnfairLock(initialState: 0)
+        let saved = PipelineRealtimeFixture()
+        let savedStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in localProvider }, realtimeFactory: { _ in
+            freshCount.withLock { $0 += 1 }
+            return RealtimeASRSessionHandle(session: saved, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
+        })
+        let retry = SessionContext(sessionID: 732)
+        retry.captureRoute = cloud
+        let manySamples = (0..<85_000).map { Float($0) / 85_000 }
+        _ = await savedStage.execute(payload: .audio(samples: manySamples, previewText: ""), context: retry)
+        let sent = await saved.chunks
+        r.eq(sent.flatMap { $0 }, manySamples, "pipeline: saved WSS sends complete audio sequentially")
+        r.check(sent.allSatisfy { $0.count <= 1600 }, "pipeline: saved chunks stay under live queue bound")
+        r.eq(freshCount.withLock { $0 }, 1, "pipeline: saved WSS creates fresh session")
+
+        let slow = PipelineASRFixture(id: ASRProviderID.qwenLocal, delay: 0.25)
+        let bounded = SessionContext(sessionID: 733)
+        bounded.captureRoute = local
+        bounded.completionBudget = CompletionBudget(seconds: 0.02)
+        let slowStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in slow })
+        let clock = ContinuousClock.now
+        let expired = await slowStage.execute(payload: .audio(samples: completeSamples, previewText: "partial"), context: bounded)
+        r.check(clock.duration(to: .now) < .milliseconds(150), "pipeline: deadline never joins uncooperative inference")
+        if case .suspend = expired { r.check(true, "pipeline: no final at budget expiry is retryable error") }
+        else { r.check(false, "pipeline: no final at budget expiry is retryable error") }
+        r.eq(bounded.rawTranscript, "", "pipeline: late inference cannot claim winner")
+
+        let cancelContext = SessionContext(sessionID: 734)
+        cancelContext.captureRoute = cloud
+        let cancelledCloud = PipelineASRFixture(id: ASRProviderID.cloud, delay: 0.25)
+        var httpRoute = cloud
+        let httpProvider = CloudASRProviderConfig.defaultSiliconFlow()
+        httpRoute = ASRRouteSnapshot(policy: .auto, selectedProviderID: ASRProviderID.cloud,
+                                    localAvailable: true, cloudAvailable: true,
+                                    cloudConfiguration: CloudASRRequestConfiguration(provider: httpProvider, apiKey: "fixture", sendContext: false))
+        cancelContext.captureRoute = httpRoute
+        let cancelStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { id in id == ASRProviderID.cloud ? cancelledCloud : localProvider })
+        let task = Task { await cancelStage.execute(payload: .audio(samples: completeSamples, previewText: "partial"), context: cancelContext) }
+        try? await Task.sleep(for: .milliseconds(10))
+        task.cancel()
+        let cancellation = await task.value
+        if case .suspend(let recovery) = cancellation { r.check(recovery.error is CancellationError, "pipeline: cancellation remains cancellation") }
+        else { r.check(false, "pipeline: cancellation remains cancellation") }
+        r.eq(localProvider.requests.withLock { $0.count }, 1, "pipeline: cancel starts no fallback")
+
+        let overflowContext = SessionContext(sessionID: 735)
+        let overflowTransport = FakeRealtimeTransport()
+        let realtimeConfig = try! RealtimeASRConfiguration(provider: provider, apiKey: "fixture", language: nil)
+        let overflowAdapter = DashScopeRealtimeASR(configuration: realtimeConfig, transport: overflowTransport)
+        overflowContext.prepareRealtime(route: cloud, factory: { _ in
+            RealtimeASRSessionHandle(session: overflowAdapter, ingress: overflowAdapter.ingress, capabilities: DashScopeRealtimeASR.capabilities)
+        })
+        try? overflowAdapter.ingress.enqueue(samples: manySamples)
+        _ = await stage.execute(payload: .audio(samples: manySamples, previewText: ""), context: overflowContext)
+        r.eq(localProvider.requests.withLock { $0.last?.samples.count }, 85_000,
+             "pipeline: queue overflow keeps entire recording for local fallback")
+
+        let slowCloud = PipelineASRFixture(id: ASRProviderID.cloud, delay: 5.5)
+        let cloudBudget = SessionContext(sessionID: 736)
+        cloudBudget.captureRoute = httpRoute
+        cloudBudget.completionBudget = CompletionBudget(seconds: 20)
+        let fallbackBefore = localProvider.requests.withLock { $0.count }
+        let fiveSecondStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { id in id == ASRProviderID.cloud ? slowCloud : localProvider })
+        let fiveStart = ContinuousClock.now
+        _ = await fiveSecondStage.execute(payload: .audio(samples: completeSamples, previewText: ""), context: cloudBudget)
+        r.check(fiveStart.duration(to: .now) < .seconds(5.4), "pipeline: actual auto cloud attempt stops at five seconds")
+        r.eq(localProvider.requests.withLock { $0.count }, fallbackBefore + 1, "pipeline: deadline hands full audio to local once")
+        r.check((localProvider.requests.withLock { $0.last?.timeout } ?? 0) > 14,
+                "pipeline: local inherits remaining total twenty-second budget")
+
+        var polishConfig = Configuration()
+        polishConfig.llmProviders = [LLMProvider(name: "fixture", provider: "custom", baseURL: "https://unused.invalid", model: "fixture", isActive: true)]
+        polishConfig.providerAPIKeys[polishConfig.llmProviders[0].id.uuidString] = "fixture"
+        let immutablePolishConfig = polishConfig
+        let polishes = OSAllocatedUnfairLock(initialState: 0)
+        let polish = PolishStage(configuration: { immutablePolishConfig }, streamFactory: { _, _ in
+            polishes.withLock { $0 += 1 }
+            return AsyncThrowingStream { _ in }
+        })
+        let complete = SessionContext(sessionID: 737)
+        complete.usePolish = true
+        complete.completionBudget = CompletionBudget(seconds: 0)
+        let rawDelivery = await polish.execute(payload: .processed("完整原文。", raw: "完整原文"), context: complete)
+        if case .continue(.polished(let text, _)) = rawDelivery { r.eq(text, "完整原文。", "pipeline: budget expiry delivers complete ASR") }
+        else { r.check(false, "pipeline: budget expiry delivers complete ASR") }
+        r.eq(polishes.withLock { $0 }, 0, "pipeline: expired total budget starts no polish request")
+        let limited = SessionContext(sessionID: 738)
+        limited.usePolish = true
+        limited.completionBudget = CompletionBudget(seconds: 0.03)
+        let limitedStart = ContinuousClock.now
+        _ = await polish.execute(payload: .processed("完整原文。", raw: "完整原文"), context: limited)
+        r.check(limitedStart.duration(to: .now) < .milliseconds(200), "pipeline: polish uses min three seconds and remaining budget")
+
+        let request = ASRRequest(samples: completeSamples, sampleRate: 16000, language: nil, context: nil,
+                                 timeout: 1, cloudConfiguration: cloud.cloudConfiguration)
+        do {
+            _ = try await CloudASRProvider().transcribe(request)
+            r.check(false, "pipeline: WSS cannot enter HTTP multipart")
+        } catch { r.check(error is CloudASRError, "pipeline: WSS cannot enter HTTP multipart") }
+
+        let networkConfig = URLSessionConfiguration.ephemeral
+        networkConfig.protocolClasses = [BatchSnapshotProtocol.self]
+        let batch = CloudASRProvider(session: URLSession(configuration: networkConfig))
+        var frozenProvider = CloudASRProviderConfig(name: "snapshot", provider: "fixture", baseURL: "https://asr-snapshot.invalid/v1",
+                                                   model: "snapshot-model", isActive: true)
+        let frozenConfig = CloudASRRequestConfiguration(provider: frozenProvider, apiKey: "snapshot-key", sendContext: false)
+        frozenProvider.baseURL = "wss://changed.invalid"
+        frozenProvider.model = "changed"
+        do {
+            let batchResult = try await batch.transcribe(ASRRequest(samples: completeSamples, sampleRate: 16000, language: "en",
+                context: ASRContext(phrases: [], foreground: "private"), timeout: 1, cloudConfiguration: frozenConfig))
+            r.eq(batchResult.text, "batch full", "pipeline: legacy HTTP still transcribes batch")
+            let sent = BatchSnapshotProtocol.requests.withLock { $0.last }
+            r.eq(sent?.url?.absoluteString, "https://asr-snapshot.invalid/v1/audio/transcriptions", "pipeline: HTTP endpoint remains captured snapshot")
+            r.eq(sent?.value(forHTTPHeaderField: "Authorization"), "Bearer snapshot-key", "pipeline: HTTP uses captured ASR key")
+        } catch { r.check(false, "pipeline: offline HTTP fixture succeeds") }
+        var failureProvider = frozenConfig.provider
+        failureProvider.baseURL = "https://asr-snapshot.invalid/fail"
+        let beforeFailure = BatchSnapshotProtocol.requests.withLock { $0.count }
+        _ = try? await batch.transcribe(ASRRequest(samples: completeSamples, sampleRate: 16000, language: nil,
+            context: nil, timeout: 1, cloudConfiguration: CloudASRRequestConfiguration(provider: failureProvider, apiKey: "fixture", sendContext: false)))
+        r.eq(BatchSnapshotProtocol.requests.withLock { $0.count }, beforeFailure + 1, "pipeline: HTTP failure gets one request before local fallback")
+
+        var health = RouterHealthSnapshot()
+        health.cloudIdentity = cloud.cloudIdentity
+        r.check(routeHealthIsCurrent(cloud, health: health), "routing: capture health token matches identity and generation")
+        health.generation += 1
+        r.check(!routeHealthIsCurrent(cloud, health: health), "routing: old network generation cannot update health")
+        health.generation = cloud.healthGeneration
+        health.cloudIdentity = CloudASRHealthIdentity(provider: frozenProvider)
+        r.check(!routeHealthIsCurrent(cloud, health: health), "routing: old endpoint identity cannot update health")
+        r.eq(cloud.cloudConfiguration?.provider.model, "paraformer-realtime-v2", "routing: capture identity survives settings mutation")
+
+        // Exercise the saved-audio helper through the real adapter and a fake
+        // suspended socket, proving it does not burst 85k samples into ingress.
+        let wireID = "pipeline-saved-fixture"
+        let wire = FakeRealtimeTransport(suspendedAction: "binary")
+        let adapter = DashScopeRealtimeASR(configuration: realtimeConfig, transport: wire, taskID: wireID,
+                                           startTimeout: 1, finalTimeout: 1)
+        let savedHandle = RealtimeASRSessionHandle(session: adapter, ingress: adapter.ingress,
+                                                  capabilities: DashScopeRealtimeASR.capabilities)
+        let savedTask = Task { try await transcribeSavedRealtime(samples: manySamples, handle: savedHandle) }
+        func waitForWire(_ predicate: @escaping @Sendable () async -> Bool) async throws {
+            try await withAsyncDeadline(seconds: 2) {
+                while !(await predicate()) { try Task.checkCancellation(); await Task.yield() }
+            }
+        }
+        do {
+            try await waitForWire { await wire.actions().contains("run-task") }
+            await wire.feed(#"{"header":{"task_id":"pipeline-saved-fixture","event":"task-started"},"payload":{}}"#)
+            try await waitForWire { await wire.binaryFrames().count == 1 }
+            r.eq(adapter.ingress.pendingSampleCount, 1600, "pipeline: saved upload waits for each actual binary send")
+            r.eq(await wire.binaryFrames().count, 1, "pipeline: suspended send prevents bulk enqueue")
+            await wire.releaseSend()
+            try await waitForWire { await wire.actions().contains("finish-task") }
+            await wire.feed(#"{"header":{"task_id":"pipeline-saved-fixture","event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":0,"end_time":null,"text":"saved full","sentence_end":true,"heartbeat":false}}}}"#)
+            await wire.feed(#"{"header":{"task_id":"pipeline-saved-fixture","event":"task-finished"},"payload":{}}"#)
+            r.eq(try await savedTask.value.text, "saved full", "pipeline: saved WSS waits for final event")
+            r.eq(await wire.binaryFrames().reduce(Data(), +), encodePCM16LE(manySamples), "pipeline: saved wire sends exact complete PCM")
+        } catch {
+            savedTask.cancel()
+            await adapter.cancel()
+            r.check(false, "pipeline: saved production adapter completed offline: \(error)")
+        }
+
     }
 
     static func testRealtimeAudioIngress(_ r: Reporter) {

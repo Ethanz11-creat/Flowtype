@@ -73,10 +73,10 @@ actor LLMService {
 
     /// `config` MUST be a snapshot the caller read on the main actor — do NOT read
     /// ConfigurationStore.shared.current from this actor (it's a @Published value mutated on main → data race).
-    func polishText(_ text: String, systemPrompt: String? = nil, config: Configuration) -> AsyncThrowingStream<String, Error> {
+    func polishText(_ text: String, systemPrompt: String? = nil, config: Configuration, timeoutSeconds: TimeInterval = 30) -> AsyncThrowingStream<String, Error> {
         let prompt = systemPrompt ?? config.systemPrompt
         let maxTokens = config.maxTokens
-        return makeStream(text: text, systemPrompt: prompt, maxTokens: maxTokens, timeoutSeconds: 30, config: config)
+        return makeStream(text: text, systemPrompt: prompt, maxTokens: maxTokens, timeoutSeconds: timeoutSeconds, config: config)
     }
 
     @MainActor
@@ -204,12 +204,13 @@ actor LLMService {
         text: String,
         systemPrompt: String,
         maxTokens: Int,
-        timeoutSeconds: UInt64,
+        timeoutSeconds: TimeInterval,
         config: Configuration
     ) -> AsyncThrowingStream<String, Error> {
         let temperature = config.temperature
 
         let session = makeSession()
+        let budget = CompletionBudget(seconds: timeoutSeconds)
         return Self.producerOwnedStream(cancelTransport: { session.invalidateAndCancel() }) { continuation in
             guard let validatedText = Self.shouldPolish(text) else {
                 continuation.finish()
@@ -228,8 +229,8 @@ actor LLMService {
             }
 
             var lastError: Error?
-            // Latency cap: each attempt may wait up to timeoutSeconds, so trying more
-            // than 2 providers would leave the user staring at the capsule for minutes.
+            // At most two providers share one remaining deadline; no attempt
+            // begins after cancellation or budget expiry.
             let maxAttempts = min(chain.count, 2)
             if chain.count > maxAttempts {
                 AppLogger.log("[LLMService] \(chain.count - maxAttempts) provider(s) beyond the 2-attempt latency cap will not be tried")
@@ -237,6 +238,7 @@ actor LLMService {
             let delivery = DeliveryState()
             for i in 0..<maxAttempts {
                 guard !Task.isCancelled else { continuation.finish(throwing: CancellationError()); return }
+                guard budget.remainingSeconds > 0 else { continuation.finish(throwing: LLMError.timeout); return }
                 let resolved = chain[i]
                 do {
                     AppLogger.log("[LLMService] Trying provider \(resolved.provider.name) (attempt \(i+1)/\(maxAttempts))")
@@ -248,7 +250,7 @@ actor LLMService {
                         systemPrompt: systemPrompt,
                         userMessage: validatedText,
                         maxTokens: maxTokens,
-                        timeoutSeconds: timeoutSeconds,
+                        timeoutSeconds: budget.remainingSeconds,
                         continuation: continuation,
                         delivery: delivery,
                         session: session
@@ -349,7 +351,7 @@ actor LLMService {
         systemPrompt: String,
         userMessage: String,
         maxTokens: Int,
-        timeoutSeconds: UInt64,
+        timeoutSeconds: TimeInterval,
         continuation: AsyncThrowingStream<String, Error>.Continuation,
         delivery: DeliveryState,
         session: URLSession
@@ -371,104 +373,80 @@ actor LLMService {
 
         let requestBody = try JSONSerialization.data(withJSONObject: body)
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.timeoutInterval = TimeInterval(timeoutSeconds)
-                request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = requestBody
+        try await withAsyncDeadline(seconds: timeoutSeconds) {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = TimeInterval(timeoutSeconds)
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = requestBody
 
-                let (bytes, response) = try await session.bytes(for: request)
+            let (bytes, response) = try await session.bytes(for: request)
 
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    throw LLMError.apiError("Non-HTTP response")
-                }
-
-                guard (200...299).contains(httpResponse.statusCode) else {
-                    let statusCode = httpResponse.statusCode
-                    var errorBody = ""
-                    do {
-                        for try await line in bytes.lines.prefix(20) {
-                            errorBody += line + "\n"
-                        }
-                    } catch {
-                        errorBody = "(unable to read error body)"
-                    }
-                    let sanitizedBody = sanitizeErrorBody(errorBody)
-                    AppLogger.log("[LLMService] HTTP \(statusCode): \(sanitizedBody)")
-                    throw LLMError.apiError("HTTP \(statusCode): \(sanitizedBody)")
-                }
-
-                var yieldedAny = false
-                var decodeFailures = 0
-                var explicitlyCompleted = false
-                for try await line in bytes.lines {
-                    try Task.checkCancellation()
-                    delivery.touch() // any inbound frame counts as liveness for the watchdog
-                    switch parseSSELine(line, decodeFailures: &decodeFailures) {
-                    case .content(let content):
-                        if !content.isEmpty {
-                            guard !explicitlyCompleted else { throw LLMError.incompleteResponse }
-                            yieldedAny = true
-                            delivery.markYielded()
-                            continuation.yield(content)
-                        }
-                    case .completion(let content, let reason):
-                        // Only normal stop is supported as an explicit finish signal.
-                        // length/content_filter/tool_calls cannot be full polish output.
-                        guard reason == "stop", !explicitlyCompleted else { throw LLMError.incompleteResponse }
-                        explicitlyCompleted = true
-                        if !content.isEmpty {
-                            yieldedAny = true
-                            delivery.markYielded()
-                            continuation.yield(content)
-                        }
-                    case .done:
-                        guard decodeFailures == 0 else { throw LLMError.streamDecodingError }
-                        continuation.finish()
-                        return
-                    case .error(let message):
-                        // In-band error frame (HTTP 200 + {"error":...}); surface it
-                        // so PolishStage can fall back / report instead of going silent.
-                        throw LLMError.apiError(sanitizeErrorBody(message))
-                    case .ignore:
-                        break
-                    }
-                }
-
-                if decodeFailures > 0 {
-                    AppLogger.log("[LLMService] SSE decode failures: \(decodeFailures), yieldedAny=\(yieldedAny)")
-                }
-                // EOF alone is not a completion signal. Any undecodable frame may
-                // have contained lost output, even after earlier content was valid.
-                guard decodeFailures == 0 else { throw LLMError.streamDecodingError }
-                guard explicitlyCompleted else { throw LLMError.incompleteResponse }
-                continuation.finish()
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw LLMError.apiError("Non-HTTP response")
             }
 
-            // Inactivity watchdog: a healthy slow stream keeps touching the clock, so long
-            // outputs are not cut off mid-flight; a stalled stream times out within
-            // timeoutSeconds of its last frame. Transport-level hangs are additionally
-            // covered by request.timeoutInterval. See watchdogShouldTimeout for the
-            // pre-first-token hard cap that keeps heartbeat-only streams from hanging polish.
-            group.addTask {
-                delivery.touch()
-                let attemptStart = Date()
-                while true {
-                    try await Task.sleep(nanoseconds: 2_000_000_000)
-                    if Self.watchdogShouldTimeout(idleSeconds: delivery.idleSeconds(),
-                                                  attemptElapsed: Date().timeIntervalSince(attemptStart),
-                                                  hasYielded: delivery.hasYielded,
-                                                  limit: TimeInterval(timeoutSeconds)) {
-                        throw LLMError.timeout
+            guard (200...299).contains(httpResponse.statusCode) else {
+                let statusCode = httpResponse.statusCode
+                var errorBody = ""
+                do {
+                    for try await line in bytes.lines.prefix(20) {
+                        errorBody += line + "\n"
                     }
+                } catch {
+                    errorBody = "(unable to read error body)"
+                }
+                let sanitizedBody = sanitizeErrorBody(errorBody)
+                AppLogger.log("[LLMService] HTTP \(statusCode): \(sanitizedBody)")
+                throw LLMError.apiError("HTTP \(statusCode): \(sanitizedBody)")
+            }
+
+            var yieldedAny = false
+            var decodeFailures = 0
+            var explicitlyCompleted = false
+            for try await line in bytes.lines {
+                try Task.checkCancellation()
+                delivery.touch() // any inbound frame counts as liveness for the watchdog
+                switch parseSSELine(line, decodeFailures: &decodeFailures) {
+                case .content(let content):
+                    if !content.isEmpty {
+                        guard !explicitlyCompleted else { throw LLMError.incompleteResponse }
+                        yieldedAny = true
+                        delivery.markYielded()
+                        continuation.yield(content)
+                    }
+                case .completion(let content, let reason):
+                    // Only normal stop is supported as an explicit finish signal.
+                    // length/content_filter/tool_calls cannot be full polish output.
+                    guard reason == "stop", !explicitlyCompleted else { throw LLMError.incompleteResponse }
+                    explicitlyCompleted = true
+                    if !content.isEmpty {
+                        yieldedAny = true
+                        delivery.markYielded()
+                        continuation.yield(content)
+                    }
+                case .done:
+                    guard decodeFailures == 0 else { throw LLMError.streamDecodingError }
+                    continuation.finish()
+                    return
+                case .error(let message):
+                    // In-band error frame (HTTP 200 + {"error":...}); surface it
+                    // so PolishStage can fall back / report instead of going silent.
+                    throw LLMError.apiError(sanitizeErrorBody(message))
+                case .ignore:
+                    break
                 }
             }
 
-            try await group.next()!
-            group.cancelAll()
+            if decodeFailures > 0 {
+                AppLogger.log("[LLMService] SSE decode failures: \(decodeFailures), yieldedAny=\(yieldedAny)")
+            }
+            // EOF alone is not a completion signal. Any undecodable frame may
+            // have contained lost output, even after earlier content was valid.
+            guard decodeFailures == 0 else { throw LLMError.streamDecodingError }
+            guard explicitlyCompleted else { throw LLMError.incompleteResponse }
+            continuation.finish()
         }
     }
 }

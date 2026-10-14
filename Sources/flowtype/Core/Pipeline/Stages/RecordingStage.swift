@@ -21,6 +21,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
         let audioRecorder = AudioRecorder()
         let appleSpeechProvider = AppleSpeechProvider()
         let frozen = OSAllocatedUnfairLock<Bool>(initialState: false)
+        let realtimeBox = OSAllocatedUnfairLock<RealtimeASRSessionHandle?>(initialState: nil)
         AppLogger.log("[RecordingStage#\(sessionID)] Recording phase started")
         let recordingStart = Date()
 
@@ -65,6 +66,20 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
                 try Task.checkCancellation()
 
+                let route = await ASRRouter.shared.captureStartRoute()
+                let handle = await MainActor.run {
+                    context.prepareRealtime(route: route)
+                    return context.realtimeHandle
+                }
+                realtimeBox.withLock { $0 = handle }
+                audioRecorder.onPCMSamples = { samples in
+                    context.performIfActive {
+                        do { try handle?.ingress.enqueue(samples: samples) }
+                        catch { context.markRealtimeFailure(String(describing: error)) }
+                    }
+                }
+                try Task.checkCancellation()
+
                 // 2. Start audio recording
                 let deviceID = ConfigurationStore.shared.current.microphoneDeviceID
                 let output = try await audioRecorder.startRecording(deviceID: deviceID, ownerID: sessionID)
@@ -78,7 +93,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 // 采集一次前台上下文（失败则静默跳过，不阻断录音）。
                 // 本地优先与云端策略都采集：本地 Qwen 直接用（不上传），云端可能随请求发送。
                 try Task.checkCancellation()
-                if let fg = await contextProvider.collect(),
+                if let fg = try? await withAsyncDeadline(seconds: 3, operation: { [self] in await contextProvider.collect() }),
                    let text = buildContextText(fg) {
                     await MainActor.run {
                         guard !context.isCancelled else { return }
@@ -90,7 +105,11 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 // Detect a mid-recording freeze (device gone) so we can surface an error.
                 // 3. Start AppleSpeech real-time preview streaming
                 try Task.checkCancellation()
-                let previewStream = await appleSpeechProvider.startStreamingRecognition()
+                let previewStream = (try? await withAsyncDeadline(seconds: 3) {
+                    let stream = await appleSpeechProvider.startStreamingRecognition()
+                    if Task.isCancelled { _ = appleSpeechProvider.stopStreamingRecognition() }
+                    return stream
+                }) ?? AsyncStream { $0.finish() }
                 try Task.checkCancellation()
                 AppLogger.log("[RecordingStage#\(sessionID)] AppleSpeech preview started")
 
@@ -120,15 +139,17 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 // 5. Stop recording and collect results
                 previewTask?.cancel()
                 let ownsRecorder = audioRecorder.owns(sessionID)
+                cleanup(recorder: audioRecorder, ownerID: sessionID)
                 let rawSamples = audioRecorder.takeAccumulatedSamples(ownerID: sessionID)
                 let finalPreviewText = ownsRecorder ? appleSpeechProvider.stopStreamingRecognition() : ""
-                cleanup(recorder: audioRecorder, ownerID: sessionID)
+                realtimeBox.withLock { $0 }?.ingress.seal()
                 AppLogger.log("[RecordingStage#\(sessionID)] AppleSpeech final preview: \(finalPreviewText.count) chars")
 
                 // If the spectrum stream ended because the mic froze (not because the user
                 // stopped — that path throws CancellationError), fail the session so it
                 // recovers to .idle instead of pushing a silent partial transcript.
                 if frozen.withLock({ $0 }) {
+                    if let handle = realtimeBox.withLock({ $0 }) { await handle.session.cancel() }
                     AppLogger.log("[RecordingStage#\(sessionID)] Recording interrupted (device froze/disconnected)")
                     return .suspend(ErrorRecoveryContext(
                         failedStage: name,
@@ -151,14 +172,20 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 AppLogger.log("[RecordingStage#\(sessionID)] Recording cancelled")
                 previewTask?.cancel()
                 let ownsRecorder = audioRecorder.owns(sessionID)
+                cleanup(recorder: audioRecorder, ownerID: sessionID)
                 let rawSamples = audioRecorder.takeAccumulatedSamples(ownerID: sessionID)
                 let finalPreviewText = ownsRecorder ? appleSpeechProvider.stopStreamingRecognition() : ""
-                cleanup(recorder: audioRecorder, ownerID: sessionID)
+                if context.isCancellationRequested {
+                    if let handle = realtimeBox.withLock({ $0 }) { await handle.session.cancel() }
+                } else {
+                    realtimeBox.withLock { $0 }?.ingress.seal()
+                }
                 let audioDuration = Double(rawSamples.count) / 16000.0
                 AppLogger.log("[RecordingStage#\(sessionID)] Recording cancelled, samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
                 if await MainActor.run(body: { context.isCancelled }) {
                     return .complete
                 }
+                await MainActor.run { context.recordingMs = UInt64(audioDuration * 1000) }
                 return .continue(.audio(samples: rawSamples, previewText: finalPreviewText))
             } catch {
                 AppLogger.log("[RecordingStage#\(sessionID)] Recording failed: \(error)")
@@ -167,6 +194,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 if ownsRecorder { _ = appleSpeechProvider.stopStreamingRecognition() }
                 cleanup(recorder: audioRecorder, ownerID: sessionID)
                 _ = audioRecorder.takeAccumulatedSamples(ownerID: sessionID)
+                if let handle = realtimeBox.withLock({ $0 }) { await handle.session.cancel() }
                 if await MainActor.run(body: { context.isCancelled }) {
                     return .complete
                 }
@@ -181,6 +209,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
             // Stop capture even if context collection or Speech authorization
             // is still suspended. This execution owns this recorder exclusively.
             audioRecorder.stopRecording(ownerID: sessionID)
+            realtimeBox.withLock { $0 }?.ingress.seal()
         }
     }
 

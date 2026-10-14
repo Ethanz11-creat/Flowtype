@@ -161,6 +161,9 @@ final class AppleSpeechProvider: @unchecked Sendable {
             return AsyncStream { $0.finish() }
         }
 
+        // A stop/deadline may have returned while the authorization prompt was
+        // pending. Never resurrect preview recognition for that old recording.
+        guard !Task.isCancelled else { return AsyncStream { $0.finish() } }
         AppLogger.log("[AppleSpeechProvider] Starting real-time streaming recognition...")
         return AsyncStream { continuation in
             self.stateLock.withLock { $0.previewContinuation = continuation }

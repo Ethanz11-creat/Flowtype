@@ -7,7 +7,7 @@ struct CloudASRProviderList: View {
     fileprivate enum TestState: Equatable {
         case idle
         case testing
-        case success
+        case success(String)
         case failure(String)
     }
 
@@ -34,11 +34,11 @@ struct CloudASRProviderList: View {
                 }
             }
 
-            Button {
-                addProvider()
-            } label: {
-                Label("添加云端服务商", systemImage: "plus.circle")
-                    .font(.system(size: 12))
+            Menu("添加云端服务商") {
+                Button("OpenAI 兼容 HTTP") { addProvider() }
+                Button("阿里云 Paraformer 实时") {
+                    store.current.cloudASRConfig.providers.append(.defaultParaformer(isActive: store.current.cloudASRConfig.providers.isEmpty))
+                }
             }
             .buttonStyle(.plain)
             .foregroundColor(Brand.accent)
@@ -73,8 +73,8 @@ struct CloudASRProviderList: View {
         let service = CloudASRProvider()
         let result = await service.testConnection(provider: provider, apiKey: apiKey)
         switch result {
-        case .success:
-            return .success
+        case .success(let message):
+            return .success(message)
         case .failure(let error):
             return .failure(error.localizedDescription)
         }
@@ -192,6 +192,11 @@ private struct CloudASRProviderCard: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
+                Picker("识别协议", selection: binding.protocolKind) {
+                    Text("OpenAI 兼容 HTTP").tag(CloudASRProtocolKind.openAICompatible)
+                    Text("DashScope 实时 WSS").tag(CloudASRProtocolKind.dashScopeRealtime)
+                }
+                .font(.system(size: 11))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Base URL")
                         .font(.system(size: 11, weight: .medium))
@@ -302,19 +307,21 @@ private struct CloudASRProviderCard: View {
                                     onUpdateTestStatus(status)
                                 }
                             } label: {
-                                Image(systemName: "bolt.horizontal.circle")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.secondary)
+                                Text(provider.protocolKind == .dashScopeRealtime ? "验证配置" : "测试连接")
+                                    .font(.system(size: 11))
                             }
                             .buttonStyle(.plain)
                             .disabled(testStatus == .testing)
                         }
                     }
-                    Text("API Key 请前往 siliconflow.cn 注册获取，本地存储不上传")
+                    Text(provider.protocolKind == .dashScopeRealtime ? "使用阿里云 DashScope API Key；验证配置不连接服务、不发送音频。" : "使用服务商 API Key；仅随识别请求发送给该服务商。")
                         .font(.system(size: 9))
                         .foregroundColor(.secondary)
                 }
 
+                if case let .success(msg) = testStatus {
+                    Text(msg).font(.system(size: 10)).foregroundColor(.secondary)
+                }
                 if case let .failure(msg) = testStatus {
                     Text(msg)
                         .font(.system(size: 10))
