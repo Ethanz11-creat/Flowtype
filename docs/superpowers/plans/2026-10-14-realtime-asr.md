@@ -1,0 +1,96 @@
+# Background Realtime ASR and Local Fallback Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Upload audio during capture to a verified BYOK realtime ASR provider while retaining complete local audio and a bounded final-only fallback.
+
+**Architecture:** Add a transport-agnostic realtime session contract and a DashScope Paraformer adapter backed by injectable WebSocket transport. RecordingStage owns capture fan-out and the session context owns the winning result; ASRStage finalizes or falls back to local/batch. Existing OpenAI-compatible batch configuration remains unchanged unless explicitly marked realtime.
+
+**Tech Stack:** Swift 6.2, Foundation URLSessionWebSocketTask, AVAudioEngine, async/await, existing ASR contracts and self-tests.
+
+**Spec:** `docs/superpowers/specs/2026-10-14-realtime-asr-design.md`; wire authority `docs/superpowers/paraformer-protocol-2026-10-14.md`.
+
+## Global Constraints
+
+- Paraformer realtime uses WSS, Bearer API key, `run-task`, matching `task-started`, binary PCM16 LE mono 16 kHz, `finish-task`, then `task-finished`.
+- Do not send WAV, Float32 bytes, Opus, arbitrary prompt/context, or undocumented vocabulary fields.
+- Partial sentences are provisional and never rendered/injected; final text is delivered once per session.
+- Keep complete Float32 capture for local fallback; localOnly never opens a cloud socket.
+- Stop-to-delivery budget is 20 seconds; auto cloud first attempt is bounded to 5 seconds when local is ready.
+- Run `swift build` and `swift run FlowType --self-test` before each commit.
+
+## Review Focus
+
+- No binary audio may be sent before the matching task-started event.
+- Final Paraformer sentence with `end_time: null` must decode and not duplicate.
+- Cancellation and wrong task IDs must not resume a wait or deliver late text.
+- Legacy batch cloud profiles must decode and route exactly as before.
+- A full realtime queue must drain before finish-task; local fallback must use the complete recording.
+
+### Task 1: Realtime contracts, config, and PCM/assembly pure logic
+
+**Files:**
+- Create: `Sources/flowtype/Services/Speech/RealtimeASR.swift`
+- Modify: `Sources/flowtype/Services/Speech/ASRContract.swift`
+- Modify: `Sources/flowtype/Core/Configuration.swift`
+- Test: `Sources/flowtype/Testing/SelfTest.swift`
+
+**Interfaces:**
+- Define `RealtimeASRSession` with `start()`, `append(samples:)`, `finish()`, `cancel()` and `finalText` result semantics.
+- Define protocol-kind Codable config with legacy default `.openAICompatible`; expose exact Paraformer model/endpoint preset.
+- Produce pure Float32→PCM16LE conversion and `ParaformerSentenceAssembler`.
+
+- [ ] Write fixture tests for signed PCM endpoints/NaN, exact run/finish envelopes, sentence revisions, null end_time, heartbeats, and foreign task IDs.
+- [ ] Run self-test and capture expected RED output.
+- [ ] Implement contracts/config/fixtures without opening a socket.
+- [ ] Run full build and self-test.
+- [ ] Commit `feat(asr): add realtime session contract and Paraformer wire models`.
+
+### Task 2: Injectable WebSocket transport and DashScope adapter
+
+**Files:**
+- Create: `Sources/flowtype/Services/Speech/DashScopeRealtimeASR.swift`
+- Create: `Sources/flowtype/Services/Speech/WebSocketTransport.swift`
+- Modify: `Sources/flowtype/Services/Speech/ASRProviderRegistry.swift`
+- Test: `Sources/flowtype/Testing/SelfTest.swift`
+
+**Interfaces:**
+- Produce an injectable transport with text/binary send and async receive; production implementation wraps URLSessionWebSocketTask.
+- Adapter must enforce start ack before audio, ordered queue/drain, finish once, task ID filtering, start/final timeouts, task-failed/close errors, and cancellation.
+
+- [ ] Add fake transport tests for handshake ordering, bounded queued audio, finish drain, final after finish, timeout, malformed events, and cancellation.
+- [ ] Run self-test RED before adapter implementation.
+- [ ] Implement production transport and adapter; keep API key in an in-memory session snapshot and never log it.
+- [ ] Run build/self-test and commit `feat(asr): implement DashScope realtime Paraformer adapter`.
+
+### Task 3: Capture fan-out, routing, budget, and fallback
+
+**Files:**
+- Modify: `Sources/flowtype/Core/Pipeline/SessionContext.swift`
+- Modify: `Sources/flowtype/Core/Pipeline/Stages/RecordingStage.swift`
+- Modify: `Sources/flowtype/Core/Pipeline/Stages/ASRStage.swift`
+- Modify: `Sources/flowtype/Services/Speech/ASRRouter.swift`
+- Modify: `Sources/flowtype/Core/Configuration.swift`
+- Test: `Sources/flowtype/Testing/SelfTest.swift`
+
+**Interfaces:**
+- Add session-scoped realtime handle and result snapshot; RecordingStage appends every valid buffer without blocking audio callback.
+- Add `CompletionBudget` and route realtime only when policy/config/provider capability permits.
+
+- [ ] Test localOnly/no-key no socket, cloud start during capture, queue overflow, bounded stop, realtime failure to local, and one winner.
+- [ ] Run self-test RED.
+- [ ] Implement fan-out and ASR final selection; use batch/local fallback with complete samples and enforce 20s/5s budgets and cancellation.
+- [ ] Run full build/self-test and commit `feat(asr): stream capture in background with bounded local fallback`.
+
+### Task 4: Health recovery and protocol validation
+
+**Files:**
+- Modify: `Sources/flowtype/Services/Speech/ASRRouter.swift`
+- Modify: `Sources/flowtype/Services/Speech/CloudProbe.swift`
+- Create: `docs/2026-10-14-realtime-asr-validation.md`
+- Test: `Sources/flowtype/Testing/SelfTest.swift`
+
+- [ ] Add pure half-open recovery tests, endpoint/model identity invalidation, and no probe on forced/local modes.
+- [ ] Document real Key/weak network/offline/cancel/manual protocol matrix without claiming unrun results.
+- [ ] Implement one bounded real request recovery attempt per 60 seconds; preserve conservative slow evidence.
+- [ ] Run full build/self-test and commit `fix(asr): bound realtime health recovery and validation`.
