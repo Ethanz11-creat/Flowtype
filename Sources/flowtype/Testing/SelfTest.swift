@@ -311,6 +311,7 @@ enum SelfTest {
         testRouterEWMA(r)          // ASR router health: EWMA update math
         testCloudProbe(r)          // cloud host probe: endpoint parse + threshold isolation + cold-start chain
         testPathChangeDetection(r) // network switch must invalidate the cached probe sample
+        testLinkSampleInvalidation(r) // which samples die on a link change (probe + stale EWMA)
         testProbeGating(r)         // when the probe is allowed to spend a handshake at all
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
@@ -1344,6 +1345,26 @@ enum SelfTest {
         r.check(!shouldProbeCloud(path: sig(constrained: true), policy: .auto),
                 "probe-gate: low-data mode → no probe")
         r.check(shouldProbeCloud(path: nil, policy: .auto), "probe-gate: no observation yet → probe")
+    }
+
+    // MARK: - Link-change invalidation contract (which samples die on a network switch)
+
+    static func testLinkSampleInvalidation(_ r: Reporter) {
+        var stale = RouterHealthSnapshot()
+        stale.cloudLatencyEWMA = 4200          // 旧链路测到的整轮延迟
+        stale.probeLatencyMs = 150             // 旧链路测到的握手
+        stale.probeSampledAt = Date()
+        stale.probeFailed = true
+        stale.cloudConsecutiveFailures = 1
+        stale.networkReachable = true
+
+        let next = invalidateLinkSamples(stale)
+        r.eq(next.cloudLatencyEWMA, 0, "invalidate: stale request latency dropped on link change")
+        r.eq(next.probeLatencyMs, nil, "invalidate: probe latency dropped")
+        r.eq(next.probeSampledAt, nil, "invalidate: probe timestamp dropped")
+        r.check(!next.probeFailed, "invalidate: probe failure flag dropped")
+        r.eq(next.cloudConsecutiveFailures, 1, "invalidate: failure streak preserved (link-agnostic evidence)")
+        r.check(next.networkReachable, "invalidate: reachability preserved (owned by the path monitor)")
     }
 
     // MARK: - Foreground context assembly (pure)

@@ -50,6 +50,17 @@ func shouldProbeCloud(path: PathSignature?, policy: ASRRoutingPolicy) -> Bool {
     return !(path.isExpensive || path.isConstrained)
 }
 
+/// 链路变化后作废旧链路的延迟证据：探测样本与真实请求 EWMA 都属于**上一条链路**，
+/// 保留它们会让"新链路很慢"被旧快样本掩盖。失败连击与可达性由调用方维护，不在此作废。
+func invalidateLinkSamples(_ state: RouterHealthSnapshot) -> RouterHealthSnapshot {
+    var next = state
+    next.probeLatencyMs = nil
+    next.probeSampledAt = nil
+    next.probeFailed = false
+    next.cloudLatencyEWMA = 0
+    return next
+}
+
 /// 云端主机探测的周期/超时/首启延迟（秒）。
 enum ASRRouterProbeConfig {
     static let interval: TimeInterval = 30
@@ -70,6 +81,8 @@ final class ASRRouter: @unchecked Sendable {
 
     private var probeTimer: DispatchSourceTimer?
     private let probeQueue = DispatchQueue(label: "flowtype.asr-router.probe")
+    /// 探测是否正在进行，防止链路抖动时重叠刷新。
+    private let probeInFlight = OSAllocatedUnfairLock(initialState: false)
 
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
@@ -82,14 +95,11 @@ final class ASRRouter: @unchecked Sendable {
                 return pathChanged(previous: previous, current: current)
             }
             guard changed else { return }
-            // 链路换了一条（Wi-Fi ↔ 热点 ↔ VPN）：旧延迟与探测样本属于另一条链路，立即作废并重探，
-            // 否则切换后的首次听写会复用旧"快"样本，白等一整轮慢请求。
-            self.health.withLock {
-                $0.probeLatencyMs = nil
-                $0.probeSampledAt = nil
-                $0.probeFailed = false
-            }
-            AppLogger.log("[ASRRouter] network path changed (\(current.interface ?? "?")) → probe cache invalidated")
+            // 链路换了一条（Wi-Fi ↔ 热点 ↔ VPN）：探测样本与真实延迟都来自旧链路，一并作废并重探。
+            // 只清探测是不够的——EWMA 一旦非零，决策就不再采信探测（冷启动判定），
+            // 于是"新链路变慢"会被旧快样本掩盖，切换后的首次听写仍白等一整轮慢请求。
+            self.health.withLock { $0 = invalidateLinkSamples($0) }
+            AppLogger.log("[ASRRouter] network path changed (\(current.interface ?? "?")) → latency samples invalidated")
             Task { await self.refreshProbeIfNeeded(force: true) }
         }
         monitor.start(queue: monitorQueue)
@@ -142,8 +152,17 @@ final class ASRRouter: @unchecked Sendable {
         AppLogger.log("[ASRRouter] cloud probe started (interval \(Int(ASRRouterProbeConfig.interval))s)")
     }
 
-    /// 按需刷新探测样本。仅 `auto` 策略 + 已配置云端 + 网络可达时执行。
+    /// 按需刷新探测样本。仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
     func refreshProbeIfNeeded(force: Bool = false) async {
+        // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+        let alreadyRunning = probeInFlight.withLock { running -> Bool in
+            if running { return true }
+            running = true
+            return false
+        }
+        guard !alreadyRunning else { return }
+        defer { probeInFlight.withLock { $0 = false } }
+
         let cfg = await MainActor.run { ConfigurationStore.shared.current }
         guard let effective = cfg.effectiveCloudASRConfig else { return }
         guard let endpoint = CloudProbe.probeEndpoint(fromBaseURL: effective.provider.baseURL) else { return }
