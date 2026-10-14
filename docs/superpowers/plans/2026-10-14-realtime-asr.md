@@ -36,9 +36,11 @@
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
 **Interfaces:**
-- Define `RealtimeASRSession` with `start()`, `append(samples:)`, `finish()`, `cancel()` and `finalText` result semantics.
+- Define `RealtimeASRSession: Sendable` with `func start() async throws`, `func append(samples: [Float]) async throws`, `func finish() async throws -> ASRResult`, `func cancel() async`. Immutable session config snapshots credentials/model/language.
+- For nonblocking capture, add a bounded synchronous enqueue/fan-out wrapper instead of one unbounded Task per audio callback.
 - Define protocol-kind Codable config with legacy default `.openAICompatible`; expose exact Paraformer model/endpoint preset.
-- Produce pure Float32→PCM16LE conversion and `ParaformerSentenceAssembler`.
+- Produce pure `encodePCM16LE(_ samples: [Float]) -> Data` and `ParaformerSentenceAssembler`; use begin_time as replacement key (official protocol has no sentence_id), final sentence_end controls commitment, nullable end_time accepted.
+- `CloudASRProviderConfig.protocolKind` uses `.openAICompatible` or `.dashScopeRealtime`; explicit init/decode defaults preserve all existing callers and JSON.
 
 - [ ] Write fixture tests for signed PCM endpoints/NaN, exact run/finish envelopes, sentence revisions, null end_time, heartbeats, and foreign task IDs.
 - [ ] Run self-test and capture expected RED output.
@@ -71,11 +73,19 @@
 - Modify: `Sources/flowtype/Core/Pipeline/Stages/ASRStage.swift`
 - Modify: `Sources/flowtype/Services/Speech/ASRRouter.swift`
 - Modify: `Sources/flowtype/Core/Configuration.swift`
+- Modify: `Sources/flowtype/Settings/CloudASRProviderList.swift` (or actual editor file discovered via rg)
+- Modify: `Sources/flowtype/Settings/SettingsPage+ASR.swift`
+- Modify: `Sources/flowtype/Services/Speech/CloudASRProvider.swift`
+- Modify: `Sources/flowtype/Core/Pipeline/Stages/PolishStage.swift`
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
 **Interfaces:**
 - Add session-scoped realtime handle and result snapshot; RecordingStage appends every valid buffer without blocking audio callback.
-- Add `CompletionBudget` and route realtime only when policy/config/provider capability permits.
+- Add monotonic `CompletionBudget` with `remainingSeconds` and per-stage timeout; create at stop for 20 seconds; auto cloud attempt max 5 seconds with local ready; polish min(3, remaining). Respect user cancel.
+- Registry cloud identity remains ASRProviderID.cloud; dispatch protocolKind via capabilities/factory, no provider runtime casts. Batch provider sees immutable request config and no third-party WS URL sent to HTTP multipart.
+- Capture explicit ordered PCM closure before engine starts, retain all complete samples; allow realtime start in parallel with capture/context. Extend stopped cleanup to distinguish finish vs cancellation.
+- Settings expose protocol kind and Paraformer preset; save Key in cloudASRConfig.providerAPIKeys (actual existing ASR key location, separate from LLM keys). Test button must not send paid silence for realtime; label configuration validation honestly.
+- If stop budget expires after full ASR exists, deliver full raw. No text means error. Retry creates a new realtime task or uses stored batch/local samples, not stale finish handle.
 
 - [ ] Test localOnly/no-key no socket, cloud start during capture, queue overflow, bounded stop, realtime failure to local, and one winner.
 - [ ] Run self-test RED.

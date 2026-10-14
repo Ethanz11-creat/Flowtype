@@ -53,11 +53,16 @@
 - Modify: `Sources/flowtype/CapsuleView.swift`
 - Modify: `Sources/flowtype/Core/PipelineOrchestrator.swift`
 - Modify: `Sources/flowtype/App/StatusBarController.swift`
+- Modify: `Sources/flowtype/Core/Configuration.swift`
+- Modify: `Sources/flowtype/Settings/SettingsPage+Recording.swift`
+- Modify: `Sources/flowtype/Settings/OnboardingView.swift`
+- Modify: `Sources/flowtype/Core/Pipeline/Observers/AudioFeedbackObserver.swift`
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
 **Interfaces:**
 - Make the first clean stop action immediate once active; preserve idle double-tap/toggle start behavior and modifier chord suppression.
 - Add stable presentation mapping for preparing/processing and remove polish preview content.
+- Produce `Configuration.polishOnStop: Bool` default true, `decodeIfPresent` legacy true; settings toggle “停止后自动整理”; all stop paths including max-duration use it. Active modifier release stops immediately; idle start detector remains compatible; nonmodifier key repeat cannot extend holds.
 
 - [ ] Add event timeline tests for first tap/stop, double tap start compatibility, Escape cancel, and repeated stop.
 - [ ] Run self-test to verify the new timeline assertions fail before implementation.
@@ -72,11 +77,16 @@
 - Modify: `Sources/flowtype/Core/PipelineOrchestrator.swift`
 - Modify: `Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift`
 - Modify: `Sources/flowtype/Core/Pipeline/SessionContext.swift`
+- Modify: `Sources/flowtype/Services/LLMService.swift`
+- Modify: `Sources/flowtype/CapsuleView.swift`
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
 **Interfaces:**
 - Add pure `polishFallbackText(processed:raw:)` and explicit recovery action mapping by failed stage.
 - Keep one terminal delivery gate; Polish failure must continue with processed text, cancellation must suspend without delivery.
+- Use a cancellable 3-second whole polish deadline; an underlying producer must be cancelled on timeout/stream termination (do not await uncooperative task-group losers). Preserve full processed text, never partial tokens. Configure available-LLM detection before optional polish so missing Key is pass-through.
+- Add context completion notice rendered only after delivery, remove 5-second error dismissal, expose retry/copy/dismiss buttons only for actionable error. Stage-specific retry must not force polish for ASR retry.
+- InjectionStage must check Task/context cancellation before sleep, after sleep and before clipboard/CGEvent side effects; terminal save history exactly once when completing through idle or notice.
 
 - [ ] Write tests for empty/same/error polish results, cancellation, one delivery, and retry action labels.
 - [ ] Run self-test and capture RED output.

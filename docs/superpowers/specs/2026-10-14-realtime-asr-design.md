@@ -10,7 +10,7 @@
 
 现有 ASRProvider.transcribe 保留整段协议，新增 RealtimeASRSession：start / append PCM / finish / cancel 生命周期。独立 DashScope adapter 用 URLSessionWebSocketTask；test socket 注入只存在于测试。CloudASRProviderConfig 新增 protocolKind（openAICompatible 默认，dashScopeRealtime 可选）；独立 model/baseURL 预设 paraformer-realtime-v2 与 wss://dashscope.aliyuncs.com/api-ws/v1/inference。已有配置继续是 HTTP，不擅自转 WS；设置可添加实时 provider 和 Key，连接测试仅做协议/握手验证，不假装识别质量验证。
 
-run-task 发送后等 task-started 才发 PCM16 LE mono 16k 二进制；finish-task 后继续收结果直至 task-finished。task_id 精确匹配；task-failed、畸形消息和断线产生结构化错误；未知非错误事件忽略。sentence_id 为键替换 revisions，sentence_end=true 才提交该句；task-finished 不随意把未定稿 partial 当完整句。end_time 可 null；最终文本按句 ID 排序。句子/重放有去重，迟到事件在 cancel 后丢弃。
+run-task 发送后等 task-started 才发 PCM16 LE mono 16k 二进制；finish-task 后继续收结果直至 task-finished。task_id 精确匹配；task-failed、畸形消息和断线产生结构化错误；未知非错误事件忽略。官方 Paraformer 无 sentence_id；以 begin_time 为键替换 revisions（FlowType 的明确归并策略），sentence_end=true 才提交该句；task-finished 不随意把未定稿 partial 当完整句。end_time 可 null；最终文本按 begin_time 排序。句子/重放有去重，迟到事件在 cancel 后丢弃。
 
 音频回调仅复制/转换并交给串行有界队列，不在音频 callback 或 MainActor 等网络。未收到 task-started 时缓存不超过 5 秒音频，发送队列累计不超过 5 秒；溢出终止云端会话并保留完整录音用于本地。adapter 总开始超时 3 秒；PCM 分片目标约 100ms，但可依实际 buffer 切片。格式遵循官方服务，不引入 Opus 依赖。
 

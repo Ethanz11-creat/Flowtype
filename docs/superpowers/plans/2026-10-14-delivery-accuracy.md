@@ -38,7 +38,10 @@
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
 **Interfaces:**
-- Produce bounded structured snapshot, time-limited AX collection, context-safe polish prompt block, and `preservesCodingLiterals(original:polished:)`.
+- Produce bounded structured ForegroundContext snapshot, time-limited AX collection (0.15s per AX call, 0.5s total wait, no UI/audio blocking), context-safe polish data block, and `preservesCodingLiterals(original: String, polished: String) -> Bool`.
+- Selected text/app name precede bounded cursor-near element text; maxChars 1200 after redaction. Preserve secure/parent guards. Store snapshot in SessionContext at capture start and clean up async collection on cancel.
+- LLM context uses user message data separate from system instructions. `Configuration.cloudPolishSendContext` default follows cloudASRSendContext at legacy decode; localOnly never forwards foreground context to cloud LLM. Add actual settings toggle/copy. Existing user prompt remains authoritative but append clear no instruction execution/literal preservation requirements.
+- Reject missing explicit code/path/URL/flags/version/numeric literals with token boundaries; allow prose/punctuation changes, use processed ASR on damage and mark polishFailed.
 
 - [ ] Write tests for redaction, secure parent, bounded timeout fallback, trusted prompt separation, and literal preservation/corruption.
 - [ ] Run self-test RED.
@@ -56,7 +59,8 @@
 
 **Interfaces:**
 - Produce `DeliveryOutcome`, target snapshot/revalidation pure functions, and one-side-effect gate.
-- Preserve Unicode default and distinguish dispatched/clipboard/uncertain/cancelled.
+- Preserve Unicode default and distinguish typedDispatched/pasteDispatched/clipboard/uncertain/cancelled; explicit side-effect latch claimed only immediately before actual delivery.
+- Capture target PID and comparable AX identity at stop (avoids preparation target races), revalidate at delivery; changed PID/known focus → clipboard. AX blind same PID preserves existing behavior. A synchronous gate plus Task checks surrounds each irreversible event dispatch.
 
 - [ ] Write pure tests for same target, changed target, secure/noneditable/AX-blind, duplicate delivery, and cancellation.
 - [ ] Run self-test RED.
@@ -74,7 +78,9 @@
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
 **Interfaces:**
-- Produce injectable clipboard transaction preserving representations and restoring only when ownership change-count is unchanged.
+- Produce injectable clipboard transaction preserving every available item/type Data representation and restoring only if current changeCount and content are still owned. Add `Configuration.deliveryMode` unicode default / pasteInSupportedApps explicit opt-in; settings label experimental.
+- Support candidate bundle IDs for TextEdit/VSCode/Cursor/Chrome/Safari/Edge; other apps use Unicode. Snapshot before mutation; one Cmd+V event pair, 150ms nonblocking settling window; no blind repeated delivery after cancellation/failure/unknown target receipt. Plain fallback clipboard may remain new content only before any injection event is dispatched.
+- Add Optional deliveryOutcome and stopToDeliveryMs to history JSON; DB v5_delivery and Records init/read, save clipboard/notice terminal history once and include metrics even with transcript storage off. Report dispatch vs clipboard vs uncertain, no actual insertion success claim.
 - Add Optional delivery metrics migration and report dispatch vs clipboard vs uncertain.
 
 - [ ] Write fake pasteboard tests for restore ownership, user change, multi-representation capture, legacy decode/migration, and metric reports.
