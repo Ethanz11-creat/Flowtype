@@ -8,7 +8,15 @@ struct CapsuleView: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            AudioVisualizer()
+            if session.sessionState.showSpinner {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(statusColor)
+                    .scaleEffect(0.65)
+                    .frame(width: 40, height: 24)
+            } else {
+                AudioVisualizer()
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.sessionState.statusTitle)
@@ -92,10 +100,8 @@ struct CapsuleView: View {
             return "正在准备麦克风..."
         case .recording:
             return "正在听写..."
-        case .processing:
-            return "识别中..."
-        case .polishing(let preview):
-            return preview.isEmpty ? "润色中..." : preview
+        case .processing, .polishing:
+            return "完成后自动输入"
         case .injecting:
             return "输入中..."
         case .notice:

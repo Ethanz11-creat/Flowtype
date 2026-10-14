@@ -52,7 +52,7 @@ extension SettingsPage {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("单击")
                                     .font(.system(size: 11, weight: .semibold))
-                                Text("停止录音，输出原始识别文本")
+                                Text("立即停止录音")
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
@@ -72,7 +72,7 @@ extension SettingsPage {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("双击")
                                     .font(.system(size: 11, weight: .semibold))
-                                Text("停止录音，输出润色后的文本")
+                                Text("开始录音")
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }

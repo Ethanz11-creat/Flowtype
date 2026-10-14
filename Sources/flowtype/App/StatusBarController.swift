@@ -48,10 +48,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
                     self.statusItem?.button?.toolTip = "FlowType — 正在准备麦克风..."
                 case .recording:
                     self.statusItem?.button?.toolTip = "FlowType — 录音中..."
-                case .processing:
-                    self.statusItem?.button?.toolTip = "FlowType — 识别中..."
-                case .polishing:
-                    self.statusItem?.button?.toolTip = "FlowType — 润色中..."
+                case .processing, .polishing:
+                    self.statusItem?.button?.toolTip = "FlowType — \(state.statusTitle)"
                 case .injecting:
                     self.statusItem?.button?.toolTip = "FlowType — 输入中..."
                 case .notice(let msg):

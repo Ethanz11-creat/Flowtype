@@ -325,10 +325,131 @@ enum SelfTest {
         testHardwareProfiler(r)    // HardwareProfiler: memory tier classification
         testModelPreset(r)         // ModelPreset: preset catalog + tier recommendation
         testCustomModelScanner(r)  // CustomModelScanner: validateModelDirectory error cases + success
+        testStopGestureTimeline(r) // first-release stop, pending taps, idle compatibility
+        testNonModifierRepeat(r)
+        testAudioFeedbackTimeline(r)
+        testPolishOnStopConfig(r)  // default/migration and persisted opt-out
+        testStableSessionPresentation(r) // no provider or streaming text in capsule
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
+    }
+
+    // MARK: - Stop gestures and final-only presentation
+
+    private final class TapTimeline: @unchecked Sendable {
+        var events: [String] = []
+    }
+
+    @MainActor
+    static func testStopGestureTimeline(_ r: Reporter) {
+        let detector = OptionTapDetector.shared
+        let timeline = TapTimeline()
+        detector.onSingleTap = { timeline.events.append("single") }
+        detector.onDoubleTap = { timeline.events.append("double") }
+        // Drain a timer left by a previous sequence, then start each sequence clean.
+        func drain() { RunLoop.main.run(until: Date().addingTimeInterval(0.4)) }
+        func reset() { drain(); timeline.events = [] }
+        reset()
+        let now = Date()
+
+        detector.recordTap(at: now, state: .recording(elapsedSeconds: 3), mode: .tapToStart)
+        r.eq(timeline.events, ["single"], "gesture: first recording release stops before double-tap window")
+        reset()
+        detector.recordTap(at: now, state: .preparing, mode: .tapToStart)
+        r.eq(timeline.events, ["single"], "gesture: first preparing release cancels immediately")
+        reset()
+
+        detector.recordTap(at: now, state: .idle, mode: .tapToStart)
+        r.eq(timeline.events, [], "gesture: idle first tap does not start")
+        detector.recordTap(at: now.addingTimeInterval(0.1), state: .idle, mode: .tapToStart)
+        r.eq(timeline.events, ["double"], "gesture: idle double-tap start remains compatible")
+        reset()
+        detector.recordTap(at: now, state: .idle, mode: .toggle)
+        r.eq(timeline.events, ["single"], "gesture: idle toggle starts on first release")
+        reset()
+
+        detector.recordTap(at: now, state: .idle, mode: .tapToStart)
+        detector.recordTap(at: now.addingTimeInterval(0.1), state: .recording(elapsedSeconds: 0), mode: .tapToStart)
+        r.eq(timeline.events, ["single"], "gesture: active release clears idle tap instead of becoming double-tap")
+        drain()
+        r.eq(timeline.events, ["single"], "gesture: active stop leaves no delayed tap callback")
+        detector.recordTap(at: now.addingTimeInterval(0.2), state: .processing(provider: "cloud"), mode: .tapToStart)
+        drain()
+        r.eq(timeline.events, ["single"], "gesture: repeated release while processing does not stop or restart")
+        reset()
+
+        detector.recordTap(at: now, state: .idle, mode: .tapToStart)
+        detector.cancelPendingTaps() // Escape path must discard a pending idle tap.
+        drain()
+        r.eq(timeline.events, [], "gesture: Escape cancellation clears pending tap timer")
+        detector.onSingleTap = nil
+        detector.onDoubleTap = nil
+    }
+
+    static func testNonModifierRepeat(_ r: Reporter) {
+        let pressed = Date(timeIntervalSince1970: 100)
+        let repeated = Date(timeIntervalSince1970: 100.5)
+        r.eq(WindowManager.nonModifierPressTime(current: pressed, now: repeated, isRepeat: true), pressed,
+             "gesture: key repeat cannot restart original hold timestamp")
+        r.eq(WindowManager.nonModifierPressTime(current: nil, now: repeated, isRepeat: true), nil,
+             "gesture: repeat without initial press cannot manufacture hold")
+        r.eq(WindowManager.nonModifierPressTime(current: nil, now: pressed, isRepeat: false), pressed,
+             "gesture: first genuine key-down begins hold")
+    }
+
+    @MainActor
+    static func testAudioFeedbackTimeline(_ r: Reporter) {
+        var sounds: [AudioFeedbackObserver.Feedback] = []
+        var enabled = true
+        let observer = AudioFeedbackObserver(enabled: { enabled }, play: { sounds.append($0) })
+        let context = SessionContext(sessionID: 200)
+        observer.sessionDidTransition(from: .idle, to: .preparing, context: context)
+        observer.sessionDidTransition(from: .preparing, to: .recording(elapsedSeconds: 0), context: context)
+        r.eq(sounds, [], "sound: no start cue before valid PCM readiness")
+        context.markReady()
+        observer.sessionDidTransition(from: .preparing, to: .recording(elapsedSeconds: 0), context: context)
+        observer.sessionDidTransition(from: .recording(elapsedSeconds: 0), to: .recording(elapsedSeconds: 1), context: context)
+        r.eq(sounds, [.start], "sound: ready session plays one start cue across repeated updates")
+        observer.sessionDidTransition(from: .recording(elapsedSeconds: 1), to: .processing(provider: "cloud"), context: context)
+        observer.sessionDidTransition(from: .recording(elapsedSeconds: 1), to: .processing(provider: "local"), context: context)
+        r.eq(sounds, [.start, .stop], "sound: repeated stop plays exactly one stop cue")
+        context.cancel()
+        observer.sessionDidTransition(from: .preparing, to: .recording(elapsedSeconds: 0), context: context)
+        observer.sessionDidTransition(from: .preparing, to: .error("cancelled"), context: context)
+        r.eq(sounds, [.start, .stop], "sound: cancelled context cannot play late cues")
+        enabled = false
+        let disabled = SessionContext(sessionID: 201)
+        disabled.markReady()
+        observer.sessionDidTransition(from: .preparing, to: .recording(elapsedSeconds: 0), context: disabled)
+        r.eq(sounds, [.start, .stop], "sound: audio-feedback preference disables cues")
+        enabled = true
+        let preparingError = SessionContext(sessionID: 202)
+        observer.sessionDidTransition(from: .preparing, to: .error("no microphone"), context: preparingError)
+        r.eq(sounds, [.start, .stop, .error], "sound: preparation failure gives error cue without start cue")
+    }
+
+    static func testPolishOnStopConfig(_ r: Reporter) {
+        func encodedFlag(_ config: Configuration) -> Bool? {
+            let data = try! JSONEncoder().encode(config)
+            let json = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
+            return json["polishOnStop"] as? Bool
+        }
+        r.eq(encodedFlag(Configuration()), true, "config: new sessions enable automatic polish by default")
+        let legacy = try! JSONDecoder().decode(Configuration.self, from: Data(#"{}"#.utf8))
+        r.eq(encodedFlag(legacy), true, "config: legacy config enables automatic polish")
+        let optedOut = try! JSONDecoder().decode(Configuration.self, from: Data(#"{"polishOnStop":false}"#.utf8))
+        r.eq(encodedFlag(optedOut), false, "config: automatic-polish opt-out survives decode/encode")
+    }
+
+    static func testStableSessionPresentation(_ r: Reporter) {
+        r.eq(SessionState.processing(provider: "private-provider").statusTitle, "处理中...",
+             "presentation: ASR provider identity does not leak into processing title")
+        r.eq(SessionState.polishing(preview: "unfinished draft").statusTitle,
+             SessionState.processing(provider: "cloud").statusTitle,
+             "presentation: ASR and polish share one stable processing title")
+        r.check(SessionState.preparing.showSpinner, "presentation: preparing visibly indicates work before audio readiness")
     }
 
     // MARK: - Session experience: readiness and ownership contract

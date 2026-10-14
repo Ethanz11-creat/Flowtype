@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 import ApplicationServices
 import CoreGraphics
 import QuartzCore
@@ -23,7 +22,29 @@ final class OptionTapDetector: @unchecked Sendable {
 
     private init() {}
 
-    func recordTap(at now: Date = Date()) {
+    func cancelPendingTaps() {
+        tapTimer.cancel()
+        tapTimes.removeAll()
+    }
+
+    /// Active releases bypass the idle start detector and discard its pending timer.
+    func recordTap(at now: Date = Date(), state: SessionState = .idle,
+                   mode: InteractionMode = .tapToStart) {
+        switch state {
+        case .preparing, .recording:
+            cancelPendingTaps()
+            onSingleTap?()
+            return
+        case .processing, .polishing, .injecting:
+            cancelPendingTaps()
+            return
+        case .idle, .error, .notice:
+            if mode == .toggle {
+                cancelPendingTaps()
+                onSingleTap?()
+                return
+            }
+        }
         tapTimes.append(now)
         tapTimes.removeAll { now.timeIntervalSince($0) > tapWindow }
 
@@ -61,7 +82,6 @@ class WindowManager: ObservableObject {
     var panel: FloatingPanel?
 
     private var eventTapPort: CFMachPort?
-    private var sessionStateCancellable: AnyCancellable?
     private var reloadWorkItem: DispatchWorkItem?
 
     /// Periodic timer to ensure the CGEvent tap stays enabled after system events.
@@ -73,10 +93,6 @@ class WindowManager: ObservableObject {
 
     /// Cached trigger key for safe access from C callback (avoids actor isolation issues)
     private static var cachedTriggerKey = MainThreadCachedValue<TriggerKey>(.command)
-
-    /// Cached flag: true when a session is active (non-idle). Updated by SessionController
-    /// observer so the C callback can check without crossing actor isolation.
-    private static var cachedSessionActive = MainThreadCachedValue<Bool>(false)
 
     /// Cached interaction mode for safe access from C callback.
     private static var cachedInteractionMode = MainThreadCachedValue<InteractionMode>(.tapToStart)
@@ -101,6 +117,10 @@ class WindowManager: ObservableObject {
         return (recordTap: false, resetSawOtherKey: false)
     }
 
+    nonisolated static func nonModifierPressTime(current: Date?, now: Date, isRepeat: Bool) -> Date? {
+        isRepeat ? current : (current ?? now)
+    }
+
     init() {
         let view = AnyView(
             CapsuleView()
@@ -112,24 +132,12 @@ class WindowManager: ObservableObject {
         let detector = OptionTapDetector.shared
         detector.onDoubleTap = { [weak self] in
             guard let self = self else { return }
-            Task { @MainActor in
-                self.handleDoubleTap()
-            }
+            MainActor.assumeIsolated { self.handleDoubleTap() }
         }
         detector.onSingleTap = { [weak self] in
             guard let self = self else { return }
-            Task { @MainActor in
-                self.handleSingleTap()
-            }
+            MainActor.assumeIsolated { self.handleSingleTap() }
         }
-
-        sessionStateCancellable = SessionController.shared.$sessionState
-            .receive(on: DispatchQueue.main)
-            .sink { state in
-                let active: Bool
-                if case .idle = state { active = false } else { active = true }
-                Self.cachedSessionActive.value = active
-            }
     }
 
     // MARK: - Hotkey Setup
@@ -161,6 +169,8 @@ class WindowManager: ObservableObject {
             // flagsChanged into a phantom release-tap — start the new tap clean.
             Self.cachedTriggerWasDown.value = false
             Self.cachedSawOtherKeyDuringHold.value = false
+            Self.cachedKeyDownTime.value = nil
+            OptionTapDetector.shared.cancelPendingTaps()
             self.eventTapHealthTimer.cancel()
             if let tap = self.eventTapPort {
                 CGEvent.tapEnable(tap: tap, enable: false)
@@ -227,7 +237,7 @@ class WindowManager: ObservableObject {
     }
 
     /// CGEventTap callback — runs on the main thread since source is added to main RunLoop.
-    /// Uses cachedTriggerKey / cachedSessionActive to avoid actor isolation issues from C callback context.
+    /// MainActor.assumeIsolated routes session actions synchronously on this main-runloop callback.
     private static let eventTapCallback: CGEventTapCallBack = { proxy, type, event, refcon in
         // Security: enforce that callback runs on main thread (all cached values are main-thread-only)
         dispatchPrecondition(condition: .onQueue(.main))
@@ -245,19 +255,26 @@ class WindowManager: ObservableObject {
 
         if type == .keyDown {
             let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-            if keyCode == 53, cachedSessionActive.value {
-                AppLogger.log("[EventTap] Esc pressed during active session — cancelling")
-                DispatchQueue.main.async {
-                    SessionController.shared.cancel()
+            if keyCode == 53 {
+                let cancelled = MainActor.assumeIsolated {
+                    OptionTapDetector.shared.cancelPendingTaps()
+                    let controller = SessionController.shared
+                    guard controller.sessionState != .idle else { return false }
+                    controller.cancel()
+                    return true
                 }
-                return nil
+                if cancelled { return nil }
             }
 
-            // Handle non-modifier trigger keys (F13, F14, F15, Caps Lock, Right Command)
+            // Handle non-modifier trigger keys (F13, F14, F15, Caps Lock)
             if !cachedTriggerKey.value.isModifier,
                let triggerKeyCode = cachedTriggerKey.value.keyCode,
                keyCode == Int64(triggerKeyCode) {
-                cachedKeyDownTime.value = Date()
+                cachedKeyDownTime.value = nonModifierPressTime(
+                    current: cachedKeyDownTime.value,
+                    now: Date(),
+                    isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+                )
                 AppLogger.log("[EventTap] Non-modifier trigger key down, waiting for hold threshold...")
                 return nil
             }
@@ -292,20 +309,10 @@ class WindowManager: ObservableObject {
                     return nil
                 }
 
-                let mode = cachedInteractionMode.value
-                if mode == .toggle {
-                    AppLogger.log("[EventTap] Non-modifier trigger key released after hold (toggle mode)")
-                    DispatchQueue.main.async {
-                        let controller = SessionController.shared
-                        if controller.isRecording {
-                            controller.endRecording(withPolish: false)
-                        } else {
-                            controller.startRecording()
-                        }
-                    }
-                } else {
-                    AppLogger.log("[EventTap] Non-modifier trigger key released after hold (tapToStart mode)")
-                    OptionTapDetector.shared.recordTap()
+                MainActor.assumeIsolated {
+                    let controller = SessionController.shared
+                    OptionTapDetector.shared.recordTap(state: controller.sessionState,
+                                                       mode: cachedInteractionMode.value)
                 }
                 return nil
             }
@@ -329,17 +336,29 @@ class WindowManager: ObservableObject {
             isTriggerKeyNow = false
         }
 
+        let modifiers: CGEventFlags = [.maskCommand, .maskAlternate, .maskControl, .maskShift, .maskSecondaryFn]
+        let hasOtherModifier = triggerFlag.map {
+            flags.rawValue & modifiers.rawValue & ~$0.rawValue != 0
+        } ?? false
+        if isTriggerKeyNow && hasOtherModifier {
+            cachedSawOtherKeyDuringHold.value = true
+        }
+
         let wasDown = cachedTriggerWasDown.value
         cachedTriggerWasDown.value = isTriggerKeyNow
         let action = modifierTapAction(isDownNow: isTriggerKeyNow,
                                        wasDown: wasDown,
                                        sawOtherKey: cachedSawOtherKeyDuringHold.value)
         if action.resetSawOtherKey {
-            cachedSawOtherKeyDuringHold.value = false
+            cachedSawOtherKeyDuringHold.value = hasOtherModifier
         }
         if action.recordTap {
             AppLogger.log("[EventTap] Trigger key tap (clean press+release, trigger=\(cachedTriggerKey.value.displayName))")
-            OptionTapDetector.shared.recordTap()
+            MainActor.assumeIsolated {
+                let controller = SessionController.shared
+                OptionTapDetector.shared.recordTap(state: controller.sessionState,
+                                                   mode: cachedInteractionMode.value)
+            }
         } else if !isTriggerKeyNow && wasDown {
             AppLogger.log("[EventTap] Trigger key release suppressed (shortcut chord during hold)")
         }
@@ -349,50 +368,27 @@ class WindowManager: ObservableObject {
 
     // MARK: - Tap Handlers
 
-    @MainActor
     private func handleDoubleTap() {
         let controller = SessionController.shared
-        let wasRecording = controller.isRecording
-        let mode = ConfigurationStore.shared.current.interactionMode
-        AppLogger.log("[WindowManager] handleDoubleTap — wasRecording=\(wasRecording), mode=\(mode)")
-
-        if mode == .toggle {
-            // In toggle mode, double-tap is same as single-tap
-            handleSingleTap()
-            return
-        }
-
-        if wasRecording {
-            AppLogger.log("[WindowManager] → DOUBLE-TAP END (with LLM polish)")
-            controller.endRecording(withPolish: true)
-        } else {
-            AppLogger.log("[WindowManager] → DOUBLE-TAP START recording")
-            controller.startRecording()
+        // Double-tap belongs exclusively to idle start detection. An active release
+        // already stopped synchronously and cannot change the polish policy.
+        switch controller.sessionState {
+        case .idle, .error, .notice: controller.startRecording()
+        default: break
         }
     }
 
-    @MainActor
     private func handleSingleTap() {
         let controller = SessionController.shared
-        let mode = ConfigurationStore.shared.current.interactionMode
-        AppLogger.log("[WindowManager] handleSingleTap — isRecording=\(controller.isRecording), mode=\(mode)")
-
-        if mode == .toggle {
-            if controller.isRecording {
-                AppLogger.log("[WindowManager] → SINGLE-TAP END (raw ASR)")
-                controller.endRecording(withPolish: false)
-            } else {
-                AppLogger.log("[WindowManager] → SINGLE-TAP START recording")
+        switch controller.sessionState {
+        case .preparing, .recording:
+            controller.endRecording()
+        case .idle, .error, .notice:
+            if ConfigurationStore.shared.current.interactionMode == .toggle {
                 controller.startRecording()
             }
-            return
-        }
-
-        if controller.isRecording {
-            AppLogger.log("[WindowManager] → SINGLE-TAP END (raw ASR)")
-            controller.endRecording(withPolish: false)
-        } else {
-            AppLogger.log("[WindowManager] Single tap while idle, ignoring")
+        default:
+            break
         }
     }
 

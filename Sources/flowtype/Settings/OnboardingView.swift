@@ -256,6 +256,10 @@ struct OnboardingView: View {
                     }
                 }
 
+                Toggle("停止后自动整理", isOn: $store.current.polishOnStop)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+
                 // Dynamic interaction hint
                 VStack(alignment: .leading, spacing: 10) {
                     let mode = store.current.interactionMode
@@ -269,7 +273,7 @@ struct OnboardingView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("单击")
                                         .font(.system(size: 11, weight: .semibold))
-                                    Text("停止录音，输出原始文本")
+                                    Text("立即停止录音")
                                         .font(.system(size: 10))
                                         .foregroundColor(.secondary)
                                 }
@@ -289,7 +293,7 @@ struct OnboardingView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("双击")
                                         .font(.system(size: 11, weight: .semibold))
-                                    Text("停止录音，输出润色文本")
+                                    Text("开始录音")
                                         .font(.system(size: 10))
                                         .foregroundColor(.secondary)
                                 }

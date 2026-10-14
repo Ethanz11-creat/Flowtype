@@ -127,7 +127,6 @@ final class SessionController: ObservableObject {
         // Create session context
         let statePublisher = PassthroughSubject<SessionState, Never>()
         let context = SessionContext(sessionID: newID, statePublisher: statePublisher)
-        context.recordingStartTime = Date()
         context.targetApp = NSWorkspace.shared.frontmostApplication
         currentContext = context
 
@@ -159,6 +158,7 @@ final class SessionController: ObservableObject {
                                              eventSessionID: newID,
                                              isCancelled: ctx.isCancelled),
                       ctx.isReady else { return }
+                ctx.recordingStartTime = Date()
                 self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx)
                 self.startRecordingTimer(sessionID: newID, context: ctx)
             }
@@ -180,7 +180,9 @@ final class SessionController: ObservableObject {
         executeStage(at: 0, payload: .empty, context: context)
     }
 
-    func endRecording(withPolish: Bool) {
+    func endRecording() {
+        OptionTapDetector.shared.cancelPendingTaps()
+        let withPolish = ConfigurationStore.shared.current.polishOnStop
         AppLogger.log("[SessionController#\(activeSessionID)] endRecording called, withPolish=\(withPolish)")
 
         if isPreparing {
@@ -451,7 +453,7 @@ final class SessionController: ObservableObject {
                 // Auto-stop at max duration
                 if self.elapsedSeconds >= maxDuration {
                     AppLogger.log("[SessionController] Recording reached max duration (\(maxDuration)s), auto-stopping")
-                    self.endRecording(withPolish: false)
+                    self.endRecording()
                 }
             }
         }
@@ -586,6 +588,7 @@ final class SessionController: ObservableObject {
     // MARK: - Reset
 
     private func resetToIdle() {
+        OptionTapDetector.shared.cancelPendingTaps()
         currentContext?.cancel()
         sessionState = .idle
         activeSessionID = 0
@@ -668,8 +671,7 @@ extension SessionState {
         case .idle:       return Color.white.opacity(0.5)
         case .preparing:  return Color(red: 0.5, green: 0.3, blue: 1.0)
         case .recording:  return Color(red: 0.5, green: 0.3, blue: 1.0)
-        case .processing: return .blue
-        case .polishing:  return Color(red: 0.8, green: 0.4, blue: 0.9)
+        case .processing, .polishing: return .blue
         case .injecting:  return .green
         case .notice:     return Color(red: 0.66, green: 0.61, blue: 1.0)  // 温和紫 #A99BFF,非红
         case .error:      return .red
@@ -681,8 +683,7 @@ extension SessionState {
         case .idle:                      return "准备就绪"
         case .preparing:                 return "正在准备..."
         case .recording:                 return "Listening..."
-        case .processing(let provider):  return "\(provider)..."
-        case .polishing:                 return "润色中..."
+        case .processing, .polishing:    return "处理中..."
         case .injecting:                 return "输入中..."
         case .notice(let msg):           return msg
         case .error:                     return "出错了"
@@ -696,7 +697,7 @@ extension SessionState {
 
     var showSpinner: Bool {
         switch self {
-        case .processing, .polishing: return true
+        case .preparing, .processing, .polishing: return true
         default: return false
         }
     }

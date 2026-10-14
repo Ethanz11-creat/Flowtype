@@ -12,6 +12,13 @@ extension SettingsPage {
                 Spacer()
             }
 
+            Toggle("停止后自动整理", isOn: $store.current.polishOnStop)
+                .toggleStyle(.switch)
+                .controlSize(.small)
+            Text("开启后，停止录音时自动整理识别结果；关闭后直接输入识别文本。")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("最大录音时长")

@@ -352,6 +352,7 @@ struct Configuration: Codable, Equatable {
     var triggerKey: TriggerKey = .command
     var interactionMode: InteractionMode = .tapToStart
     var enableAudioFeedback: Bool = true
+    var polishOnStop: Bool = true
     var maxRecordingDuration: Int = 600 // seconds, default 10 minutes
 
     // Module 2a: Microphone device selection
@@ -453,6 +454,7 @@ struct Configuration: Codable, Equatable {
         triggerKey = (try? c.decode(TriggerKey.self, forKey: .triggerKey)) ?? d.triggerKey
         interactionMode = (try? c.decode(InteractionMode.self, forKey: .interactionMode)) ?? d.interactionMode
         enableAudioFeedback = (try? c.decode(Bool.self, forKey: .enableAudioFeedback)) ?? d.enableAudioFeedback
+        polishOnStop = (try? c.decodeIfPresent(Bool.self, forKey: .polishOnStop)) ?? true
         let rawDuration = (try? c.decode(Int.self, forKey: .maxRecordingDuration)) ?? d.maxRecordingDuration
         maxRecordingDuration = min(max(rawDuration, Configuration.minRecordingDuration), Configuration.maxRecordingDurationCap)
         systemPrompt = (try? c.decode(String.self, forKey: .systemPrompt)) ?? d.systemPrompt
@@ -500,6 +502,7 @@ extension Configuration {
         case triggerKey
         case interactionMode
         case enableAudioFeedback
+        case polishOnStop
         case maxRecordingDuration
         case systemPrompt
         case microphoneDeviceID
@@ -529,6 +532,7 @@ extension Configuration {
         try container.encode(triggerKey, forKey: .triggerKey)
         try container.encode(interactionMode, forKey: .interactionMode)
         try container.encode(enableAudioFeedback, forKey: .enableAudioFeedback)
+        try container.encode(polishOnStop, forKey: .polishOnStop)
         try container.encode(maxRecordingDuration, forKey: .maxRecordingDuration)
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(microphoneDeviceID, forKey: .microphoneDeviceID)
