@@ -31,6 +31,12 @@ final class AudioRecorder: @unchecked Sendable {
     private var _isRecording = false
     private var _isStopping = false
 
+    /// Session owner for the current engine. A cancelled stage may still unwind
+    /// after a new session starts; owner checks keep that cleanup from stopping
+    /// or clearing the new session's capture.
+    private let ownerLock = OSAllocatedUnfairLock<UInt64?>(initialState: nil)
+    private let lifecycleLock = OSAllocatedUnfairLock()
+
     var isRecording: Bool {
         stateLock.withLock { _isRecording }
     }
@@ -80,10 +86,20 @@ final class AudioRecorder: @unchecked Sendable {
         return granted
     }
 
-    nonisolated func startRecording(deviceID: String? = nil) async throws -> RecordingOutput {
+    nonisolated func startRecording(deviceID: String? = nil, ownerID: UInt64 = 0) async throws -> RecordingOutput {
+        ownerLock.withLock { $0 = ownerID }
         guard await requestPermission() else {
+            releaseOwner(ownerID)
             throw AudioRecorderError.permissionDenied
         }
+        return try lifecycleLock.withLock {
+            try startEngine(deviceID: deviceID, ownerID: ownerID)
+        }
+    }
+
+    private func startEngine(deviceID: String?, ownerID: UInt64) throws -> RecordingOutput {
+        try Task.checkCancellation()
+        guard isOwner(ownerID) else { throw CancellationError() }
 
         // Fresh visualizer state per session. Relies on start/stop being serial (the same
         // assumption the engine reuse makes): after this, only the audio tap touches the
@@ -91,6 +107,7 @@ final class AudioRecorder: @unchecked Sendable {
         spectrumAnalyzer.reset()
 
         let freshEngine = AVAudioEngine()
+        guard isOwner(ownerID) else { throw CancellationError() }
         self.engine = freshEngine
 
         // Route to specific device if requested
@@ -163,12 +180,19 @@ final class AudioRecorder: @unchecked Sendable {
             // We may have already switched the system default device above; this throw
             // skips stopRecording, so restore here or the switch leaks.
             restoreOriginalDeviceIfNeeded()
+            releaseOwner(ownerID)
             throw AudioRecorderError.formatCreationFailed
         }
 
         guard let converter = AVAudioConverter(from: inputFormat, to: format) else {
             restoreOriginalDeviceIfNeeded()
+            releaseOwner(ownerID)
             throw AudioRecorderError.formatCreationFailed
+        }
+
+        guard isOwner(ownerID) else {
+            restoreOriginalDeviceIfNeeded()
+            throw CancellationError()
         }
 
         stateLock.withLock {
@@ -185,6 +209,7 @@ final class AudioRecorder: @unchecked Sendable {
         }
         heartbeatTimer.schedule(withTimeInterval: heartbeatInterval, repeats: true) { [weak self] in
             guard let self = self else { return }
+            guard self.isOwner(ownerID) else { return }
             guard self.isRecording && !self.isStopping else { return }
             let (currentCount, lastCount, lastTimestamp) = self.heartbeatLock.withLock { state in
                 (state.tapCallCount, state.lastTapCallCount, state.lastTapTimestamp)
@@ -202,16 +227,22 @@ final class AudioRecorder: @unchecked Sendable {
                 // Notify first (sets the freeze flag), then end the spectrum stream so
                 // RecordingStage's `for await` returns instead of suspending forever.
                 // finish() is idempotent, so a later stopRecording() is safe.
+                guard self.isOwner(ownerID) else { return }
                 self.onRecordingFrozen?()
                 self.spectrumContinuation?.finish()
             }
         }
 
         let spectrumStream = AsyncStream<[Float]> { continuation in
+            guard self.isOwner(ownerID) else {
+                continuation.finish()
+                return
+            }
             self.spectrumContinuation = continuation
 
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
                 guard let self = self else { return }
+                guard self.isOwner(ownerID) else { return }
                 guard self.isRecording || self.isStopping else { return }
 
                 self.heartbeatLock.withLock { $0.tapCallCount += 1 }
@@ -233,6 +264,10 @@ final class AudioRecorder: @unchecked Sendable {
                 }
 
                 // Forward to streaming recognizer (AppleSpeech preview)
+                guard self.isOwner(ownerID) else { return }
+                guard error == nil,
+                      Self.isValidPCM(frameCount: Int(convertedBuffer.frameLength),
+                                      hasFloatChannel: convertedBuffer.floatChannelData != nil) else { return }
                 self.onAudioBuffer?(convertedBuffer)
 
                 // Accumulate raw samples for batch ASR
@@ -248,7 +283,9 @@ final class AudioRecorder: @unchecked Sendable {
 
                     // Yield the frequency spectrum for the visualizer.
                     let spectrum = self.spectrumAnalyzer.process(samplesArray)
-                    self.spectrumContinuation?.yield(spectrum)
+                    if self.isOwner(ownerID) {
+                        self.spectrumContinuation?.yield(spectrum)
+                    }
                 }
             }
 
@@ -271,8 +308,21 @@ final class AudioRecorder: @unchecked Sendable {
     }
 
     nonisolated func stopRecording() {
+        guard let ownerID = ownerLock.withLock({ $0 }) else { return }
+        stopRecording(ownerID: ownerID)
+    }
+
+    nonisolated func stopRecording(ownerID: UInt64) {
+        lifecycleLock.withLock { stopEngine(ownerID: ownerID) }
+    }
+
+    private func stopEngine(ownerID: UInt64) {
+        guard isOwner(ownerID) else {
+            AppLogger.log("[AudioRecorder] Ignoring stop from stale owner \(ownerID)")
+            return
+        }
         let tapCount = heartbeatLock.withLock { $0.tapCallCount }
-        AppLogger.log("[AudioRecorder] stopRecording called, tapCallCount=\(tapCount)")
+        AppLogger.log("[AudioRecorder] stopRecording(owner=\(ownerID)) called, tapCallCount=\(tapCount)")
 
         let wasRecording = stateLock.withLock {
             let was = _isRecording || _isStopping
@@ -298,6 +348,8 @@ final class AudioRecorder: @unchecked Sendable {
         engine?.stop()
         engine?.inputNode.removeTap(onBus: 0)
         engine = nil
+        onAudioBuffer = nil
+        onRecordingFrozen = nil
 
         // Restore original default input device if we changed it
         restoreOriginalDeviceIfNeeded()
@@ -305,6 +357,34 @@ final class AudioRecorder: @unchecked Sendable {
         stateLock.withLock {
             _isStopping = false
         }
+    }
+
+    nonisolated private func isOwner(_ ownerID: UInt64) -> Bool {
+        ownerLock.withLock { Self.shouldAcceptOwner(activeOwnerID: $0, eventOwnerID: ownerID) }
+    }
+
+    nonisolated func owns(_ ownerID: UInt64) -> Bool {
+        isOwner(ownerID)
+    }
+
+    nonisolated func clearCallbacks(ownerID: UInt64) {
+        guard isOwner(ownerID) else { return }
+        onAudioBuffer = nil
+        onRecordingFrozen = nil
+    }
+
+    nonisolated private func releaseOwner(_ ownerID: UInt64) {
+        ownerLock.withLock {
+            if $0 == ownerID { $0 = nil }
+        }
+    }
+
+    nonisolated static func shouldAcceptOwner(activeOwnerID: UInt64?, eventOwnerID: UInt64) -> Bool {
+        activeOwnerID == eventOwnerID
+    }
+
+    nonisolated static func isValidPCM(frameCount: Int, hasFloatChannel: Bool) -> Bool {
+        frameCount > 0 && hasFloatChannel
     }
 
     // MARK: - Default input device restore (crash safety)
@@ -369,8 +449,11 @@ final class AudioRecorder: @unchecked Sendable {
     }
 
     /// Take accumulated raw Float32 samples and clear the buffer.
-    nonisolated func takeAccumulatedSamples() -> [Float] {
-        sampleLock.withLock {
+    nonisolated func takeAccumulatedSamples(ownerID: UInt64? = nil) -> [Float] {
+        if let ownerID, !isOwner(ownerID) {
+            return []
+        }
+        return sampleLock.withLock {
             let samples = rawSamples
             rawSamples.removeAll(keepingCapacity: false)
             return samples

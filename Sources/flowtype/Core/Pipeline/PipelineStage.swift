@@ -68,7 +68,10 @@ protocol PipelineStage: Sendable {
 extension PipelineStage {
     /// Runs a stage only while its session still owns the pipeline. A cancellation
     /// that races with a stage's async work is converted into `.complete`, which
-    /// lets the controller finish quietly without advancing a stale result.
+    /// lets the controller finish quietly without advancing a stale result. A
+    /// stage still owns its external side effects and must check cancellation
+    /// immediately before each such effect (for example, a provider append or
+    /// delivery attempt).
     func executeIfOwned(payload: StagePayload, context: SessionContext) async -> StageResult {
         let cancelledBefore = await MainActor.run { context.isCancelled }
         guard !cancelledBefore else { return .complete }

@@ -344,8 +344,24 @@ enum SelfTest {
                 "session: cancelled session event is rejected")
         r.check(!SessionController.shouldAcceptEvent(activeSessionID: 0, eventSessionID: 7, isCancelled: false),
                 "session: stop invalidates ownership before late result")
+        r.check(!SessionController.shouldAcceptTimerTick(activeSessionID: 7, tickSessionID: 6,
+                                                         isCancelled: false, isRecording: true),
+                "session: queued timer tick from old session is rejected")
+        r.check(!SessionController.shouldAcceptTimerTick(activeSessionID: 7, tickSessionID: 7,
+                                                         isCancelled: true, isRecording: true),
+                "session: queued timer tick after cancellation is rejected")
+        r.check(AudioRecorder.shouldAcceptOwner(activeOwnerID: 7, eventOwnerID: 7),
+                "audio: current recorder owner is accepted")
+        r.check(!AudioRecorder.shouldAcceptOwner(activeOwnerID: 8, eventOwnerID: 7),
+                "audio: stale recorder owner is rejected")
+        r.check(AudioRecorder.isValidPCM(frameCount: 1, hasFloatChannel: true),
+                "audio: even first one-frame PCM buffer establishes readiness")
+        r.check(!AudioRecorder.isValidPCM(frameCount: 0, hasFloatChannel: true),
+                "audio: empty callback cannot establish readiness")
+        r.check(!AudioRecorder.isValidPCM(frameCount: 1, hasFloatChannel: false),
+                "audio: unusable PCM callback cannot establish readiness")
 
-        let contextChecks: (initial: Bool, emittedOnce: Bool, cancelled: Bool) = MainActor.assumeIsolated {
+        let contextChecks: (initial: Bool, emittedOnce: Bool, cancelled: Bool, sideEffects: Int) = MainActor.assumeIsolated {
             let context = SessionContext(sessionID: 8)
             var readinessEvents = 0
             let subscription = context.readinessPublisher.sink { _ in readinessEvents += 1 }
@@ -353,11 +369,14 @@ enum SelfTest {
             context.markReady()
             context.markReady()
             let emittedOnce = context.isReady && readinessEvents == 1
+            var sideEffects = 0
+            context.performIfActive { sideEffects += 1 }
             context.cancel()
+            context.performIfActive { sideEffects += 1 }
             context.markReady()
             let cancelled = context.isCancelled && readinessEvents == 1
             subscription.cancel()
-            return (initial, emittedOnce, cancelled)
+            return (initial, emittedOnce, cancelled, sideEffects)
         }
         r.check(contextChecks.initial,
                 "session: fresh context is neither ready nor cancelled")
@@ -365,6 +384,8 @@ enum SelfTest {
                 "session: readiness emits once after first valid buffer")
         r.check(contextChecks.cancelled,
                 "session: cancellation blocks late readiness events")
+        r.eq(contextChecks.sideEffects, 1,
+             "session: cancelled audio callback cannot forward another buffer")
     }
 
     // MARK: - B1: validatedAPIURL must preserve the base path (e.g. /v1)

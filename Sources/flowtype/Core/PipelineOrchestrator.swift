@@ -160,13 +160,17 @@ final class SessionController: ObservableObject {
                                              isCancelled: ctx.isCancelled),
                       ctx.isReady else { return }
                 self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx)
-                self.startRecordingTimer()
+                self.startRecordingTimer(sessionID: newID, context: ctx)
             }
 
         // Subscribe to real-time spectrum publisher (avoids 1Hz timer polling)
         spectrumCancellable = context.spectrumPublisher
             .sink { [weak self] spec in
-                self?.spectrum = spec
+                guard let self,
+                      Self.shouldAcceptEvent(activeSessionID: self.activeSessionID,
+                                             eventSessionID: newID,
+                                             isCancelled: context.isCancelled) else { return }
+                self.spectrum = spec
             }
         // 录音中不再向 UI 推送预览文字（预览仅作 ASR 失败时的内部兜底）。
 
@@ -430,12 +434,17 @@ final class SessionController: ObservableObject {
 
     // MARK: - Timer
 
-    private func startRecordingTimer() {
+    private func startRecordingTimer(sessionID: UInt64, context: SessionContext) {
         elapsedSeconds = 0
         let maxDuration = ConfigurationStore.shared.current.maxRecordingDuration
         recordingTimer.schedule(withTimeInterval: 1.0, repeats: true) { [weak self] in
             Task { @MainActor [weak self] in
-                guard let self, self.isRecording else { return }
+                guard let self,
+                      Self.shouldAcceptTimerTick(activeSessionID: self.activeSessionID,
+                                                 tickSessionID: sessionID,
+                                                 isCancelled: context.isCancelled,
+                                                 isRecording: self.isRecording),
+                      self.currentContext === context else { return }
                 self.elapsedSeconds += 1
                 self.sessionState = .recording(elapsedSeconds: self.elapsedSeconds)
 
@@ -624,6 +633,15 @@ extension SessionController {
                                                eventSessionID: UInt64,
                                                isCancelled: Bool) -> Bool {
         activeSessionID != 0 && activeSessionID == eventSessionID && !isCancelled
+    }
+
+    nonisolated static func shouldAcceptTimerTick(activeSessionID: UInt64,
+                                                   tickSessionID: UInt64,
+                                                   isCancelled: Bool,
+                                                   isRecording: Bool) -> Bool {
+        shouldAcceptEvent(activeSessionID: activeSessionID,
+                          eventSessionID: tickSessionID,
+                          isCancelled: isCancelled) && isRecording
     }
 
     enum ErrorAction: Equatable, Hashable {

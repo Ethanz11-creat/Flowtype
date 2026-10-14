@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import os
 
 // MARK: - SessionContext
 
@@ -52,6 +53,25 @@ final class SessionContext {
     /// Cancellation is owned by the controller. Stages and callbacks must check it
     /// before publishing state or advancing the pipeline.
     private(set) var isCancelled = false
+    private let cancellationLock = OSAllocatedUnfairLock<Bool>(initialState: false)
+
+    /// Synchronous cancellation snapshot for audio callbacks, which cannot await
+    /// the main actor before forwarding a PCM buffer.
+    nonisolated var isCancellationRequested: Bool {
+        cancellationLock.withLock { $0 }
+    }
+
+    /// Performs a short synchronous effect only while the session is active.
+    /// Cancellation and an audio append serialize on this gate; work queued
+    /// after cancellation cannot forward a buffer to the preview provider.
+    @discardableResult
+    nonisolated func performIfActive(_ action: () -> Void) -> Bool {
+        cancellationLock.withLockUnchecked { cancelled in
+            guard !cancelled else { return false }
+            action()
+            return true
+        }
+    }
 
     /// Raw transcript from ASR before any post-processing.
     var rawTranscript: String = ""
@@ -118,5 +138,6 @@ final class SessionContext {
     /// Invalidates all future stage results and readiness/state callbacks.
     func cancel() {
         isCancelled = true
+        cancellationLock.withLock { $0 = true }
     }
 }
