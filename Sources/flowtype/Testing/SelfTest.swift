@@ -313,6 +313,7 @@ enum SelfTest {
         testPathChangeDetection(r) // network switch must invalidate the cached probe sample
         testLinkSampleInvalidation(r) // which samples die on a link change (probe + stale EWMA)
         testAgedLatencySample(r)   // EWMA TTL: stale fast sample re-decided by the probe
+        testRoutingInputsWiring(r) // production wiring: snapshot → aging → decision
         testProbeGating(r)         // when the probe is allowed to spend a handshake at all
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
@@ -1404,6 +1405,58 @@ enum SelfTest {
         // 边界：恰好到期视为过期（与 sampleIsFresh 的 < 语义一致）。
         r.eq(agedLatencySample(1200, sampledAt: now.addingTimeInterval(-ttl), now: now, ttl: ttl), 0,
              "ewma-ttl: exactly at ttl → stale")
+    }
+
+    // MARK: - Production wiring: snapshot → aging → decision (pins selectChain's real path)
+
+    static func testRoutingInputsWiring(_ r: Reporter) {
+        let now = Date()
+
+        // 陈旧"快"EWMA + 新鲜慢探测 → 走本地。
+        // 这钉住的是 ASRRouter.selectChain 实际走的组装函数，而不是测试里自制的合成。
+        var snap = RouterHealthSnapshot()
+        snap.cloudLatencyEWMA = 1200
+        snap.cloudLatencySampledAt = now.addingTimeInterval(-(ASRRouterProbeConfig.latencyTtl + 60))
+        snap.probeLatencyMs = 900
+        snap.probeSampledAt = now
+        let wired = routingInputs(from: snap, policy: .auto,
+                                  localAvailable: true, cloudAvailable: true, now: now)
+        r.eq(wired.cloudLatencyEWMA, 0, "wiring: stale fast EWMA aged to unknown")
+        r.eq(selectASRChain(wired), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "wiring: stale fast EWMA + slow probe → local-first")
+
+        // 陈旧的探测值不得当"当前链路"用（休眠/唤醒后定时器不触发、无唤醒重探）。
+        var staleProbe = RouterHealthSnapshot()
+        staleProbe.probeLatencyMs = 200
+        staleProbe.probeSampledAt = now.addingTimeInterval(-(ASRRouterProbeConfig.ttl + 60))
+        let staleProbeInputs = routingInputs(from: staleProbe, policy: .auto,
+                                            localAvailable: true, cloudAvailable: true, now: now)
+        r.eq(staleProbeInputs.cloudProbeMs, nil, "wiring: stale probe value → unknown")
+        r.eq(selectASRChain(staleProbeInputs), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
+             "wiring: stale probe must not decide the chain")
+
+        // 干净启动：无任何样本 → 维持既有"未知视为健康"。
+        let empty = routingInputs(from: RouterHealthSnapshot(), policy: .auto,
+                                  localAvailable: true, cloudAvailable: true, now: now)
+        r.eq(selectASRChain(empty), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
+             "wiring: no samples at all → unchanged healthy default")
+
+        // 负证据在过期后仍保留（保守不需要新鲜证据）。
+        var staleFailure = RouterHealthSnapshot()
+        staleFailure.probeFailed = true
+        staleFailure.probeSampledAt = now.addingTimeInterval(-(ASRRouterProbeConfig.ttl + 60))
+        let staleFailureInputs = routingInputs(from: staleFailure, policy: .auto,
+                                              localAvailable: true, cloudAvailable: true, now: now)
+        r.eq(selectASRChain(staleFailureInputs), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "wiring: stale failure evidence still blocks cloud")
+
+        // 新鲜探测值照常透传。
+        var fresh = RouterHealthSnapshot()
+        fresh.probeLatencyMs = 200
+        fresh.probeSampledAt = now
+        let freshInputs = routingInputs(from: fresh, policy: .auto,
+                                        localAvailable: true, cloudAvailable: true, now: now)
+        r.eq(freshInputs.cloudProbeMs, 200, "wiring: fresh probe value passes through")
     }
 
     // MARK: - Foreground context assembly (pure)

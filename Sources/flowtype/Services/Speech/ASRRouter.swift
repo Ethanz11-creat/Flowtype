@@ -87,6 +87,37 @@ enum ASRRouterProbeConfig {
     static let latencyTtl: TimeInterval = 300
 }
 
+/// 生产接线的**唯一**入口：健康快照 + 可用性 + 策略 → 决策输入。
+///
+/// 抽成纯函数的目的很具体：`ASRRouter.selectChain()` 依赖单例与 MainActor 配置、无法单测，
+/// 若把"快照 → 老化 → 决策"的组装留在它里面，接线就能被静默回退而自测仍然全绿
+/// （曾经的探测失效 bug 正是这样藏住的）。这里让所有样本时效判定集中在一处并被测试钉住。
+func routingInputs(from snapshot: RouterHealthSnapshot,
+                   policy: ASRRoutingPolicy,
+                   localAvailable: Bool,
+                   cloudAvailable: Bool,
+                   now: Date) -> ASRRoutingInputs {
+    // 探测值同样要论新鲜度：休眠/唤醒后定时器不触发、也没有唤醒重探，
+    // 决策若采用数小时前的握手值，就复现了"陈旧样本当当前样本"的同一类 bug。
+    // 与 EWMA 采用同一非对称策略：陈旧的"快"值降级为未知，陈旧的"失败"证据保留（保守）。
+    let probeIsCurrent = sampleIsFresh(sampledAt: snapshot.probeSampledAt,
+                                       now: now,
+                                       ttl: ASRRouterProbeConfig.ttl)
+    return ASRRoutingInputs(
+        policy: policy,
+        localAvailable: localAvailable,
+        cloudAvailable: cloudAvailable,
+        networkReachable: snapshot.networkReachable,
+        cloudLatencyEWMA: agedLatencySample(snapshot.cloudLatencyEWMA,
+                                            sampledAt: snapshot.cloudLatencySampledAt,
+                                            now: now,
+                                            ttl: ASRRouterProbeConfig.latencyTtl),
+        cloudConsecutiveFailures: snapshot.cloudConsecutiveFailures,
+        cloudProbeMs: probeIsCurrent ? snapshot.probeLatencyMs : nil,
+        cloudProbeFailed: snapshot.probeFailed
+    )
+}
+
 /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
 final class ASRRouter: @unchecked Sendable {
     static let shared = ASRRouter()
@@ -208,20 +239,12 @@ final class ASRRouter: @unchecked Sendable {
         let cloudAvailable = await cloud.isAvailable
         let snap = snapshot()
 
-        let inputs = ASRRoutingInputs(
-            policy: cfg.asrRoutingPolicy,
-            localAvailable: localAvailable,
-            cloudAvailable: cloudAvailable,
-            networkReachable: snap.networkReachable,
-            // 陈旧的"快"样本降级为未知，交给探测按当前链路重判；陈旧的"慢"样本依然否决云端。
-            cloudLatencyEWMA: agedLatencySample(snap.cloudLatencyEWMA,
-                                                sampledAt: snap.cloudLatencySampledAt,
-                                                now: Date(),
-                                                ttl: ASRRouterProbeConfig.latencyTtl),
-            cloudConsecutiveFailures: snap.cloudConsecutiveFailures,
-            cloudProbeMs: snap.probeLatencyMs,
-            cloudProbeFailed: snap.probeFailed
-        )
+        // 组装逻辑全部在纯函数 `routingInputs` 里（被自测钉住），此处不得再自行拼装样本。
+        let inputs = routingInputs(from: snap,
+                                   policy: cfg.asrRoutingPolicy,
+                                   localAvailable: localAvailable,
+                                   cloudAvailable: cloudAvailable,
+                                   now: Date())
         return selectASRChain(inputs).compactMap { ASRProviderRegistry.shared.provider(forID: $0) }
     }
 }
