@@ -2339,6 +2339,46 @@ enum SelfTest {
             r.eq(request?.url, configuration.endpoint, "adapter: immutable endpoint snapshot")
         } catch { r.check(false, "adapter: handshake/drain/final test: \(error)") }
 
+        // RecordingStage seals synchronously, then ASRStage invokes finish
+        // later. Cover both an idle pump and a final binary send still in flight.
+        for sealDuringSend in [false, true] {
+            let label = sealDuringSend ? "in-flight seal" : "already-drained seal"
+            let fake = FakeRealtimeTransport(suspendedAction: sealDuringSend ? "binary" : nil)
+            let adapter = session(fake, final: 0.3)
+            do {
+                let start = Task { try await adapter.start() }
+                try await wait { await fake.actions().contains("run-task") }
+                await fake.feed(event("task-started"))
+                try await start.value
+                try adapter.ingress.enqueue(samples: [-0.5, 0.5])
+                try await wait { await fake.binaryFrames().count == 1 }
+                if !sealDuringSend { try await wait { adapter.ingress.pendingSampleCount == 0 } }
+                adapter.ingress.seal()
+                if sealDuringSend {
+                    r.eq(adapter.ingress.pendingSampleCount, 2, "adapter: delayed finish keeps final send in flight")
+                    await fake.releaseSend()
+                }
+                try await wait { await adapter.captureDrainCompleted }
+                r.check(adapter.ingress.isDrained, "adapter: \(label) pump has observed sealed drain before finish")
+                r.eq(await fake.actions(), ["run-task"], "adapter: \(label) does not finish before lifecycle request")
+                let finish = Task { try await adapter.finish() }
+                let concurrentFinish = Task { try await adapter.finish() }
+                try await wait { await fake.actions().contains("finish-task") }
+                await fake.feed(event("result-generated", sentence: #"{"begin_time":0,"end_time":null,"text":"delayed final","heartbeat":false,"sentence_end":true}"#))
+                await fake.feed(event("task-finished"))
+                let result = try await finish.value
+                r.eq(result.text, "delayed final", "adapter: \(label) delayed finish succeeds")
+                r.eq(try await concurrentFinish.value, result, "adapter: \(label) concurrent finish shares winner")
+                r.eq(try await adapter.finish(), result, "adapter: \(label) repeated finish shares winner")
+                r.eq(await fake.actions(), ["run-task", "finish-task"], "adapter: \(label) sends finish exactly once")
+                r.eq(await fake.binaryFrames(), [encodePCM16LE([-0.5, 0.5])], "adapter: \(label) never replays binary")
+                r.eq(await fake.closeCount, 1, "adapter: \(label) terminal success closes once")
+            } catch {
+                await adapter.cancel()
+                r.check(false, "adapter: \(label) delayed finish regression: \(error)")
+            }
+        }
+
         for mode in ["connect-timeout", "start-timeout", "timeout-before-waiter", "cancel-before-start", "caller-cancel-before-start", "caller-cancel-start", "cancel-handshake", "malformed", "missing-sentence", "failed", "close", "final-timeout", "caller-cancel-final", "overflow", "cancel-drain", "sync-overflow-drain", "sync-overflow-handshake", "failed-drain", "early-finished", "empty"] {
             let fake = FakeRealtimeTransport(suspendedAction: mode == "connect-timeout" ? "connect" : ["timeout-before-waiter", "caller-cancel-start"].contains(mode) ? "run-task" : (["cancel-drain", "sync-overflow-drain", "failed-drain"].contains(mode) ? "binary" : nil))
             let adapter = session(fake, start: 0.08, final: 0.08, limit: 2)

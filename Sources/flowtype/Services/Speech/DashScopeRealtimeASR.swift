@@ -36,6 +36,9 @@ actor DashScopeRealtimeASR: RealtimeASRSession {
     private var failureMonitor: Task<Void, Never>?
     private var receiver: Task<Void, Never>?
     private var sender: Task<Void, Never>?
+    /// Capture wakeups have ended after their final drain. Lifecycle finish may
+    /// still arrive later from ASRStage after RecordingStage sealed capture.
+    private(set) var captureDrainCompleted = false
     private var audioWaiters: [CheckedContinuation<Void, Error>] = []
     private var startTime: ContinuousClock.Instant?
 
@@ -101,6 +104,13 @@ actor DashScopeRealtimeASR: RealtimeASRSession {
         finishRequested = true
         ingress.seal()
         do {
+            // Capture may already have sealed and drained before the ASR stage
+            // gets scheduled. In that ordering the wakeup stream has ended;
+            // perform the single finish send from this actor instead of waiting
+            // on a pump that can no longer observe a wakeup.
+            if captureDrainCompleted {
+                try await sendFinishIfNeeded()
+            }
             return try await withAsyncDeadline(seconds: finalTimeout) { [self] in
                 try await self.completed.value()
             }
@@ -195,6 +205,7 @@ actor DashScopeRealtimeASR: RealtimeASRSession {
             }
             // Stream completion can precede observation (seal/overflow/cancel).
             try await drainAudio()
+            captureDrainCompleted = true
         } catch { await terminate(.failure(error)) }
     }
 
@@ -211,10 +222,13 @@ actor DashScopeRealtimeASR: RealtimeASRSession {
                 waiters.forEach { $0.resume() }
             }
         }
-        if finishRequested, ingress.isDrained, !finishSent {
-            finishSent = true
-            try await transport.sendText(ParaformerClientMessage.finishTask(taskID: taskID).encodedText())
-        }
+        try await sendFinishIfNeeded()
+    }
+
+    private func sendFinishIfNeeded() async throws {
+        guard finishRequested, ingress.isDrained, !finishSent else { return }
+        finishSent = true
+        try await transport.sendText(ParaformerClientMessage.finishTask(taskID: taskID).encodedText())
     }
 
     private func checkFailure() throws {
