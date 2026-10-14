@@ -311,6 +311,7 @@ enum SelfTest {
         testRouterEWMA(r)          // ASR router health: EWMA update math
         testCloudProbe(r)          // cloud host probe: endpoint parse + threshold isolation + cold-start chain
         testPathChangeDetection(r) // network switch must invalidate the cached probe sample
+        testProbeGating(r)         // when the probe is allowed to spend a handshake at all
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
         testSessionMetrics(r)      // percentile + metrics report
@@ -1322,6 +1323,27 @@ enum SelfTest {
                 "path: became expensive → change")
         r.check(pathChanged(previous: sig(), current: sig(constrained: true)),
                 "path: became constrained → change")
+    }
+
+    // MARK: - Probe gating (when to spend a handshake at all)
+
+    static func testProbeGating(_ r: Reporter) {
+        func sig(satisfied: Bool = true, expensive: Bool = false, constrained: Bool = false) -> PathSignature {
+            PathSignature(satisfied: satisfied, isExpensive: expensive,
+                          isConstrained: constrained, interface: "wifi")
+        }
+        // 采样 TTL 必须严格短于探测周期，否则每隔一拍才真正探测（有效周期翻倍）。
+        r.check(ASRRouterProbeConfig.ttl < ASRRouterProbeConfig.interval,
+                "probe-gate: ttl strictly shorter than interval")
+        r.check(!shouldProbeCloud(path: sig(), policy: .localOnly), "probe-gate: localOnly → never probe")
+        r.check(!shouldProbeCloud(path: sig(), policy: .cloudOnly), "probe-gate: cloudOnly → never probe")
+        r.check(shouldProbeCloud(path: sig(), policy: .auto), "probe-gate: auto + normal link → probe")
+        r.check(!shouldProbeCloud(path: sig(satisfied: false), policy: .auto), "probe-gate: offline → no probe")
+        r.check(!shouldProbeCloud(path: sig(expensive: true), policy: .auto),
+                "probe-gate: metered link → no probe (don't burn cellular data)")
+        r.check(!shouldProbeCloud(path: sig(constrained: true), policy: .auto),
+                "probe-gate: low-data mode → no probe")
+        r.check(shouldProbeCloud(path: nil, policy: .auto), "probe-gate: no observation yet → probe")
     }
 
     // MARK: - Foreground context assembly (pure)

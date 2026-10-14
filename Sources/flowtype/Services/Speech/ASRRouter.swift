@@ -40,11 +40,24 @@ func pathChanged(previous: PathSignature?, current: PathSignature) -> Bool {
     return previous != current
 }
 
+/// 是否应当做握手探测。仅 `auto` 策略、链路可达、且**非计费/受限**链路时探测：
+/// 计费热点上照烧流量最不划算，而热点恰是本该直接走本地的场景。
+/// 尚未收到任何观测（nil）时不阻塞探测，保持既有行为。
+func shouldProbeCloud(path: PathSignature?, policy: ASRRoutingPolicy) -> Bool {
+    guard policy == .auto else { return false }
+    guard let path else { return true }
+    guard path.satisfied else { return false }
+    return !(path.isExpensive || path.isConstrained)
+}
+
 /// 云端主机探测的周期/超时/首启延迟（秒）。
 enum ASRRouterProbeConfig {
     static let interval: TimeInterval = 30
     static let timeout: TimeInterval = 2.0
     static let firstDelay: TimeInterval = 1
+    /// 必须**严格小于** `interval`：采样时刻晚于 tick，若两者相等，下一个 tick 会因
+    /// "未过期"被跳过，实际退化成每两拍才探测一次（有效周期翻倍到 ~60s）。
+    static let ttl: TimeInterval = interval * 0.6
 }
 
 /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
@@ -114,6 +127,8 @@ final class ASRRouter: @unchecked Sendable {
     }
 
     /// 启动周期性探测（幂等）。app 启动时调用一次即可。
+    /// `@MainActor`：`probeTimer` 的 check-and-set 因此串行化（唯一调用点本就在 MainActor 上）。
+    @MainActor
     func startProbing() {
         guard probeTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: probeQueue)
@@ -130,12 +145,11 @@ final class ASRRouter: @unchecked Sendable {
     /// 按需刷新探测样本。仅 `auto` 策略 + 已配置云端 + 网络可达时执行。
     func refreshProbeIfNeeded(force: Bool = false) async {
         let cfg = await MainActor.run { ConfigurationStore.shared.current }
-        guard cfg.asrRoutingPolicy == .auto else { return }
         guard let effective = cfg.effectiveCloudASRConfig else { return }
         guard let endpoint = CloudProbe.probeEndpoint(fromBaseURL: effective.provider.baseURL) else { return }
         let snap = snapshot()
-        guard snap.networkReachable else { return }
-        if !force, probeIsFresh(sampledAt: snap.probeSampledAt, now: Date(), ttl: ASRRouterProbeConfig.interval) { return }
+        guard shouldProbeCloud(path: snap.pathSignature, policy: cfg.asrRoutingPolicy) else { return }
+        if !force, probeIsFresh(sampledAt: snap.probeSampledAt, now: Date(), ttl: ASRRouterProbeConfig.ttl) { return }
 
         let ms = await CloudProbe.measureLatency(host: endpoint.host,
                                                 port: endpoint.port,
