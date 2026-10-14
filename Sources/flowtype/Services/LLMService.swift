@@ -2,6 +2,7 @@ import Foundation
 
 enum LLMError: Error {
     case invalidResponse
+    case incompleteResponse
     case apiError(String)
     case streamDecodingError
     case networkError(Error)
@@ -11,6 +12,8 @@ enum LLMError: Error {
         switch self {
         case .invalidResponse:
             return "无效响应格式"
+        case .incompleteResponse:
+            return "响应未完整完成"
         case .apiError(let msg):
             if msg.contains("401") || msg.contains("403") {
                 return "API Key 无效或已过期"
@@ -400,17 +403,30 @@ actor LLMService {
 
                 var yieldedAny = false
                 var decodeFailures = 0
+                var explicitlyCompleted = false
                 for try await line in bytes.lines {
                     try Task.checkCancellation()
                     delivery.touch() // any inbound frame counts as liveness for the watchdog
                     switch parseSSELine(line, decodeFailures: &decodeFailures) {
                     case .content(let content):
                         if !content.isEmpty {
+                            guard !explicitlyCompleted else { throw LLMError.incompleteResponse }
+                            yieldedAny = true
+                            delivery.markYielded()
+                            continuation.yield(content)
+                        }
+                    case .completion(let content, let reason):
+                        // Only normal stop is supported as an explicit finish signal.
+                        // length/content_filter/tool_calls cannot be full polish output.
+                        guard reason == "stop", !explicitlyCompleted else { throw LLMError.incompleteResponse }
+                        explicitlyCompleted = true
+                        if !content.isEmpty {
                             yieldedAny = true
                             delivery.markYielded()
                             continuation.yield(content)
                         }
                     case .done:
+                        guard decodeFailures == 0 else { throw LLMError.streamDecodingError }
                         continuation.finish()
                         return
                     case .error(let message):
@@ -425,11 +441,10 @@ actor LLMService {
                 if decodeFailures > 0 {
                     AppLogger.log("[LLMService] SSE decode failures: \(decodeFailures), yieldedAny=\(yieldedAny)")
                 }
-                // A stream that produced no content but had undecodable frames is a real
-                // failure, not an empty success — surface it instead of finishing silently.
-                if !yieldedAny && decodeFailures > 0 {
-                    throw LLMError.streamDecodingError
-                }
+                // EOF alone is not a completion signal. Any undecodable frame may
+                // have contained lost output, even after earlier content was valid.
+                guard decodeFailures == 0 else { throw LLMError.streamDecodingError }
+                guard explicitlyCompleted else { throw LLMError.incompleteResponse }
                 continuation.finish()
             }
 
@@ -508,7 +523,8 @@ private struct StreamChunk: Codable {
         struct Delta: Codable {
             let content: String?
         }
-        let delta: Delta
+        let delta: Delta?
+        let finish_reason: String?
     }
     let choices: [Choice]
 }
@@ -524,6 +540,7 @@ private struct StreamErrorEnvelope: Codable {
 /// One classified Server-Sent-Event line from an OpenAI-compatible stream.
 enum SSEEvent: Equatable {
     case content(String)
+    case completion(content: String, reason: String)
     case done
     case error(String)
     case ignore
@@ -544,7 +561,15 @@ func parseSSELine(_ line: String, decodeFailures: inout Int) -> SSEEvent {
         return .error(message)
     }
     if let chunk = try? JSONDecoder().decode(StreamChunk.self, from: data) {
-        return .content(chunk.choices.first?.delta.content ?? "")
+        guard let choice = chunk.choices.first else { return .ignore } // usage-only frame
+        if let reason = choice.finish_reason {
+            return .completion(content: choice.delta?.content ?? "", reason: reason)
+        }
+        guard let delta = choice.delta else {
+            decodeFailures += 1
+            return .ignore
+        }
+        return .content(delta.content ?? "")
     }
     decodeFailures += 1
     return .ignore

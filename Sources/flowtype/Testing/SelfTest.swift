@@ -333,6 +333,7 @@ enum SelfTest {
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
         await testSessionRecoveryDelivery(r)
         await testRecoveryActions(r)
+        await testPolishStreamCompleteness(r)
         await testPolishStreamTermination(r)
         await testAsyncDeadline(r)
         await testPolishDelivery(r)
@@ -440,6 +441,61 @@ enum SelfTest {
         r.eq(SessionController.buildErrorActions(from: empty).map(\.displayName), [], "recovery: nonactionable error exposes no action buttons")
         let cancellation = ErrorRecoveryContext(failedStage: "ASR", error: CancellationError(), rawText: "stale", retryable: true)
         r.eq(SessionController.buildErrorActions(from: cancellation).map(\.displayName), [], "recovery: cancellation exposes no stale retry or copy")
+    }
+
+    private final class CompletingLLMProtocol: URLProtocol, @unchecked Sendable {
+        private static let content = "data: {\"choices\":[{\"delta\":{\"content\":\"整理完整结果。\"}}]}\n\n"
+        private static let malformed = "data: {broken json}\n\n"
+        private static let done = "data: [DONE]\n\n"
+        private static let stop = "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"
+        private static let length = "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n"
+        private static let fixtures: [String: String] = [
+            "partialEOF": content,
+            "malformedEOF": content + malformed,
+            "malformedDone": content + malformed + done,
+            "lengthDone": content + length + done,
+            "validDone": content + done,
+            "validStopEOF": content + stop
+        ]
+        override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "llm-completion.invalid" }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+        override func startLoading() {
+            let fixture = request.url!.pathComponents[1]
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/event-stream"])!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data(Self.fixtures[fixture]!.utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        override func stopLoading() {}
+    }
+
+    @MainActor
+    static func testPolishStreamCompleteness(_ r: Reporter) async {
+        let service = LLMService(makeSession: {
+            let networkConfig = URLSessionConfiguration.ephemeral
+            networkConfig.protocolClasses = [CompletingLLMProtocol.self]
+            return URLSession(configuration: networkConfig)
+        })
+        for (fixture, degraded) in [("partialEOF", true), ("malformedEOF", true), ("malformedDone", true),
+                                     ("lengthDone", true), ("validDone", false), ("validStopEOF", false)] {
+            var configured = Configuration()
+            configured.llmProviders = [LLMProvider(name: "Completion test", provider: "custom",
+                baseURL: "https://llm-completion.invalid/\(fixture)/v1", model: "test", isActive: true)]
+            configured.providerAPIKeys[configured.llmProviders[0].id.uuidString] = "test-key"
+            let config = configured
+            let stage = PolishStage(configuration: { config }, streamFactory: { text, config in
+                await service.polishText(text, config: config)
+            })
+            let context = SessionContext(sessionID: 330)
+            context.usePolish = true
+            let result = await stage.execute(payload: .processed("完整处理结果。", raw: "完整处理结果"), context: context)
+            if case .continue(.polished(let text, _)) = result {
+                r.eq(text, degraded ? "完整处理结果。" : "整理完整结果。", "SSE completeness: \(fixture) delivers only complete final text")
+            } else { r.check(false, "SSE completeness: \(fixture) continues with final text") }
+            r.eq(context.polishFailed, degraded, "SSE completeness: \(fixture) records degradation accurately")
+            r.eq(context.completionNotice, degraded ? "整理失败 · 已保留识别结果" : nil,
+                 "SSE completeness: \(fixture) records destination-neutral completion notice")
+        }
     }
 
     private final class HangingLLMProtocol: URLProtocol, @unchecked Sendable {

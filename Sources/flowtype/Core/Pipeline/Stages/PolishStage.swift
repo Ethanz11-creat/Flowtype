@@ -74,7 +74,7 @@ final class PolishStage: PipelineStage, @unchecked Sendable {
             await MainActor.run {
                 guard !context.isCancelled else { return }
                 context.polishFailed = true
-                context.completionNotice = error is AsyncDeadlineError ? "整理超时 · 已输入识别结果" : "整理失败 · 已输入识别结果"
+                context.completionNotice = error is AsyncDeadlineError ? "整理超时 · 已保留识别结果" : "整理失败 · 已保留识别结果"
                 context.polishMs = Int(Date().timeIntervalSince(start) * 1000)
             }
             AppLogger.log("[PolishStage#\(context.sessionID)] Degraded to complete processed text: \(error)")
