@@ -11,6 +11,8 @@ struct RouterHealthSnapshot: Sendable, Equatable {
     var probeSampledAt: Date? = nil
     /// 采样过但握手失败（与"从未采样"区分）。
     var probeFailed: Bool = false
+    /// 最近一次 NWPath 观测特征；用于判断链路是否变化（变化 ⇒ 作废探测样本）。
+    var pathSignature: PathSignature? = nil
 }
 
 /// 指数移动平均：`previous == 0` 表示未知，直接采用首个样本。
@@ -22,6 +24,20 @@ func updateLatencyEWMA(previous: Double, sample: Double, alpha: Double = 0.3) ->
 func probeIsFresh(sampledAt: Date?, now: Date, ttl: TimeInterval) -> Bool {
     guard let sampledAt else { return false }
     return now.timeIntervalSince(sampledAt) < ttl
+}
+
+/// 一次 NWPath 观测的可比对特征。链路特征变化 ⇒ 旧延迟/探测样本来自另一条链路，必须作废。
+struct PathSignature: Equatable, Sendable {
+    let satisfied: Bool
+    let isExpensive: Bool
+    let isConstrained: Bool
+    let interface: String?
+}
+
+/// 判定链路是否发生变化（首次观测不算变化）。纯函数，便于测试。
+func pathChanged(previous: PathSignature?, current: PathSignature) -> Bool {
+    guard let previous else { return false }
+    return previous != current
 }
 
 /// 云端主机探测的周期/超时/首启延迟（秒）。
@@ -44,9 +60,40 @@ final class ASRRouter: @unchecked Sendable {
 
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
-            self?.health.withLock { $0.networkReachable = (path.status == .satisfied) }
+            guard let self else { return }
+            let current = Self.signature(for: path)
+            let changed = self.health.withLock { state -> Bool in
+                let previous = state.pathSignature
+                state.networkReachable = current.satisfied
+                state.pathSignature = current
+                return pathChanged(previous: previous, current: current)
+            }
+            guard changed else { return }
+            // 链路换了一条（Wi-Fi ↔ 热点 ↔ VPN）：旧延迟与探测样本属于另一条链路，立即作废并重探，
+            // 否则切换后的首次听写会复用旧"快"样本，白等一整轮慢请求。
+            self.health.withLock {
+                $0.probeLatencyMs = nil
+                $0.probeSampledAt = nil
+                $0.probeFailed = false
+            }
+            AppLogger.log("[ASRRouter] network path changed (\(current.interface ?? "?")) → probe cache invalidated")
+            Task { await self.refreshProbeIfNeeded(force: true) }
         }
         monitor.start(queue: monitorQueue)
+    }
+
+    /// 把 `NWPath` 映射为可比对特征。`NWPath` 不可构造，故仅做映射，判定逻辑留给纯函数 `pathChanged`。
+    private static func signature(for path: NWPath) -> PathSignature {
+        let interface: String?
+        if path.usesInterfaceType(.wifi) { interface = "wifi" }
+        else if path.usesInterfaceType(.cellular) { interface = "cellular" }
+        else if path.usesInterfaceType(.wiredEthernet) { interface = "wired" }
+        else if path.usesInterfaceType(.loopback) { interface = "loopback" }
+        else { interface = "other" }
+        return PathSignature(satisfied: path.status == .satisfied,
+                             isExpensive: path.isExpensive,
+                             isConstrained: path.isConstrained,
+                             interface: interface)
     }
 
     func snapshot() -> RouterHealthSnapshot { health.withLock { $0 } }
@@ -96,6 +143,7 @@ final class ASRRouter: @unchecked Sendable {
         health.withLock {
             $0.probeLatencyMs = ms
             $0.probeSampledAt = Date()
+            $0.probeFailed = (ms == nil)   // "采了但失败" 与 "从未采样" 必须区分
         }
         let shown = ms.map { String(format: "%.0f", $0) } ?? "nil"
         AppLogger.log("[ASRRouter] cloud probe \(endpoint.host) → \(shown)ms")

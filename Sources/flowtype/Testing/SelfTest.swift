@@ -309,7 +309,8 @@ enum SelfTest {
         testFallbackReasonClassification(r) // provider failure → aggregatable fallback reason
         testASRCapabilityContract(r) // provider capability contract (router requiresNetwork gate)
         testRouterEWMA(r)          // ASR router health: EWMA update math
-        testCloudProbe(r)          // cloud host probe: endpoint parse + effective latency + cold-start chain
+        testCloudProbe(r)          // cloud host probe: endpoint parse + threshold isolation + cold-start chain
+        testPathChangeDetection(r) // network switch must invalidate the cached probe sample
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
         testSessionMetrics(r)      // percentile + metrics report
@@ -1301,6 +1302,26 @@ enum SelfTest {
              "probe: sampled but failed → negative signal → local-first")
         r.eq(selectASRChain(cold(probe: 900, ewma: 1200)), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
              "probe: real EWMA is ground truth → slow probe ignored once a real sample exists")
+    }
+
+    // MARK: - Network path change detection (probe cache must be invalidated on switch)
+
+    static func testPathChangeDetection(_ r: Reporter) {
+        func sig(satisfied: Bool = true, expensive: Bool = false, constrained: Bool = false,
+                 interface: String? = "wifi") -> PathSignature {
+            PathSignature(satisfied: satisfied, isExpensive: expensive,
+                          isConstrained: constrained, interface: interface)
+        }
+        r.check(!pathChanged(previous: nil, current: sig()), "path: first observation is not a change")
+        r.check(!pathChanged(previous: sig(), current: sig()), "path: identical observation → no change")
+        r.check(pathChanged(previous: sig(), current: sig(interface: "cellular")),
+                "path: interface switch → change (invalidate probe cache)")
+        r.check(pathChanged(previous: sig(), current: sig(satisfied: false)),
+                "path: reachability flip → change")
+        r.check(pathChanged(previous: sig(), current: sig(expensive: true)),
+                "path: became expensive → change")
+        r.check(pathChanged(previous: sig(), current: sig(constrained: true)),
+                "path: became constrained → change")
     }
 
     // MARK: - Foreground context assembly (pure)
