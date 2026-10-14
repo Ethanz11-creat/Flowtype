@@ -228,26 +228,62 @@ struct CloudASRModelPreset: Identifiable, Hashable {
         modelId: "TeleAI/TeleSpeechASR"
     )
 
+    static let paraformerRealtimeV2 = CloudASRModelPreset(
+        id: "paraformer-realtime-v2", name: "Paraformer Realtime v2", modelId: "paraformer-realtime-v2"
+    )
+
     static let siliconFlowModels: [CloudASRModelPreset] = [.senseVoiceSmall, .teleSpeechASR]
 }
 
 // MARK: - Cloud ASR Provider
 
-struct CloudASRProviderConfig: Codable, Equatable, Identifiable {
+/// Transport is explicit; existing profiles always remain batch HTTP.
+enum CloudASRProtocolKind: String, Codable, Sendable {
+    case openAICompatible
+    case dashScopeRealtime
+}
+
+struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     var name: String
     var provider: String
     var baseURL: String
     var model: String
     var isActive: Bool
+    var protocolKind: CloudASRProtocolKind
 
-    init(id: UUID = UUID(), name: String, provider: String, baseURL: String, model: String, isActive: Bool = false) {
+    init(id: UUID = UUID(), name: String, provider: String, baseURL: String, model: String,
+         isActive: Bool = false, protocolKind: CloudASRProtocolKind = .openAICompatible) {
         self.id = id
         self.name = name
         self.provider = provider
         self.baseURL = baseURL
         self.model = model
         self.isActive = isActive
+        self.protocolKind = protocolKind
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, provider, baseURL, model, isActive, protocolKind
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        provider = try c.decode(String.self, forKey: .provider)
+        baseURL = try c.decode(String.self, forKey: .baseURL)
+        model = try c.decode(String.self, forKey: .model)
+        isActive = try c.decode(Bool.self, forKey: .isActive)
+        protocolKind = try c.decodeIfPresent(CloudASRProtocolKind.self, forKey: .protocolKind) ?? .openAICompatible
+    }
+
+    static func defaultParaformer(id: UUID = UUID(), isActive: Bool = false) -> CloudASRProviderConfig {
+        CloudASRProviderConfig(
+            id: id, name: "阿里云 Paraformer", provider: "DashScope",
+            baseURL: "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+            model: CloudASRModelPreset.paraformerRealtimeV2.modelId, isActive: isActive, protocolKind: .dashScopeRealtime
+        )
     }
 
     static func defaultSiliconFlow(id: UUID = UUID(), isActive: Bool = true) -> CloudASRProviderConfig {

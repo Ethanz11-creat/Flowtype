@@ -304,6 +304,9 @@ enum SelfTest {
         testJSONMigration(r)       // JSONMigration: idempotent import + sttBackend tagging
         testPrivacyConfig(r)       // storeTranscriptText: round-trip + legacy default true
         testASRConfig(r)           // ASR engine config: round-trip + legacy default
+        testRealtimeASRContracts(r)
+        testRealtimeAudioIngress(r)
+        await testRealtimeIngressWakeups(r)
         testASRRouting(r)          // unified ASR routing: pure chain selection
         testRoutingKeyPrecedence(r) // legacy asrEngine wins when both routing keys present
         testProviderContextCompose(r) // ASRContext → provider prompt hint
@@ -1724,6 +1727,197 @@ enum SelfTest {
         r.eq(decoded?.cloudASRConfig.providers.count, 1, "asrcfg: legacy missing key → default SiliconFlow provider")
         r.eq(decoded?.cloudASRConfig.providers.first?.provider, "SiliconFlow", "asrcfg: default provider is SiliconFlow")
         r.eq(decoded?.cloudASRConfig.providers.first?.model, "", "asrcfg: default model is empty (user must select)")
+    }
+
+    // MARK: - Realtime ASR: offline wire/config/audio fixtures
+
+    static func testRealtimeASRContracts(_ r: Reporter) {
+        let taskID = "2bf83b9a-baeb-4fda-8d9a-123456789abc"
+        let legacy = Data(#"{"id":"2bf83b9a-baeb-4fda-8d9a-123456789abc","name":"old","provider":"SiliconFlow","baseURL":"https://api.siliconflow.cn/v1","model":"old-model","isActive":true}"#.utf8)
+        let old = try? JSONDecoder().decode(CloudASRProviderConfig.self, from: legacy)
+        r.eq(old?.protocolKind, .openAICompatible, "realtime: legacy provider remains HTTP")
+        r.eq(CloudASRProviderConfig.defaultSiliconFlow().protocolKind, .openAICompatible, "realtime: existing initializer defaults HTTP")
+        var provider = CloudASRProviderConfig.defaultParaformer()
+        r.eq(provider.protocolKind, .dashScopeRealtime, "realtime: Paraformer explicit protocol")
+        r.eq(provider.baseURL, "wss://dashscope.aliyuncs.com/api-ws/v1/inference", "realtime: official endpoint")
+        r.eq(provider.model, "paraformer-realtime-v2", "realtime: exact model")
+        let decoded = try? JSONDecoder().decode(CloudASRProviderConfig.self, from: JSONEncoder().encode(provider))
+        r.eq(decoded, provider, "realtime: protocol config round-trips")
+        var cfg = Configuration()
+        cfg.cloudASRConfig.providers = [provider]
+        cfg.providerAPIKeys[provider.id.uuidString] = "fake-llm-key"
+        r.eq(cfg.effectiveCloudASRConfig?.apiKey, "", "realtime: LLM key cannot supply ASR key")
+        cfg.cloudASRConfig.providerAPIKeys[provider.id.uuidString] = "fake-asr-key"
+        r.eq(cfg.effectiveCloudASRConfig?.apiKey, "fake-asr-key", "realtime: ASR key namespace preserved")
+        r.check((try? RealtimeASRConfiguration(provider: provider, apiKey: " ", language: nil)) == nil,
+                "realtime: missing key rejected locally")
+        let snapshot = try! RealtimeASRConfiguration(provider: provider, apiKey: "fake-asr-key", language: nil)
+        provider.model = "changed-later"
+        r.eq(snapshot.model, "paraformer-realtime-v2", "realtime: model is immutable snapshot")
+        r.eq(snapshot.apiKey, "fake-asr-key", "realtime: credentials are immutable snapshot")
+        provider.baseURL = "https://example.invalid"
+        r.check((try? RealtimeASRConfiguration(provider: provider, apiKey: "fake", language: nil)) == nil,
+                "realtime: non-WSS endpoint rejected locally")
+
+        let samples: [Float] = [-1, -0.5, 0, 0.5, 1, .nan, .infinity, -.infinity, -2, 2]
+        r.eq(Array(encodePCM16LE(samples)), [0,128,0,192,0,0,0,64,255,127,0,0,0,0,0,0,0,128,255,127],
+             "realtime: signed PCM endpoints/clamping/nonfinite silence and little endian")
+        r.eq(encodePCM16LE(Array(repeating: 0, count: 1600)).count, 3200, "realtime: 100ms PCM chunk is 3200 bytes")
+        r.eq(encodePCM16LE([]).count, 0, "realtime: empty PCM has no header")
+        func json(_ text: String) -> NSDictionary? {
+            (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? NSDictionary
+        }
+        let run = try! ParaformerClientMessage.runTask(taskID: taskID, configuration: snapshot).encodedText()
+        let expectedRun = #"{"header":{"action":"run-task","task_id":"2bf83b9a-baeb-4fda-8d9a-123456789abc","streaming":"duplex"},"payload":{"task_group":"audio","task":"asr","function":"recognition","model":"paraformer-realtime-v2","parameters":{"format":"pcm","sample_rate":16000},"input":{}}}"#
+        r.eq(json(run), json(expectedRun), "realtime: exact automatic run-task envelope")
+        let english = try! RealtimeASRConfiguration(provider: .defaultParaformer(), apiKey: "fake", language: "en")
+        let englishJSON = json(try! ParaformerClientMessage.runTask(taskID: taskID, configuration: english).encodedText())
+        let params = (englishJSON?["payload"] as? NSDictionary)?["parameters"] as? NSDictionary
+        r.eq(params?["language_hints"] as? [String], ["en"], "realtime: language_hints exact field")
+        r.eq(params?["language"] as? String, nil, "realtime: no invented language field")
+        let finish = try! ParaformerClientMessage.finishTask(taskID: taskID).encodedText()
+        let expectedFinish = #"{"header":{"action":"finish-task","task_id":"2bf83b9a-baeb-4fda-8d9a-123456789abc","streaming":"duplex"},"payload":{"input":{}}}"#
+        r.eq(json(finish), json(expectedFinish), "realtime: exact finish-task envelope")
+
+        func event(_ text: String, begin: Int = 170, final: Bool = false, heartbeat: Bool = false,
+                   foreign: Bool = false) -> ParaformerServerEvent {
+            let fixture = """
+            {"header":{"task_id":"\(foreign ? "foreign-task" : taskID)","event":"result-generated","attributes":{}},"payload":{"output":{"sentence":{"begin_time":\(begin),"end_time":null,"text":"\(text)","heartbeat":\(heartbeat),"sentence_end":\(final),"words":[],"future_field":1}},"usage":null}}
+            """
+            return try! JSONDecoder().decode(ParaformerServerEvent.self, from: Data(fixture.utf8))
+        }
+        var assembler = ParaformerSentenceAssembler(taskID: taskID)
+        assembler.consume(event("你好"))
+        r.eq(assembler.text, "你好", "realtime: partial preview")
+        r.eq(assembler.finalizedText, "", "realtime: partial never committed")
+        assembler.consume(event("你好世界"))
+        r.eq(assembler.text, "你好世界", "realtime: partial replaces previous hypothesis")
+        let final = event("你好世界。", final: true)
+        r.eq(final.payload.output?.sentence?.endTime, nil, "realtime: null final end_time accepted")
+        assembler.consume(final)
+        assembler.consume(final)
+        r.eq(assembler.finalizedText, "你好世界。", "realtime: final and duplicate produce one sentence")
+        assembler.consume(event("你好，世界。", final: true))
+        r.eq(assembler.text, "你好，世界。", "realtime: repeated final revises same begin_time")
+        assembler.consume(event("stale partial"))
+        r.eq(assembler.text, "你好，世界。", "realtime: late partial cannot regress committed sentence")
+        assembler.consume(event("heartbeat", begin: 200, final: true, heartbeat: true))
+        assembler.consume(event("foreign", begin: 200, final: true, foreign: true))
+        r.eq(assembler.text, "你好，世界。", "realtime: heartbeat and foreign task ignored")
+        let minimalHeartbeat = Data("""
+        {"header":{"task_id":"\(taskID)","event":"result-generated"},"payload":{"output":{"sentence":{"begin_time":null,"end_time":null,"text":null,"heartbeat":true,"sentence_end":null}}}}
+        """.utf8)
+        let heartbeatEvent = try? JSONDecoder().decode(ParaformerServerEvent.self, from: minimalHeartbeat)
+        r.check(heartbeatEvent != nil, "realtime: heartbeat permits absent sentence detail")
+        if let heartbeatEvent { assembler.consume(heartbeatEvent) }
+        r.eq(assembler.text, "你好，世界。", "realtime: empty heartbeat never changes transcript")
+        assembler.consume(event("第二句。", begin: 1000, final: true))
+        assembler.consume(event("第一句。", begin: 0, final: true))
+        r.eq(assembler.finalizedText, "第一句。你好，世界。第二句。", "realtime: final sentences ordered by begin_time")
+        for kind in ["task-started", "task-finished", "task-failed"] {
+            let fixture = """
+            {"header":{"task_id":"\(taskID)","event":"\(kind)","error_code":"CLIENT_ERROR","error_message":"fixture failure","attributes":{}},"payload":{}}
+            """
+            let lifecycle = try! JSONDecoder().decode(ParaformerServerEvent.self, from: Data(fixture.utf8))
+            r.eq(lifecycle.header.event, kind, "realtime: decodes \(kind)")
+            assembler.consume(lifecycle)
+        }
+        r.eq(assembler.text, "第一句。你好，世界。第二句。", "realtime: lifecycle events contain no transcript")
+        var unfinished = ParaformerSentenceAssembler(taskID: taskID)
+        unfinished.consume(event("uncommitted"))
+        let terminal = try! JSONDecoder().decode(ParaformerServerEvent.self, from: Data("""
+        {"header":{"task_id":"\(taskID)","event":"task-finished"},"payload":{"output":{},"usage":null}}
+        """.utf8))
+        unfinished.consume(terminal)
+        r.eq(unfinished.finalizedText, "", "realtime: task-finished cannot commit a partial")
+        let malformed = Data("""
+        {"header":{"task_id":"\(taskID)","event":"result-generated"},"payload":{"output":{"sentence":{"heartbeat":false,"end_time":null}}}}
+        """.utf8)
+        r.check((try? JSONDecoder().decode(ParaformerServerEvent.self, from: malformed)) == nil,
+                "realtime: malformed recognition cannot silently become empty success")
+    }
+
+    static func testRealtimeAudioIngress(_ r: Reporter) {
+        let ingress = RealtimeAudioIngress(maxPendingSamples: 4)
+        try! ingress.enqueue(samples: [1, 2])
+        try! ingress.enqueue(samples: [3, 4])
+        let first = try! ingress.nextChunk()!
+        r.eq(first.samples, [1, 2], "ingress: FIFO chunks")
+        r.eq(ingress.pendingSampleCount, 4, "ingress: in-flight samples count toward bound")
+        r.check((try! ingress.nextChunk()) == nil, "ingress: single sender cannot take second in-flight chunk")
+        ingress.acknowledge(chunkID: UUID())
+        r.eq(ingress.pendingSampleCount, 4, "ingress: unrelated acknowledgement cannot release budget")
+        ingress.acknowledge(chunkID: first.id)
+        r.eq(ingress.pendingSampleCount, 2, "ingress: completion releases budget")
+        ingress.acknowledge(chunkID: first.id)
+        r.eq(ingress.pendingSampleCount, 2, "ingress: duplicate acknowledgement is harmless")
+        ingress.seal()
+        r.check(!ingress.isDrained, "ingress: seal waits for queued audio")
+        do { try ingress.enqueue(samples: [5]); r.check(false, "ingress: sealed enqueue rejected") }
+        catch { r.eq(error as? RealtimeAudioIngressError, .closed, "ingress: sealed enqueue rejected") }
+        let last = try! ingress.nextChunk()!
+        r.eq(last.samples, [3, 4], "ingress: sealed queue still drains")
+        r.check(!ingress.isDrained, "ingress: drain waits for in-flight send")
+        ingress.acknowledge(chunkID: last.id)
+        r.check(ingress.isDrained, "ingress: seal plus acknowledgement completes drain")
+        let overflow = RealtimeAudioIngress(maxPendingSamples: 2)
+        try! overflow.enqueue(samples: [1, 2])
+        _ = try! overflow.nextChunk()
+        do { try overflow.enqueue(samples: [3]); r.check(false, "ingress: in-flight overflow rejected") }
+        catch { r.eq(error as? RealtimeAudioIngressError, .overflow, "ingress: in-flight overflow rejected") }
+        do { _ = try overflow.nextChunk(); r.check(false, "ingress: overflow is terminal for sender") }
+        catch { r.eq(error as? RealtimeAudioIngressError, .overflow, "ingress: overflow is terminal for sender") }
+        let cancelled = RealtimeAudioIngress()
+        r.eq(cancelled.maxPendingSamples, 80_000, "ingress: default capacity is five seconds at 16kHz")
+        try! cancelled.enqueue(samples: [1])
+        cancelled.cancel()
+        r.eq(cancelled.pendingSampleCount, 0, "ingress: cancel releases queued audio")
+        do { try cancelled.enqueue(samples: [2]); r.check(false, "ingress: late capture after cancel rejected") }
+        catch { r.eq(error as? RealtimeAudioIngressError, .cancelled, "ingress: late capture after cancel rejected") }
+    }
+
+    static func testRealtimeIngressWakeups(_ r: Reporter) async {
+        // Signals occur before observation; buffering must preserve the terminal
+        // wakeup and state even when many earlier enqueue notifications coalesce.
+        for termination in ["seal", "cancel", "overflow"] {
+            let ingress = RealtimeAudioIngress(maxPendingSamples: 2)
+            if termination == "seal" {
+                ingress.seal()
+            } else {
+                try! ingress.enqueue(samples: [1])
+                try! ingress.enqueue(samples: [2])
+                if termination == "cancel" { ingress.cancel() }
+                else { try? ingress.enqueue(samples: [3]) }
+            }
+            do {
+                let wakeupCount = try await withAsyncDeadline(seconds: 1) {
+                    var count = 0
+                    for await _ in ingress.wakeups { count += 1 }
+                    return count
+                }
+                r.eq(wakeupCount, 1, "ingress: coalesced \(termination) wakeup survives until consumer")
+                if termination == "seal" {
+                    r.check(ingress.isDrained, "ingress: terminal seal observed as drained")
+                } else {
+                    do { _ = try ingress.nextChunk(); r.check(false, "ingress: terminal \(termination) observed") }
+                    catch {
+                        r.eq(error as? RealtimeAudioIngressError, termination == "cancel" ? .cancelled : .overflow,
+                             "ingress: terminal \(termination) observed")
+                    }
+                }
+            } catch { r.check(false, "ingress: \(termination) signal terminated within deadline") }
+        }
+        let ingress = RealtimeAudioIngress(maxPendingSamples: 100)
+        // Parallel callback simulation uses no per-callback Swift Task.
+        DispatchQueue.concurrentPerform(iterations: 100) { _ in try! ingress.enqueue(samples: [0]) }
+        ingress.seal()
+        var count = 0
+        while let chunk = try! ingress.nextChunk() {
+            count += chunk.samples.count
+            ingress.acknowledge(chunkID: chunk.id)
+        }
+        r.eq(count, 100, "ingress: concurrent callbacks preserve all accepted samples")
+        r.check(ingress.isDrained, "ingress: concurrent callbacks drain exactly once")
     }
 
     // MARK: - Cloud context opt-out

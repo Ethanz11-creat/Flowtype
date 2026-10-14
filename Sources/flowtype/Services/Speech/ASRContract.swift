@@ -42,6 +42,16 @@ struct ASRResult: Sendable, Equatable {
     let latencyMs: Int
 }
 
+/// One recording owns one realtime session. Audio remains 16kHz mono Float32;
+/// providers perform their own wire encoding. Finish drains accepted audio and
+/// waits for the server's terminal result; cancel must unblock pending waits.
+protocol RealtimeASRSession: Sendable {
+    func start() async throws
+    func append(samples: [Float]) async throws
+    func finish() async throws -> ASRResult
+    func cancel() async
+}
+
 /// 把词典热词与前台上下文拼成一段 provider 提示。
 /// 热词在前（信号更强），前台文本截断到 `maxForegroundChars` 避免 prompt 膨胀。
 func composeProviderContext(
