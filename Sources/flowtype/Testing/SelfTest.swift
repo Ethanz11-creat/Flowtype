@@ -457,6 +457,22 @@ enum SelfTest {
 
     @MainActor
     static func testRecoveryActions(_ r: Reporter) async {
+        r.eq(DeliveryCopy.forOutcome(.clipboard, focusChanged: true)?.message,
+             "焦点已变化 · 已复制，按 ⌘V 粘贴", "delivery copy: changed focus uses explicit clipboard recovery")
+        r.eq(DeliveryCopy.forOutcome(.clipboard)?.message,
+             "已复制，按 ⌘V 粘贴", "delivery copy: clipboard fallback explains manual paste")
+        r.eq(DeliveryCopy.forOutcome(.uncertain)?.message,
+             "已发送 · 可从历史复制", "delivery copy: uncertain dispatch never promises insertion")
+        r.eq(DeliveryCopy.clipboardOwnershipChanged.message,
+             "剪贴板已变化 · 可从历史复制", "delivery copy: ownership loss points to history")
+        r.eq(DeliveryCopy.forOutcome(.typedDispatched), nil,
+             "delivery copy: typed dispatch has no false confirmation notice")
+        r.eq(DeliveryCopy.forOutcome(.pasteDispatched), nil,
+             "delivery copy: paste dispatch has no false confirmation notice")
+        r.eq(DeliveryCopy.forOutcome(.cancelled), nil,
+             "delivery copy: cancellation has no stale notice")
+        r.eq(DeliveryCopy.literalPreservationFallback.message,
+             "技术内容已保留 · 已使用识别结果", "delivery copy: literal fallback is explicit")
         let asr = ErrorRecoveryContext(failedStage: "ASR", error: LLMError.invalidResponse, rawText: nil, retryable: true)
         r.eq(SessionController.buildErrorActions(from: asr).map(\.displayName), ["重试识别", "忽略"], "recovery: ASR retry label describes failed stage")
         let processed = ErrorRecoveryContext(failedStage: "PostProcess", error: LLMError.invalidResponse, rawText: "完整文本", retryable: true)
@@ -465,6 +481,11 @@ enum SelfTest {
         r.eq(SessionController.buildErrorActions(from: empty).map(\.displayName), [], "recovery: nonactionable error exposes no action buttons")
         let cancellation = ErrorRecoveryContext(failedStage: "ASR", error: CancellationError(), rawText: "stale", retryable: true)
         r.eq(SessionController.buildErrorActions(from: cancellation).map(\.displayName), [], "recovery: cancellation exposes no stale retry or copy")
+        for error in [InjectionStageError.clipboardSnapshotIncomplete, .pasteNotDispatched] {
+            let delivery = ErrorRecoveryContext(failedStage: "Injection", error: error, rawText: "完整最终结果", retryable: false)
+            r.eq(SessionController.buildErrorActions(from: delivery).map(\.displayName), ["复制结果", "忽略"],
+                 "delivery copy: unsafe paste offers final result copy and no repeat")
+        }
     }
 
     private final class CompletingLLMProtocol: URLProtocol, @unchecked Sendable {
@@ -3643,6 +3664,7 @@ enum SelfTest {
             r.eq(final, transcript, "refine: damaged completed polish falls back to full processed ASR")
         } else { r.check(false, "refine: damaged polish still provides safe fallback") }
         r.check(session.polishFailed, "refine: literal damage marks polishFailed")
+        r.eq(session.completionNotice, "技术内容已保留 · 已使用识别结果", "delivery copy: literal fallback explains preserved complete recognition result")
         r.eq(seen.withLock { $0 }, transcript, "refine: stage passes transcript separately for validation")
     }
 

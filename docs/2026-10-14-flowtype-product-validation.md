@@ -133,3 +133,57 @@ Failure or remaining limitation:
 
 Pass requires the row's actual setup and observations. Keep unexercised variants
 Pending; automated fixture success cannot promote a manual row to Pass.
+
+## Delivery accuracy appendix (2026-10-14 delivery plan)
+
+The rows below extend this session matrix with the delivery-plan evidence. They
+remain Pending until a tester runs the stated setup on a real app. A dispatched
+keyboard or paste event is an **attempt**, not proof that the target inserted the
+text; an uncertain result must never be retried automatically.
+
+### Coding-speech evaluation cases
+
+Use prepared 5–15 second utterances so the expected literals are known before
+each run. Repeat each case in Chinese, English, and mixed speech where shown.
+
+| ID | Utterance and setup | Accuracy/recovery evidence | Status |
+| --- | --- | --- | --- |
+| A1 | Chinese coding request containing ``/tmp/项目.swift``, ``--force``, ``v1.2.3-beta+build1`` and the number ``42``; polish on. | Final text retains every path, flag, version and number; ordinary sentence punctuation may be improved. | Pending |
+| A2 | English request containing a URL with a query, a backtick identifier and a shell command; polish on. | URL/query, code identifier and command survive unchanged; no spoken instruction is executed. | Pending |
+| A3 | Mixed Chinese/English paragraph with a multiline code block and emoji; polish on and off. | Complete beginning and tail are present once; polish off uses processed ASR text and does not call the LLM. | Pending |
+| A4 | Repeat A1 with a tester-controlled refinement response that drops or changes one literal. | Damaged polish is rejected; the complete processed ASR result is delivered, history is marked raw, and the literal-preservation copy is shown. | Pending |
+| A5 | 30–60 second prepared paragraph with coding terms, then silence and a rapid cancel in separate runs. | Record start/end completeness, no invented text for silence, and no delivery/history for cancellation. | Pending |
+| A6 | Slow network, disconnected network, and local cold/warm model runs using the same short utterance. | Record stop→final and stop→delivery/clipboard timings; fallback remains complete and no uncollected accuracy number is claimed. | Pending |
+
+For each A-row record WER-like observations only with the reference text and
+literal pass/fail counts. Do not turn a small manual sample into a model accuracy
+percentage. Record `polishFailed`, `deliveryOutcome`, and whether the recovery
+copy was actionable.
+
+### Manual app and delivery matrix
+
+The paste-mode list identifies candidate adaptations. It is not evidence that a
+particular release accepts paste or supports AX readback. Keep the default
+Unicode mode for all apps unless the experimental setting is explicitly enabled.
+
+| App/control | Bundle ID | Mode to exercise | Cases | Acceptance observation | Status |
+| --- | --- | --- | --- | --- | --- |
+| TextEdit plain text | `com.apple.TextEdit` | Unicode, then experimental paste | A1–A4, multiline, emoji, user copies during cleanup | One delivery attempt; user clipboard is restored only while still owned; concurrent copy is never overwritten. | Pending |
+| VS Code editor | `com.microsoft.VSCode` | Unicode, then experimental paste | A1–A4, command/flag/path literals | Focus/PID recheck protects the editor; uncertain paste says it can be copied from history and does not repeat. | Pending |
+| Cursor editor | `com.todesktop.230313mzl4w4u92` | Unicode, then experimental paste | A1–A4, multiline code | Same as VS Code; record the actual focused editor and whether insertion can be read back. | Pending |
+| Chrome text control | `com.google.Chrome` | Unicode, then experimental paste | URL, CJK/English, focus switch | Switching tabs/controls before delivery routes to explicit clipboard recovery; no old target activation. | Pending |
+| Safari text control | `com.apple.Safari` | Unicode, then experimental paste | URL, emoji, user concurrent copy | Record whether paste is accepted and keep an uncertain outcome when it cannot be verified. | Pending |
+| Edge text control | `com.microsoft.edgemac` | Unicode, then experimental paste | URL, path, focus switch | Same target/focus checks and no automatic repeat after an ambiguous event. | Pending |
+| Unknown app / non-text or secure control | tester bundle ID | Unicode only | Focus change, secure field, button, AX unavailable | Complete result is copied with the matching recovery message; it is never blindly typed into a non-editable target. | Pending |
+
+For every app row record app version, bundle ID, focused element before stop and
+at delivery, selected mode, delivery outcome, and whether a tester copied the
+result manually. Do not call the candidate list a compatibility certification.
+
+### Delivery evidence fields
+
+Capture `stop→final`, `stop→dispatch`, and `stop→clipboard` separately and report
+P50/P95 with the repository definition `round((n - 1) × p)` on sorted samples.
+Also count duplicate attempts, focus-change recoveries, clipboard ownership
+losses, uncertain dispatches, preserved literals, and successful manual recovery.
+The current repository has no live measurements; leave every unrun row Pending.

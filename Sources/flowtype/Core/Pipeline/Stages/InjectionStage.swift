@@ -73,7 +73,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                     guard !context.isCancelled else { return }
                     let changed = target?.pid != current.pid ||
                         (target?.focusIdentity != nil && current.focusIdentity != nil && target?.focusIdentity != current.focusIdentity)
-                    context.completionNotice = changed ? "焦点已变化 · 已复制，按 ⌘V 粘贴" : "已复制，按 ⌘V 粘贴"
+                    context.completionNotice = DeliveryCopy.forOutcome(.clipboard, focusChanged: changed)?.message
                 }
             case .inject:
                 let usePaste = await MainActor.run {
@@ -96,7 +96,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                     case .clipboardChanged:
                         await complete(.uncertain, context: context, start: start)
                         await MainActor.run {
-                            if !context.isCancelled { context.completionNotice = "剪贴板已变化 · 可从历史复制" }
+                            if !context.isCancelled { context.completionNotice = DeliveryCopy.clipboardOwnershipChanged.message }
                         }
                     case .notDispatched:
                         return .suspend(ErrorRecoveryContext(failedStage: name,
@@ -120,7 +120,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                     guard !(error is CancellationError) else { throw error }
                     try await copyToClipboard(text, context: context)
                     await MainActor.run {
-                        if !context.isCancelled { context.completionNotice = "已复制，按 ⌘V 粘贴" }
+                        if !context.isCancelled { context.completionNotice = DeliveryCopy.forOutcome(.clipboard)?.message }
                     }
                     outcome = .clipboard
                 }
@@ -148,7 +148,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             context.stopToDeliveryMs = context.stopRecordingAt.map { Int((context.deliveryEventDispatchedAt ?? Date()).timeIntervalSince($0) * 1000) }
             guard !context.isCancelled else { return }
             context.injectMs = Int(Date().timeIntervalSince(start) * 1000)
-            if effective == .uncertain { context.completionNotice = "已发送 · 可从历史复制" }
+            if effective == .uncertain { context.completionNotice = DeliveryCopy.forOutcome(.uncertain)?.message }
         }
     }
 

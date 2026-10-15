@@ -133,7 +133,7 @@ struct CapsuleView: View {
                     Button(action.displayName) {
                         switch action {
                         case .retry: session.retryFailedStage()
-                        case .copyRaw: session.copyRawText()
+                        case .copyRaw, .copyResult: session.copyRawText()
                         case .dismiss: session.dismissError()
                         }
                     }

@@ -16,6 +16,37 @@ enum SessionState: Equatable {
     case error(String)
 }
 
+/// User-facing copy for terminal delivery and accuracy fallbacks. These strings
+/// describe the recovery action available to the user; they never imply that a
+/// dispatched keyboard or paste event was confirmed by the target application.
+enum DeliveryCopy: Equatable, Sendable {
+    case focusChanged
+    case clipboardRecovery
+    case clipboardOwnershipChanged
+    case uncertainDispatch
+    case literalPreservationFallback
+
+    var message: String {
+        switch self {
+        case .focusChanged: return "焦点已变化 · 已复制，按 ⌘V 粘贴"
+        case .clipboardRecovery: return "已复制，按 ⌘V 粘贴"
+        case .clipboardOwnershipChanged: return "剪贴板已变化 · 可从历史复制"
+        case .uncertainDispatch: return "已发送 · 可从历史复制"
+        case .literalPreservationFallback: return "技术内容已保留 · 已使用识别结果"
+        }
+    }
+
+    /// Map an explicit terminal outcome to copy. Typed/paste-dispatched outcomes
+    /// intentionally have no copy because the event was attempted only once.
+    nonisolated static func forOutcome(_ outcome: DeliveryOutcome, focusChanged: Bool = false) -> DeliveryCopy? {
+        switch outcome {
+        case .clipboard: return focusChanged ? .focusChanged : .clipboardRecovery
+        case .uncertain: return .uncertainDispatch
+        case .typedDispatched, .pasteDispatched, .cancelled: return nil
+        }
+    }
+}
+
 /// External session effects are replaceable without changing pipeline ownership or transitions.
 @MainActor
 struct SessionEffects {
@@ -261,6 +292,10 @@ final class SessionController: ObservableObject {
             AppLogger.log("[SessionController] retryFailedStage: no recovery context")
             return
         }
+        guard suspendedContext?.retryable == true else {
+            AppLogger.log("[SessionController] retryFailedStage: recovery is copy/dismiss only")
+            return
+        }
         guard let payload = suspendedPayload else {
             AppLogger.log("[SessionController] retryFailedStage: no suspended payload")
             return
@@ -450,7 +485,16 @@ final class SessionController: ObservableObject {
         guard recovery.retryable || hasText else { return [] }
         var actions: [ErrorAction] = []
         if recovery.retryable { actions.append(.retry(stage: recovery.failedStage)) }
-        if hasText { actions.append(.copyRaw) }
+        if hasText {
+            // Delivery failures carry the final polished result. Keep their
+            // recovery action explicit so the capsule never offers a hidden
+            // retry after a paste transaction refused to dispatch.
+            if recovery.error is InjectionStageError {
+                actions.append(.copyResult)
+            } else {
+                actions.append(.copyRaw)
+            }
+        }
         actions.append(.dismiss)
         return actions
     }
@@ -675,6 +719,7 @@ extension SessionController {
     enum ErrorAction: Equatable, Hashable {
         case retry(stage: String)
         case copyRaw
+        case copyResult
         case dismiss
 
         var displayName: String {
@@ -687,6 +732,7 @@ extension SessionController {
                 default: return "重试处理"
                 }
             case .copyRaw: return "复制原文"
+            case .copyResult: return "复制结果"
             case .dismiss: return "忽略"
             }
         }

@@ -150,7 +150,17 @@ final class PolishStage: PipelineStage, @unchecked Sendable {
             await MainActor.run {
                 guard !context.isCancelled else { return }
                 context.polishFailed = true
-                context.completionNotice = error is AsyncDeadlineError ? "整理超时 · 已保留识别结果" : "整理失败 · 已保留识别结果"
+                let literalDamage = (error as? PolishStageError).map {
+                    if case .damagedLiterals = $0 { return true }
+                    return false
+                } ?? false
+                context.completionNotice = if literalDamage {
+                    DeliveryCopy.literalPreservationFallback.message
+                } else if error is AsyncDeadlineError {
+                    "整理超时 · 已保留识别结果"
+                } else {
+                    "整理失败 · 已保留识别结果"
+                }
                 context.polishMs = Int(Date().timeIntervalSince(start) * 1000)
             }
             AppLogger.log("[PolishStage#\(context.sessionID)] Degraded to complete processed text: \(error)")
