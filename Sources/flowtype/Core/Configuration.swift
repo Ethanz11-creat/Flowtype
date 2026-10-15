@@ -411,6 +411,7 @@ struct Configuration: Codable, Equatable {
     var asrRoutingPolicy: ASRRoutingPolicy = .auto
     /// 云端请求是否携带前台上下文（默认开启；设置中可关闭）。
     var cloudASRSendContext: Bool = true
+    var cloudPolishSendContext: Bool = true
     var cloudASRConfig: CloudASRConfig = .defaultSiliconFlow
     var selectedLocalModelID: String? = nil
     var customLocalModelPath: String? = nil
@@ -505,6 +506,7 @@ struct Configuration: Codable, Equatable {
             asrRoutingPolicy = (try? c.decode(ASRRoutingPolicy.self, forKey: .asrRoutingPolicy)) ?? d.asrRoutingPolicy
         }
         cloudASRSendContext = (try? c.decodeIfPresent(Bool.self, forKey: .cloudASRSendContext)) ?? true
+        cloudPolishSendContext = (try? c.decodeIfPresent(Bool.self, forKey: .cloudPolishSendContext)) ?? cloudASRSendContext
         cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
@@ -549,6 +551,7 @@ extension Configuration {
         case asrEngine
         case asrRoutingPolicy
         case cloudASRSendContext
+        case cloudPolishSendContext
         case cloudASRConfig
         case selectedLocalModelID
         case customLocalModelPath
@@ -578,6 +581,7 @@ extension Configuration {
         try container.encode(downloadSource, forKey: .downloadSource)
         try container.encode(asrRoutingPolicy, forKey: .asrRoutingPolicy)
         try container.encode(cloudASRSendContext, forKey: .cloudASRSendContext)
+        try container.encode(cloudPolishSendContext, forKey: .cloudPolishSendContext)
         try container.encode(cloudASRConfig, forKey: .cloudASRConfig)
         try container.encode(selectedLocalModelID, forKey: .selectedLocalModelID)
         try container.encode(customLocalModelPath, forKey: .customLocalModelPath)

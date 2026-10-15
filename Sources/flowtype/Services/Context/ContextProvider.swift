@@ -1,7 +1,7 @@
 import Foundation
 
 /// 前台上下文的一次采集结果。逐项可为 nil（采集失败或不可用不阻断录音）。
-struct ForegroundContext: Sendable, Equatable {
+struct ForegroundContext: Sendable, Equatable, Codable {
     let appName: String?
     let elementText: String?
     let url: String?
@@ -13,17 +13,79 @@ protocol ContextProvider: Sendable {
     func collect() async -> ForegroundContext?
 }
 
-/// 把采集结果压成一段有界上下文文本（先脱敏，再截断）。
-/// 优先级：焦点元素文本 > 选中文本 > 网页 URL。
+/// Redact each field before allocating the shared character budget. Selection and
+/// app identity must survive even when an editor exposes a very large value.
+func boundedForegroundContext(_ context: ForegroundContext?, maxChars: Int = 1200) -> ForegroundContext? {
+    guard let context else { return nil }
+    var remaining = max(0, maxChars)
+    func take(_ value: String?) -> String? {
+        guard remaining > 0, let value else { return nil }
+        let clean = redactContextSecrets(value).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return nil }
+        let result = String(clean.prefix(remaining))
+        // Reserve the separator used by the compatible text projection.
+        remaining = max(0, remaining - result.count - 1)
+        return result
+    }
+    let selected = take(context.selectedText)
+    let app = take(context.appName)
+    let element = take(context.elementText)
+    let url = take(context.url)
+    guard selected != nil || app != nil || element != nil || url != nil else { return nil }
+    return ForegroundContext(appName: app, elementText: element, url: url, selectedText: selected)
+}
+
 func buildContextText(_ ctx: ForegroundContext?, maxChars: Int = 1200) -> String? {
-    guard let ctx else { return nil }
-    var parts: [String] = []
-    if let t = ctx.elementText?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { parts.append(t) }
-    if let s = ctx.selectedText?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty { parts.append(s) }
-    if let u = ctx.url?.trimmingCharacters(in: .whitespacesAndNewlines), !u.isEmpty { parts.append(u) }
-    guard !parts.isEmpty else { return nil }
-    let joined = parts.joined(separator: "\n")
-    return String(redactContextSecrets(joined).prefix(maxChars))
+    guard let context = boundedForegroundContext(ctx, maxChars: maxChars) else { return nil }
+    return [context.selectedText, context.appName, context.elementText, context.url]
+        .compactMap { $0 }.joined(separator: "\n")
+}
+
+/// Synchronous producers (including AX) run outside the main actor. The deadline
+/// never joins one that is blocked in a platform call; late results have no sink.
+func collectBoundedForegroundContext(timeout: TimeInterval = 0.5,
+    producer: @escaping @Sendable () -> ForegroundContext?) async -> ForegroundContext? {
+    try? await withAsyncDeadline(seconds: timeout) {
+        let worker = Task.detached(priority: .utility) { () -> ForegroundContext? in
+            guard !Task.isCancelled else { return nil }
+            let result = producer()
+            guard !Task.isCancelled else { return nil }
+            return boundedForegroundContext(result)
+        }
+        return await withTaskCancellationHandler {
+            await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+}
+
+/// Shared production guard, injectable without touching real AX/user applications.
+/// Metadata for the element AND parent is evaluated before any text closure runs.
+func collectSafeElementContext<Node>(element: Node,
+    parent: (Node) -> Node?, secure: (Node) -> Bool,
+    selected: (Node) -> String?, text: (Node) -> String?) -> (selected: String?, text: String?)? {
+    let parentElement = parent(element)
+    guard !secure(element), parentElement.map({ !secure($0) }) ?? true else { return nil }
+    let selection = selected(element)
+    if let value = text(element) { return (selection, value) }
+    guard let parentElement else { return (selection, nil) }
+    // A parent fallback is also guarded against its own secure parent.
+    guard parent(parentElement).map({ !secure($0) }) ?? true else { return (selection, nil) }
+    return (selection, text(parentElement))
+}
+
+/// Selection ranges from AX use UTF-16 offsets, as does NSString.
+func cursorNearContextText(_ value: String, selection: NSRange?, maxChars: Int = 1200) -> String {
+    let source = value as NSString
+    guard let selection, selection.location != NSNotFound,
+          selection.location >= 0, selection.location <= source.length else {
+        return String(value.prefix(max(0, maxChars)))
+    }
+    let start = max(0, selection.location - max(0, maxChars) / 2)
+    let range = NSRange(location: start, length: min(max(0, maxChars), source.length - start))
+    // Avoid slicing a surrogate pair or a composed character.
+    return String(source.substring(with: source.rangeOfComposedCharacterSequences(for: range)).prefix(max(0, maxChars)))
 }
 
 /// 焦点处于安全输入（密码）字段时，绝不可采集其值。

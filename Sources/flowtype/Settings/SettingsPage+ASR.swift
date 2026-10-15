@@ -103,7 +103,17 @@ extension SettingsPage {
                     .controlSize(.small)
                     .disabled(store.current.asrRoutingPolicy == .localOnly)
             }
-            Text("开启后，支持上下文的 HTTP 云端识别会携带前台上下文；Paraformer 实时识别不发送上下文。音频仅在走云端路径时离开设备。")
+            HStack {
+                Text("云端整理使用上下文")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Toggle("", isOn: $store.current.cloudPolishSendContext)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(!store.current.cloudASRSendContext || store.current.asrRoutingPolicy == .localOnly)
+            }
+            Text("云端发送上下文是总开关：开启后，支持上下文的 HTTP 识别可携带前台文本；整理还需单独开启。Paraformer 实时识别不发送上下文。仅本地模式不向云端发送前台上下文；音频仅在云端识别时离开设备。")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
         }

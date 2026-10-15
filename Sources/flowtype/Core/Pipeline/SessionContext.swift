@@ -98,7 +98,33 @@ final class SessionContext {
     var usedProviderID: String?
 
     /// 前台上下文文本（由 ContextStage / ContextProvider 写入；nil 表示未采集）。
-    var foregroundContextText: String?
+    var foregroundContext: ForegroundContext?
+    var foregroundContextText: String? { buildContextText(foregroundContext) }
+    private var foregroundCollectionTask: Task<Void, Never>?
+    private var foregroundCollectionID = UUID()
+
+    /// Starts alongside audio, never blocking capture or realtime preview setup.
+    func startForegroundCollection(provider: ContextProvider = AXContextProvider()) {
+        guard !isCancelled else { return }
+        foregroundCollectionTask?.cancel()
+        let ownership = UUID()
+        foregroundCollectionID = ownership
+        foregroundContext = nil
+        foregroundCollectionTask = Task { [weak self] in
+            let snapshot = try? await withAsyncDeadline(seconds: 0.5) { await provider.collect() }
+            guard !Task.isCancelled, let self, !self.isCancelled,
+                  self.foregroundCollectionID == ownership else { return }
+            self.foregroundContext = boundedForegroundContext(snapshot)
+            self.foregroundCollectionTask = nil
+        }
+    }
+
+    private func cancelForegroundCollection() {
+        foregroundCollectionID = UUID()
+        foregroundCollectionTask?.cancel()
+        foregroundCollectionTask = nil
+        foregroundContext = nil
+    }
 
     /// 用户停止录音的时刻（用于 stopToInjectMs）。
     var stopRecordingAt: Date?
@@ -212,6 +238,7 @@ final class SessionContext {
     /// Invalidates all future stage results and readiness/state callbacks.
     func cancel() {
         isCancelled = true
+        cancelForegroundCollection()
         cancellationLock.withLock { $0 = true }
         realtimeHandle?.ingress.cancel()
         realtimeStartTask?.cancel()

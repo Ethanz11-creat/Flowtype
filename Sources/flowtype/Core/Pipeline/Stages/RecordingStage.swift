@@ -13,8 +13,6 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
     var name: String { "Recording" }
 
-    private let contextProvider: ContextProvider = AXContextProvider()
-
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
         let sessionID = context.sessionID
         // Capture and preview resources belong to this execution alone.
@@ -68,6 +66,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
                 let route = await ASRRouter.shared.captureStartRoute()
                 let handle = await MainActor.run {
+                    context.startForegroundCollection()
                     context.prepareRealtime(route: route)
                     return context.realtimeHandle
                 }
@@ -88,18 +87,6 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 if await MainActor.run(body: { context.isCancelled }) {
                     cleanup(recorder: audioRecorder, ownerID: sessionID)
                     return .complete
-                }
-
-                // 采集一次前台上下文（失败则静默跳过，不阻断录音）。
-                // 本地优先与云端策略都采集：本地 Qwen 直接用（不上传），云端可能随请求发送。
-                try Task.checkCancellation()
-                if let fg = try? await withAsyncDeadline(seconds: 3, operation: { [self] in await contextProvider.collect() }),
-                   let text = buildContextText(fg) {
-                    await MainActor.run {
-                        guard !context.isCancelled else { return }
-                        context.foregroundContextText = text
-                    }
-                    AppLogger.log("[RecordingStage#\(sessionID)] Foreground context: \(text.count) chars")
                 }
 
                 // Detect a mid-recording freeze (device gone) so we can surface an error.
