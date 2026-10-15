@@ -16,6 +16,9 @@ enum SessionMetrics {
     /// 纯函数：把会话指标渲染成可复制的文本报告（不含转写内容）。
     static func report(_ sessions: [DictationSession]) -> String {
         let stopToInject = sessions.compactMap(\.stopToInjectMs)
+        let dispatched = sessions.filter { $0.deliveryOutcome == .typedDispatched || $0.deliveryOutcome == .pasteDispatched }
+        let clipboard = sessions.filter { $0.deliveryOutcome == .clipboard }
+        let uncertain = sessions.filter { $0.deliveryOutcome == .uncertain }
         let asr = sessions.compactMap(\.asrMs)
         let fallbacks = sessions.filter { $0.usedFallback == true }.count
         let cloud = sessions.filter { $0.asrProviderID == ASRProviderID.cloud }.count
@@ -29,7 +32,12 @@ enum SessionMetrics {
 
         return [
             "=== Flowtype ASR metrics ===",
-            line("stop→inject", stopToInject),
+            line("stop→inject (legacy timing)", stopToInject),
+            line("stop→dispatch", dispatched.compactMap(\.stopToDeliveryMs)),
+            line("stop→clipboard", clipboard.compactMap(\.stopToDeliveryMs)),
+            line("stop→uncertain", uncertain.compactMap(\.stopToDeliveryMs)),
+            "delivery: dispatched: \(dispatched.count), clipboard: \(clipboard.count), uncertain: \(uncertain.count), cancelled: \(sessions.filter { $0.deliveryOutcome == .cancelled }.count)",
+            "dispatch means events sent; insertion is not confirmed",
             line("asr", asr),
             "sessions: \(sessions.count), cloud: \(cloud), fallback: \(fallbacks)",
         ].joined(separator: "\n")

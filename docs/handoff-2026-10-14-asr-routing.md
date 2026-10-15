@@ -50,7 +50,7 @@ swift run FlowType --self-test   # 期望：412 passed, 0 failed, exit 0
 | `.../CloudProbe.swift` | TCP+TLS 握手计时（2s 超时）+ `SingleResumeBox`（exactly-once resume） |
 | `Services/Context/ContextProvider.swift` | `ForegroundContext`、`ContextProvider` 协议、纯函数 `buildContextText` / `redactContextSecrets` / `isSecureFocus` |
 | `Services/Context/AXContextProvider.swift` | Accessibility API 采集前台上下文 + 安全字段守卫 |
-| `Core/SessionMetrics.swift` | `percentile`（nearest-rank）+ `SessionMetrics.report`（P50/P95，content-free） |
+| `Core/SessionMetrics.swift` | `percentile`（round((n−1)×p) index）+ `SessionMetrics.report`（P50/P95，content-free） |
 
 ### 删除
 - `SpeechProvider.swift`、`SpeechRouter.swift`

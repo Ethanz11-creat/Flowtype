@@ -535,6 +535,8 @@ final class SessionController: ObservableObject {
         session.asrMs = context.asrMs
         session.polishMs = context.polishMs
         session.injectMs = context.injectMs
+        session.deliveryOutcome = context.deliveryOutcome
+        session.stopToDeliveryMs = context.stopToDeliveryMs
         if let stopAt = context.stopRecordingAt, context.injectMs != nil {
             session.stopToInjectMs = Int(Date().timeIntervalSince(stopAt) * 1000)
         }

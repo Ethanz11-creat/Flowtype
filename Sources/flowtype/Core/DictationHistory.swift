@@ -42,6 +42,8 @@ struct DictationSession: Codable, Identifiable {
     var polishMs: Int?
     var injectMs: Int?
     var stopToInjectMs: Int?
+    var deliveryOutcome: DeliveryOutcome?
+    var stopToDeliveryMs: Int?
 
     init(rawTranscript: String, finalText: String, polishMode: PolishMode,
          durationMs: UInt64?, recordingMs: UInt64? = nil,
@@ -115,8 +117,7 @@ final class HistoryStore: ObservableObject {
 
     /// Insert one session. `charCount` is computed before nulling text, so stats survive privacy-off.
     func append(_ session: DictationSession, storeText: Bool) {
-        var rec = SessionRecord(from: session)
-        if !storeText { rec.rawTranscript = nil; rec.finalText = nil }
+        var rec = SessionRecord(from: session, storeText: storeText)
         do { try db.dbQueue.write { try rec.insert($0) } } catch { AppLogger.log("[History] insert failed: \(error)") }
         reload()
         DailyStatsStore.shared.refresh()

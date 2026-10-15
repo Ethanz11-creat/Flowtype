@@ -32,7 +32,7 @@ final class AppDatabase: @unchecked Sendable {
     /// Empty in-memory DB (self-tests).
     static func inMemory() throws -> AppDatabase { try AppDatabase(try DatabaseQueue(), isOnDisk: false) }
 
-    private static var migrator: DatabaseMigrator {
+    static var migrator: DatabaseMigrator {
         var m = DatabaseMigrator()
         m.registerMigration("v1") { db in
             try db.create(table: "session") { t in
@@ -91,6 +91,12 @@ final class AppDatabase: @unchecked Sendable {
                 t.add(column: "polishMs", .integer).notNull().defaults(to: 0)
                 t.add(column: "injectMs", .integer).notNull().defaults(to: 0)
                 t.add(column: "stopToInjectMs", .integer).notNull().defaults(to: 0)
+            }
+        }
+        m.registerMigration("v5_delivery") { db in
+            try db.alter(table: "session") { t in
+                t.add(column: "deliveryOutcome", .text)
+                t.add(column: "stopToDeliveryMs", .integer)
             }
         }
         return m

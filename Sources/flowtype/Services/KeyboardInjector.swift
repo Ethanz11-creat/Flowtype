@@ -198,3 +198,168 @@ struct KeyboardInjector {
     }
 
 }
+
+// MARK: - Experimental native paste
+
+enum DeliveryMode: String, Codable, Sendable {
+    case unicode, pasteInSupportedApps
+
+    func usesPaste(bundleID: String?) -> Bool {
+        guard self == .pasteInSupportedApps, let bundleID else { return false }
+        return ["com.apple.TextEdit", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92",
+                "com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"].contains(bundleID)
+    }
+}
+
+typealias PasteboardContents = [[String: Data]]
+
+struct PasteboardWriteReceipt {
+    /// Generation returned by clearContents, never a later read that could
+    /// already belong to another application's concurrent Copy operation.
+    let changeCount: Int
+    let succeeded: Bool
+}
+
+/// nil means some advertised representation could not be materialized. Never clear
+/// such a clipboard: a text-only backup would silently discard images/files/RTF.
+@MainActor protocol DeliveryPasteboard: AnyObject {
+    var changeCount: Int { get }
+    func contents() -> PasteboardContents?
+    @discardableResult func write(_ contents: PasteboardContents) -> PasteboardWriteReceipt?
+}
+
+@MainActor final class SystemDeliveryPasteboard: DeliveryPasteboard {
+    private let board = NSPasteboard.general
+    var changeCount: Int { board.changeCount }
+    func contents() -> PasteboardContents? {
+        guard let items = board.pasteboardItems else { return board.types?.isEmpty != false ? [] : nil }
+        var result: PasteboardContents = []
+        for item in items {
+            var representations: [String: Data] = [:]
+            for type in item.types {
+                guard let data = item.data(forType: type) else { return nil }
+                representations[type.rawValue] = data
+            }
+            result.append(representations)
+        }
+        return result
+    }
+    func write(_ contents: PasteboardContents) -> PasteboardWriteReceipt? {
+        // Build all items before clearing the shared pasteboard.
+        var items: [NSPasteboardItem] = []
+        for representations in contents {
+            let item = NSPasteboardItem()
+            for (type, data) in representations {
+                guard item.setData(data, forType: .init(type)) else { return nil }
+            }
+            items.append(item)
+        }
+        let generation = board.clearContents()
+        guard board.changeCount == generation else {
+            return PasteboardWriteReceipt(changeCount: generation, succeeded: false)
+        }
+        return PasteboardWriteReceipt(changeCount: generation, succeeded: items.isEmpty || board.writeObjects(items))
+    }
+}
+
+enum PasteTransactionResult: Equatable {
+    case dispatched, uncertain, notDispatched, cancelled, clipboardChanged
+}
+
+/// Main-actor serialization extends across the settling window and restoration.
+/// A queued transaction never snapshots another transaction's temporary text.
+@MainActor final class ClipboardTransaction {
+    static let shared = ClipboardTransaction()
+    private var busy = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    private func acquire() async {
+        if busy { await withCheckedContinuation { waiters.append($0) } }
+        else { busy = true }
+    }
+    private func release() {
+        if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
+    }
+
+    func paste(_ text: String, context: SessionContext, board: any DeliveryPasteboard,
+               validate: @MainActor () async -> Bool,
+               prepareDispatch: @MainActor () throws -> (@MainActor () -> Void),
+               settle: @escaping @MainActor @Sendable () async -> Void = {
+                   try? await Task.sleep(nanoseconds: 150_000_000)
+               }) async -> PasteTransactionResult {
+        await acquire()
+        defer { release() }
+        guard !Task.isCancelled, !context.isCancelled else { return .cancelled }
+        // Revalidate after serialization, because a prior transaction may have waited.
+        guard await validate() else { return .notDispatched }
+        guard !Task.isCancelled, !context.isCancelled else { return .cancelled }
+        let dispatch: @MainActor () -> Void
+        do { dispatch = try prepareDispatch() } catch { return .notDispatched }
+        let beforeCount = board.changeCount
+        guard let original = board.contents() else { return .notDispatched }
+        guard board.changeCount == beforeCount else { return .clipboardChanged }
+        guard await validate() else { return .notDispatched }
+        guard !Task.isCancelled, !context.isCancelled else { return .cancelled }
+        let owned: PasteboardContents = [[NSPasteboard.PasteboardType.string.rawValue: Data(text.utf8)]]
+        // The last count check and mutation have no suspension between them.
+        guard board.changeCount == beforeCount else { return .clipboardChanged }
+        var receipt: PasteboardWriteReceipt?
+        let active = context.performDeliveryEffect { receipt = board.write(owned) }
+        guard active else { return .cancelled }
+        guard let receipt else { return .notDispatched }
+        let ownedCount = receipt.changeCount
+        // A failed write may leave an empty/partial board. Capture it only while
+        // its original write generation is still ours, so cleanup can restore it.
+        let cleanupContents: PasteboardContents?
+        if board.changeCount == ownedCount {
+            cleanupContents = receipt.succeeded ? owned : board.contents()
+        } else { cleanupContents = nil }
+        var dispatched = false
+        if receipt.succeeded, board.contents() == owned, board.changeCount == ownedCount {
+            do {
+                try KeyboardInjector.postIfActive(context: context) {
+                    dispatched = true
+                    dispatch()
+                    context.deliveryEventDispatchedAt = Date()
+                }
+            } catch { /* cleanup still owns its complete settling window */ }
+        }
+        // Unstructured task has independent cancellation. Awaiting it does not
+        // propagate session cancellation; the clipboard remains readable for 150ms.
+        var restored = false
+        let cleanup = Task { @MainActor in
+            if dispatched { await settle() }
+            guard let cleanupContents, board.changeCount == ownedCount, board.contents() == cleanupContents,
+                  board.changeCount == ownedCount else { return }
+            if let restore = board.write(original) { restored = restore.succeeded }
+        }
+        await cleanup.value
+        if dispatched { return Task.isCancelled || context.isCancelled ? .uncertain : .dispatched }
+        if Task.isCancelled || context.isCancelled { return .cancelled }
+        return restored ? .notDispatched : .clipboardChanged
+    }
+}
+
+extension KeyboardInjector {
+    @MainActor static func preparePasteDispatch() throws -> (@MainActor () -> Void) {
+        guard let source = CGEventSource(stateID: .hidSystemState) else { throw InjectionError.eventSourceCreationFailed }
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+            throw InjectionError.eventCreationFailed
+        }
+        down.flags = .maskCommand
+        up.flags = .maskCommand
+        return {
+            isInjecting.withLock { $0 = true }
+            defer { isInjecting.withLock { $0 = false } }
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+    }
+
+    @MainActor static func pasteText(_ text: String, context: SessionContext,
+                                    validate: @MainActor () async -> Bool) async -> PasteTransactionResult {
+        await ClipboardTransaction.shared.paste(text, context: context, board: SystemDeliveryPasteboard(),
+                                               validate: validate, prepareDispatch: preparePasteDispatch)
+    }
+}

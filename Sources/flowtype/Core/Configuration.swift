@@ -402,6 +402,7 @@ struct Configuration: Codable, Equatable {
 
     // Privacy: whether to persist transcript text alongside session metadata
     var storeTranscriptText: Bool = true
+    var deliveryMode: DeliveryMode = .unicode
 
     // Model provisioning
     var localModelPath: String? = nil          // user-specified model folder (offline load)
@@ -510,6 +511,7 @@ struct Configuration: Codable, Equatable {
         cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
+        deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? .unicode
         storeTranscriptText = (try? c.decodeIfPresent(Bool.self, forKey: .storeTranscriptText)) ?? true
         providerAPIKeys = (try? c.decodeIfPresent([String: String].self, forKey: .providerAPIKeys)) ?? [:]
 
@@ -551,6 +553,7 @@ extension Configuration {
         case asrEngine
         case asrRoutingPolicy
         case cloudASRSendContext
+        case deliveryMode
         case cloudPolishSendContext
         case cloudASRConfig
         case selectedLocalModelID
@@ -581,6 +584,7 @@ extension Configuration {
         try container.encode(downloadSource, forKey: .downloadSource)
         try container.encode(asrRoutingPolicy, forKey: .asrRoutingPolicy)
         try container.encode(cloudASRSendContext, forKey: .cloudASRSendContext)
+        try container.encode(deliveryMode, forKey: .deliveryMode)
         try container.encode(cloudPolishSendContext, forKey: .cloudPolishSendContext)
         try container.encode(cloudASRConfig, forKey: .cloudASRConfig)
         try container.encode(selectedLocalModelID, forKey: .selectedLocalModelID)

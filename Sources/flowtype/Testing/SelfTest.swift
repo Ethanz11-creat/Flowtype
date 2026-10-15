@@ -1,6 +1,7 @@
 import os
 import Foundation
 import Combine
+import GRDB
 
 /// Lightweight, dependency-free self-tests that run WITHOUT Xcode / XCTest.
 ///
@@ -351,6 +352,9 @@ enum SelfTest {
         await testPolishStreamTermination(r)
         await testAsyncDeadline(r)
         await testPolishDelivery(r)
+        await testClipboardTransactions(r)
+        testDeliveryPersistence(r)
+        await testDeliveryModeStage(r)
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
@@ -3679,7 +3683,7 @@ enum SelfTest {
         r.check(percentile([], 0.5) == nil, "metrics: empty → nil")
         r.eq(percentile([100], 0.5), 100, "metrics: single value")
         r.eq(percentile([10, 20, 30, 40, 50], 0.5), 30, "metrics: p50 of odd set")
-        r.eq(percentile([10, 20, 30, 40], 0.5), 30, "metrics: p50 nearest-rank of even set")
+        r.eq(percentile([10, 20, 30, 40], 0.5), 30, "metrics: p50 round((n−1)×p) index of even set")
         r.eq(percentile([10, 20, 30, 40], 0.95), 40, "metrics: p95 clamps to max")
         r.eq(percentile([10, 20, 30, 40], 0.0), 10, "metrics: p0 → min")
 
@@ -3690,6 +3694,7 @@ enum SelfTest {
         s.asrProviderID = "cloud-asr"
         s.usedFallback = false
         let txt = SessionMetrics.report([s])
+        r.check(txt.contains("stop→dispatch: n=0"), "delivery metrics: legacy timing must not imply dispatched delivery")
         r.check(txt.contains("p50"), "metrics: report contains p50")
         r.check(txt.contains("1500"), "metrics: report contains the sample value")
         r.check(txt.contains("fallback: 0"), "metrics: report counts non-fallback as 0")
@@ -3735,5 +3740,236 @@ enum SelfTest {
         let plainBack = SessionRecord(from: plain).toDictationSession()
         r.eq(plainBack.usedFallback, false, "metrics: nil usedFallback → false round-trip")
         r.eq(plainBack.fallbackReason, nil, "metrics: nil fallbackReason → nil round-trip")
+    }
+}
+
+extension SelfTest {
+    @MainActor final class FakeDeliveryPasteboard: DeliveryPasteboard {
+        var changeCount = 10
+        var value: PasteboardContents
+        var incomplete = false
+        var changeOnRead = false
+        var failWrite = false
+        var afterWrite: (() -> Void)?
+        var writes: [PasteboardContents] = []
+        init(_ value: PasteboardContents) { self.value = value }
+        func contents() -> PasteboardContents? {
+            if changeOnRead { changeCount += 1 }
+            return incomplete ? nil : value
+        }
+        func write(_ contents: PasteboardContents) -> PasteboardWriteReceipt? {
+            changeCount += 1
+            let generation = changeCount
+            let success = !failWrite
+            failWrite = false
+            value = success ? contents : []
+            writes.append(contents)
+            let callback = afterWrite
+            afterWrite = nil
+            callback?()
+            return PasteboardWriteReceipt(changeCount: generation, succeeded: success)
+        }
+    }
+
+    @MainActor final class PasteWindow {
+        var entered = false
+        var continuation: CheckedContinuation<Void, Never>?
+        func wait() async {
+            entered = true
+            await withCheckedContinuation { continuation = $0 }
+        }
+        func finish() { continuation?.resume(); continuation = nil }
+    }
+
+    @MainActor static func testClipboardTransactions(_ r: Reporter) async {
+        let original: PasteboardContents = [
+            ["public.utf8-plain-text": Data("original".utf8), "public.rtf": Data([0, 1, 254]), "public.png": Data([255, 7])],
+            ["public.file-url": Data("file:///tmp/sample".utf8), "custom.vendor-type": Data([3, 4])]
+        ]
+        let coordinator = ClipboardTransaction()
+        let board = FakeDeliveryPasteboard(original)
+        let context = SessionContext(sessionID: 400)
+        var pairs = 0
+        let result = await coordinator.paste("新内容\n🙂", context: context, board: board,
+            validate: { true }, prepareDispatch: { { pairs += 1 } }, settle: {})
+        r.eq(result, .dispatched, "paste: reports dispatch without claiming insertion")
+        r.eq(pairs, 1, "paste: exactly one prepared balanced Cmd+V pair")
+        r.eq(board.value, original, "paste: restores every item and binary representation")
+        r.eq(board.writes.count, 2, "paste: one temporary write and one restore")
+
+        for incomplete in [true, false] {
+            let unsafe = FakeDeliveryPasteboard(original)
+            unsafe.incomplete = incomplete
+            unsafe.changeOnRead = !incomplete
+            let result = await coordinator.paste("blocked", context: SessionContext(sessionID: 401), board: unsafe,
+                validate: { true }, prepareDispatch: { { pairs += 1 } }, settle: {})
+            r.eq(result, incomplete ? .notDispatched : .clipboardChanged, "paste: incomplete or unstable snapshot rejects transaction")
+            r.eq(unsafe.writes.count, 0, "paste: rejected snapshot never mutates clipboard")
+        }
+        let changedTarget = FakeDeliveryPasteboard(original)
+        var validations = 0
+        let rejectedTarget = await coordinator.paste("blocked", context: SessionContext(sessionID: 402), board: changedTarget,
+            validate: { validations += 1; return validations == 1 }, prepareDispatch: { { pairs += 1 } }, settle: {})
+        r.eq(rejectedTarget, .notDispatched, "paste: revalidates target after snapshot enumeration")
+        r.eq(changedTarget.writes.count, 0, "paste: late target change never writes or dispatches")
+
+        let copied = FakeDeliveryPasteboard(original)
+        let userCopy: PasteboardContents = [["public.png": Data([9, 9, 9])]]
+        _ = await coordinator.paste("temporary", context: SessionContext(sessionID: 403), board: copied,
+            validate: { true }, prepareDispatch: { {} }, settle: { _ = copied.write(userCopy) })
+        r.eq(copied.value, userCopy, "paste: user copy during settling is never overwritten")
+        r.eq(copied.writes.count, 2, "paste: ownership loss skips restore")
+        let copyDuringWrite = FakeDeliveryPasteboard(original)
+        copyDuringWrite.afterWrite = { _ = copyDuringWrite.write(copyDuringWrite.value) }
+        let concurrentResult = await coordinator.paste("temporary", context: SessionContext(sessionID: 412), board: copyDuringWrite,
+            validate: { true }, prepareDispatch: { { pairs += 1 } }, settle: {})
+        r.eq(concurrentResult, .clipboardChanged, "paste: new ownership during write blocks event and fallback")
+        r.eq(copyDuringWrite.writes.count, 2, "paste: same-content concurrent write never mistaken for our generation")
+        r.eq(copyDuringWrite.value, [["public.utf8-plain-text": Data("temporary".utf8)]], "paste: concurrent copy survives cleanup")
+        let failedWrite = FakeDeliveryPasteboard(original)
+        failedWrite.failWrite = true
+        let writeFailure = await coordinator.paste("temporary", context: SessionContext(sessionID: 413), board: failedWrite,
+            validate: { true }, prepareDispatch: { { pairs += 1 } }, settle: {})
+        r.eq(writeFailure, .notDispatched, "paste: failed write never dispatches")
+        r.eq(failedWrite.value, original, "paste: failed write restores original while owning cleared generation")
+
+        let sameText = FakeDeliveryPasteboard(original)
+        _ = await coordinator.paste("temporary", context: SessionContext(sessionID: 404), board: sameText,
+            validate: { true }, prepareDispatch: { {} }, settle: { _ = sameText.write(sameText.value) })
+        r.eq(sameText.writes.count, 2, "paste: same text with a new changeCount is user-owned")
+        let corruptContent = FakeDeliveryPasteboard(original)
+        _ = await coordinator.paste("temporary", context: SessionContext(sessionID: 405), board: corruptContent,
+            validate: { true }, prepareDispatch: { {} }, settle: { corruptContent.value = userCopy })
+        r.eq(corruptContent.value, userCopy, "paste: content mismatch also prevents restore")
+
+        // Real production 150ms wait, cancelled inside the fake event boundary.
+        // No clipboard, CGEvent, AX, or foreground application APIs are invoked.
+        let cancelled = SessionContext(sessionID: 406)
+        let cancelledBoard = FakeDeliveryPasteboard(original)
+        let began = ContinuousClock.now
+        let task = Task {
+            await coordinator.paste("cancel after event", context: cancelled, board: cancelledBoard,
+                validate: { true }, prepareDispatch: { {
+                    withUnsafeCurrentTask { $0?.cancel() }
+                } })
+        }
+        r.eq(await task.value, .uncertain, "paste: task cancellation after event is uncertain")
+        r.check(began.duration(to: .now) >= .milliseconds(145), "paste: cancelled event retains full independent 150ms window")
+        r.eq(cancelledBoard.value, original, "paste: cleanup survives cancelled session task")
+
+        // Hold the first cleanup so a concurrent transaction is forced to queue.
+        let overlapping = FakeDeliveryPasteboard(original)
+        let window = PasteWindow()
+        let firstContext = SessionContext(sessionID: 407)
+        let first = Task {
+            await coordinator.paste("first", context: firstContext, board: overlapping,
+                validate: { true }, prepareDispatch: { {} }, settle: { await window.wait() })
+        }
+        while !window.entered { await Task.yield() }
+        firstContext.cancel()
+        let second = Task {
+            await coordinator.paste("second", context: SessionContext(sessionID: 408), board: overlapping,
+                validate: { true }, prepareDispatch: { {} }, settle: {})
+        }
+        for _ in 0..<10 { await Task.yield() }
+        r.eq(overlapping.writes.count, 1, "paste: overlapping transaction cannot snapshot/write during first cleanup")
+        window.finish()
+        r.eq(await first.value, .uncertain, "paste: context cancellation after event is uncertain")
+        r.eq(await second.value, .dispatched, "paste: queued transaction starts after cleanup")
+        r.eq(overlapping.value, original, "paste: overlap restores real original, never another temporary text")
+        r.eq(overlapping.writes.count, 4, "paste: serialized transactions each write and restore once")
+
+        let before = SessionContext(sessionID: 409)
+        before.cancel()
+        let untouched = FakeDeliveryPasteboard(original)
+        r.eq(await coordinator.paste("never", context: before, board: untouched,
+            validate: { true }, prepareDispatch: { {} }, settle: {}), .cancelled,
+             "paste: cancellation before preparation has no delivery")
+        r.eq(untouched.writes.count, 0, "paste: pre-event cancellation leaves clipboard untouched")
+        let failed = await coordinator.paste("never", context: SessionContext(sessionID: 410), board: untouched,
+            validate: { true }, prepareDispatch: { throw InjectionError.eventCreationFailed }, settle: {})
+        r.eq(failed, .notDispatched, "paste: event preparation failure permits one clipboard fallback")
+        r.eq(untouched.writes.count, 0, "paste: event objects prepared before clipboard mutation")
+    }
+
+    @MainActor static func testDeliveryModeStage(_ r: Reporter) async {
+        r.eq(Configuration().deliveryMode, .unicode, "delivery mode: Unicode remains default")
+        let legacy = try? JSONDecoder().decode(Configuration.self, from: Data("{}".utf8))
+        r.eq(legacy?.deliveryMode, .unicode, "delivery mode: old configuration defaults Unicode")
+        var config = Configuration(); config.deliveryMode = .pasteInSupportedApps
+        let encoded = try? JSONEncoder().encode(config)
+        let decoded = encoded.flatMap { try? JSONDecoder().decode(Configuration.self, from: $0) }
+        r.eq(decoded?.deliveryMode, .pasteInSupportedApps, "delivery mode: opt-in persists")
+        for id in ["com.apple.TextEdit", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"] {
+            r.check(DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: id), "delivery mode: explicit candidate \(id)")
+            r.check(!DeliveryMode.unicode.usesPaste(bundleID: id), "delivery mode: default never pastes")
+        }
+        r.check(!DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: "com.apple.Terminal"), "delivery mode: unknown apps keep Unicode")
+        r.check(!DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: nil), "delivery mode: missing identity keeps Unicode")
+        for (mode, bundle, result, expected) in [
+            (DeliveryMode.unicode, "com.apple.TextEdit", PasteTransactionResult.dispatched, DeliveryOutcome.typedDispatched),
+            (.pasteInSupportedApps, "com.apple.Terminal", .dispatched, .typedDispatched),
+            (.pasteInSupportedApps, "com.apple.TextEdit", .dispatched, .pasteDispatched),
+            (.pasteInSupportedApps, "com.apple.TextEdit", .notDispatched, .clipboard),
+            (.pasteInSupportedApps, "com.apple.TextEdit", .uncertain, .uncertain),
+            (.pasteInSupportedApps, "com.apple.TextEdit", .clipboardChanged, .uncertain)
+        ] {
+            let ctx = SessionContext(sessionID: 411)
+            let target = DeliveryTargetSnapshot(pid: 42)
+            ctx.deliveryTarget = target
+            ctx.stopRecordingAt = Date().addingTimeInterval(-1)
+            let log = DeliveryLog()
+            let stage = InjectionStage(settle: {}, currentTarget: { target },
+                inject: { _, ctx in try KeyboardInjector.postIfActive(context: ctx) { log.append("typed") } },
+                mode: { mode }, bundleID: { _ in bundle }, paste: { _, _, _ in log.append("paste"); return result },
+                copy: { _ in log.append("copied") })
+            _ = await stage.execute(payload: .polished("delivered", raw: "delivered"), context: ctx)
+            _ = await stage.execute(payload: .polished("delivered", raw: "delivered"), context: ctx)
+            r.eq(ctx.deliveryOutcome, expected, "delivery stage: configured mode produces explicit terminal outcome")
+            r.check(ctx.stopToDeliveryMs != nil, "delivery stage: clipboard/dispatch/uncertain all have latency")
+            let expectedLog = expected == .typedDispatched ? ["typed"] : expected == .clipboard ? ["paste", "copied"] : ["paste"]
+            r.eq(log.value, expectedLog, "delivery stage: no repeated paste or fallback after uncertain dispatch")
+        }
+    }
+
+    static func testDeliveryPersistence(_ r: Reporter) {
+        do {
+            let queue = try DatabaseQueue()
+            try AppDatabase.migrator.migrate(queue, upTo: "v4_metrics")
+            try queue.write { db in
+                try db.execute(sql: "INSERT INTO session(id,startedAt,rawTranscript,finalText) VALUES('old',0,'old','old')")
+            }
+            let database = try AppDatabase(queue, isOnDisk: false)
+            let old = try database.dbQueue.read { try SessionRecord.fetchOne($0, key: "old") }
+            r.eq(old?.deliveryOutcome, nil, "delivery migration: v4 row keeps unknown outcome")
+            r.eq(old?.stopToDeliveryMs, nil, "delivery migration: v4 row keeps unknown timing")
+            let migrations = try database.dbQueue.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations") }
+            r.check(migrations.contains("v5_delivery"), "delivery migration: v5 registered and applied")
+            var sessions: [DictationSession] = []
+            for outcome in [DeliveryOutcome.typedDispatched, .pasteDispatched, .clipboard, .uncertain, .cancelled] {
+                var session = DictationSession(rawTranscript: "private speech", finalText: "private output", polishMode: .raw, durationMs: 1)
+                session.deliveryOutcome = outcome
+                session.stopToDeliveryMs = outcome == .clipboard ? 0 : 1200
+                let json = try JSONEncoder().encode(session)
+                let decoded = try JSONDecoder().decode(DictationSession.self, from: json)
+                r.eq(decoded.deliveryOutcome, outcome, "delivery JSON: outcome round trips")
+                r.eq(decoded.stopToDeliveryMs, session.stopToDeliveryMs, "delivery JSON: latency round trips including zero")
+                var record = SessionRecord(from: session, storeText: false)
+                try database.dbQueue.write { try record.insert($0) }
+                let restored = try database.dbQueue.read { try SessionRecord.fetchOne($0, key: session.id) }!.toDictationSession()
+                r.eq(restored.deliveryOutcome, outcome, "delivery DB: outcome survives transcript privacy off")
+                r.eq(restored.stopToDeliveryMs, session.stopToDeliveryMs, "delivery DB: latency survives transcript privacy off")
+                r.eq(restored.finalText, "", "delivery DB: transcript remains absent")
+                sessions.append(restored)
+            }
+            let report = SessionMetrics.report(sessions)
+            r.check(report.contains("dispatched: 2, clipboard: 1, uncertain: 1, cancelled: 1"), "delivery metrics: distinguishes all outcomes")
+            r.check(report.contains("stop→dispatch: n=2") && report.contains("stop→clipboard: n=1") && report.contains("stop→uncertain: n=1"), "delivery metrics: separate destination latency distributions")
+            r.check(!report.contains("private"), "delivery metrics: report is content free")
+            let oldJSON = Data(#"{"id":"old","createdAt":0,"rawTranscript":"a","finalText":"a","polishMode":"raw"}"#.utf8)
+            let legacy = try JSONDecoder().decode(DictationSession.self, from: oldJSON)
+            r.eq(legacy.deliveryOutcome, nil, "delivery JSON: legacy missing outcome decodes nil")
+            r.eq(legacy.stopToDeliveryMs, nil, "delivery JSON: legacy missing latency decodes nil")
+        } catch { r.check(false, "delivery persistence: \(error)") }
     }
 }

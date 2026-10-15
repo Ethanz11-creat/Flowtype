@@ -22,8 +22,10 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
     var polishMs: Int64
     var injectMs: Int64
     var stopToInjectMs: Int64
+    var deliveryOutcome: DeliveryOutcome?
+    var stopToDeliveryMs: Int64?
 
-    init(from s: DictationSession) {
+    init(from s: DictationSession, storeText: Bool = true) {
         self.id = s.id
         self.startedAt = s.createdAt.timeIntervalSince1970
         self.recordingMs = Int64(s.recordingMs ?? 0)
@@ -37,8 +39,8 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         self.appBundleID = s.appBundleID
         self.polishMode = s.polishMode.rawValue
         self.sttBackend = s.sttBackend ?? "legacy"   // migrated old rows have no backend
-        self.rawTranscript = s.rawTranscript
-        self.finalText = s.finalText
+        self.rawTranscript = storeText ? s.rawTranscript : nil
+        self.finalText = storeText ? s.finalText : nil
         self.asrProviderID = s.asrProviderID
         self.usedFallback = s.usedFallback ?? false
         self.fallbackReason = s.fallbackReason
@@ -46,6 +48,8 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         self.polishMs = Int64(s.polishMs ?? 0)
         self.injectMs = Int64(s.injectMs ?? 0)
         self.stopToInjectMs = Int64(s.stopToInjectMs ?? 0)
+        self.deliveryOutcome = s.deliveryOutcome
+        self.stopToDeliveryMs = s.stopToDeliveryMs.map(Int64.init)
     }
 
     func toDictationSession() -> DictationSession {
@@ -65,6 +69,8 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         session.polishMs = polishMs > 0 ? Int(polishMs) : nil
         session.injectMs = injectMs > 0 ? Int(injectMs) : nil
         session.stopToInjectMs = stopToInjectMs > 0 ? Int(stopToInjectMs) : nil
+        session.deliveryOutcome = deliveryOutcome
+        session.stopToDeliveryMs = stopToDeliveryMs.map(Int.init)
         return session
     }
 }

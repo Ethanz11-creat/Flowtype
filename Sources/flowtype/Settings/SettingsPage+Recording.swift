@@ -12,6 +12,13 @@ extension SettingsPage {
                 Spacer()
             }
 
+            Picker("文字交付方式", selection: $store.current.deliveryMode) {
+                Text("Unicode 键入（默认）").tag(DeliveryMode.unicode)
+                Text("候选应用粘贴（实验）").tag(DeliveryMode.pasteInSupportedApps)
+            }
+            Text("实验候选：TextEdit、VS Code、Cursor、Chrome、Safari、Edge；其他应用使用键入。候选目录不代表已完成真机验证。")
+                .font(.system(size: 11)).foregroundColor(.secondary)
+
             Toggle("停止后自动整理", isOn: $store.current.polishOnStop)
                 .toggleStyle(.switch)
                 .controlSize(.small)

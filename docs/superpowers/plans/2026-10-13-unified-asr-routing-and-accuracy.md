@@ -1358,7 +1358,7 @@ git commit -m "feat(context): collect foreground context via Accessibility API"
         r.check(percentile([], 0.5) == nil, "metrics: empty → nil")
         r.eq(percentile([100], 0.5), 100, "metrics: single value")
         r.eq(percentile([10, 20, 30, 40, 50], 0.5), 30, "metrics: p50 of odd set")
-        r.eq(percentile([10, 20, 30, 40], 0.5), 30, "metrics: p50 nearest-rank of even set")
+        r.eq(percentile([10, 20, 30, 40], 0.5), 30, "metrics: p50 round((n−1)×p) index of even set")
         r.eq(percentile([10, 20, 30, 40], 0.95), 40, "metrics: p95 clamps to max")
         r.eq(percentile([10, 20, 30, 40], 0.0), 10, "metrics: p0 → min")
 
@@ -1403,7 +1403,7 @@ Expected: 编译失败（`cannot find 'percentile'`）。
 ```swift
 import Foundation
 
-/// 最近样本的 p 分位数（nearest-rank），空数组返回 nil。
+/// 最近样本的 p 分位数（round((n−1)×p) index），空数组返回 nil。
 func percentile(_ values: [Int], _ p: Double) -> Int? {
     guard !values.isEmpty else { return nil }
     let sorted = values.sorted()

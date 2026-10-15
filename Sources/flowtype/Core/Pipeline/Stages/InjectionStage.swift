@@ -8,6 +8,9 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
     private let currentTarget: @Sendable () async -> DeliveryTargetSnapshot
     private let focus: (@MainActor @Sendable () -> FocusSignals)?
     private let inject: @Sendable (String, SessionContext) async throws -> Void
+    private let mode: @MainActor @Sendable () -> DeliveryMode
+    private let bundleID: @MainActor @Sendable (Int32?) -> String?
+    private let paste: @MainActor @Sendable (String, SessionContext, DeliveryTargetSnapshot?) async -> PasteTransactionResult
     private let copy: @MainActor @Sendable (String) -> Void
 
     init(settle: @escaping @Sendable () async throws -> Void = { try await Task.sleep(nanoseconds: 50_000_000) },
@@ -15,6 +18,15 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
          currentTarget: @escaping @Sendable () async -> DeliveryTargetSnapshot = { await KeyboardInjector.currentDeliveryTarget() },
          inject: @escaping @Sendable (String, SessionContext) async throws -> Void = { text, context in
              try await KeyboardInjector.insertText(text, context: context)
+         },
+         mode: @escaping @MainActor @Sendable () -> DeliveryMode = { ConfigurationStore.shared.current.deliveryMode },
+         bundleID: @escaping @MainActor @Sendable (Int32?) -> String? = { pid in
+             pid.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
+         },
+         paste: @escaping @MainActor @Sendable (String, SessionContext, DeliveryTargetSnapshot?) async -> PasteTransactionResult = { text, context, target in
+             await KeyboardInjector.pasteText(text, context: context) {
+                 decideDelivery(target: target, current: await KeyboardInjector.currentDeliveryTarget()) == .inject
+             }
          },
          copy: @escaping @MainActor @Sendable (String) -> Void = { text in
              NSPasteboard.general.clearContents()
@@ -26,6 +38,9 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
         self.currentTarget = currentTarget
         self.inject = inject
         self.copy = copy
+        self.mode = mode
+        self.bundleID = bundleID
+        self.paste = paste
     }
 
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
@@ -61,6 +76,30 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                     context.completionNotice = changed ? "焦点已变化 · 已复制，按 ⌘V 粘贴" : "已复制，按 ⌘V 粘贴"
                 }
             case .inject:
+                let usePaste = await MainActor.run {
+                    let selected = mode()
+                    return selected == .pasteInSupportedApps && selected.usesPaste(bundleID: bundleID(current.pid))
+                }
+                if usePaste {
+                    let result = await paste(text, context, target)
+                    switch result {
+                    case .dispatched: await complete(.pasteDispatched, context: context, start: start)
+                    case .uncertain: await complete(.uncertain, context: context, start: start)
+                    case .cancelled: await complete(.cancelled, context: context, start: start)
+                    case .clipboardChanged:
+                        await complete(.uncertain, context: context, start: start)
+                        await MainActor.run {
+                            if !context.isCancelled { context.completionNotice = "剪贴板已变化 · 可从历史复制" }
+                        }
+                    case .notDispatched:
+                        // Temporary clipboard preparation may have claimed the effect
+                        // latch, but no event was sent and cleanup has already finished.
+                        try await copyToClipboard(text, context: context, afterPastePreparation: true)
+                        await MainActor.run { context.completionNotice = "已复制，按 ⌘V 粘贴" }
+                        await complete(.clipboard, context: context, start: start)
+                    }
+                    return .complete
+                }
                 do {
                     try checkActive(context)
                     try await inject(text, context)
@@ -101,6 +140,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 (outcome == .typedDispatched || outcome == .pasteDispatched) && (context.isCancelled || Task.isCancelled)
                 ? .uncertain : outcome
             context.finishDelivery(effective)
+            context.stopToDeliveryMs = context.stopRecordingAt.map { Int((context.deliveryEventDispatchedAt ?? Date()).timeIntervalSince($0) * 1000) }
             guard !context.isCancelled else { return }
             context.injectMs = Int(Date().timeIntervalSince(start) * 1000)
             if effective == .uncertain { context.completionNotice = "已发送 · 可从历史复制" }
@@ -112,10 +152,10 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
         guard !context.isCancellationRequested else { throw CancellationError() }
     }
 
-    private func copyToClipboard(_ text: String, context: SessionContext) async throws {
+    private func copyToClipboard(_ text: String, context: SessionContext, afterPastePreparation: Bool = false) async throws {
         try checkActive(context)
         let copied = await MainActor.run {
-            guard !Task.isCancelled, !context.deliveryEffectStarted else { return false }
+            guard !Task.isCancelled, (!context.deliveryEffectStarted || afterPastePreparation) else { return false }
             return context.performDeliveryEffect { copy(text) }
         }
         guard copied else { throw CancellationError() }
