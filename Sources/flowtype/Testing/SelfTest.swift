@@ -3460,10 +3460,10 @@ enum SelfTest {
                      ("/tmp/a然后继续", "/tmp/a并继续")] {
             r.check(!preservesCodingLiterals(original: pair.0, polished: pair.1), "literal-round2: complete token corruption rejected \(pair.0) → \(pair.1)")
         }
-        for pair in [("请打开/tmp/a，然后继续。", "打开/tmp/a。"),
-                     ("请打开~/项目/文件.swift，然后继续。", "打开~/项目/文件.swift。"),
-                     ("请打开/tmp/测试.txt，然后继续。", "打开/tmp/测试.txt。"),
-                     ("请打开/tmp/a，然后继续。", "请使用/tmp/a，再继续。"),
+        for pair in [("请打开 /tmp/a，然后继续。", "打开 /tmp/a。"),
+                     ("请打开，~/项目/文件.swift，然后继续。", "打开，~/项目/文件.swift。"),
+                     ("请打开 /tmp/测试.txt，然后继续。", "打开 /tmp/测试.txt。"),
+                     ("请打开`/tmp/a`，然后继续。", "请使用`/tmp/a`，再继续。"),
                      ("请保留 v1.2.3-beta.1+build.1，然后继续。", "使用 v1.2.3-beta.1+build.1。"),
                      ("Use v1.2.3", "Use `v1.2.3`"), ("Use /tmp/a", "Use `/tmp/a`"),
                      ("Use https://example.com/path", "Use `https://example.com/path`"),
@@ -3472,6 +3472,19 @@ enum SelfTest {
         }
         r.check(!preservesCodingLiterals(original: "Use v1.2.3-beta", polished: "Use `v1.2.3-beta+wrong`"),
                 "literal-round2: added backticks cannot hide version corruption")
+        for pair in [("项目/文件.swift", "其他/文件.swift"),
+                     ("项目/文件.swift", "项目/其他.swift"),
+                     ("请打开/tmp/a，然后继续。", "打开/tmp/a。"),
+                     ("请打开/tmp/测试.txt，然后继续。", "打开/tmp/测试.txt。"),
+                     ("请打开/tmp/a，然后继续。", "请使用/tmp/a，再继续。")] {
+            r.check(!preservesCodingLiterals(original: pair.0, polished: pair.1), "literal-round3: complete ambiguous Unicode relative token protected \(pair.0)")
+        }
+        for pair in [("请打开 项目/文件.swift，然后继续。", "打开 项目/文件.swift。"),
+                     ("请打开，项目/文件.swift，然后继续。", "使用，项目/文件.swift。"),
+                     ("请打开`项目/文件.swift`，然后继续。", "打开`项目/文件.swift`。"),
+                     ("请打开 ./项目/文件.swift，然后继续。", "打开 ./项目/文件.swift。")] {
+            r.check(preservesCodingLiterals(original: pair.0, polished: pair.1), "literal-round3: explicitly delimited CJK prose remains editable \(pair.0)")
+        }
         config.asrRoutingPolicy = .auto
         config.cloudPolishSendContext = true
         config.llmProviders = [LLMProvider(name: "Test", provider: "custom", baseURL: "https://example.com/v1", model: "test", isActive: true)]
