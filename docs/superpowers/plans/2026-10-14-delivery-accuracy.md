@@ -1,6 +1,6 @@
 # Delivery and Context Accuracy Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make final text delivery honest and safe across app/focus changes while using bounded foreground context to improve coding-language accuracy.
 
@@ -46,10 +46,10 @@
 - Add structured foreground argument/user-data message builder to LLMService; do not combine context with transcript text passed to literal validation. Bounded AX waiter does not join the synchronous producer; stale collection commit blocked by session ownership. Add actual settings toggle/copy. Existing user prompt remains authoritative but append clear no instruction execution/literal preservation requirements.
 - Reject missing explicit code/path/URL/flags/version/numeric literals with token boundaries; allow prose/punctuation changes, use processed ASR on damage and mark polishFailed.
 
-- [ ] Write tests for redaction, secure parent, bounded timeout fallback, trusted prompt separation, and literal preservation/corruption.
-- [ ] Run self-test RED.
-- [ ] Implement context snapshot and refinement guard; reject damaged polish to processed text.
-- [ ] Run full build/self-test and commit `feat(accuracy): bound foreground context and protect coding literals`.
+- [x] Write tests for redaction, secure parent, bounded timeout fallback, trusted prompt separation, and literal preservation/corruption.
+- [x] Run self-test RED.
+- [x] Implement context snapshot and refinement guard; reject damaged polish to processed text.
+- [x] Run full build/self-test and commit `feat(accuracy): bound foreground context and protect coding literals`.
 
 ### Task 2: Target identity and delivery outcome contract
 
@@ -65,10 +65,10 @@
 - Preserve Unicode default and distinguish typedDispatched/pasteDispatched/clipboard/uncertain/cancelled; explicit side-effect latch claimed only immediately before actual delivery.
 - Capture target PID and comparable AX identity at stop (avoids preparation target races), revalidate at delivery; changed PID/known focus → clipboard. Switching app before stop selects the stop-time target; switching afterward routes clipboard. AX blind same PID preserves existing behavior. A synchronous gate plus Task checks surrounds each irreversible event dispatch.
 
-- [ ] Write pure tests for same target, changed target, secure/noneditable/AX-blind, duplicate delivery, and cancellation.
-- [ ] Run self-test RED.
-- [ ] Implement target snapshot/revalidation and explicit outcome propagation; do not claim paste confirmation from sleep.
-- [ ] Run full build/self-test and commit `feat(delivery): make target validation and outcome explicit`.
+- [x] Write pure tests for same target, changed target, secure/noneditable/AX-blind, duplicate delivery, and cancellation.
+- [x] Run self-test RED.
+- [x] Implement target snapshot/revalidation and explicit outcome propagation; do not claim paste confirmation from sleep.
+- [x] Run full build/self-test and commit `feat(delivery): make target validation and outcome explicit`.
 
 ### Task 3: Clipboard transaction and persistence migration
 
@@ -87,10 +87,10 @@
 - Add Optional deliveryOutcome and stopToDeliveryMs to history JSON; DB v5_delivery and Records init/read, save clipboard/notice terminal history once and include metrics even with transcript storage off. Report dispatch vs clipboard vs uncertain, no actual insertion success claim.
 - Add Optional delivery metrics migration and report dispatch vs clipboard vs uncertain.
 
-- [ ] Write fake pasteboard tests for restore ownership, user change, multi-representation capture, legacy decode/migration, and metric reports.
-- [ ] Run self-test RED.
-- [ ] Implement paste transaction and v5 migration; keep plain text fallback and no automatic repeat after ambiguous dispatch.
-- [ ] Run full build/self-test and commit `feat(delivery): protect clipboard and persist delivery outcome`.
+- [x] Write fake pasteboard tests for restore ownership, user change, multi-representation capture, legacy decode/migration, and metric reports.
+- [x] Run self-test RED.
+- [x] Implement paste transaction and v5 migration; keep plain text fallback and no automatic repeat after ambiguous dispatch.
+- [x] Run full build/self-test and commit `feat(delivery): protect clipboard and persist delivery outcome`.
 
 ### Task 4: Accuracy validation and UI recovery copy
 
@@ -100,7 +100,7 @@
 - Create: `docs/2026-10-14-flowtype-product-validation.md`
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
-- [ ] Add copy for focus-changed, clipboard recovery, uncertain dispatch, and literal-preservation fallback.
-- [ ] Document coding speech evaluation cases and manual app matrix.
-- [ ] Add pure tests for outcome-to-copy mapping and old histories.
-- [ ] Run full build/self-test and commit `test(delivery): document accuracy and delivery validation`.
+- [x] Add copy for focus-changed, clipboard recovery, uncertain dispatch, and literal-preservation fallback.
+- [x] Document coding speech evaluation cases and manual app matrix.
+- [x] Add pure tests for outcome-to-copy mapping and old histories.
+- [x] Run full build/self-test and commit `test(delivery): document accuracy and delivery validation`.

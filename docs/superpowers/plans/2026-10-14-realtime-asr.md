@@ -1,6 +1,6 @@
 # Background Realtime ASR and Local Fallback Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Upload audio during capture to a verified BYOK realtime ASR provider while retaining complete local audio and a bounded final-only fallback.
 
@@ -42,11 +42,11 @@
 - Produce pure `encodePCM16LE(_ samples: [Float]) -> Data` and `ParaformerSentenceAssembler`; use begin_time as replacement key (official protocol has no sentence_id), final sentence_end controls commitment, nullable end_time accepted.
 - `CloudASRProviderConfig.protocolKind` uses `.openAICompatible` or `.dashScopeRealtime`; explicit init/decode defaults preserve all existing callers and JSON.
 
-- [ ] Write fixture tests for signed PCM endpoints/NaN, exact run/finish envelopes, sentence revisions, null end_time, heartbeats, and foreign task IDs.
-- [ ] Run self-test and capture expected RED output.
-- [ ] Implement contracts/config/fixtures without opening a socket.
-- [ ] Run full build and self-test.
-- [ ] Commit `feat(asr): add realtime session contract and Paraformer wire models`.
+- [x] Write fixture tests for signed PCM endpoints/NaN, exact run/finish envelopes, sentence revisions, null end_time, heartbeats, and foreign task IDs.
+- [x] Run self-test and capture expected RED output.
+- [x] Implement contracts/config/fixtures without opening a socket.
+- [x] Run full build and self-test.
+- [x] Commit `feat(asr): add realtime session contract and Paraformer wire models`.
 
 ### Task 2: Injectable WebSocket transport and DashScope adapter
 
@@ -62,10 +62,10 @@
 - Synchronous capture ingress `seal()` closes accepted-buffer sequence; `finish()` awaits all prior accepted buffers and in-flight send before finish-task. One serial send pump avoids actor reentrant sends; queued+inflight count to 5s bound.
 - Validate endpoint WSS/host/port/no credentials/no unresolved placeholder before connection; do not log request key. Test startup timeout-before-waiter, cancel-before-start and stop during suspended last binary send.
 
-- [ ] Add fake transport tests for handshake ordering, bounded queued audio, finish drain, final after finish, timeout, malformed events, and cancellation.
-- [ ] Run self-test RED before adapter implementation.
-- [ ] Implement production transport and adapter; keep API key in an in-memory session snapshot and never log it.
-- [ ] Run build/self-test and commit `feat(asr): implement DashScope realtime Paraformer adapter`.
+- [x] Add fake transport tests for handshake ordering, bounded queued audio, finish drain, final after finish, timeout, malformed events, and cancellation.
+- [x] Run self-test RED before adapter implementation.
+- [x] Implement production transport and adapter; keep API key in an in-memory session snapshot and never log it.
+- [x] Run build/self-test and commit `feat(asr): implement DashScope realtime Paraformer adapter`.
 
 ### Task 3: Capture fan-out, routing, budget, and fallback
 
@@ -92,10 +92,10 @@
 - Deadline completion uses single-resume owner/unstructured cancellable producer, not task-group join on synchronous Qwen/AX. LLM receives deadline and termination cancellation; no next-provider attempt after cancelled.
 - Snapshot capture-start route once; carry it through stop/final rather than reserving half-open twice.
 
-- [ ] Test localOnly/no-key no socket, cloud start during capture, queue overflow, bounded stop, realtime failure to local, and one winner.
-- [ ] Run self-test RED.
-- [ ] Implement fan-out and ASR final selection; use batch/local fallback with complete samples and enforce 20s/5s budgets and cancellation.
-- [ ] Run full build/self-test and commit `feat(asr): stream capture in background with bounded local fallback`.
+- [x] Test localOnly/no-key no socket, cloud start during capture, queue overflow, bounded stop, realtime failure to local, and one winner.
+- [x] Run self-test RED.
+- [x] Implement fan-out and ASR final selection; use batch/local fallback with complete samples and enforce 20s/5s budgets and cancellation.
+- [x] Run full build/self-test and commit `feat(asr): stream capture in background with bounded local fallback`.
 
 ### Task 4: Health recovery and protocol validation
 
@@ -105,7 +105,7 @@
 - Create: `docs/2026-10-14-realtime-asr-validation.md`
 - Test: `Sources/flowtype/Testing/SelfTest.swift`
 
-- [ ] Add pure half-open recovery tests, endpoint/model identity invalidation, and no probe on forced/local modes.
-- [ ] Document real Key/weak network/offline/cancel/manual protocol matrix without claiming unrun results.
-- [ ] Implement one bounded real request recovery attempt per 60 seconds; preserve conservative slow evidence.
-- [ ] Run full build/self-test and commit `fix(asr): bound realtime health recovery and validation`.
+- [x] Add pure half-open recovery tests, endpoint/model identity invalidation, and no probe on forced/local modes.
+- [x] Document real Key/weak network/offline/cancel/manual protocol matrix without claiming unrun results.
+- [x] Implement one bounded real request recovery attempt per 60 seconds; preserve conservative slow evidence.
+- [x] Run full build/self-test and commit `fix(asr): bound realtime health recovery and validation`.

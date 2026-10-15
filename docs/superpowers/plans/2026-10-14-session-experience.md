@@ -1,6 +1,6 @@
 # Session Experience and Recovery Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make capture readiness, stop/cancel, final-only delivery, and recoverable errors feel like one native session.
 
@@ -40,11 +40,11 @@
 - Produce `SessionState.preparing`, `SessionContext.isCancelled`, and a readiness event that occurs after the first valid audio buffer.
 - Preserve `StageResult` and add no provider-specific casts.
 
-- [ ] Write pure tests for state transitions: preparing before first buffer, recording after ready, stop/cancel ownership, and stale session event rejection.
-- [ ] Run `swift run FlowType --self-test` and observe the new tests fail for missing state/contract.
-- [ ] Implement the minimal controller/context/stage contract; ensure stop during preparation cancels capture and no result advances.
-- [ ] Run focused self-test, then full `swift build` and self-test.
-- [ ] Commit `feat(session): gate recording on audio readiness and session ownership`.
+- [x] Write pure tests for state transitions: preparing before first buffer, recording after ready, stop/cancel ownership, and stale session event rejection.
+- [x] Run `swift run FlowType --self-test` and observe the new tests fail for missing state/contract.
+- [x] Implement the minimal controller/context/stage contract; ensure stop during preparation cancels capture and no result advances.
+- [x] Run focused self-test, then full `swift build` and self-test.
+- [x] Commit `feat(session): gate recording on audio readiness and session ownership`.
 
 ### Task 2: Gesture stop/cancel and stable presentation
 
@@ -64,11 +64,11 @@
 - Add stable presentation mapping for preparing/processing and remove polish preview content.
 - Produce `Configuration.polishOnStop: Bool` default true, `decodeIfPresent` legacy true; settings toggle “停止后自动整理”; all stop paths including max-duration use it. Active modifier release stops immediately; idle start detector remains compatible; nonmodifier key repeat cannot extend holds.
 
-- [ ] Add event timeline tests for first tap/stop, double tap start compatibility, Escape cancel, and repeated stop.
-- [ ] Run self-test to verify the new timeline assertions fail before implementation.
-- [ ] Implement immediate active-session stop, cancellation of pending tap timers, stable capsule/status titles, and readiness-based recording timer.
-- [ ] Run full build and self-test; manually record the required gesture matrix as pending where hardware is needed.
-- [ ] Commit `feat(session): make stop immediate and capsule states stable`.
+- [x] Add event timeline tests for first tap/stop, double tap start compatibility, Escape cancel, and repeated stop.
+- [x] Run self-test to verify the new timeline assertions fail before implementation.
+- [x] Implement immediate active-session stop, cancellation of pending tap timers, stable capsule/status titles, and readiness-based recording timer.
+- [x] Run full build and self-test; manually record the required gesture matrix as pending where hardware is needed.
+- [x] Commit `feat(session): make stop immediate and capsule states stable`.
 
 ### Task 3: Complete-text degradation and recovery actions
 
@@ -88,11 +88,11 @@
 - Add context completion notice rendered only after delivery, remove 5-second error dismissal, expose retry/copy/dismiss buttons only for actionable error. Stage-specific retry must not force polish for ASR retry.
 - InjectionStage must check Task/context cancellation before sleep, after sleep and before clipboard/CGEvent side effects; terminal save history exactly once when completing through idle or notice.
 
-- [ ] Write tests for empty/same/error polish results, cancellation, one delivery, and retry action labels.
-- [ ] Run self-test and capture RED output.
-- [ ] Implement bounded polish fallback and cancellation-aware stream cleanup; make recovery UI retain actionable state until explicit dismissal.
-- [ ] Run full build and self-test.
-- [ ] Commit `fix(session): deliver processed text when polish degrades`.
+- [x] Write tests for empty/same/error polish results, cancellation, one delivery, and retry action labels.
+- [x] Run self-test and capture RED output.
+- [x] Implement bounded polish fallback and cancellation-aware stream cleanup; make recovery UI retain actionable state until explicit dismissal.
+- [x] Run full build and self-test.
+- [x] Commit `fix(session): deliver processed text when polish degrades`.
 
 ### Task 4: Plan validation and manual matrix
 
@@ -100,7 +100,7 @@
 - Create: `docs/2026-10-14-flowtype-product-validation.md`
 - Modify: `Sources/flowtype/Testing/SelfTest.swift`
 
-- [ ] Add a reproducible manual matrix for readiness, short/long speech, silence, quick cancel, focus changes, permissions, and local cold/warm runs.
-- [ ] Add assertions for unchanged legacy configuration decode and onboarding demo behavior.
-- [ ] Run `swift build` and `swift run FlowType --self-test`.
-- [ ] Commit `test(session): document and pin interaction validation matrix`.
+- [x] Add a reproducible manual matrix for readiness, short/long speech, silence, quick cancel, focus changes, permissions, and local cold/warm runs.
+- [x] Add assertions for unchanged legacy configuration decode and onboarding demo behavior.
+- [x] Run `swift build` and `swift run FlowType --self-test`.
+- [x] Commit `test(session): document and pin interaction validation matrix`.
