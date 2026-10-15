@@ -3803,7 +3803,7 @@ extension SelfTest {
             unsafe.changeOnRead = !incomplete
             let result = await coordinator.paste("blocked", context: SessionContext(sessionID: 401), board: unsafe,
                 validate: { true }, prepareDispatch: { { pairs += 1 } }, settle: {})
-            r.eq(result, incomplete ? .notDispatched : .clipboardChanged, "paste: incomplete or unstable snapshot rejects transaction")
+            r.eq(result, incomplete ? .unsafeSnapshot : .clipboardChanged, "paste: incomplete or unstable snapshot rejects transaction")
             r.eq(unsafe.writes.count, 0, "paste: rejected snapshot never mutates clipboard")
         }
         let changedTarget = FakeDeliveryPasteboard(original)
@@ -3906,11 +3906,36 @@ extension SelfTest {
         }
         r.check(!DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: "com.apple.Terminal"), "delivery mode: unknown apps keep Unicode")
         r.check(!DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: nil), "delivery mode: missing identity keeps Unicode")
+        let unsafeBoard = FakeDeliveryPasteboard([["public.rtf": Data("old".utf8)]])
+        unsafeBoard.incomplete = true
+        var unsafeCopies = 0
+        let unsafeTarget = DeliveryTargetSnapshot(pid: 42, signals: FocusSignals(secureInputActive: false, focus: .editableText))
+        let unsafeStage = InjectionStage(settle: {}, currentTarget: { unsafeTarget }, mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" },
+            paste: { text, context, _ in await ClipboardTransaction().paste(text, context: context, board: unsafeBoard, validate: { true }, prepareDispatch: { {} }, settle: {}) },
+            copy: { _ in unsafeCopies += 1 })
+        let unsafeContext = SessionContext(sessionID: 414); unsafeContext.deliveryTarget = unsafeTarget
+        _ = await unsafeStage.execute(payload: .polished("safe", raw: "safe"), context: unsafeContext)
+        r.eq(unsafeCopies, 0, "paste stage: incomplete snapshot never falls back destructively")
+        r.eq(unsafeContext.deliveryOutcome, .cancelled, "paste stage: incomplete snapshot remains explicit recovery")
+
+        let cancelledRecovery = SessionContext(sessionID: 415)
+        cancelledRecovery.finalText = "recoverable"
+        _ = cancelledRecovery.beginDeliveryAttempt()
+        _ = cancelledRecovery.performDeliveryEffect { }
+        cancelledRecovery.finishDelivery(.uncertain)
+        cancelledRecovery.cancel()
+        r.check(cancelledRecovery.claimHistorySave(), "paste cancellation: dispatched uncertainty remains persistable once")
+        r.check(!cancelledRecovery.claimHistorySave(), "paste cancellation: persisted terminal outcome is once-only")
+        let preEffectCancel = SessionContext(sessionID: 416)
+        preEffectCancel.finalText = "never delivered"
+        preEffectCancel.cancel()
+        r.check(!preEffectCancel.claimHistorySave(), "paste cancellation: pre-effect cancel has no history side effect")
+
         for (mode, bundle, result, expected) in [
             (DeliveryMode.unicode, "com.apple.TextEdit", PasteTransactionResult.dispatched, DeliveryOutcome.typedDispatched),
             (.pasteInSupportedApps, "com.apple.Terminal", .dispatched, .typedDispatched),
             (.pasteInSupportedApps, "com.apple.TextEdit", .dispatched, .pasteDispatched),
-            (.pasteInSupportedApps, "com.apple.TextEdit", .notDispatched, .clipboard),
+            (.pasteInSupportedApps, "com.apple.TextEdit", .notDispatched, .cancelled),
             (.pasteInSupportedApps, "com.apple.TextEdit", .uncertain, .uncertain),
             (.pasteInSupportedApps, "com.apple.TextEdit", .clipboardChanged, .uncertain)
         ] {

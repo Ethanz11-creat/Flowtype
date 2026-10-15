@@ -86,17 +86,20 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                     case .dispatched: await complete(.pasteDispatched, context: context, start: start)
                     case .uncertain: await complete(.uncertain, context: context, start: start)
                     case .cancelled: await complete(.cancelled, context: context, start: start)
+                    case .unsafeSnapshot:
+                        // A partial representation snapshot is unsafe to replace.
+                        // Keep the text available through the session's explicit
+                        // recovery/history path and never clear the user's board.
+                        await complete(.cancelled, context: context, start: start)
+                        await MainActor.run { context.completionNotice = "剪贴板内容无法完整读取 · 可从历史复制" }
                     case .clipboardChanged:
                         await complete(.uncertain, context: context, start: start)
                         await MainActor.run {
                             if !context.isCancelled { context.completionNotice = "剪贴板已变化 · 可从历史复制" }
                         }
                     case .notDispatched:
-                        // Temporary clipboard preparation may have claimed the effect
-                        // latch, but no event was sent and cleanup has already finished.
-                        try await copyToClipboard(text, context: context, afterPastePreparation: true)
-                        await MainActor.run { context.completionNotice = "已复制，按 ⌘V 粘贴" }
-                        await complete(.clipboard, context: context, start: start)
+                        await complete(.cancelled, context: context, start: start)
+                        await MainActor.run { context.completionNotice = "粘贴未发送 · 可从历史复制" }
                     }
                     return .complete
                 }

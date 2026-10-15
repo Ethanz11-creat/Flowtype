@@ -85,6 +85,17 @@ final class SessionContext {
         }
     }
 
+    /// Claims the first-effect latch only when the operation reports that it
+    /// actually mutated the delivery destination.
+    nonisolated func performDeliveryEffectIf(_ action: () -> Bool) -> Bool {
+        cancellationLock.withLockUnchecked { state in
+            guard !state.cancelled, !Task.isCancelled else { return false }
+            let changed = action()
+            if changed { state.effectStarted = true }
+            return changed
+        }
+    }
+
     nonisolated var deliveryEffectStarted: Bool {
         cancellationLock.withLock { $0.effectStarted }
     }
@@ -105,7 +116,8 @@ final class SessionContext {
 
     /// Completion can transition through a notice and then idle; persist only once.
     func claimHistorySave() -> Bool {
-        guard !isCancelled, !historySaved, hasInjected, !finalText.isEmpty else { return false }
+        guard !historySaved, hasInjected, !finalText.isEmpty else { return false }
+        guard !isCancelled || (deliveryEffectStarted && deliveryOutcome == .uncertain) else { return false }
         historySaved = true
         return true
     }

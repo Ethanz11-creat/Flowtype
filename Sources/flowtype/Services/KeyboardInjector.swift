@@ -263,7 +263,7 @@ struct PasteboardWriteReceipt {
 }
 
 enum PasteTransactionResult: Equatable {
-    case dispatched, uncertain, notDispatched, cancelled, clipboardChanged
+    case dispatched, uncertain, notDispatched, unsafeSnapshot, cancelled, clipboardChanged
 }
 
 /// Main-actor serialization extends across the settling window and restoration.
@@ -296,7 +296,7 @@ enum PasteTransactionResult: Equatable {
         let dispatch: @MainActor () -> Void
         do { dispatch = try prepareDispatch() } catch { return .notDispatched }
         let beforeCount = board.changeCount
-        guard let original = board.contents() else { return .notDispatched }
+        guard let original = board.contents() else { return .unsafeSnapshot }
         guard board.changeCount == beforeCount else { return .clipboardChanged }
         guard await validate() else { return .notDispatched }
         guard !Task.isCancelled, !context.isCancelled else { return .cancelled }
@@ -304,9 +304,12 @@ enum PasteTransactionResult: Equatable {
         // The last count check and mutation have no suspension between them.
         guard board.changeCount == beforeCount else { return .clipboardChanged }
         var receipt: PasteboardWriteReceipt?
-        let active = context.performDeliveryEffect { receipt = board.write(owned) }
-        guard active else { return .cancelled }
-        guard let receipt else { return .notDispatched }
+        let active = context.performDeliveryEffectIf {
+            receipt = board.write(owned)
+            return receipt?.succeeded == true
+        }
+        guard active || receipt != nil else { return .cancelled }
+        guard let receipt else { return .cancelled }
         let ownedCount = receipt.changeCount
         // A failed write may leave an empty/partial board. Capture it only while
         // its original write generation is still ours, so cleanup can restore it.
