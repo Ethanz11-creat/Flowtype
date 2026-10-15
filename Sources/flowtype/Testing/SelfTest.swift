@@ -3369,6 +3369,19 @@ enum SelfTest {
         r.check(bounded?.selectedText?.hasPrefix("[REDACTED]") == true, "context: redacts before field truncation")
         r.check((buildContextText(bounded)?.count ?? 0) <= 1200 && bounded?.appName == "Editor", "context: selection/app survive shared bound")
 
+        let secret = "sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdef"
+        let secretSource = secret + String(repeating: " ", count: 1300) + "CURSOR"
+        let secretWindow = cursorNearContextText(secretSource, selection: NSRange(location: 620, length: 0))
+        let secretSnapshot = boundedForegroundContext(ForegroundContext(appName: nil, elementText: secretWindow, url: nil, selectedText: nil))
+        r.check(!(buildContextText(secretSnapshot) ?? "").contains("RSTUVWXYZ0123456789abcdef"),
+                "context-review: redact full secret before cursor window removes its prefix")
+        let prefixSnapshot = boundedForegroundContext(ForegroundContext(appName: nil,
+            elementText: cursorNearContextText(secretSource, selection: nil, maxChars: 8), url: nil, selectedText: nil))
+        r.check(!(buildContextText(prefixSnapshot) ?? "").contains("sk-ABCDE"),
+                "context-review: redact full secret before bounded prefix shortens credential")
+        let shiftedSource = secret + String(repeating: " ", count: 700) + "OFFSET_MARKER" + String(repeating: " ", count: 700)
+        r.check(cursorNearContextText(shiftedSource, selection: NSRange(location: 750, length: 0), maxChars: 100).contains("OFFSET_MARKER"),
+                "context-review: redaction retains original UTF16 cursor offsets")
         let cancelled = SessionContext(sessionID: 901)
         cancelled.startForegroundCollection(provider: DelayedContextProvider(delay: 0.05, value: "cancelled"))
         cancelled.cancel()
@@ -3426,6 +3439,22 @@ enum SelfTest {
         r.check(!preservesCodingLiterals(original: "Use 42.", polished: "Use 43."), "literal: sentence-final standalone number stays protected")
         r.check(preservesCodingLiterals(original: "Use 42.", polished: "Use 42!"), "literal: sentence punctuation may change around numbers")
         r.check(!preservesCodingLiterals(original: "```\nload_value()\n```", polished: "load_other()"), "literal: fenced code content stays protected")
+        for pair in [("v1.2.3", "v1.2.3-beta"), ("1.2.3", "1.2.3+wrong"),
+                     ("v1.2.3-beta", "v1.2.3-other"), ("1.2.3+build", "1.2.3+wrong"),
+                     ("https://example.com?q=(x)", "https://example.com?q=(x"),
+                     ("https://example.com/path_(x)", "https://example.com/path_(x"),
+                     ("https://example.com?q=wow!", "https://example.com?q=wow"),
+                     ("https://example.com?q=x?", "https://example.com?q=x"),
+                     ("https://example.com#section:", "https://example.com#section"),
+                     ("/tmp/测试.txt", "/tmp/其他.txt"), ("~/项目/文件.swift", "~/项目/其他.swift")] {
+            r.check(!preservesCodingLiterals(original: pair.0, polished: pair.1), "literal-review: corruption rejected \(pair.0) → \(pair.1)")
+        }
+        for literal in ["https://example.com?q=(x)", "https://example.com/path_(x)", "/tmp/测试.txt", "~/项目/文件.swift", "v1.2.3-beta", "1.2.3+build"] {
+            r.check(preservesCodingLiterals(original: "请使用 \(literal)，然后继续。", polished: "使用 \(literal)。"),
+                    "literal-review: preserve literal and allow CJK sentence punctuation \(literal)")
+        }
+        r.check(preservesCodingLiterals(original: "See (https://example.com/path).", polished: "Visit https://example.com/path!"),
+                "literal-review: unmatched external URL delimiters are prose")
         config.asrRoutingPolicy = .auto
         config.cloudPolishSendContext = true
         config.llmProviders = [LLMProvider(name: "Test", provider: "custom", baseURL: "https://example.com/v1", model: "test", isActive: true)]

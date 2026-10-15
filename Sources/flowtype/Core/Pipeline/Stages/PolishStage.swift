@@ -11,43 +11,63 @@ func preservesCodingLiterals(original: String, polished: String) -> Bool {
     let patterns = [
         #"`+([^`]+)`+"#,
         #"(?<![A-Za-z0-9_])https?://[^\s<>\"'`\p{Han}，。；！？、]+"#,
-        #"(?<![A-Za-z0-9_:/])(?:~/|/|\.{1,2}/|[A-Za-z0-9_.-]+/)[A-Za-z0-9_./~+@%:=#?&-]+"#,
+        #"(?<![\p{L}\p{M}\p{N}_:/])(?:~/|/|\.{1,2}/|[\p{L}\p{M}\p{N}_.-]+/)[\p{L}\p{M}\p{N}\p{S}_./~+@%:=#?&-]+"#,
         #"(?<![A-Za-z0-9_-])--?[A-Za-z][A-Za-z0-9_-]*(?:=[A-Za-z0-9_./~:+@%=-]+)?"#,
         #"(?<![A-Za-z0-9_.])(?:v\d+(?:\.\d+)*|\d+(?:\.\d+)+)(?:[-+][A-Za-z0-9.-]+)?(?![A-Za-z0-9_]|\.[A-Za-z0-9_])"#,
         #"(?<![A-Za-z0-9_.])[-+]?\d+(?:\.\d+)?(?![A-Za-z0-9_]|\.[A-Za-z0-9_])"#,
     ]
-    var literals: [(String, Int)] = []
-    var occupied: [NSRange] = []
-    for (index, pattern) in patterns.enumerated() {
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return false }
-        for match in expression.matches(in: original, range: NSRange(original.startIndex..., in: original)) {
-            guard !occupied.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) else { continue }
-            occupied.append(match.range)
-            let matchedRange = index == 0 ? match.range(at: 1) : match.range
-            guard let range = Range(matchedRange, in: original) else { continue }
-            let matched = String(original[range])
-            let literal = index == 0 ? matched : matched.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)]}"))
-            if !literal.isEmpty { literals.append((literal, index)) }
+
+    func trimSentenceDelimiters(_ matched: String, category: Int) -> String {
+        guard category != 0 else { return matched }
+        var result = matched
+        while let last = result.last {
+            if ".,;:!?".contains(last), !(category == 1 && (result.contains("?") || result.contains("#"))) {
+                // Query/fragment punctuation is URL data. Ambiguous English
+                // punctuation there is conservatively protected, not discarded.
+                result.removeLast()
+            } else if let opening = [")": "(", "]": "[", "}": "{"][String(last)],
+                      result.filter({ String($0) == String(last) }).count > result.filter({ String($0) == opening }).count {
+                // Keep balanced URL content such as ?q=(x); only an unmatched
+                // closing delimiter belongs to the surrounding sentence.
+                result.removeLast()
+            } else { break }
         }
+        return result
     }
-    for (literal, category) in literals {
-        // ASCII boundaries allow adjacent CJK prose and sentence punctuation.
-        let left: String
-        let right: String
-        switch category {
-        case 0:
-            left = #"[A-Za-z0-9_]"#; right = #"[A-Za-z0-9_]"#
-        case 1, 2:
-            left = #"[A-Za-z0-9_./~:]"#
-            right = #"[A-Za-z0-9_/~:@%+?&#=-]|\.[A-Za-z0-9_]"#
-        case 3:
-            left = #"[A-Za-z0-9_-]"#; right = #"[A-Za-z0-9_=-]"#
-        default:
-            left = #"[A-Za-z0-9_.+-]"#; right = #"[A-Za-z0-9_]|\.[A-Za-z0-9_]"#
+
+    func extract(_ text: String) -> [[String]] {
+        var categories = Array(repeating: [String](), count: patterns.count)
+        var occupied: [NSRange] = []
+        for (category, pattern) in patterns.enumerated() {
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+            for match in expression.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                guard !occupied.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) else { continue }
+                occupied.append(match.range)
+                let matchedRange = category == 0 ? match.range(at: 1) : match.range
+                guard let range = Range(matchedRange, in: text) else { continue }
+                let literal = trimSentenceDelimiters(String(text[range]), category: category)
+                if !literal.isEmpty { categories[category].append(literal) }
+            }
         }
-        let pattern = "(?<!" + left + ")" + NSRegularExpression.escapedPattern(for: literal) + "(?!" + right + ")"
-        guard let expression = try? NSRegularExpression(pattern: pattern),
-              expression.firstMatch(in: polished, range: NSRange(polished.startIndex..., in: polished)) != nil else { return false }
+        return categories
+    }
+
+    let source = extract(original)
+    let result = extract(polished)
+    for category in source.indices {
+        for literal in source[category] {
+            if category == 0 {
+                // Backtick content may retain its text while prose formatting
+                // removes delimiters; it must still occur as a complete token.
+                let pattern = #"(?<![A-Za-z0-9_])"# + NSRegularExpression.escapedPattern(for: literal) + #"(?![A-Za-z0-9_])"#
+                guard let expression = try? NSRegularExpression(pattern: pattern),
+                      expression.firstMatch(in: polished, range: NSRange(polished.startIndex..., in: polished)) != nil else { return false }
+            } else if !result[category].contains(literal) {
+                // Compare complete tokens in the same category: added version
+                // suffixes and Unicode filename changes cannot match a prefix.
+                return false
+            }
+        }
     }
     return true
 }

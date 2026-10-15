@@ -77,10 +77,11 @@ func collectSafeElementContext<Node>(element: Node,
 
 /// Selection ranges from AX use UTF-16 offsets, as does NSString.
 func cursorNearContextText(_ value: String, selection: NSRange?, maxChars: Int = 1200) -> String {
-    let source = value as NSString
+    let safeValue = redactContextSecrets(value, preservingUTF16Offsets: true)
+    let source = safeValue as NSString
     guard let selection, selection.location != NSNotFound,
           selection.location >= 0, selection.location <= source.length else {
-        return String(value.prefix(max(0, maxChars)))
+        return String(safeValue.prefix(max(0, maxChars)))
     }
     let start = max(0, selection.location - max(0, maxChars) / 2)
     let range = NSRange(location: start, length: min(max(0, maxChars), source.length - start))
@@ -101,7 +102,7 @@ func isSecureFocus(role: String?, subrole: String?) -> Bool {
 /// 模式必须带左侧词边界：上下文文本会被喂进 ASR 提示词来偏向技术词，若 `sk-` 不带边界，
 /// 普通标识符会被误伤（`disk-partitioning` → `di[REDACTED]`），反而损害识别准确率。
 /// `Bearer` 则要求 token 至少 20 个字符，避免吞掉 `Bearer authentication` 这类正常文字。
-func redactContextSecrets(_ text: String) -> String {
+func redactContextSecrets(_ text: String, preservingUTF16Offsets: Bool = false) -> String {
     var out = text
     let patterns = [
         #"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{8,}"#,
@@ -110,8 +111,18 @@ func redactContextSecrets(_ text: String) -> String {
     ]
     for pattern in patterns {
         if let re = try? NSRegularExpression(pattern: pattern) {
-            out = re.stringByReplacingMatches(in: out, range: NSRange(out.startIndex..., in: out),
-                                              withTemplate: "[REDACTED]")
+            if preservingUTF16Offsets {
+                // AX selections refer to the original UTF-16 source. Mask every
+                // complete credential span before a window can lose its prefix.
+                let masked = NSMutableString(string: out)
+                for match in re.matches(in: out, range: NSRange(out.startIndex..., in: out)).reversed() {
+                    masked.replaceCharacters(in: match.range, with: String(repeating: "•", count: match.range.length))
+                }
+                out = masked as String
+            } else {
+                out = re.stringByReplacingMatches(in: out, range: NSRange(out.startIndex..., in: out),
+                                                  withTemplate: "[REDACTED]")
+            }
         }
     }
     return out
