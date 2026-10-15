@@ -3057,6 +3057,24 @@ enum SelfTest {
         switched.recordProbe(token: oldNetwork, latencyMs: 20, now: now)
         r.eq(switched, cleanNetwork, "identity: network change rejects all old in-flight results")
 
+        // The first NWPath callback is itself a generation boundary. A route
+        // captured while the monitor is still silent must not write health after
+        // that first callback reports offline or a different interface.
+        var preObservation = RouterHealthSnapshot()
+        preObservation.synchronizeIdentity(CloudASRHealthIdentity(provider: provider))
+        let preRoute = makeASRRouteSnapshot(configuration: config, localAvailable: true,
+                                             health: preObservation, now: now)
+        let preGeneration = preObservation.generation
+        let preChanged = preObservation.applyNetworkPath(
+            PathSignature(satisfied: false, isExpensive: false, isConstrained: false, interface: "wifi"))
+        r.check(preChanged && preObservation.generation != preGeneration,
+                "identity: first path observation advances generation")
+        let cleanPreObservation = preObservation
+        preObservation.recordSuccess(route: preRoute, latencyMs: 42, now: now)
+        preObservation.recordFailure(route: preRoute)
+        r.eq(preObservation, cleanPreObservation,
+             "identity: route captured before first path callback cannot write health")
+
         // Exercise the actual capture-start lock and probe entry point. No
         // singleton, monitor, network connection, provider, or microphone starts.
         let cfgBox = OSAllocatedUnfairLock(initialState: config)

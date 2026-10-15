@@ -85,11 +85,17 @@ struct RouterHealthSnapshot: Sendable, Equatable {
     /// Path observation + invalidation are one transaction with capture/results.
     @discardableResult
     mutating func applyNetworkPath(_ current: PathSignature) -> Bool {
+        // The first monitor callback is a boundary too: captures made while
+        // NWPath was still unknown carry the pre-observation generation and
+        // must be rejected once the initial reachable/expensive/interface
+        // state is known. Keep `pathChanged(nil, ...) == false` as a pure
+        // comparison contract; production state treats nil as invalidating.
+        let firstObservation = pathSignature == nil
         let changed = pathChanged(previous: pathSignature, current: current)
-        if changed { self = invalidateLinkSamples(self) }
+        if firstObservation || changed { self = invalidateLinkSamples(self) }
         networkReachable = current.satisfied
         pathSignature = current
-        return changed
+        return firstObservation || changed
     }
 
     mutating func recordSuccess(route: ASRRouteSnapshot, latencyMs: Int, now: Date) {
