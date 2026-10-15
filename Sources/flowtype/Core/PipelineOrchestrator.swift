@@ -142,7 +142,6 @@ final class SessionController: ObservableObject {
         // Create session context
         let statePublisher = PassthroughSubject<SessionState, Never>()
         let context = SessionContext(sessionID: newID, statePublisher: statePublisher)
-        context.targetApp = NSWorkspace.shared.frontmostApplication
         currentContext = context
 
         // Reset state
@@ -224,6 +223,8 @@ final class SessionController: ObservableObject {
         // Stages derive their own bounded timeout from this snapshot.
         context.completionBudget = CompletionBudget(seconds: 20)
         context.stopRecordingAt = Date()
+        context.targetApp = NSWorkspace.shared.frontmostApplication
+        context.captureDeliveryTarget(pid: context.targetApp?.processIdentifier)
 
         currentTask?.cancel()
         currentTask = nil

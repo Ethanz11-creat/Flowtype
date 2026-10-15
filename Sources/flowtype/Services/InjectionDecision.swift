@@ -7,7 +7,7 @@ enum InjectionDecision: Equatable {
 }
 
 /// Classification of the system-wide focused element at delivery time.
-enum FocusKind: Equatable {
+enum FocusKind: Equatable, Sendable {
     case editableText    // an editable text field/area (or settable value)
     case nonTextControl  // a clearly non-text control: button, menu, slider, link, image…
     case blindOrUnknown  // no element, generic container, AXUnknown, or AX timed out
@@ -15,7 +15,7 @@ enum FocusKind: Equatable {
 
 /// Observable signals gathered just before delivery. Plain data so `decideInjection`
 /// stays a pure function (unit-testable without a live AX/system query).
-struct FocusSignals: Equatable {
+struct FocusSignals: Equatable, Sendable {
     var secureInputActive: Bool   // IsSecureEventInputEnabled() OR an AXSecureTextField focus
     var focus: FocusKind
 }

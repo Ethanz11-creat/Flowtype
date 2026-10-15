@@ -45,9 +45,10 @@ struct DemoInjectionStage: PipelineStage {
         // Reserve and notify without an actor hop between the cancellation gate
         // and side effect. Do not hold a lock while calling reentrant observers.
         await MainActor.run {
-            guard !Task.isCancelled, !context.isCancelled, !context.hasInjected else { return }
-            context.hasInjected = true
+            guard !Task.isCancelled, context.beginDeliveryAttempt() else { return }
+            guard context.performDeliveryEffect({}) else { context.finishDelivery(.cancelled); return }
             NotificationCenter.default.post(name: .onboardingDemoTextReceived, object: text)
+            context.finishDelivery(.typedDispatched)
         }
         return .complete
     }

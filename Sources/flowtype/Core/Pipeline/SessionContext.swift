@@ -53,12 +53,13 @@ final class SessionContext {
     /// Cancellation is owned by the controller. Stages and callbacks must check it
     /// before publishing state or advancing the pipeline.
     private(set) var isCancelled = false
-    private let cancellationLock = OSAllocatedUnfairLock<Bool>(initialState: false)
+    private struct DeliveryGateState { var cancelled = false; var effectStarted = false }
+    private let cancellationLock = OSAllocatedUnfairLock(initialState: DeliveryGateState())
 
     /// Synchronous cancellation snapshot for audio callbacks, which cannot await
     /// the main actor before forwarding a PCM buffer.
     nonisolated var isCancellationRequested: Bool {
-        cancellationLock.withLock { $0 }
+        cancellationLock.withLock { $0.cancelled }
     }
 
     /// Performs a short synchronous effect only while the session is active.
@@ -67,10 +68,25 @@ final class SessionContext {
     @discardableResult
     nonisolated func performIfActive(_ action: () -> Void) -> Bool {
         cancellationLock.withLockUnchecked { cancelled in
-            guard !cancelled else { return false }
+            guard !cancelled.cancelled else { return false }
             action()
             return true
         }
+    }
+
+    /// The first irreversible action claims the latch inside the cancellation gate.
+    /// Later balanced key pairs belong to this same attempt, never a fallback.
+    nonisolated func performDeliveryEffect(_ action: () -> Void) -> Bool {
+        cancellationLock.withLockUnchecked { state in
+            guard !state.cancelled, !Task.isCancelled else { return false }
+            state.effectStarted = true
+            action()
+            return true
+        }
+    }
+
+    nonisolated var deliveryEffectStarted: Bool {
+        cancellationLock.withLock { $0.effectStarted }
     }
 
     /// Raw transcript from ASR before any post-processing.
@@ -201,10 +217,48 @@ final class SessionContext {
         realtimeResult = result
     }
 
-    /// Guard to prevent double-injection.
-    var hasInjected: Bool = false
+    /// Reserves one terminal attempt; preparation is not an irreversible effect.
+    private(set) var deliveryAttempted = false
+    private(set) var deliveryOutcome: DeliveryOutcome?
+    /// Legacy read-only terminal flag; event dispatch is never insertion confirmation.
+    var hasInjected: Bool { deliveryOutcome?.isTerminalDelivery == true }
 
-    /// The target application that was frontmost when recording started.
+    func beginDeliveryAttempt() -> Bool {
+        guard !isCancelled, !deliveryAttempted else { return false }
+        deliveryAttempted = true
+        return true
+    }
+
+    func finishDelivery(_ outcome: DeliveryOutcome) {
+        guard deliveryOutcome == nil else { return }
+        deliveryOutcome = outcome
+    }
+
+    var deliveryTarget: DeliveryTargetSnapshot?
+    private var deliveryTargetTask: Task<DeliveryTargetSnapshot, Never>?
+
+    /// PID is captured synchronously by the stop handler. AX work cannot select
+    /// a different app after this point, and a cancelled session drops its result.
+    func captureDeliveryTarget(pid: Int32?,
+        collect: @escaping @Sendable (Int32?) async -> DeliveryTargetSnapshot = { await KeyboardInjector.deliveryTarget(pid: $0) }) {
+        guard !isCancelled, deliveryTarget == nil else { return }
+        deliveryTarget = DeliveryTargetSnapshot(pid: pid)
+        deliveryTargetTask = Task { await collect(pid) }
+    }
+
+    func resolvedDeliveryTarget() async -> DeliveryTargetSnapshot? {
+        guard !isCancelled else { return nil }
+        if let task = deliveryTargetTask {
+            let result = await task.value
+            guard !isCancelled else { return nil }
+            // Ignore an invalid provider result rather than changing the stop PID.
+            if result.pid == deliveryTarget?.pid { deliveryTarget = result }
+            deliveryTargetTask = nil
+        }
+        return deliveryTarget
+    }
+
+    /// The target application that was frontmost when recording stopped.
     var targetApp: NSRunningApplication?
 
     // MARK: - Real-time Recording State
@@ -239,7 +293,9 @@ final class SessionContext {
     func cancel() {
         isCancelled = true
         cancelForegroundCollection()
-        cancellationLock.withLock { $0 = true }
+        cancellationLock.withLock { $0.cancelled = true }
+        deliveryTargetTask?.cancel()
+        deliveryTargetTask = nil
         realtimeHandle?.ingress.cancel()
         realtimeStartTask?.cancel()
         if let handle = realtimeHandle { Task { await handle.session.cancel() } }

@@ -351,6 +351,7 @@ enum SelfTest {
         await testPolishStreamTermination(r)
         await testAsyncDeadline(r)
         await testPolishDelivery(r)
+        await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
@@ -697,7 +698,8 @@ enum SelfTest {
         let unsent = SessionContext(sessionID: 307)
         unsent.finalText = "取消文本。"
         r.check(!unsent.claimHistorySave(), "history: undelivered text never creates terminal history")
-        unsent.hasInjected = true
+        _ = unsent.beginDeliveryAttempt()
+        unsent.finishDelivery(.typedDispatched)
         unsent.cancel()
         r.check(!unsent.claimHistorySave(), "history: cancelled context cannot claim history")
 
@@ -719,12 +721,131 @@ enum SelfTest {
         r.eq(events.value, [], "keyboard: task cancellation posts no event")
 
         let afterInject = SessionContext(sessionID: 310)
+        afterInject.deliveryTarget = DeliveryTargetSnapshot(pid: 42)
         let cancelledDuringInject = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: false, focus: .blindOrUnknown) },
             inject: { _, context in await context.cancel(); throw LLMError.invalidResponse },
             copy: { text in events.append(text) })
         _ = await cancelledDuringInject.execute(payload: .polished("禁止回退。", raw: "禁止回退"), context: afterInject)
         r.eq(events.value, [], "injection: cancellation during keyboard await prevents clipboard fallback")
+        let partial = SessionContext(sessionID: 312)
+        partial.deliveryTarget = DeliveryTargetSnapshot(pid: 42)
+        let partialEvents = DeliveryLog()
+        let partialStage = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: false, focus: .editableText) },
+            inject: { _, context in
+                try KeyboardInjector.postIfActive(context: context) { partialEvents.append("first-event") }
+                throw InjectionError.eventCreationFailed
+            }, copy: { _ in partialEvents.append("duplicate-clipboard") })
+        _ = await partialStage.execute(payload: .polished("不可重复。", raw: "不可重复"), context: partial)
+        r.eq(partialEvents.value, ["first-event"], "delivery contract: partial dispatch must never duplicate to clipboard")
+        r.eq(partial.deliveryOutcome, .uncertain, "delivery: failed partial dispatch is uncertain, never confirmed")
         r.eq(polishFallbackText(processed: "", raw: "最后兜底"), "最后兜底", "polish: empty processed text falls back to complete raw text")
+    }
+
+    @MainActor
+    static func testDeliveryContract(_ r: Reporter) async {
+        let editable = FocusSignals(secureInputActive: false, focus: .editableText)
+        let blind = FocusSignals(secureInputActive: false, focus: .blindOrUnknown)
+        let a = DeliveryTargetSnapshot(pid: 42, focusIdentity: DeliveryFocusIdentity(testID: "field-a"), signals: editable)
+        let b = DeliveryTargetSnapshot(pid: 42, focusIdentity: DeliveryFocusIdentity(testID: "field-b"), signals: editable)
+        r.eq(decideDelivery(target: a, current: a), .inject, "delivery: same PID and comparable focus types")
+        r.eq(decideDelivery(target: a, current: b), .clipboard, "delivery: changed known focus uses clipboard")
+        r.eq(decideDelivery(target: a, current: DeliveryTargetSnapshot(pid: 43, signals: blind)), .clipboard,
+             "delivery: changed PID uses clipboard even when AX blind")
+        r.eq(decideDelivery(target: a, current: DeliveryTargetSnapshot(pid: 42, signals: blind)), .inject,
+             "delivery: AX blind same PID retains Unicode")
+        r.eq(decideDelivery(target: nil, current: a), .clipboard, "delivery: missing stop PID cannot authorize typing")
+        let switchedDuringAX = deliverySnapshotAfterCollection(DeliveryTargetSnapshot(pid: 43), frontmostPID: 42)
+        r.eq(decideDelivery(target: a, current: switchedDuringAX), .clipboard,
+             "delivery: switching back to stop app during AX collection cannot authorize stale focus")
+        for signals in [FocusSignals(secureInputActive: true, focus: .editableText),
+                        FocusSignals(secureInputActive: false, focus: .nonTextControl)] {
+            r.eq(decideDelivery(target: a, current: DeliveryTargetSnapshot(pid: 42, signals: signals)), .clipboard,
+                 "delivery: secure/noneditable focus uses clipboard")
+        }
+        for (current, expected) in [(a, DeliveryOutcome.typedDispatched), (b, .clipboard),
+                                   (DeliveryTargetSnapshot(pid: 43), .clipboard)] {
+            let context = SessionContext(sessionID: 320)
+            context.deliveryTarget = a
+            context.finalText = "交付。"
+            let events = DeliveryLog()
+            let stage = InjectionStage(settle: {}, currentTarget: { current }, inject: { _, ctx in
+                try KeyboardInjector.postIfActive(context: ctx) { events.append("typed") }
+            }, copy: { _ in events.append("copied") })
+            _ = await stage.execute(payload: .polished("交付。", raw: "交付"), context: context)
+            _ = await stage.execute(payload: .polished("交付。", raw: "交付"), context: context)
+            r.eq(context.deliveryOutcome, expected, "delivery stage: target validation propagates explicit outcome")
+            r.eq(events.value, [expected == .clipboard ? "copied" : "typed"], "delivery stage: duplicate attempt has one destination")
+            r.check(context.claimHistorySave() && !context.claimHistorySave(), "delivery: terminal outcome saves history once")
+        }
+        // Stop selects B even when capture-start was A; a late app C must never
+        // become the target of an in-flight collection for B.
+        let stop = SessionContext(sessionID: 321)
+        stop.captureDeliveryTarget(pid: 43, collect: { pid in
+            await Task.yield()
+            return DeliveryTargetSnapshot(pid: pid, signals: blind)
+        })
+        r.eq(stop.deliveryTarget?.pid, 43, "delivery stop: PID is set synchronously before AX await")
+        let stopTarget = await stop.resolvedDeliveryTarget()
+        r.eq(stopTarget?.pid, 43, "delivery stop: collection retains stop PID")
+        r.eq(decideDelivery(target: stopTarget, current: DeliveryTargetSnapshot(pid: 43)), .inject,
+             "delivery stop: app changed before stop selects new app")
+        r.eq(decideDelivery(target: stopTarget, current: DeliveryTargetSnapshot(pid: 44)), .clipboard,
+             "delivery stop: app changed after stop cannot become target")
+        stop.captureDeliveryTarget(pid: 99, collect: { DeliveryTargetSnapshot(pid: $0) })
+        r.eq(stop.deliveryTarget?.pid, 43, "delivery stop: target cannot be replaced after resolution")
+        let invalidCapture = SessionContext(sessionID: 325)
+        invalidCapture.captureDeliveryTarget(pid: 43, collect: { _ in a })
+        r.eq(await invalidCapture.resolvedDeliveryTarget()?.pid, 43,
+             "delivery stop: late collection cannot commit another PID")
+        let cancelledCapture = SessionContext(sessionID: 322)
+        cancelledCapture.captureDeliveryTarget(pid: 43, collect: { _ in
+            await Task.yield(); return a
+        })
+        cancelledCapture.cancel()
+        r.check(await cancelledCapture.resolvedDeliveryTarget() == nil,
+                "delivery stop: cancelled collection cannot commit a target")
+
+        for afterFirstEvent in [false, true] {
+            let context = SessionContext(sessionID: 323)
+            context.deliveryTarget = a
+            let events = DeliveryLog()
+            let stage = InjectionStage(settle: {}, currentTarget: { a }, inject: { _, ctx in
+                if afterFirstEvent {
+                    try KeyboardInjector.postIfActive(context: ctx) { events.append("first") }
+                }
+                await ctx.cancel()
+                try KeyboardInjector.postIfActive(context: ctx) { events.append("forbidden") }
+            }, copy: { _ in events.append("duplicate") })
+            _ = await stage.execute(payload: .polished("交付。", raw: "交付"), context: context)
+            r.eq(events.value, afterFirstEvent ? ["first"] : [], "delivery: cancellation gates each actual event and forbids fallback")
+            r.eq(context.deliveryOutcome, afterFirstEvent ? .uncertain : .cancelled,
+                 "delivery: cancellation before/after first effect has honest terminal outcome")
+        }
+        let taskCancelledContext = SessionContext(sessionID: 326)
+        taskCancelledContext.deliveryTarget = a
+        let taskEvents = DeliveryLog()
+        let taskCancelledStage = InjectionStage(settle: {}, currentTarget: { a }, inject: { _, ctx in
+            try KeyboardInjector.postIfActive(context: ctx) { taskEvents.append("first") }
+            withUnsafeCurrentTask { $0?.cancel() }
+            try KeyboardInjector.postIfActive(context: ctx) { taskEvents.append("forbidden") }
+        }, copy: { _ in taskEvents.append("duplicate") })
+        let taskCancelledDelivery = Task {
+            await taskCancelledStage.execute(payload: .polished("交付。", raw: "交付"), context: taskCancelledContext)
+        }
+        _ = await taskCancelledDelivery.value
+        r.eq(taskEvents.value, ["first"], "delivery: task cancellation after event prevents later events and clipboard")
+        r.eq(taskCancelledContext.deliveryOutcome, .uncertain, "delivery: task cancellation after event remains uncertain")
+        let beforeFirstEvent = SessionContext(sessionID: 324)
+        beforeFirstEvent.deliveryTarget = a
+        let fallback = DeliveryLog()
+        let failing = InjectionStage(settle: {}, currentTarget: { a }, inject: { _, ctx in
+            let started = ctx.deliveryEffectStarted
+            if started { throw InjectionError.noEventsDispatched }
+            throw InjectionError.eventCreationFailed
+        }, copy: { _ in fallback.append("copied") })
+        _ = await failing.execute(payload: .polished("交付。", raw: "交付"), context: beforeFirstEvent)
+        r.eq(beforeFirstEvent.deliveryOutcome, .clipboard, "delivery: pre-event failure permits clipboard fallback")
+        r.eq(fallback.value, ["copied"], "delivery: preparation does not consume first effect latch")
     }
 
     // MARK: - Stop gestures and final-only presentation

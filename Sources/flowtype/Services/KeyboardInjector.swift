@@ -9,6 +9,8 @@ enum InjectionError: Error {
     case eventSourceCreationFailed
     case eventCreationFailed
     case textTooLong
+    case injectionAlreadyInProgress
+    case noEventsDispatched
 }
 
 struct KeyboardInjector {
@@ -34,8 +36,8 @@ struct KeyboardInjector {
             return true
         }
         guard canProceed else {
-            AppLogger.log("[KeyboardInjector] Injection already in progress, ignoring duplicate")
-            return
+            AppLogger.log("[KeyboardInjector] Injection already in progress, rejecting duplicate")
+            throw InjectionError.injectionAlreadyInProgress
         }
         defer { injectionLock.withLock { $0 = false } }
 
@@ -49,7 +51,7 @@ struct KeyboardInjector {
 
         let start = Date()
         defer {
-            AppLogger.log("[KeyboardInjector] Injected \(text.count) chars in \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
+            AppLogger.log("[KeyboardInjector] Unicode dispatch attempt for \(text.count) chars in \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
         }
 
         isInjecting.withLock { $0 = true }
@@ -127,40 +129,60 @@ struct KeyboardInjector {
     static func postIfActive(context: SessionContext?, action: () -> Void) throws {
         try Task.checkCancellation()
         if let context {
-            guard context.performIfActive(action) else { throw CancellationError() }
+            guard context.performDeliveryEffect(action) else { throw CancellationError() }
         } else { action() }
+        try Task.checkCancellation()
     }
 
     // MARK: - Focus detection
 
-    /// Gathers the signals the delivery decision needs from the live system. Bounds AX
-    /// latency with a 0.25 s messaging timeout and fails open to `.blindOrUnknown` so a
-    /// transient AX miss never blocks injection. Must be called on the main thread.
-    static func currentFocusSignals() -> FocusSignals {
-        let systemWide = AXUIElementCreateSystemWide()
-        // Global default timeout for all AX messages — prevents a hung target app from
-        // blocking the main thread for the ~6 s system default.
-        AXUIElementSetMessagingTimeout(systemWide, 0.25)
+    /// Capture the frontmost PID before awaiting AX. All synchronous AX IPC runs
+    /// off the main actor; total waiting is bounded even for an unresponsive app.
+    static func currentDeliveryTarget() async -> DeliveryTargetSnapshot {
+        let pid = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+        let snapshot = await deliveryTarget(pid: pid)
+        // Invalidate a sample taken across an app switch, even if the new app
+        // happens to be the original stop target.
+        let after = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+        let validated = deliverySnapshotAfterCollection(snapshot, frontmostPID: after)
+        if IsSecureEventInputEnabled() {
+            return DeliveryTargetSnapshot(pid: validated.pid, focusIdentity: validated.focusIdentity,
+                signals: FocusSignals(secureInputActive: true, focus: .nonTextControl))
+        }
+        return validated
+    }
 
-        let secureGlobal = IsSecureEventInputEnabled()
+    static func deliveryTarget(pid: Int32?) async -> DeliveryTargetSnapshot {
+        let fallback = DeliveryTargetSnapshot(pid: pid, signals: FocusSignals(secureInputActive: IsSecureEventInputEnabled(), focus: .blindOrUnknown))
+        return (try? await withAsyncDeadline(seconds: 0.5) {
+            let worker = Task.detached(priority: .utility) { collectDeliveryTarget(pid: pid) }
+            return await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+        }) ?? fallback
+    }
 
+    private static func collectDeliveryTarget(pid: Int32?) -> DeliveryTargetSnapshot {
+        let secure = IsSecureEventInputEnabled()
+        let blind = DeliveryTargetSnapshot(pid: pid, signals: FocusSignals(secureInputActive: secure, focus: .blindOrUnknown))
+        guard let pid, !Task.isCancelled, AXIsProcessTrusted() else { return blind }
+        let deadline = Date().addingTimeInterval(0.45)
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.1)
         var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let value = focused,
-              CFGetTypeID(value) == AXUIElementGetTypeID() else {
-            return FocusSignals(secureInputActive: secureGlobal, focus: .blindOrUnknown)
-        }
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let value = focused, CFGetTypeID(value) == AXUIElementGetTypeID() else { return blind }
         let element = value as! AXUIElement
-        let role = copyStringAttribute(element, kAXRoleAttribute as CFString)
-        let subrole = copyStringAttribute(element, kAXSubroleAttribute as CFString)
-
-        // A real password field reports role AXTextField + subrole AXSecureTextField; the
-        // subrole check is the reliable one. The role check + global flag are belt-and-suspenders.
-        if secureGlobal || role == "AXSecureTextField" || subrole == "AXSecureTextField" {
-            return FocusSignals(secureInputActive: true, focus: .nonTextControl)
+        AXUIElementSetMessagingTimeout(element, 0.1)
+        func string(_ key: CFString) -> String? {
+            guard !Task.isCancelled, Date() < deadline else { return nil }
+            return copyStringAttribute(element, key)
         }
-        let kind = classifyFocus(role: role, isValueSettable: isValueSettable(element))
-        return FocusSignals(secureInputActive: false, focus: kind)
+        let role = string(kAXRoleAttribute as CFString)
+        let subrole = string(kAXSubroleAttribute as CFString)
+        let isSecure = secure || isSecureFocus(role: role, subrole: subrole)
+        let settable = !isSecure && Date() < deadline && !Task.isCancelled && isValueSettable(element)
+        return DeliveryTargetSnapshot(pid: pid, focusIdentity: DeliveryFocusIdentity(element: element),
+            signals: FocusSignals(secureInputActive: isSecure,
+                focus: isSecure ? .nonTextControl : classifyFocus(role: role, isValueSettable: settable)))
     }
 
     private static func copyStringAttribute(_ element: AXUIElement, _ attr: CFString) -> String? {
