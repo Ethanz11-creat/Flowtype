@@ -3455,6 +3455,23 @@ enum SelfTest {
         }
         r.check(preservesCodingLiterals(original: "See (https://example.com/path).", polished: "Visit https://example.com/path!"),
                 "literal-review: unmatched external URL delimiters are prose")
+        for pair in [("v1.2.3-beta", "v1.2.3-beta+wrong"), ("v1.2.3-beta+build1", "v1.2.3-beta+build2"),
+                     ("1.2.3-beta.1+build.1", "1.2.3-beta.1+build.2"),
+                     ("/tmp/a然后继续", "/tmp/a并继续")] {
+            r.check(!preservesCodingLiterals(original: pair.0, polished: pair.1), "literal-round2: complete token corruption rejected \(pair.0) → \(pair.1)")
+        }
+        for pair in [("请打开/tmp/a，然后继续。", "打开/tmp/a。"),
+                     ("请打开~/项目/文件.swift，然后继续。", "打开~/项目/文件.swift。"),
+                     ("请打开/tmp/测试.txt，然后继续。", "打开/tmp/测试.txt。"),
+                     ("请打开/tmp/a，然后继续。", "请使用/tmp/a，再继续。"),
+                     ("请保留 v1.2.3-beta.1+build.1，然后继续。", "使用 v1.2.3-beta.1+build.1。"),
+                     ("Use v1.2.3", "Use `v1.2.3`"), ("Use /tmp/a", "Use `/tmp/a`"),
+                     ("Use https://example.com/path", "Use `https://example.com/path`"),
+                     ("Use --force", "Use `--force`"), ("Use 42", "Use `42`")] {
+            r.check(preservesCodingLiterals(original: pair.0, polished: pair.1), "literal-round2: delimited prose and backtick formatting may change \(pair.0)")
+        }
+        r.check(!preservesCodingLiterals(original: "Use v1.2.3-beta", polished: "Use `v1.2.3-beta+wrong`"),
+                "literal-round2: added backticks cannot hide version corruption")
         config.asrRoutingPolicy = .auto
         config.cloudPolishSendContext = true
         config.llmProviders = [LLMProvider(name: "Test", provider: "custom", baseURL: "https://example.com/v1", model: "test", isActive: true)]

@@ -11,9 +11,9 @@ func preservesCodingLiterals(original: String, polished: String) -> Bool {
     let patterns = [
         #"`+([^`]+)`+"#,
         #"(?<![A-Za-z0-9_])https?://[^\s<>\"'`\p{Han}，。；！？、]+"#,
-        #"(?<![\p{L}\p{M}\p{N}_:/])(?:~/|/|\.{1,2}/|[\p{L}\p{M}\p{N}_.-]+/)[\p{L}\p{M}\p{N}\p{S}_./~+@%:=#?&-]+"#,
+        #"(?<![A-Za-z0-9_:/])(?:~/|/|\.{1,2}/|[A-Za-z0-9_.-]+/)(?:(?!`)[\p{L}\p{M}\p{N}\p{S}_./~+@%:=#?&-])+"#,
         #"(?<![A-Za-z0-9_-])--?[A-Za-z][A-Za-z0-9_-]*(?:=[A-Za-z0-9_./~:+@%=-]+)?"#,
-        #"(?<![A-Za-z0-9_.])(?:v\d+(?:\.\d+)*|\d+(?:\.\d+)+)(?:[-+][A-Za-z0-9.-]+)?(?![A-Za-z0-9_]|\.[A-Za-z0-9_])"#,
+        #"(?<![A-Za-z0-9_.])(?:v\d+(?:\.\d+)*|\d+(?:\.\d+)+)(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?(?![A-Za-z0-9_]|\.[A-Za-z0-9_])"#,
         #"(?<![A-Za-z0-9_.])[-+]?\d+(?:\.\d+)?(?![A-Za-z0-9_]|\.[A-Za-z0-9_])"#,
     ]
 
@@ -35,14 +35,16 @@ func preservesCodingLiterals(original: String, polished: String) -> Bool {
         return result
     }
 
-    func extract(_ text: String) -> [[String]] {
+    func extract(_ text: String, includeBacktickContents: Bool = false) -> [[String]] {
         var categories = Array(repeating: [String](), count: patterns.count)
         var occupied: [NSRange] = []
         for (category, pattern) in patterns.enumerated() {
             guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
             for match in expression.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
                 guard !occupied.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) else { continue }
-                occupied.append(match.range)
+                // On the polished side, a newly added backtick may enclose an
+                // unchanged path/version/etc.; retain those inner categories.
+                if category != 0 || !includeBacktickContents { occupied.append(match.range) }
                 let matchedRange = category == 0 ? match.range(at: 1) : match.range
                 guard let range = Range(matchedRange, in: text) else { continue }
                 let literal = trimSentenceDelimiters(String(text[range]), category: category)
@@ -53,7 +55,7 @@ func preservesCodingLiterals(original: String, polished: String) -> Bool {
     }
 
     let source = extract(original)
-    let result = extract(polished)
+    let result = extract(polished, includeBacktickContents: true)
     for category in source.indices {
         for literal in source[category] {
             if category == 0 {
