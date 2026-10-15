@@ -104,21 +104,26 @@ actor DashScopeRealtimeASR: RealtimeASRSession {
         finishRequested = true
         ingress.seal()
         do {
-            // Capture may already have sealed and drained before the ASR stage
-            // gets scheduled. In that ordering the wakeup stream has ended;
-            // perform the single finish send from this actor instead of waiting
-            // on a pump that can no longer observe a wakeup.
-            if captureDrainCompleted {
-                try await sendFinishIfNeeded()
-            }
             return try await withAsyncDeadline(seconds: finalTimeout) { [self] in
-                try await self.completed.value()
+                try await self.finishDrainedCapture()
             }
         } catch {
             let error = error is AsyncDeadlineError ? DashScopeRealtimeError.finalTimeout : error
             await terminate(.failure(error))
             return try await completed.value()
         }
+    }
+
+    private func finishDrainedCapture() async throws -> ASRResult {
+        try checkFailure()
+        try Task.checkCancellation()
+        // Capture may have sealed and drained before finish was requested. The
+        // pump has exited in that ordering, so send here under the same deadline
+        // as the final result wait. Otherwise the existing pump owns the send.
+        if captureDrainCompleted {
+            try await sendFinishIfNeeded()
+        }
+        return try await completed.value()
     }
 
     func cancel() async { await terminate(.failure(CancellationError())) }

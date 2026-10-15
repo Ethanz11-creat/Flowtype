@@ -2379,6 +2379,34 @@ enum SelfTest {
             }
         }
 
+        // Single caller, after the capture pump exits: the adapter's own
+        // deadline must include a suspended finish-task send, not only receive.
+        do {
+            let fake = FakeRealtimeTransport(suspendedAction: "finish-task")
+            let adapter = session(fake, final: 0.05)
+            let start = Task { try await adapter.start() }
+            try await wait { await fake.actions().contains("run-task") }
+            await fake.feed(event("task-started"))
+            try await start.value
+            try await adapter.append(samples: [0.5])
+            adapter.ingress.seal()
+            try await wait { await adapter.captureDrainCompleted }
+            let began = ContinuousClock.now
+            do {
+                _ = try await withAsyncDeadline(seconds: 0.4) { try await adapter.finish() }
+                r.check(false, "adapter: stalled delayed finish must time out")
+            } catch {
+                r.eq(error as? DashScopeRealtimeError, .finalTimeout,
+                     "adapter: stalled delayed finish uses adapter final deadline")
+            }
+            r.check(began.duration(to: .now) < .milliseconds(300),
+                    "adapter: stalled delayed finish returns promptly")
+            r.eq(await fake.closeCount, 1, "adapter: stalled delayed finish closes transport before returning")
+            r.eq(await fake.actions(), ["run-task", "finish-task"], "adapter: stalled delayed finish sends once")
+            r.eq(await fake.binaryFrames(), [encodePCM16LE([0.5])], "adapter: stalled delayed finish never replays audio")
+            await adapter.cancel()
+        } catch { r.check(false, "adapter: stalled delayed finish setup: \(error)") }
+
         for mode in ["connect-timeout", "start-timeout", "timeout-before-waiter", "cancel-before-start", "caller-cancel-before-start", "caller-cancel-start", "cancel-handshake", "malformed", "missing-sentence", "failed", "close", "final-timeout", "caller-cancel-final", "overflow", "cancel-drain", "sync-overflow-drain", "sync-overflow-handshake", "failed-drain", "early-finished", "empty"] {
             let fake = FakeRealtimeTransport(suspendedAction: mode == "connect-timeout" ? "connect" : ["timeout-before-waiter", "caller-cancel-start"].contains(mode) ? "run-task" : (["cancel-drain", "sync-overflow-drain", "failed-drain"].contains(mode) ? "binary" : nil))
             let adapter = session(fake, start: 0.08, final: 0.08, limit: 2)
