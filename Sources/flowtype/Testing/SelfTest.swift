@@ -3916,7 +3916,7 @@ extension SelfTest {
         let unsafeContext = SessionContext(sessionID: 414); unsafeContext.deliveryTarget = unsafeTarget
         _ = await unsafeStage.execute(payload: .polished("safe", raw: "safe"), context: unsafeContext)
         r.eq(unsafeCopies, 0, "paste stage: incomplete snapshot never falls back destructively")
-        r.eq(unsafeContext.deliveryOutcome, .cancelled, "paste stage: incomplete snapshot remains explicit recovery")
+        r.eq(unsafeContext.deliveryOutcome, nil, "paste stage: incomplete snapshot remains explicit recovery")
 
         let cancelledRecovery = SessionContext(sessionID: 415)
         cancelledRecovery.finalText = "recoverable"
@@ -3935,7 +3935,7 @@ extension SelfTest {
             (DeliveryMode.unicode, "com.apple.TextEdit", PasteTransactionResult.dispatched, DeliveryOutcome.typedDispatched),
             (.pasteInSupportedApps, "com.apple.Terminal", .dispatched, .typedDispatched),
             (.pasteInSupportedApps, "com.apple.TextEdit", .dispatched, .pasteDispatched),
-            (.pasteInSupportedApps, "com.apple.TextEdit", .notDispatched, .cancelled),
+            (.pasteInSupportedApps, "com.apple.TextEdit", .notDispatched, nil),
             (.pasteInSupportedApps, "com.apple.TextEdit", .uncertain, .uncertain),
             (.pasteInSupportedApps, "com.apple.TextEdit", .clipboardChanged, .uncertain)
         ] {
@@ -3951,7 +3951,7 @@ extension SelfTest {
             _ = await stage.execute(payload: .polished("delivered", raw: "delivered"), context: ctx)
             _ = await stage.execute(payload: .polished("delivered", raw: "delivered"), context: ctx)
             r.eq(ctx.deliveryOutcome, expected, "delivery stage: configured mode produces explicit terminal outcome")
-            r.check(ctx.stopToDeliveryMs != nil, "delivery stage: clipboard/dispatch/uncertain all have latency")
+            r.check(expected == nil || ctx.stopToDeliveryMs != nil, "delivery stage: delivered outcomes have latency")
             let expectedLog = expected == .typedDispatched ? ["typed"] : expected == .clipboard ? ["paste", "copied"] : ["paste"]
             r.eq(log.value, expectedLog, "delivery stage: no repeated paste or fallback after uncertain dispatch")
         }

@@ -90,16 +90,18 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                         // A partial representation snapshot is unsafe to replace.
                         // Keep the text available through the session's explicit
                         // recovery/history path and never clear the user's board.
-                        await complete(.cancelled, context: context, start: start)
-                        await MainActor.run { context.completionNotice = "剪贴板内容无法完整读取 · 可从历史复制" }
+                        return .suspend(ErrorRecoveryContext(failedStage: name,
+                            error: InjectionStageError.clipboardSnapshotIncomplete,
+                            rawText: text, retryable: false))
                     case .clipboardChanged:
                         await complete(.uncertain, context: context, start: start)
                         await MainActor.run {
                             if !context.isCancelled { context.completionNotice = "剪贴板已变化 · 可从历史复制" }
                         }
                     case .notDispatched:
-                        await complete(.cancelled, context: context, start: start)
-                        await MainActor.run { context.completionNotice = "粘贴未发送 · 可从历史复制" }
+                        return .suspend(ErrorRecoveryContext(failedStage: name,
+                            error: InjectionStageError.pasteNotDispatched,
+                            rawText: text, retryable: false))
                     }
                     return .complete
                 }
@@ -167,5 +169,13 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
 
 enum InjectionStageError: LocalizedError {
     case invalidPayload
-    var errorDescription: String? { "注入失败：无效的文本" }
+    case clipboardSnapshotIncomplete
+    case pasteNotDispatched
+    var errorDescription: String? {
+        switch self {
+        case .invalidPayload: return "注入失败：无效的文本"
+        case .clipboardSnapshotIncomplete: return "剪贴板内容无法完整读取，未发送粘贴"
+        case .pasteNotDispatched: return "粘贴未发送，文本可从错误卡片复制"
+        }
+    }
 }
