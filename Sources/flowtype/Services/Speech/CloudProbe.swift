@@ -6,13 +6,15 @@ import os
 /// 不发送任何 HTTP 请求、不需要 API Key、不涉及音频与上下文。
 enum CloudProbe {
 
-    /// 从 Base URL 解析探测目标；非 https 或无法解析时返回 nil。纯函数，便于单测。
+    /// HTTPS/WSS share a TLS handshake. Reject unusable ports before conversion.
     static func probeEndpoint(fromBaseURL baseURL: String) -> (host: String, port: UInt16)? {
         let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let components = URLComponents(string: trimmed) else { return nil }
-        guard components.scheme?.lowercased() == "https" else { return nil }
+        guard let scheme = components.scheme?.lowercased(), ["https", "wss"].contains(scheme) else { return nil }
         guard let host = components.host, !host.isEmpty else { return nil }
-        return (host, UInt16(components.port ?? 443))
+        guard components.user == nil, components.password == nil,
+              let port = UInt16(exactly: components.port ?? 443), port > 0 else { return nil }
+        return (host, port)
     }
 
     /// 对主机做一次 TLS 握手计时（毫秒）。超时或失败返回 nil。
@@ -21,7 +23,7 @@ enum CloudProbe {
             let box = SingleResumeBox<Double?>()
             box.setContinuation(continuation)
 
-            let start = Date()
+            let start = DispatchTime.now().uptimeNanoseconds
             guard let nwPort = NWEndpoint.Port(rawValue: port) else {
                 box.resume(returning: nil)
                 return
@@ -30,7 +32,7 @@ enum CloudProbe {
             connection.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    box.resume(returning: Date().timeIntervalSince(start) * 1000)
+                    box.resume(returning: Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
                     connection.cancel()
                 case .failed, .cancelled:
                     box.resume(returning: nil)

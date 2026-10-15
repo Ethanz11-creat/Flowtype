@@ -323,6 +323,7 @@ enum SelfTest {
         testAgedLatencySample(r)   // EWMA TTL: stale fast sample re-decided by the probe
         testRoutingInputsWiring(r) // production wiring: snapshot → aging → decision
         testProbeGating(r)         // when the probe is allowed to spend a handshake at all
+        await testHealthRecovery(r)
         testContextAssembly(r)     // ForegroundContext → bounded context text + redaction
         testSecureFocus(r)         // secure (password) focus → never collect value
         testSessionMetrics(r)      // percentile + metrics report
@@ -2918,8 +2919,193 @@ enum SelfTest {
              "probe: never sampled → existing healthy default (unchanged)")
         r.eq(selectASRChain(cold(probe: nil, failed: true)), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
              "probe: sampled but failed → negative signal → local-first")
-        r.eq(selectASRChain(cold(probe: 900, ewma: 1200)), [ASRProviderID.cloud, ASRProviderID.qwenLocal],
-             "probe: real EWMA is ground truth → slow probe ignored once a real sample exists")
+        r.eq(selectASRChain(cold(probe: 900, ewma: 1200)), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "probe: slow current handshake vetoes fast request EWMA")
+        r.eq(selectASRChain(cold(probe: nil, failed: true, ewma: 1200)), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "probe: failed handshake vetoes fast request EWMA")
+        r.eq(selectASRChain(cold(probe: 100, ewma: 4200)), [ASRProviderID.qwenLocal, ASRProviderID.cloud],
+             "probe: fast handshake cannot erase slow actual request")
+        let wss = CloudProbe.probeEndpoint(fromBaseURL: "wss://dashscope.aliyuncs.com:8443/api-ws/v1/inference")
+        r.eq(wss?.host, "dashscope.aliyuncs.com", "probe: WSS host accepted for TLS handshake")
+        r.eq(wss?.port, 8443, "probe: WSS explicit port preserved")
+        r.eq(CloudProbe.probeEndpoint(fromBaseURL: "wss://example.invalid/ws")?.port, 443,
+             "probe: WSS default TLS port")
+        r.eq(CloudProbe.probeEndpoint(fromBaseURL: "https://example.invalid:65535/v1")?.port, 65535,
+             "probe: largest valid port is preserved")
+        for url in ["https://example.invalid:65536/v1", "wss://example.invalid:99999/ws",
+                    "wss://example.invalid:0/ws", "https://example.invalid:-1/v1",
+                    "wss://user:password@example.invalid/ws", "ws://example.invalid/ws"] {
+            r.check(CloudProbe.probeEndpoint(fromBaseURL: url) == nil, "probe: invalid or insecure target rejected (\(url))")
+        }
+    }
+
+    // Breaks caught: repeated capture reservations, wall-clock cooldowns,
+    // recovery EWMA retaining stale slow evidence, and late old-profile writes.
+    @MainActor
+    static func testHealthRecovery(_ r: Reporter) async {
+        let provider = CloudASRProviderConfig.defaultParaformer(isActive: true)
+        var config = Configuration()
+        config.asrRoutingPolicy = .auto
+        config.cloudASRConfig = CloudASRConfig(providers: [provider], providerAPIKeys: [provider.id.uuidString: "offline-fixture"])
+        let now = Date(timeIntervalSince1970: 1_000)
+        var health = RouterHealthSnapshot()
+        health.synchronizeIdentity(CloudASRHealthIdentity(provider: provider))
+        health.realtimeLatencyEWMA = 8_000
+        health.cloudLatencyEWMA = 9_000
+        health.cloudConsecutiveFailures = 2
+        health.probeFailed = true
+        health.probeSampledAt = now
+        let first = reserveASRCaptureRoute(configuration: config, localAvailable: true,
+                                           health: &health, now: now, uptimeNanoseconds: 1_000_000_000)
+        r.check(first.isHealthRecovery && first.shouldStartRealtime, "recovery: degraded cloud gets one real capture attempt")
+        let blocked = reserveASRCaptureRoute(configuration: config, localAvailable: true,
+                                             health: &health, now: now.addingTimeInterval(86_400), uptimeNanoseconds: 60_999_999_999)
+        r.eq(blocked.selectedProviderID, ASRProviderID.qwenLocal, "recovery: forward wall-clock jump cannot bypass cooldown")
+        r.check(!blocked.isHealthRecovery, "recovery: no second reservation before sixty seconds")
+        health.recordFailure(route: first)
+        r.eq(health.cloudConsecutiveFailures, 3, "recovery: failed attempt preserves failure evidence")
+        r.eq(health.realtimeLatencyEWMA, 8_000, "recovery: failed attempt preserves slow request evidence")
+        let second = reserveASRCaptureRoute(configuration: config, localAvailable: true,
+                                            health: &health, now: now.addingTimeInterval(-86_400), uptimeNanoseconds: 61_000_000_000)
+        r.check(second.isHealthRecovery, "recovery: exactly sixty monotonic seconds permits another attempt")
+        health.recordSuccess(route: second, latencyMs: 200, now: now)
+        r.eq(health.realtimeLatencyEWMA, 200, "recovery: successful real request replaces old slow realtime EWMA")
+        r.eq(health.cloudLatencyEWMA, 9_000, "recovery: realtime latency does not mix into batch EWMA")
+        r.eq(health.cloudConsecutiveFailures, 0, "recovery: success resets failure streak")
+        r.check(!health.probeFailed && health.probeSampledAt == nil, "recovery: real success clears obsolete negative probe")
+        let recovered = reserveASRCaptureRoute(configuration: config, localAvailable: true,
+                                               health: &health, now: now, uptimeNanoseconds: 62_000_000_000)
+        r.check(recovered.shouldStartRealtime && !recovered.isHealthRecovery, "recovery: healthy cloud resumes normal capture routing")
+
+        // A fast handshake cannot promote stale slow service inference outside
+        // the one reserved real request. A slow successful request stays slow.
+        var slow = health
+        slow.realtimeLatencyEWMA = 8_000
+        slow.realtimeLatencySampledAt = now.addingTimeInterval(-10_000)
+        slow.probeLatencyMs = 100
+        slow.probeSampledAt = now
+        r.eq(makeASRRouteSnapshot(configuration: config, localAvailable: true, health: slow, now: now).selectedProviderID,
+             ASRProviderID.qwenLocal, "recovery: fast probe cannot erase stale slow realtime evidence")
+        slow.recordSuccess(route: second, latencyMs: 5_000, now: now)
+        r.eq(slow.realtimeLatencyEWMA, 5_000, "recovery: slow success records its actual new latency")
+        r.eq(makeASRRouteSnapshot(configuration: config, localAvailable: true, health: slow, now: now).selectedProviderID,
+             ASRProviderID.qwenLocal, "recovery: slow successful service remains demoted")
+        var batchConfig = config
+        batchConfig.cloudASRConfig.providers[0].protocolKind = .openAICompatible
+        var batchHealth = RouterHealthSnapshot()
+        batchHealth.synchronizeIdentity(CloudASRHealthIdentity(provider: batchConfig.cloudASRConfig.providers[0]))
+        batchHealth.cloudLatencyEWMA = 9_000
+        batchHealth.realtimeLatencyEWMA = 300
+        let batchRoute = reserveASRCaptureRoute(configuration: batchConfig, localAvailable: true,
+                                                health: &batchHealth, now: now, uptimeNanoseconds: 1)
+        batchHealth.recordSuccess(route: batchRoute, latencyMs: 250, now: now)
+        r.eq(batchHealth.cloudLatencyEWMA, 250, "recovery: batch success replaces old slow batch EWMA")
+        r.eq(batchHealth.realtimeLatencyEWMA, 300, "recovery: batch latency cannot mix into realtime EWMA")
+
+        for policy in [ASRRoutingPolicy.localOnly, .cloudOnly] {
+            var forced = config
+            forced.asrRoutingPolicy = policy
+            var state = health
+            state.realtimeLatencyEWMA = 8_000
+            state.lastHalfOpenUptimeNanoseconds = nil
+            let route = reserveASRCaptureRoute(configuration: forced, localAvailable: true,
+                                               health: &state, now: now, uptimeNanoseconds: 1)
+            r.check(!route.isHealthRecovery && state.lastHalfOpenUptimeNanoseconds == nil,
+                    "recovery: forced policy never reserves half-open (\(policy))")
+            r.eq(route.selectedProviderID, policy == .localOnly ? ASRProviderID.qwenLocal : ASRProviderID.cloud,
+                 "recovery: forced policy keeps explicit provider (\(policy))")
+        }
+        var offline = health
+        offline.networkReachable = false
+        let offlineRoute = reserveASRCaptureRoute(configuration: config, localAvailable: true,
+                                                  health: &offline, now: now, uptimeNanoseconds: 200_000_000_000)
+        r.eq(offlineRoute.selectedProviderID, ASRProviderID.qwenLocal, "recovery: offline path never reserves real request")
+        var noKey = config
+        noKey.cloudASRConfig.providerAPIKeys = [:]
+        let noKeyRoute = reserveASRCaptureRoute(configuration: noKey, localAvailable: true,
+                                                health: &offline, now: now, uptimeNanoseconds: 200_000_000_000)
+        r.check(!noKeyRoute.isHealthRecovery && !noKeyRoute.cloudAvailable, "recovery: no key cannot reserve cloud")
+
+        var changedProviders: [CloudASRProviderConfig] = []
+        var changed = provider; changed.baseURL = "wss://other.invalid/ws"; changedProviders.append(changed)
+        changed = provider; changed.model = "new-model"; changedProviders.append(changed)
+        changed = provider; changed.protocolKind = .openAICompatible; changedProviders.append(changed)
+        changedProviders.append(CloudASRProviderConfig(name: provider.name, provider: provider.provider, baseURL: provider.baseURL,
+                                                     model: provider.model, isActive: true, protocolKind: provider.protocolKind))
+        for (index, replacement) in changedProviders.enumerated() {
+            var state = health
+            state.realtimeLatencyEWMA = 8_000
+            state.cloudConsecutiveFailures = 4
+            let oldToken = state.token
+            state.synchronizeIdentity(CloudASRHealthIdentity(provider: replacement))
+            r.eq(state.realtimeLatencyEWMA, 0, "identity: profile change clears slow latency (\(index))")
+            r.eq(state.cloudConsecutiveFailures, 0, "identity: profile change clears failures (\(index))")
+            r.eq(state.lastHalfOpenUptimeNanoseconds, nil, "identity: profile change clears recovery cooldown (\(index))")
+            let clean = state
+            state.recordSuccess(route: first, latencyMs: 30, now: now)
+            state.recordFailure(route: first)
+            state.recordProbe(token: oldToken, latencyMs: 999, now: now)
+            r.eq(state, clean, "identity: late success/failure/probe cannot write old profile (\(index))")
+        }
+        var switched = health
+        switched.pathSignature = PathSignature(satisfied: true, isExpensive: false, isConstrained: false, interface: "wifi")
+        let oldNetwork = switched.token
+        _ = switched.applyNetworkPath(PathSignature(satisfied: true, isExpensive: true, isConstrained: false, interface: "cellular"))
+        let cleanNetwork = switched
+        switched.recordSuccess(route: second, latencyMs: 10, now: now)
+        switched.recordFailure(route: second)
+        switched.recordProbe(token: oldNetwork, latencyMs: 20, now: now)
+        r.eq(switched, cleanNetwork, "identity: network change rejects all old in-flight results")
+
+        // Exercise the actual capture-start lock and probe entry point. No
+        // singleton, monitor, network connection, provider, or microphone starts.
+        let cfgBox = OSAllocatedUnfairLock(initialState: config)
+        let clock = OSAllocatedUnfairLock(initialState: UInt64(1_000_000_000))
+        let probeGate = StageRendezvous()
+        let router = ASRRouter(startMonitoring: false, configuration: { cfgBox.withLock { $0 } },
+                               localAvailable: { true }, uptimeNanoseconds: { clock.withLock { $0 } },
+                               measureProbe: { _, _, _ in
+            await probeGate.invoke(suspend: true)
+            return 900
+        })
+        let route = await router.captureStartRoute()
+        router.recordFailure(providerID: ASRProviderID.cloud, route: route)
+        router.recordFailure(providerID: ASRProviderID.cloud, route: route)
+        let reserved = await router.captureStartRoute()
+        r.check(reserved.isHealthRecovery, "capture entry: production boundary reserves recovery")
+        let parallelRoutes = await withTaskGroup(of: ASRRouteSnapshot.self, returning: [ASRRouteSnapshot].self) { group in
+            for _ in 0..<8 { group.addTask { await router.captureStartRoute() } }
+            var routes: [ASRRouteSnapshot] = []
+            for await captured in group { routes.append(captured) }
+            return routes
+        }
+        r.check(parallelRoutes.allSatisfy { !$0.isHealthRecovery && $0.selectedProviderID == ASRProviderID.qwenLocal },
+                "capture entry: concurrent callers cannot duplicate reservation")
+        router.recordSuccess(providerID: ASRProviderID.cloud, latencyMs: 180, route: reserved)
+        r.eq((await router.captureStartRoute()).selectedProviderID, ASRProviderID.cloud,
+             "capture entry: successful recovery restores cloud")
+        let pendingProbe = Task { await router.refreshProbeIfNeeded(force: true) }
+        await probeGate.waitForInvocation()
+        cfgBox.withLock { $0.cloudASRConfig.providers[0].model = "replacement" }
+        await probeGate.release()
+        await pendingProbe.value
+        r.eq(router.snapshot().probeSampledAt, nil, "probe entry: configuration changed during await rejects result")
+        r.eq(router.snapshot().realtimeLatencyEWMA, 0, "probe entry: new profile invalidates actual latency too")
+        let staleRoute = reserved
+        router.recordFailure(providerID: ASRProviderID.cloud, route: staleRoute)
+        r.eq(router.snapshot().cloudConsecutiveFailures, 0, "capture entry: stale request cannot write before next capture")
+
+        let probes = OSAllocatedUnfairLock(initialState: 0)
+        let gated = ASRRouter(startMonitoring: false, configuration: { cfgBox.withLock { $0 } },
+                              localAvailable: { true }, measureProbe: { _, _, _ in
+            probes.withLock { $0 += 1 }
+            return 100
+        })
+        for policy in [ASRRoutingPolicy.localOnly, .cloudOnly] {
+            cfgBox.withLock { $0.asrRoutingPolicy = policy }
+            await gated.refreshProbeIfNeeded(force: true)
+        }
+        r.eq(probes.withLock { $0 }, 0, "probe entry: forced/local modes perform zero handshakes")
     }
 
     // MARK: - Network path change detection (probe cache must be invalidated on switch)

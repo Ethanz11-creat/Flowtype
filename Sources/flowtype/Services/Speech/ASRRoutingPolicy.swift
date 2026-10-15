@@ -70,16 +70,14 @@ func selectASRChain(_ input: ASRRoutingInputs) -> [String] {
     case .auto:
         if input.localAvailable && input.cloudAvailable {
             // 产品默认：云端优先；下列任一成立则改走本地兜底：
-            // 网络不可达 / 整轮延迟明显升高 / 连续失败 / 冷启动时握手探测判慢或失败。
+            // 网络不可达 / 整轮延迟明显升高 / 连续失败 / 当前握手探测判慢或失败。
             let coldStart = input.cloudLatencyEWMA == 0
-            // 真实请求延迟是地面真相；探测只在没有真实样本时才参与。
+            // 快探测不能抵消慢真实请求；慢/失败探测仍可否决快真实样本。
             let requestHealthy = coldStart
                 || input.cloudLatencyEWMA <= ASRRoutingThresholds.cloudLatencyMs
 
             let probeHealthy: Bool
-            if !coldStart {
-                probeHealthy = true          // 有真实样本 → 探测不参与
-            } else if input.cloudProbeFailed {
+            if input.cloudProbeFailed {
                 probeHealthy = false         // 采了但失败 → 负证据
             } else if let probe = input.cloudProbeMs {
                 probeHealthy = probe <= ASRRoutingThresholds.cloudProbeHandshakeMs

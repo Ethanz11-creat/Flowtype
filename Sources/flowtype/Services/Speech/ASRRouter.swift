@@ -13,6 +13,7 @@ struct ASRRouteSnapshot: Sendable, Equatable {
     let cloudConfiguration: CloudASRRequestConfiguration?
     var language: String? = nil
     var healthGeneration: UInt64 = 0
+    var isHealthRecovery: Bool = false
     var cloudIdentity: CloudASRHealthIdentity? { cloudConfiguration.map { CloudASRHealthIdentity(provider: $0.provider) } }
 
     var shouldStartRealtime: Bool {
@@ -48,6 +49,12 @@ struct CloudASRHealthIdentity: Sendable, Equatable {
     }
 }
 
+/// Both the configured service and the observed network belong to a sample.
+struct CloudASRHealthToken: Sendable, Equatable {
+    let identity: CloudASRHealthIdentity?
+    let generation: UInt64
+}
+
 /// 健康画像快照（可测的纯数据部分）。
 struct RouterHealthSnapshot: Sendable, Equatable {
     var cloudIdentity: CloudASRHealthIdentity? = nil
@@ -64,6 +71,59 @@ struct RouterHealthSnapshot: Sendable, Equatable {
     var probeFailed: Bool = false
     /// 最近一次 NWPath 观测特征；用于判断链路是否变化（变化 ⇒ 作废探测样本）。
     var pathSignature: PathSignature? = nil
+    var lastHalfOpenUptimeNanoseconds: UInt64? = nil
+
+    var token: CloudASRHealthToken { CloudASRHealthToken(identity: cloudIdentity, generation: generation) }
+
+    mutating func synchronizeIdentity(_ identity: CloudASRHealthIdentity?) {
+        guard cloudIdentity != identity else { return }
+        self = invalidateLinkSamples(self)
+        cloudIdentity = identity
+        cloudConsecutiveFailures = 0
+    }
+
+    /// Path observation + invalidation are one transaction with capture/results.
+    @discardableResult
+    mutating func applyNetworkPath(_ current: PathSignature) -> Bool {
+        let changed = pathChanged(previous: pathSignature, current: current)
+        if changed { self = invalidateLinkSamples(self) }
+        networkReachable = current.satisfied
+        pathSignature = current
+        return changed
+    }
+
+    mutating func recordSuccess(route: ASRRouteSnapshot, latencyMs: Int, now: Date) {
+        guard routeHealthIsCurrent(route, health: self) else { return }
+        if route.isHealthRecovery {
+            // A real successful request can retire old negative handshake and
+            // inference evidence. A fast handshake alone never does this.
+            probeLatencyMs = nil
+            probeSampledAt = nil
+            probeFailed = false
+        }
+        if route.isRealtime {
+            realtimeLatencyEWMA = updateLatencyEWMA(previous: route.isHealthRecovery ? 0 : realtimeLatencyEWMA,
+                                                    sample: Double(latencyMs))
+            realtimeLatencySampledAt = now
+        } else {
+            cloudLatencyEWMA = updateLatencyEWMA(previous: route.isHealthRecovery ? 0 : cloudLatencyEWMA,
+                                                 sample: Double(latencyMs))
+            cloudLatencySampledAt = now
+        }
+        cloudConsecutiveFailures = 0
+    }
+
+    mutating func recordFailure(route: ASRRouteSnapshot) {
+        guard routeHealthIsCurrent(route, health: self) else { return }
+        cloudConsecutiveFailures += 1
+    }
+
+    mutating func recordProbe(token expected: CloudASRHealthToken, latencyMs: Double?, now: Date) {
+        guard token == expected else { return }
+        probeLatencyMs = latencyMs
+        probeSampledAt = now
+        probeFailed = latencyMs == nil
+    }
 }
 
 /// 指数移动平均：`previous == 0` 表示未知，直接采用首个样本。
@@ -125,6 +185,7 @@ func invalidateLinkSamples(_ state: RouterHealthSnapshot) -> RouterHealthSnapsho
     next.probeFailed = false
     next.cloudLatencyEWMA = 0
     next.cloudLatencySampledAt = nil
+    next.lastHalfOpenUptimeNanoseconds = nil
     return next
 }
 
@@ -138,6 +199,7 @@ enum ASRRouterProbeConfig {
     static let ttl: TimeInterval = interval * 0.6
     /// 真实请求延迟样本的有效期。超过它，陈旧的"快"样本不再可信；陈旧的"慢"样本依然有效。
     static let latencyTtl: TimeInterval = 300
+    static let recoveryIntervalNanoseconds: UInt64 = 60_000_000_000
 }
 
 /// 生产接线的**唯一**入口：健康快照 + 可用性 + 策略 → 决策输入。
@@ -184,21 +246,29 @@ final class ASRRouter: @unchecked Sendable {
     /// 探测是否正在进行，防止链路抖动时重叠刷新。
     private let probeInFlight = OSAllocatedUnfairLock(initialState: false)
 
-    private init() {
+    private let configuration: @MainActor @Sendable () -> Configuration
+    private let localAvailable: @MainActor @Sendable () -> Bool
+    private let uptimeNanoseconds: @Sendable () -> UInt64
+    private let measureProbe: @Sendable (String, UInt16, TimeInterval) async -> Double?
+
+    /// Dependencies keep the real capture/probe boundary runnable offline.
+    init(startMonitoring: Bool = true,
+         configuration: @escaping @MainActor @Sendable () -> Configuration = { ConfigurationStore.shared.current },
+         localAvailable: @escaping @MainActor @Sendable () -> Bool = { ASRProviderRegistry.shared.qwenLocalProvider.isLoaded },
+         uptimeNanoseconds: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
+         measureProbe: @escaping @Sendable (String, UInt16, TimeInterval) async -> Double? = {
+             await CloudProbe.measureLatency(host: $0, port: $1, timeout: $2)
+         }) {
+        self.configuration = configuration
+        self.localAvailable = localAvailable
+        self.uptimeNanoseconds = uptimeNanoseconds
+        self.measureProbe = measureProbe
+        guard startMonitoring else { return }
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
             let current = Self.signature(for: path)
-            let changed = self.health.withLock { state -> Bool in
-                let previous = state.pathSignature
-                state.networkReachable = current.satisfied
-                state.pathSignature = current
-                return pathChanged(previous: previous, current: current)
-            }
+            let changed = self.health.withLock { $0.applyNetworkPath(current) }
             guard changed else { return }
-            // 链路换了一条（Wi-Fi ↔ 热点 ↔ VPN）：探测样本与真实延迟都来自旧链路，一并作废并重探。
-            // 只清探测是不够的——EWMA 一旦非零，决策就不再采信探测（冷启动判定），
-            // 于是"新链路变慢"会被旧快样本掩盖，切换后的首次听写仍白等一整轮慢请求。
-            self.health.withLock { $0 = invalidateLinkSamples($0) }
             AppLogger.log("[ASRRouter] network path changed (\(current.interface ?? "?")) → latency samples invalidated")
             Task { await self.refreshProbeIfNeeded(force: true) }
         }
@@ -222,38 +292,17 @@ final class ASRRouter: @unchecked Sendable {
     func snapshot() -> RouterHealthSnapshot { health.withLock { $0 } }
 
     @MainActor
-    func recordSuccess(providerID: String, latencyMs: Int, route: ASRRouteSnapshot? = nil) {
-        guard ASRProviderRegistry.shared.provider(forID: providerID)?.capabilities.requiresNetwork == true else { return }
+    func recordSuccess(providerID: String, latencyMs: Int, route: ASRRouteSnapshot) {
+        guard providerID == ASRProviderID.cloud else { return }
         synchronizeConfigurationIdentity()
-        health.withLock {
-            if let route {
-                guard routeHealthIsCurrent(route, health: $0) else { return }
-                if route.isRealtime {
-                    $0.realtimeLatencyEWMA = updateLatencyEWMA(previous: $0.realtimeLatencyEWMA, sample: Double(latencyMs))
-                    $0.realtimeLatencySampledAt = Date()
-                    $0.cloudConsecutiveFailures = 0
-                    return
-                }
-            }
-            $0.cloudLatencyEWMA = updateLatencyEWMA(previous: $0.cloudLatencyEWMA, sample: Double(latencyMs))
-            $0.cloudLatencySampledAt = Date()
-            $0.cloudConsecutiveFailures = 0
-        }
-        AppLogger.log("[ASRRouter] cloud EWMA=\(Int(health.withLock { $0.cloudLatencyEWMA }))ms")
+        health.withLock { $0.recordSuccess(route: route, latencyMs: latencyMs, now: Date()) }
     }
 
     @MainActor
-    func recordFailure(providerID: String, route: ASRRouteSnapshot? = nil) {
-        guard ASRProviderRegistry.shared.provider(forID: providerID)?.capabilities.requiresNetwork == true else { return }
+    func recordFailure(providerID: String, route: ASRRouteSnapshot) {
+        guard providerID == ASRProviderID.cloud else { return }
         synchronizeConfigurationIdentity()
-        let n = health.withLock { s -> Int in
-            if let route {
-                guard routeHealthIsCurrent(route, health: s) else { return s.cloudConsecutiveFailures }
-            }
-            s.cloudConsecutiveFailures += 1
-            return s.cloudConsecutiveFailures
-        }
-        AppLogger.log("[ASRRouter] cloud failure streak=\(n)")
+        health.withLock { $0.recordFailure(route: route) }
     }
 
     /// 启动周期性探测（幂等）。app 启动时调用一次即可。
@@ -283,41 +332,34 @@ final class ASRRouter: @unchecked Sendable {
         guard !alreadyRunning else { return }
         defer { probeInFlight.withLock { $0 = false } }
 
-        let cfg = await MainActor.run { ConfigurationStore.shared.current }
+        // Capture configuration and its token without suspension between them.
+        let (cfg, snap) = await MainActor.run {
+            self.synchronizeConfigurationIdentity()
+            return (self.configuration(), self.snapshot())
+        }
         guard let effective = cfg.effectiveCloudASRConfig else { return }
-        guard let endpoint = CloudProbe.probeEndpoint(fromBaseURL: effective.provider.baseURL) else { return }
-        let snap = snapshot()
         guard shouldProbeCloud(path: snap.pathSignature, policy: cfg.asrRoutingPolicy) else { return }
+        guard let endpoint = CloudProbe.probeEndpoint(fromBaseURL: effective.provider.baseURL) else { return }
         if !force, sampleIsFresh(sampledAt: snap.probeSampledAt, now: Date(), ttl: ASRRouterProbeConfig.ttl) { return }
 
-        let ms = await CloudProbe.measureLatency(host: endpoint.host,
-                                                port: endpoint.port,
-                                                timeout: ASRRouterProbeConfig.timeout)
-        health.withLock {
-            $0.probeLatencyMs = ms
-            $0.probeSampledAt = Date()
-            $0.probeFailed = (ms == nil)   // "采了但失败" 与 "从未采样" 必须区分
+        let ms = await measureProbe(endpoint.host, endpoint.port, ASRRouterProbeConfig.timeout)
+        await MainActor.run {
+            // Configuration may have changed while the handshake was suspended,
+            // even when no subsequent capture or periodic probe has run yet.
+            self.synchronizeConfigurationIdentity()
+            guard shouldProbeCloud(path: self.snapshot().pathSignature, policy: self.configuration().asrRoutingPolicy) else { return }
+            self.health.withLock { $0.recordProbe(token: snap.token, latencyMs: ms, now: Date()) }
         }
-        let shown = ms.map { String(format: "%.0f", $0) } ?? "nil"
-        AppLogger.log("[ASRRouter] cloud probe \(endpoint.host) → \(shown)ms")
     }
 
     /// 收集可用性与健康画像，交给纯函数决策，映射为有序 provider 实例。
     func selectChain() async -> [ASRProvider] {
-        let cfg = await MainActor.run { ConfigurationStore.shared.current }
-        let qwen = ASRProviderRegistry.shared.qwenLocalProvider
-        let cloud = ASRProviderRegistry.shared.cloudProvider
-        let localAvailable = qwen.isLoaded
-        let cloudAvailable = await cloud.isAvailable
-        let snap = snapshot()
-
-        // 组装逻辑全部在纯函数 `routingInputs` 里（被自测钉住），此处不得再自行拼装样本。
-        let inputs = routingInputs(from: snap,
-                                   policy: cfg.asrRoutingPolicy,
-                                   localAvailable: localAvailable,
-                                   cloudAvailable: cloudAvailable,
-                                   now: Date())
-        return selectASRChain(inputs).compactMap { ASRProviderRegistry.shared.provider(forID: $0) }
+        // Diagnostic selection never spends the user-session recovery slot.
+        let route = await MainActor.run {
+            self.synchronizeConfigurationIdentity()
+            return makeASRRouteSnapshot(configuration: self.configuration(), localAvailable: self.localAvailable(), health: self.snapshot())
+        }
+        return route.candidateIDs.compactMap { ASRProviderRegistry.shared.provider(forID: $0) }
     }
 
     /// Snapshot routing exactly once at capture start. The returned identity is
@@ -325,22 +367,19 @@ final class ASRRouter: @unchecked Sendable {
     /// protocol or credentials of an active recording.
     @MainActor
     func captureStartRoute() async -> ASRRouteSnapshot {
-        synchronizeConfigurationIdentity()
-        return makeASRRouteSnapshot(configuration: ConfigurationStore.shared.current,
-                                    localAvailable: ASRProviderRegistry.shared.qwenLocalProvider.isLoaded,
-                                    health: snapshot())
+        let cfg = configuration()
+        let local = localAvailable()
+        let uptime = uptimeNanoseconds()
+        return health.withLock {
+            reserveASRCaptureRoute(configuration: cfg, localAvailable: local, health: &$0,
+                                   now: Date(), uptimeNanoseconds: uptime)
+        }
     }
 
     @MainActor
     private func synchronizeConfigurationIdentity() {
-        let identity = ConfigurationStore.shared.current.effectiveCloudASRConfig.map { CloudASRHealthIdentity(provider: $0.provider) }
-        health.withLock { state in
-            if state.cloudIdentity != identity {
-                state = invalidateLinkSamples(state)
-                state.cloudConsecutiveFailures = 0
-                state.cloudIdentity = identity
-            }
-        }
+        let identity = configuration().effectiveCloudASRConfig.map { CloudASRHealthIdentity(provider: $0.provider) }
+        health.withLock { $0.synchronizeIdentity(identity) }
     }
 
     /// Descriptive alias used by pipeline code and tests.
@@ -384,7 +423,7 @@ struct CompletionBudget: Sendable, Equatable {
 
 /// Pure capture route construction also makes privacy gating testable offline.
 func makeASRRouteSnapshot(configuration cfg: Configuration, localAvailable: Bool,
-                          health: RouterHealthSnapshot) -> ASRRouteSnapshot {
+                          health: RouterHealthSnapshot, now: Date = Date()) -> ASRRouteSnapshot {
     let effective = cfg.effectiveCloudASRConfig
     let cloud = effective.map {
         CloudASRRequestConfiguration(provider: $0.provider, apiKey: $0.apiKey, sendContext: cfg.cloudASRSendContext)
@@ -400,10 +439,29 @@ func makeASRRouteSnapshot(configuration cfg: Configuration, localAvailable: Bool
         transportHealth.cloudLatencySampledAt = health.realtimeLatencySampledAt
     }
     let inputs = routingInputs(from: transportHealth, policy: cfg.asrRoutingPolicy,
-                               localAvailable: localAvailable, cloudAvailable: available, now: Date())
+                               localAvailable: localAvailable, cloudAvailable: available, now: now)
     return ASRRouteSnapshot(policy: cfg.asrRoutingPolicy, selectedProviderID: selectASRChain(inputs).first,
                             localAvailable: localAvailable, cloudAvailable: available,
                             cloudConfiguration: cloud, language: cfg.asrLanguage.qwenLanguageCode, healthGeneration: health.generation)
+}
+
+/// Caller owns the health lock: decision and reservation are indivisible.
+func reserveASRCaptureRoute(configuration cfg: Configuration, localAvailable: Bool,
+                            health: inout RouterHealthSnapshot, now: Date,
+                            uptimeNanoseconds uptime: UInt64) -> ASRRouteSnapshot {
+    let identity = cfg.effectiveCloudASRConfig.map { CloudASRHealthIdentity(provider: $0.provider) }
+    health.synchronizeIdentity(identity)
+    let route = makeASRRouteSnapshot(configuration: cfg, localAvailable: localAvailable, health: health, now: now)
+    guard route.policy == .auto, route.localAvailable, route.cloudAvailable,
+          route.selectedProviderID == ASRProviderID.qwenLocal, health.networkReachable else { return route }
+    if let last = health.lastHalfOpenUptimeNanoseconds {
+        guard uptime >= last, uptime - last >= ASRRouterProbeConfig.recoveryIntervalNanoseconds else { return route }
+    }
+    health.lastHalfOpenUptimeNanoseconds = uptime
+    return ASRRouteSnapshot(policy: route.policy, selectedProviderID: ASRProviderID.cloud,
+                            localAvailable: route.localAvailable, cloudAvailable: route.cloudAvailable,
+                            cloudConfiguration: route.cloudConfiguration, language: route.language,
+                            healthGeneration: route.healthGeneration, isHealthRecovery: true)
 }
 
 func completionStageTimeout(remaining: TimeInterval, cloud: Bool, policy: ASRRoutingPolicy,
