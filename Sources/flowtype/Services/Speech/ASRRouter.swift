@@ -319,7 +319,10 @@ final class ASRRouter: @unchecked Sendable {
         let timer = DispatchSource.makeTimerSource(queue: probeQueue)
         timer.schedule(deadline: .now() + ASRRouterProbeConfig.firstDelay,
                        repeating: ASRRouterProbeConfig.interval)
-        timer.setEventHandler {
+        // Must be explicitly `@Sendable`: an unannotated closure formed in this `@MainActor`
+        // method would inherit MainActor isolation, then the first tick on `probeQueue`
+        // trips Swift 6's executor assertion (dispatch_assert_queue_fail → SIGTRAP).
+        timer.setEventHandler { @Sendable in
             Task { await ASRRouter.shared.refreshProbeIfNeeded() }
         }
         timer.resume()
