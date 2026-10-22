@@ -101,7 +101,6 @@ enum PermissionState: Equatable, Sendable {
 enum EngineReadiness: Equatable, Sendable {
     case ready                      // 本地模型已加载 / 云端已配置且网络可达 / Apple 已授权
     case provisioning(progress: Double)
-    case configuredUnverified       // 已配置但尚未验证（云端）
     case unavailable(reason: String)
 }
 
@@ -115,10 +114,21 @@ struct ReadinessSnapshot: Equatable, Sendable {
     let computedAt: Date
 }
 
+enum ReadinessIssue: Equatable, Sendable {
+    case microphoneDenied
+    case microphoneNotDetermined
+    case noEngine
+    case enginePreparing
+    case basicOnly
+    case accessibilityMissing
+
+    var reason: String { /* 用户可见文案，见验收标准 */ }
+}
+
 enum ReadinessLevel: Equatable, Sendable {
     case ready
-    case degraded(reason: String)   // 可用，但能力受限
-    case blocked(reason: String)    // 开始录音没有意义
+    case degraded(ReadinessIssue)   // 可用，但能力受限
+    case blocked(ReadinessIssue)    // 开始录音没有意义
 }
 
 func classifyReadiness(_ s: ReadinessSnapshot) -> ReadinessLevel  // pure
@@ -126,11 +136,13 @@ func classifyReadiness(_ s: ReadinessSnapshot) -> ReadinessLevel  // pure
 
 判定阶梯（纯函数，测试钉住）：
 
-1. `microphone != .granted` → `.blocked("麦克风权限未开启")`。
-2. 三个引擎全部不可用，且没有 `provisioning` → `.blocked("没有可用的语音识别引擎")`。
-3. 只有 AppleSpeech 可用 → `.degraded("基础识别模式，准确率较低")`。
-4. 本地 / 云端至少一个 `ready`，但 `accessibility != .granted` → `.degraded("全局热键不可用；可从菜单开始，结果写入剪贴板")`。
-5. 其余 → `.ready`。
+1. `microphone == .denied` → `.blocked(.microphoneDenied)`。
+2. 三个引擎都没有 `ready`，也没有 `provisioning` → `.blocked(.noEngine)`。
+3. 本地 / 云端都没有 `ready`，但 AppleSpeech `ready` → `.degraded(.basicOnly)`。
+4. 本地 / 云端都没有 `ready`，但至少一个 `provisioning` → `.degraded(.enginePreparing)`。
+5. 本地 / 云端至少一个 `ready`，但 `accessibility != .granted` → `.degraded(.accessibilityMissing)`。
+6. `microphone != .granted`（即 `notDetermined` / `unknown`，尚未被拒绝）→ `.degraded(.microphoneNotDetermined)`，允许开始录音以触发系统授权弹窗。
+7. 其余 → `.ready`。
 
 `ReadinessMonitor`（`@MainActor ObservableObject` 单例）：
 
@@ -177,7 +189,7 @@ func classifyReadiness(_ s: ReadinessSnapshot) -> ReadinessLevel  // pure
 候选引擎必须遵守 `asrRoutingPolicy`，否则 readiness 会宣称一条路由永远不会走的路：
 
 - 本地：`QwenModelState.status == .ready` → `ready`；`downloading/loading/stalled` → `provisioning`；`.notLoaded` 且 onboarding 完成、自动下载将会启动 → `provisioning(0)`；其余 → `unavailable(reason)`。
-- 云端：`cloudASRConfig` 有 active provider 且 key / baseURL / model 非空 → 配置存在；再结合 `ASRRouter` 的 `networkReachable`。已配置且网络可达 → `ready`（标注「未验证」可选）；已配置但网络不可达 → `unavailable("网络不可达")`；`policy == .localOnly` 时直接视为 unavailable。
+- 云端：`cloudASRConfig` 有 active provider 且 key / baseURL / model 非空 → 配置存在；再结合 `ASRRouter` 的 `networkReachable`。已配置且网络可达 → `ready`；已配置但网络不可达 → `unavailable("网络不可达")`；`policy == .localOnly` 时直接视为 unavailable。
 - AppleSpeech：`SFSpeechRecognizer.authorizationStatus() == .authorized` 且 recognizer 可用 → `ready`；仅在 `policy == .auto` 时计入可用候选（`.localOnly` / `.cloudOnly` 下它是内部兜底，不算满足用户选择）；拒绝 → `unavailable`。
 
 菜单首项显示实际候选链，例如：
@@ -473,7 +485,7 @@ applicationDidFinishLaunching
 
 ### 8.1 纯逻辑（`--self-test`）
 
-- `classifyReadiness`：麦克风拒绝 → blocked；三引擎均不可用 → blocked；仅 Apple → degraded；AX 缺失但引擎就绪 → degraded；全就绪 → ready。
+- `classifyReadiness`：麦克风拒绝 → blocked；麦克风未决定 + 引擎就绪 → degraded（允许触发系统授权）；三引擎均不可用 → blocked；仅 Apple → degraded；仅 provisioning → degraded；AX 缺失但引擎就绪 → degraded；全就绪 → ready。
 - `resolveDeliveryMethod`：secure / non-text → clipboard；无 AX → clipboard；`.unicode` → type；`.automatic` + editable / blind → paste；legacy 白名单行为不变。
 - `ModelProvisionError` 分类：真实错误字符串样本 → `metadataInvalid` / `network` / `stalled`；空目录 → `incompleteLocal`。
 - `FailureKind → RecoveryAction` 映射：每类至少一个动作；只有 deliveryUncertain / cancelled 允许空动作。
