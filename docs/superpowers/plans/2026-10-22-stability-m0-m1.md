@@ -64,7 +64,18 @@ open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibil
 
 - [ ] **Step 3: 请 Owner 在系统设置中勾选 FlowType（若列表中没有，拖入 `/Applications/FlowType.app`），等待 5 秒**
 
-- [ ] **Step 4: 验证 tap 已创建**
+- [ ] **Step 4: 重启应用以走现有的启动建 tap 路径**
+
+当前构建只在启动时创建 tap；运行中授权后的自愈是 M1 才实现。因此授权后必须退出并重新启动，才能验证 M0 基线：
+
+```bash
+osascript -e 'quit app "FlowType"' 2>/dev/null || pkill -x FlowType
+sleep 2
+open -a /Applications/FlowType.app
+sleep 3
+```
+
+- [ ] **Step 5: 验证 tap 已创建**
 
 ```bash
 rg -n "EventTap|FAILED to create CGEvent tap|Accessibility" ~/Library/Logs/flowtype/diagnostic.log | tail -n 40
@@ -72,7 +83,7 @@ rg -n "EventTap|FAILED to create CGEvent tap|Accessibility" ~/Library/Logs/flowt
 
 Expected: 最新一次启动出现 `[EventTap] CGEvent tap created and enabled successfully`；启动时间之后没有 `[WindowManager] FAILED to create CGEvent tap`。若仍然失败，记录完整日志行并在此停止 M0。
 
-- [ ] **Step 5: 写证据文档**
+- [ ] **Step 6: 写证据文档**
 
 ```bash
 mkdir -p docs/evidence
@@ -80,7 +91,7 @@ mkdir -p docs/evidence
 
 文档包含：日期、tester、`git rev-parse HEAD`、macOS 版本、app 路径与签名输出、权限状态（麦克风 / Speech / Accessibility）、上述日志摘录、是否仍失败。不要写入 API Key 或听写内容。
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 7: 提交**
 
 ```bash
 git add docs/evidence/2026-10-22-m0-environment.md
