@@ -9,7 +9,13 @@ enum CloudTranscriptionRequestBuilder {
         guard !provider.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CloudASRError.noModel }
         switch provider.protocolKind {
         case .openAICompatible: _ = try CloudASREndpoint.transcriptionURL(provider.baseURL)
-        case .dashScopeRealtime: _ = try CloudASREndpoint.validateRealtimeURL(provider.baseURL)
+        case .dashScopeRealtime:
+            _ = try CloudASREndpoint.validateRealtimeURL(provider.baseURL)
+            // Validation must also accept the original saved value at the runtime boundary;
+            // endpoint normalization alone can hide whitespace rejected by realtime capture.
+            guard (try? RealtimeASRConfiguration(provider: provider, apiKey: apiKey, language: nil)) != nil else {
+                throw CloudASRError.invalidURL("无效的 WSS 实时识别地址")
+            }
         }
     }
 

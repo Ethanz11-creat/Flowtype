@@ -236,6 +236,24 @@ enum CloudProviderSelfTests {
                 r.check(false, "transport: query credentials rejected locally")
             }
         }
+        for (url, expected) in [
+            ("wss://asr-transport.invalid/realtime", true),
+            (" wss://asr-transport.invalid/realtime", false),
+            ("wss://asr-transport.invalid/realtime ", false),
+            (" wss://asr-transport.invalid/realtime ", false),
+            ("\twss://asr-transport.invalid/realtime\t", false),
+            ("\nwss://asr-transport.invalid/realtime\n", false)
+        ] {
+            var realtime = profile(.dashScope)
+            realtime.baseURL = url
+            let runtimeAccepts = (try? RealtimeASRConfiguration(provider: realtime, apiKey: key, language: nil)) != nil
+            let validationAccepts = (try? client.validateConfiguration(provider: realtime, apiKey: key).get()) != nil
+            let connectionResult = await client.testConnection(provider: realtime, apiKey: key)
+            let connectionAccepts = (try? connectionResult.get()) != nil
+            r.eq(runtimeAccepts, expected, "transport: realtime runtime keeps strict whitespace contract")
+            r.eq(validationAccepts, runtimeAccepts, "transport: WSS pure validation agrees with runtime on whitespace")
+            r.eq(connectionAccepts, runtimeAccepts, "transport: WSS connection check agrees with runtime on whitespace")
+        }
         r.eq(CloudTransportProtocol.snapshot().requests.count, 0, "transport: configuration validation performs zero I/O")
         for invalid in ["", "   ", "\n"] {
             if case .success = client.validateConfiguration(provider: profile(.custom), apiKey: invalid) {
