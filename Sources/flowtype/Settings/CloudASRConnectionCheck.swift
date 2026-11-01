@@ -86,6 +86,12 @@ final class CloudASRConnectionCheck: ObservableObject {
         config.providers[index] = profile
     }
 
+    func selectModel(_ model: String, profileID: UUID, in config: inout CloudASRConfig) {
+        guard var profile = config.providers.first(where: { $0.id == profileID }) else { return }
+        profile.model = model
+        updateProfile(profile, in: &config)
+    }
+
     func updateAPIKey(_ key: String, profileID: UUID, in config: inout CloudASRConfig) {
         guard config.providers.contains(where: { $0.id == profileID }),
               config.providerAPIKeys[profileID.uuidString] != key else { return }

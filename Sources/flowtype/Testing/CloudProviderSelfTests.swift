@@ -94,6 +94,7 @@ enum CloudProviderSelfTests {
         defer { session.invalidateAndCancel() }
         let client = CloudASRProvider(session: session, logger: { _ in })
         let checks = CloudASRConnectionCheck(service: client)
+        runModelSelection(r, checks: checks)
         var first = CloudASRVendor.makeProfile(.custom, isActive: true)
         first.baseURL = "https://ownership.invalid/v1"
         first.model = "original-model"
@@ -238,6 +239,51 @@ enum CloudProviderSelfTests {
         checks.updateAPIKey("must-not-recreate", profileID: first.id, in: &config)
         r.eq(config.providers.first?.model, "shifted-model", "ownership: UUID editing targets shifted profile and ignores deleted binding")
         r.eq(config.providerAPIKeys[first.id.uuidString], nil, "ownership: deleted key binding cannot recreate association")
+    }
+
+    /// The picker uses this catalog and action; rendering must never apply defaults.
+    @MainActor
+    private static func runModelSelection(_ r: SelfTest.Reporter, checks: CloudASRConnectionCheck) {
+        for (vendor, expected) in [
+            (CloudASRVendorID.siliconFlow, ["FunAudioLLM/SenseVoiceSmall", "TeleAI/TeleSpeechASR"]),
+            (.openAI, ["whisper-1"]), (.dashScope, ["paraformer-realtime-v2"]), (.custom, [])
+        ] {
+            let profile = CloudASRVendor.makeProfile(vendor, isActive: false)
+            r.eq(CloudASRVendor.modelPresets(for: profile).map(\.modelId), expected,
+                 "model selection: presets belong to selected vendor")
+            var mismatched = profile
+            mismatched.protocolKind = profile.protocolKind == .openAICompatible ? .dashScopeRealtime : .openAICompatible
+            r.check(CloudASRVendor.modelPresets(for: mismatched).isEmpty,
+                    "model selection: incompatible protocol offers no misleading presets")
+        }
+        do {
+            let id = UUID()
+            let legacy: [String: Any] = ["id": id.uuidString, "name": "saved", "provider": "SiliconFlow",
+                "baseURL": "https://saved.invalid/private/v1", "model": "user/custom-asr", "isActive": true]
+            let profile = try JSONDecoder().decode(CloudASRProviderConfig.self,
+                from: JSONSerialization.data(withJSONObject: legacy))
+            var config = CloudASRConfig(providers: [CloudASRVendor.makeProfile(.openAI, isActive: false), profile],
+                                       providerAPIKeys: [id.uuidString: "synthetic-preserved-key"])
+            let before = config
+            let options = CloudASRVendor.modelPresets(for: config.providers[1])
+            r.eq(config, before, "model selection: reading picker catalog preserves migrated custom model")
+            r.check(!options.contains { $0.modelId == profile.model }, "model selection: saved custom ID stays outside preset catalog")
+            let token = checks.begin(profileID: id)
+            checks.selectModel("TeleAI/TeleSpeechASR", profileID: id, in: &config)
+            r.eq(config.providers[1].model, "TeleAI/TeleSpeechASR", "model selection: shared picker action selects TeleSpeechASR")
+            r.check(!checks.accepts(token), "model selection: preset selection invalidates prior connection result")
+            var expected = before
+            expected.providers[1].model = "TeleAI/TeleSpeechASR"
+            r.eq(config, expected, "model selection: preset changes only target model, preserving UUID, URL, Key and other profiles")
+            checks.selectModel("my/new-custom-model", profileID: id, in: &config)
+            r.eq(config.providers[1].model, "my/new-custom-model", "model selection: shared action accepts custom IDs")
+            let unchangedToken = checks.begin(profileID: id)
+            checks.selectModel("my/new-custom-model", profileID: id, in: &config)
+            r.check(checks.accepts(unchangedToken), "model selection: unchanged model keeps connection revision")
+            let preserved = config
+            checks.selectModel("TeleAI/TeleSpeechASR", profileID: UUID(), in: &config)
+            r.eq(config, preserved, "model selection: obsolete deleted card cannot modify another profile")
+        } catch { r.check(false, "model selection: migration fixture decodes: \(error)") }
     }
 
     /// Tests exercise the real provider; only HTTP I/O is replaced. Every host is synthetic.

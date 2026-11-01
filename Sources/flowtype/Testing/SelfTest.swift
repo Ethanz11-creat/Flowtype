@@ -2794,6 +2794,49 @@ enum SelfTest {
         noKeyCapture.prepareRealtime(route: noKey, factory: unopenedFactory)
         r.eq(opened.withLock { $0 }, 0, "capture: actual prepare path never creates localOnly/no-key socket")
 
+        // Removing strict validation from the runtime constructor must fail before
+        // either capture or a saved-audio retry can construct/start a session.
+        for endpoint in [
+            "wss://capture.invalid/ws?token=synthetic-secret", "wss://capture.invalid/ws?",
+            "wss://user:password@capture.invalid/ws", "wss://capture.invalid/ws#fragment",
+            "wss://capture.invalid:999999999999999999999/ws", "wss://[::1]:999999999999999999999/ws",
+            "wss://capture.invalid:0/ws", "wss://capture.invalid:65536/ws", "wss://capture.invalid:/ws",
+            "wss://capture.invalid:invalid/ws", "wss://capture.invalid/%20ws",
+            " wss://capture.invalid/ws", "wss://capture.invalid/ws ", "\twss://capture.invalid/ws\n"
+        ] {
+            var invalid = config
+            invalid.cloudASRConfig.providers[0].baseURL = endpoint
+            let saved = invalid.cloudASRConfig.providers[0]
+            do {
+                _ = try RealtimeASRConfiguration(provider: saved, apiKey: "offline-fixture", language: nil)
+                r.check(false, "capture endpoint: constructor rejects \(endpoint)")
+            } catch {
+                r.eq(error as? RealtimeASRConfigurationError, .invalidEndpoint,
+                     "capture endpoint: constructor rejects \(endpoint)")
+            }
+            let invalidRoute = makeASRRouteSnapshot(configuration: invalid, localAvailable: true, health: RouterHealthSnapshot())
+            let rejected = SessionContext(sessionID: 729)
+            rejected.prepareRealtime(route: invalidRoute, factory: unopenedFactory)
+            try? await rejected.realtimeStartTask?.value
+            r.check(rejected.realtimeHandle == nil && rejected.realtimeStartTask == nil,
+                    "capture endpoint: invalid configuration installs no session")
+            r.check(rejected.realtimeFailureReason != nil, "capture endpoint: invalid configuration records local failure")
+            let fallback = PipelineASRFixture(id: ASRProviderID.qwenLocal)
+            let rejectedStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in fallback },
+                                         realtimeFactory: unopenedFactory)
+            _ = await rejectedStage.execute(payload: .audio(samples: [0.25, -0.5], previewText: ""), context: rejected)
+            r.eq(fallback.requests.withLock { $0.first?.samples }, [0.25, -0.5],
+                 "capture endpoint: rejected URL preserves complete local fallback audio")
+        }
+        r.eq(opened.withLock { $0 }, 0, "capture endpoint: invalid URLs never reach capture or retry session factory")
+        r.eq(await never.starts, 0, "capture endpoint: invalid URLs never start a session")
+        for endpoint in ["wss://capture.invalid:443/a%2Fb", "wss://[::1]/ws", "wss://[::1]:65535/ws"] {
+            var valid = provider
+            valid.baseURL = endpoint
+            let accepted = try? RealtimeASRConfiguration(provider: valid, apiKey: "offline-fixture", language: nil)
+            r.eq(accepted?.endpoint.absoluteString, endpoint, "capture endpoint: valid explicit ports and escaped paths retained")
+        }
+
         let localProvider = PipelineASRFixture(id: ASRProviderID.qwenLocal)
         let failedSession = PipelineRealtimeFixture(fail: true)
         let failureHandle = RealtimeASRSessionHandle(session: failedSession, ingress: RealtimeAudioIngress(),

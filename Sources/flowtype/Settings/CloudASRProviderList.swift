@@ -61,6 +61,13 @@ private struct CloudASRProviderCard: View {
         )
     }
 
+    private var modelBinding: Binding<String> {
+        Binding(
+            get: { binding.wrappedValue.model },
+            set: { checks.selectModel($0, profileID: provider.id, in: &store.current.cloudASRConfig) }
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
@@ -121,7 +128,18 @@ private struct CloudASRProviderCard: View {
                         Text("OpenAI 兼容 HTTP").tag(CloudASRProtocolKind.openAICompatible)
                         Text("DashScope 实时 WSS").tag(CloudASRProtocolKind.dashScopeRealtime)
                     }
-                    TextField("模型 ID", text: binding.model)
+                    let presets = CloudASRVendor.modelPresets(for: provider)
+                    if !presets.isEmpty {
+                        Picker("模型预设", selection: modelBinding) {
+                            ForEach(presets) { preset in
+                                Text(preset.name).tag(preset.modelId)
+                            }
+                            if !presets.contains(where: { $0.modelId == provider.model }) {
+                                Text("自定义模型（在下方编辑）").tag(provider.model)
+                            }
+                        }
+                    }
+                    TextField("模型 ID", text: modelBinding)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12, design: .monospaced))
                         .accessibilityLabel("模型 ID")

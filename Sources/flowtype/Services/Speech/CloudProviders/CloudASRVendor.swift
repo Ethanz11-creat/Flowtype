@@ -13,6 +13,17 @@ struct CloudASRFieldCapabilities: Codable, Sendable, Equatable {
 
 /// Creation defaults and explicit wire capabilities, independent of URL/display labels.
 enum CloudASRVendor {
+    /// Read-only choices; editing or rendering never reapplies creation defaults.
+    static func modelPresets(for profile: CloudASRProviderConfig) -> [CloudASRModelPreset] {
+        switch (profile.vendorID, profile.protocolKind) {
+        case (.siliconFlow, .openAICompatible): return CloudASRModelPreset.siliconFlowModels
+        case (.openAI, .openAICompatible):
+            return [CloudASRModelPreset(id: "whisper-1", name: "Whisper-1", modelId: "whisper-1")]
+        case (.dashScope, .dashScopeRealtime): return [.paraformerRealtimeV2]
+        default: return []
+        }
+    }
+
     static func makeProfile(_ vendor: CloudASRVendorID, isActive: Bool) -> CloudASRProviderConfig {
         switch vendor {
         case .siliconFlow:

@@ -30,18 +30,10 @@ struct RealtimeASRConfiguration: Sendable, Equatable {
     }
 }
 
-/// Reject malformed authority and unresolved workspace templates before upgrade.
+/// Match settings' strict endpoint contract without trimming saved realtime URLs.
 func isValidRealtimeEndpoint(_ value: String) -> Bool {
-    guard !value.contains(where: { $0.isWhitespace }),
-          let decoded = value.removingPercentEncoding,
-          !decoded.contains("{"), !decoded.contains("}"),
-          let components = URLComponents(string: value),
-          components.scheme?.lowercased() == "wss",
-          let host = components.host, !host.isEmpty,
-          components.user == nil, components.password == nil,
-          components.fragment == nil, components.url != nil else { return false }
-    if let port = components.port, !(1...65535).contains(port) { return false }
-    return true
+    guard !value.contains(where: { $0.isWhitespace }) else { return false }
+    return (try? CloudASREndpoint.validateRealtimeURL(value)) != nil
 }
 
 enum RealtimeASRConfigurationError: Error, Equatable, LocalizedError {
@@ -49,7 +41,7 @@ enum RealtimeASRConfigurationError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedProtocol: return "请选择 DashScope 实时 WSS 协议"
-        case .invalidEndpoint: return "实时 ASR 地址必须为有效 WSS 地址，且不能包含账号、密码或占位符"
+        case .invalidEndpoint: return "实时 ASR 地址必须为有效 WSS 地址，使用有效端口，且不能包含空白、账号、密码、查询参数、片段或占位符"
         case .missingModel: return "请配置实时 ASR 模型，例如 paraformer-realtime-v2"
         case .missingAPIKey: return "请配置云端 ASR API Key"
         }
