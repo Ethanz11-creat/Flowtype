@@ -1,5 +1,5 @@
 {
-  "originHash" : "a2c3061bfe9f776f22ea19c823c51243ec5f64ccd2182f483b08db4770313669",
+  "originHash" : "b9a8c04ea75ac82960dc90365e75fdf972bb04d1cfb714ecbc9e67b903a6fa76",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -17,15 +17,6 @@
       "state" : {
         "revision" : "e1caa19077dda4b00441142ef57da3db02acd466",
         "version" : "1.4.2"
-      }
-    },
-    {
-      "identity" : "eventsource",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mattt/EventSource.git",
-      "state" : {
-        "revision" : "a3a85a85214caf642abaa96ae664e4c772a59f6e",
-        "version" : "1.4.1"
       }
     },
     {
@@ -182,15 +173,6 @@
       }
     },
     {
-      "identity" : "swift-huggingface",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/huggingface/swift-huggingface.git",
-      "state" : {
-        "revision" : "b721959445b617d0bf03910b2b4aced345fd93bf",
-        "version" : "0.9.0"
-      }
-    },
-    {
       "identity" : "swift-jinja",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-jinja.git",
@@ -303,8 +285,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-transformers",
       "state" : {
-        "revision" : "349a7ce54ccb8ebe4bc10c2022e9806f01adb7c6",
-        "version" : "1.3.2"
+        "revision" : "150169bfba0889c229a2ce7494cf8949f18e6906",
+        "version" : "1.1.9"
       }
     },
     {
@@ -314,6 +296,15 @@
       "state" : {
         "revision" : "ca48d46c25f8fa948d37eaa480c73172182cf90f",
         "version" : "1.5.0"
+      }
+    },
+    {
+      "identity" : "whisperkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/argmaxinc/WhisperKit.git",
+      "state" : {
+        "revision" : "e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef",
+        "version" : "0.18.0"
       }
     },
     {

@@ -309,6 +309,7 @@ enum SelfTest {
         testDownloadSource(r)      // DownloadSource endpoint mapping
         testModelLocator(r)        // ModelLocator completeness validation
         LocalModelImportSelfTests.runInspection(r)
+        await WhisperRuntimeSelfTests.run(r)
         await ModelProvisionSelfTests.runPreflight(r)
         testStatsDataModel(r)      // stats data model: language tag + legacy decode
         testStatsEngine(r)         // StatsEngine: metrics, streaks, heatmap
