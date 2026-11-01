@@ -1,6 +1,7 @@
 import os
 import Foundation
 import AppKit
+import SwiftUI
 import Combine
 import GRDB
 
@@ -10,9 +11,9 @@ import GRDB
 /// `Testing` module, so `swift test` cannot run. These checks live inside the
 /// FlowType target (so they have `internal` access to the code under test) and
 /// are invoked via `swift run FlowType --self-test`, exiting 0 on all-pass and 1
-/// on any failure. They are pure-logic regression guards for the fixed bugs;
-/// system/hardware/UI behaviours (audio device, AX, CGEvent) are verified
-/// manually and noted in the diagnostic report, not here.
+/// on any failure. Most checks are pure logic; the hidden AppKit panel geometry
+/// check also exercises its real frame-constraining boundary without showing it.
+/// System/hardware/visible UI behaviours are verified manually, not here.
 enum SelfTest {
 
     final class Reporter {
@@ -353,6 +354,7 @@ enum SelfTest {
         testPolishOnStopConfig(r)  // default/migration and persisted opt-out
         testLegacySessionConfiguration(r) // pre-session settings and single-provider migration
         testStableSessionPresentation(r) // no provider or streaming text in capsule
+        testFloatingPanelCrossScreenGeometry(r)
         testReadinessClassification(r)
         testReadinessPresentation(r)
         await testDictationMenuDispatch(r)
@@ -1058,6 +1060,38 @@ enum SelfTest {
              SessionState.processing(provider: "cloud").statusTitle,
              "presentation: ASR and polish share one stable processing title")
         r.check(SessionState.preparing.showSpinner, "presentation: preparing visibly indicates work before audio readiness")
+    }
+
+    @MainActor
+    static func testFloatingPanelCrossScreenGeometry(_ r: Reporter) {
+        // Real AppKit geometry only: no ordering, live sessions/configuration,
+        // permissions, or models. A stale previous screen must not pull an
+        // explicitly placed capsule back onto that screen during presentation.
+        _ = NSApplication.shared
+        guard let previousScreen = NSScreen.screens.first else {
+            r.check(false, "panel geometry: an AppKit screen is available")
+            return
+        }
+        let panel = FloatingPanel(view: AnyView(EmptyView()))
+        let abovePreviousScreen = previousScreen.visibleFrame.maxY + 5
+        for size in [NSSize(width: 240, height: 70), NSSize(width: 320, height: 94)] {
+            let start = NSRect(x: -487, y: abovePreviousScreen, width: size.width, height: size.height)
+            let resting = start.offsetBy(dx: 0, dy: 60)
+            r.eq(panel.constrainFrameRect(start, to: previousScreen), start,
+                 "panel geometry: stale lower screen preserves cross-screen slide start at size \(size)")
+            r.eq(panel.constrainFrameRect(resting, to: previousScreen), resting,
+                 "panel geometry: stale lower screen preserves cross-screen resting frame at size \(size)")
+        }
+        panel.setFrameOrigin(NSPoint(x: -487, y: abovePreviousScreen))
+        let centerX = panel.frame.midX
+        panel.setCapsuleSize(NSSize(width: 320, height: 94))
+        r.eq(panel.frame.midX, centerX, "panel geometry: recovery resize preserves horizontal center")
+        r.eq(panel.frame.minY, abovePreviousScreen, "panel geometry: recovery resize preserves cross-screen origin")
+        r.eq(panel.contentView?.layer?.mask?.frame.size, NSSize(width: 320, height: 94),
+             "panel geometry: recovery resize keeps the capsule mask in sync")
+        r.check(!panel.canBecomeKey && !panel.canBecomeMain && panel.styleMask.contains(.nonactivatingPanel),
+                "panel geometry: cross-screen capsule cannot take typing focus")
+        r.check(!panel.isVisible, "panel geometry: regression never displays a window")
     }
 
     // MARK: - Compatibility with saved settings and the onboarding demo

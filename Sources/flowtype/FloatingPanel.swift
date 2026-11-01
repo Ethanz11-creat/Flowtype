@@ -46,6 +46,13 @@ class FloatingPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
+    // AppKit can constrain a cross-screen presentation to the panel's previous
+    // screen. This borderless overlay owns its global position and slide path;
+    // keep the requested frame instead of pulling it back onto the old screen.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
+
     /// Keep the window and its hit-testable mask in sync with the recovery layout.
     /// Resizing preserves the capsule center and never activates the panel.
     func setCapsuleSize(_ size: NSSize) {
