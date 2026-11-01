@@ -11,7 +11,9 @@ class StatusBarController: NSObject, NSMenuDelegate {
     private var onboardingWindowController: OnboardingWindowController?
     private var statusMenuItem: NSMenuItem?
     private var sessionCancellable: AnyCancellable?
-    private var modelCancellable: AnyCancellable?
+    private var readinessCancellable: AnyCancellable?
+    private var dictationMenuItem: NSMenuItem?
+    private var originalStatusImage: NSImage?
 
     private override init() {
         super.init()
@@ -31,6 +33,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
             button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Flowtype")
         }
 
+        originalStatusImage = button.image
+
         button.action = #selector(showMenu)
         button.target = self
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -43,7 +47,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
                 guard let self else { return }
                 switch state {
                 case .idle:
-                    self.updateIdleTooltip()
+                    self.statusItem?.button?.toolTip = readinessMenuTitle(ReadinessMonitor.shared.snapshot)
                 case .preparing:
                     self.statusItem?.button?.toolTip = "FlowType — 正在准备麦克风..."
                 case .recording:
@@ -59,30 +63,45 @@ class StatusBarController: NSObject, NSMenuDelegate {
                 }
             }
 
-        modelCancellable = QwenModelState.shared.$status
+        let monitor = ReadinessMonitor.shared
+        readinessCancellable = monitor.$level.combineLatest(monitor.$snapshot)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                if case .idle = SessionController.shared.sessionState {
-                    self.updateIdleTooltip()
-                }
+            .sink { [weak self] level, snapshot in
+                self?.updateReadinessPresentation(level: level, snapshot: snapshot)
             }
     }
 
-    private func updateIdleTooltip() {
-        switch QwenModelState.shared.status {
+    private func updateReadinessPresentation(level: ReadinessLevel, snapshot: ReadinessSnapshot) {
+        guard let button = statusItem?.button else { return }
+        switch level {
         case .ready:
-            statusItem?.button?.toolTip = "FlowType — Qwen3-ASR 就绪"
-        case .downloading(let progress, _, _):
-            statusItem?.button?.toolTip = "FlowType — 下载中 \(Int(progress * 100))%"
-        case .stalled:
-            statusItem?.button?.toolTip = "FlowType — 下载停滞，重试中"
-        case .loading:
-            statusItem?.button?.toolTip = "FlowType — 模型加载中..."
-        case .error:
-            statusItem?.button?.toolTip = "FlowType — 模型加载失败"
-        case .notLoaded:
-            statusItem?.button?.toolTip = "FlowType — 等待加载模型"
+            button.image = originalStatusImage
+            button.contentTintColor = nil
+        case .degraded:
+            button.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "FlowType")
+            button.contentTintColor = .systemOrange
+        case .blocked:
+            button.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "FlowType")
+            button.contentTintColor = .systemRed
+        }
+        // Readiness can change during capture or delivery; session copy keeps ownership.
+        if case .idle = SessionController.shared.sessionState {
+            button.toolTip = readinessMenuTitle(snapshot)
+        }
+    }
+
+    nonisolated static func dictationMenuTitle(for state: SessionState) -> String {
+        switch state {
+        case .preparing, .recording: return "停止听写"
+        case .processing, .polishing, .injecting: return "处理中…"
+        case .idle, .notice, .error: return "开始听写"
+        }
+    }
+
+    nonisolated static func dictationMenuEnabled(for state: SessionState) -> Bool {
+        switch state {
+        case .processing, .polishing, .injecting: return false
+        default: return true
         }
     }
 
@@ -90,10 +109,17 @@ class StatusBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        let asrStatusItem = NSMenuItem(title: "ASR 状态: 检查中...", action: nil, keyEquivalent: "")
-        asrStatusItem.isEnabled = false
-        self.statusMenuItem = asrStatusItem
-        menu.addItem(asrStatusItem)
+        menu.autoenablesItems = false
+        let readinessItem = NSMenuItem(title: "", action: #selector(repairReadiness), keyEquivalent: "")
+        readinessItem.target = self
+        statusMenuItem = readinessItem
+        menu.addItem(readinessItem)
+
+        let dictationItem = NSMenuItem(title: "", action: #selector(toggleDictation), keyEquivalent: "")
+        dictationItem.target = self
+        dictationMenuItem = dictationItem
+        menu.addItem(dictationItem)
+        updateMenuItems()
         menu.addItem(NSMenuItem.separator())
 
         let showItem = NSMenuItem(title: "显示 Flowtype", action: #selector(showSettings), keyEquivalent: ",")
@@ -118,7 +144,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        let permissionItem = NSMenuItem(title: "检查权限", action: #selector(checkPermissions), keyEquivalent: "")
+        let permissionItem = NSMenuItem(title: "重新检测权限", action: #selector(checkPermissions), keyEquivalent: "")
         permissionItem.target = self
         menu.addItem(permissionItem)
 
@@ -158,23 +184,48 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     nonisolated func menuWillOpen(_ menu: NSMenu) {
-        Task { @MainActor in
-            let statusText: String
-            switch QwenModelState.shared.status {
-            case .ready:
-                statusText = "Qwen3-ASR 就绪"
-            case .downloading(let progress, _, _):
-                statusText = "下载中 \(Int(progress * 100))%"
-            case .stalled:
-                statusText = "下载停滞，重试中"
-            case .loading:
-                statusText = "模型加载中..."
-            case .error(let reason, _):
-                statusText = "加载失败: \(reason.prefix(30))"
-            case .notLoaded:
-                statusText = "等待加载模型"
-            }
-            self.statusMenuItem?.title = statusText
+        // AppKit invokes menu delegates on the main thread. Match the synchronous
+        // MainActor bridge used by main-runloop callbacks in WindowManager.
+        MainActor.assumeIsolated {
+            ReadinessMonitor.shared.refresh()
+            updateMenuItems()
+        }
+    }
+
+    private func updateMenuItems() {
+        let monitor = ReadinessMonitor.shared
+        statusMenuItem?.title = readinessMenuTitle(monitor.snapshot)
+        switch monitor.rawLevel {
+        case .blocked, .degraded(.accessibilityMissing): statusMenuItem?.isEnabled = true
+        default: statusMenuItem?.isEnabled = false
+        }
+        let state = SessionController.shared.sessionState
+        dictationMenuItem?.title = Self.dictationMenuTitle(for: state)
+        dictationMenuItem?.isEnabled = Self.dictationMenuEnabled(for: state)
+    }
+
+    @objc private func repairReadiness() {
+        let monitor = ReadinessMonitor.shared
+        monitor.refresh()
+        switch monitor.rawLevel {
+        case .blocked(.microphoneDenied):
+            PermissionHelper.openMicrophoneSettings()
+        case .blocked(.noEngine):
+            openSettings(tab: .settings)
+        case .degraded(.accessibilityMissing):
+            PermissionHelper.openAccessibilitySettings()
+            monitor.startPermissionWatchIfNeeded()
+        default:
+            break
+        }
+    }
+
+    @objc private func toggleDictation() {
+        let session = SessionController.shared
+        switch session.sessionState {
+        case .preparing, .recording: session.endRecording()
+        case .idle, .notice, .error: session.startRecording()
+        case .processing, .polishing, .injecting: break
         }
     }
 
@@ -196,17 +247,11 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func checkPermissions() {
-        let hasPermission = PermissionHelper.checkAccessibility()
-        if hasPermission {
-            let alert = NSAlert()
-            alert.messageText = "权限已开启"
-            alert.informativeText = "Flowtype 已拥有辅助功能权限。"
-            alert.alertStyle = .informational
-            alert.addButton(withTitle: "确定")
-            alert.runModal()
-        } else {
-            PermissionHelper.showPermissionGuide()
-        }
+        let monitor = ReadinessMonitor.shared
+        monitor.refresh()
+        WindowManager.shared.repairEventTap()
+        monitor.startPermissionWatchIfNeeded()
+        updateMenuItems()
     }
 
     @objc private func quit() {

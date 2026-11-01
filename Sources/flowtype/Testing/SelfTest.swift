@@ -344,6 +344,7 @@ enum SelfTest {
         testLegacySessionConfiguration(r) // pre-session settings and single-provider migration
         testStableSessionPresentation(r) // no provider or streaming text in capsule
         testReadinessClassification(r)
+        testReadinessPresentation(r)
         testReadinessRecoveryActions(r)
         await testReadinessRecoveryBehavior(r)
         testPermissionWatchPolicy(r)
@@ -1363,6 +1364,57 @@ enum SelfTest {
         }
         r.eq(await active.invocationCount, 1,
              "stage ownership: active execution invokes underlying stage once")
+    }
+
+    static func testReadinessPresentation(_ r: Reporter) {
+        func snap(microphone: PermissionState = .granted, accessibility: PermissionState = .granted,
+                  local: EngineReadiness = .unavailable(reason: "off"),
+                  cloud: EngineReadiness = .unavailable(reason: "off"),
+                  apple: EngineReadiness = .unavailable(reason: "off")) -> ReadinessSnapshot {
+            ReadinessSnapshot(accessibility: accessibility, microphone: microphone,
+                              speechRecognition: .granted, localModel: local,
+                              cloudASR: cloud, appleSpeech: apple,
+                              computedAt: Date(timeIntervalSince1970: 0))
+        }
+        r.eq(readinessMenuTitle(snap(microphone: .denied)),
+             "修复：麦克风权限未开启…", "menu: mic blocked title")
+        r.eq(readinessMenuTitle(snap()), "修复：没有可用的语音识别引擎…",
+             "menu: no-engine title")
+        r.eq(readinessMenuTitle(snap(apple: .ready)), "识别：Apple 基础模式（准确率较低）",
+             "menu: Apple basic title")
+        r.eq(readinessMenuTitle(snap(local: .provisioning(progress: 0.2))), "识别：引擎准备中",
+             "menu: preparing title")
+        r.eq(readinessMenuTitle(snap(accessibility: .denied, local: .ready)),
+             "识别：已就绪（无辅助功能，结果写入剪贴板）", "menu: no-AX title")
+        r.eq(readinessMenuTitle(snap(microphone: .notDetermined, local: .ready)),
+             "识别：首次听写将请求麦克风权限", "menu: undecided mic title")
+        r.eq(readinessMenuTitle(snap(local: .ready, cloud: .ready)), "识别：云端 → 本地模型",
+             "menu: cloud-first chain title")
+        r.eq(readinessMenuTitle(snap(local: .ready)), "识别：本地模型", "menu: local title")
+        r.eq(StatusBarController.dictationMenuTitle(for: .idle), "开始听写", "menu: idle starts")
+        r.eq(StatusBarController.dictationMenuTitle(for: .recording(elapsedSeconds: 1)), "停止听写",
+             "menu: recording stops")
+        r.eq(StatusBarController.dictationMenuTitle(for: .processing(provider: "x")), "处理中…",
+             "menu: processing is not clickable text")
+        r.check(!StatusBarController.dictationMenuEnabled(for: .processing(provider: "x")),
+                "menu: processing disables the dictation item")
+        r.eq(readinessMenuTitle(snap(cloud: .ready)), "识别：云端", "menu: cloud title")
+        let states: [(SessionState, String, Bool)] = [
+            (.idle, "开始听写", true),
+            (.preparing, "停止听写", true),
+            (.recording(elapsedSeconds: 0), "停止听写", true),
+            (.processing(provider: "fixture"), "处理中…", false),
+            (.polishing(preview: "fixture"), "处理中…", false),
+            (.injecting, "处理中…", false),
+            (.notice("fixture"), "开始听写", true),
+            (.error("fixture"), "开始听写", true)
+        ]
+        for (state, title, enabled) in states {
+            r.eq(StatusBarController.dictationMenuTitle(for: state), title,
+                 "menu: dictation title for \(state)")
+            r.eq(StatusBarController.dictationMenuEnabled(for: state), enabled,
+                 "menu: dictation availability for \(state)")
+        }
     }
 
     static func testReadinessClassification(_ r: Reporter) {

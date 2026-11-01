@@ -73,3 +73,26 @@ func classifyReadiness(_ s: ReadinessSnapshot) -> ReadinessLevel {
     if s.microphone != .granted { return .degraded(.microphoneNotDetermined) }
     return .ready
 }
+
+/// Presentation only: routing and readiness classification remain the source of truth.
+func readinessMenuTitle(_ s: ReadinessSnapshot) -> String {
+    switch classifyReadiness(s) {
+    case .blocked(let issue):
+        return "修复：\(issue.reason)…"
+    case .degraded(.basicOnly):
+        return "识别：Apple 基础模式（准确率较低）"
+    case .degraded(.enginePreparing):
+        return "识别：引擎准备中"
+    case .degraded(.accessibilityMissing):
+        return "识别：已就绪（无辅助功能，结果写入剪贴板）"
+    case .degraded(.microphoneNotDetermined):
+        return "识别：首次听写将请求麦克风权限"
+    case .degraded(let issue):
+        return "识别：\(issue.reason)"
+    case .ready:
+        if s.cloudASR == .ready && s.localModel == .ready { return "识别：云端 → 本地模型" }
+        if s.cloudASR == .ready { return "识别：云端" }
+        if s.localModel == .ready { return "识别：本地模型" }
+        return "识别：就绪"
+    }
+}
