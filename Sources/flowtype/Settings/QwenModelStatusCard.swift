@@ -64,9 +64,7 @@ struct QwenModelStatusCard: View {
                 if p.actions.contains(.retry) {
                     Button(modelState.failure == nil ? "加载目标模型" : "重试") {
                         Task {
-                            if let target = modelState.target {
-                                await modelState.perform(.init(target: target, source: store.current.downloadSource, origin: .manual))
-                            } else { await modelState.retryConfiguredModel() }
+                            try? await ModelRecoveryActions(coordinator: modelState, store: store).retry()
                         }
                     }.controlSize(.small)
                 }
@@ -148,10 +146,7 @@ struct QwenModelStatusCard: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             do {
-                try await modelState.importOfflineModel(at: url)
-                store.current.customLocalModelPath = url.path
-                store.current.localModelPath = nil
-                store.current.selectedLocalModelID = nil
+                try await ModelRecoveryActions(coordinator: modelState, store: store).importOfflineModel(at: url)
                 folderMessage = nil
             } catch {
                 folderMessage = (error as? ModelProvisionError).flatMap {

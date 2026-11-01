@@ -271,9 +271,13 @@ final class QwenModelState: ObservableObject {
             try checkOwnership(id)
             activeLease = candidate; commit(candidate); failure = nil; status = .ready
         } catch is CancellationError {
+            didAutoFallback = false
             status = activeLease == nil ? .notLoaded : .ready
         } catch {
-            if userCancelled { status = activeLease == nil ? .notLoaded : .ready }
+            if userCancelled {
+                didAutoFallback = false
+                status = activeLease == nil ? .notLoaded : .ready
+            }
             else { publish(error as? ModelProvisionError ?? .loadFailed()) }
         }
     }

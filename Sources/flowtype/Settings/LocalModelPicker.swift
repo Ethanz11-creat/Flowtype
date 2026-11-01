@@ -194,10 +194,7 @@ struct LocalModelPicker: View {
 
         Task {
             do {
-                try await modelState.importOfflineModel(at: url)
-                store.current.customLocalModelPath = url.path
-                store.current.localModelPath = nil
-                store.current.selectedLocalModelID = nil
+                try await ModelRecoveryActions(coordinator: modelState, store: store).importOfflineModel(at: url)
                 folderMessage = nil
             } catch {
                 folderMessage = (error as? ModelProvisionError).flatMap {

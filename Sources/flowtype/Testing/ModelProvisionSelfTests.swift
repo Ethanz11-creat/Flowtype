@@ -659,6 +659,8 @@ extension ModelProvisionSelfTests {
             r.check(false, "unresolved custom import must fail")
         } catch { r.eq(importer.activeLease, offlineLease, "invalid folder keeps the available lease") }
 
+        await runRecoveryActionRegressions(r)
+
         let oldProvider = LeaseSpeechFixture(name: "old")
         let newProvider = LeaseSpeechFixture(name: "new", id: "whisper-local")
         let oldLease = LocalASRLease(id: UUID(), identity: small, provider: oldProvider)
@@ -685,6 +687,91 @@ extension ModelProvisionSelfTests {
         r.eq(next.usedProviderID, "qwen-local", "future engines still occupy the single compatible local routing slot")
         r.eq(SessionController.backendLabel(forProviderID: next.usedProviderID, localIdentity: next.captureRoute?.localLease?.identity),
              "whisper", "history labels the captured engine instead of the legacy routing slot")
+    }
+}
+
+
+extension ModelProvisionSelfTests {
+    @MainActor
+    private static func runRecoveryActionRegressions(_ r: SelfTest.Reporter) async {
+        let suite = "flowtype-model-recovery-\(UUID())"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            r.check(false, "recovery action fixture defaults unavailable"); return
+        }
+        let store = ConfigurationStore(defaults: defaults)
+        defer { store.flushPendingSave(); defaults.removePersistentDomain(forName: suite) }
+        let folderA = URL(fileURLWithPath: "/fixture/recovery-A")
+        let folderB = URL(fileURLWithPath: "/fixture/recovery-B")
+        let modelA = ResolvedModel(directory: folderA, modelId: "aufklarer/Qwen3-ASR-1.7B-MLX-4bit")
+        let modelB = ResolvedModel(directory: folderB, modelId: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
+        let leaseA = LocalASRLease(id: UUID(), identity: .init(id: "qwen3-1.7b-4bit", displayName: "Folder A", engine: "qwen",
+            repoID: modelA.modelId, directory: folderA), provider: QwenASRProvider())
+        let leaseB = LocalASRLease(id: UUID(), identity: .init(id: "qwen3-0.6b-4bit", displayName: "Folder B", engine: "qwen",
+            repoID: modelB.modelId, directory: folderB), provider: QwenASRProvider())
+        var configuredA = Configuration()
+        configuredA.customLocalModelPath = folderA.path
+        configuredA.localModelPath = "/fixture/legacy-A"
+        configuredA.selectedLocalModelID = "qwen3-1.7b-4bit"
+        store.save(configuredA)
+        defaults.set(5, forKey: "flowtype.migrationVersion")
+        let loader = SuspendedLoader()
+        let coordinator = fixture(load: { target, offline, progress in
+            if case .offline(let model) = target, model.directory == folderA { return leaseA }
+            return try await loader.load(offline, progress)
+        }, configuration: { store.current }, localModel: { config in
+            if config.customLocalModelPath == folderA.path { return modelA }
+            if config.customLocalModelPath == folderB.path { return modelB }
+            return nil
+        })
+        await coordinator.perform(.init(target: .offline(modelA), source: .official, origin: .offlineImport))
+        let actions = ModelRecoveryActions(coordinator: coordinator, store: store)
+        let failedImport = Task { try await actions.importOfflineModel(at: folderB) }
+        await until { await loader.calls == 1 }
+        await loader.fail(.loadFailed())
+        do { try await failedImport.value; r.check(false, "failed folder action must report failure") } catch { }
+        r.eq(store.current.customLocalModelPath, "/fixture/recovery-A", "failed folder action preserves configured folder A")
+        r.eq(coordinator.activeLease, leaseA, "failed folder action preserves available lease A")
+        let cancelledRetry = Task { try await actions.retry() }
+        await until { await loader.calls == 2 }
+        coordinator.cancel()
+        await loader.complete(leaseB)
+        _ = try? await cancelledRetry.value
+        r.eq(store.current.customLocalModelPath, "/fixture/recovery-A", "cancelled folder retry preserves configured folder A")
+        r.eq(store.current.localModelPath, "/fixture/legacy-A", "cancelled folder retry preserves legacy override")
+        r.eq(store.current.selectedLocalModelID, "qwen3-1.7b-4bit", "cancelled folder retry preserves preset selection")
+        r.eq(coordinator.activeLease, leaseA, "cancelled folder retry preserves lease A")
+        let successfulRetry = Task { try await actions.retry() }
+        await until { await loader.calls == 3 }
+        await loader.complete(leaseB)
+        do { try await successfulRetry.value } catch { r.check(false, "folder recovery action failed: \(error)") }
+        r.eq(coordinator.activeLease, leaseB, "shared retry action commits successful folder B lease")
+        r.eq(store.current.customLocalModelPath, "/fixture/recovery-B", "shared retry action persists successful folder B selection")
+        r.eq(store.current.localModelPath, nil, "successful folder retry clears conflicting legacy path")
+        r.eq(store.current.selectedLocalModelID, nil, "successful folder retry clears conflicting preset selection")
+        store.flushPendingSave()
+        let restarted = ConfigurationStore(defaults: defaults)
+        r.eq(restarted.current.customLocalModelPath, "/fixture/recovery-B", "successful retry survives configuration restart")
+
+        let fallbackLoader = SuspendedLoader()
+        let fallback = fixture(load: { target, offline, progress in
+            if case .offline = target { return leaseB }
+            if case .preset(let preset) = target, preset.id == "qwen3-1.7b-4bit" { throw ModelProvisionError.loadFailed() }
+            return try await fallbackLoader.load(offline, progress)
+        })
+        await fallback.perform(.init(target: .offline(modelB), source: .official, origin: .offlineImport))
+        let cancelledFallback = Task { await fallback.perform(.init(target: .preset(.qwen317B), source: .official, origin: .automatic)) }
+        await until { await fallbackLoader.calls == 1 }
+        fallback.cancel()
+        await fallbackLoader.complete(lease("cancelled-smaller-candidate"))
+        await cancelledFallback.value
+        r.eq(fallback.activeLease, leaseB, "cancel during fallback retains the old 0.6B lease")
+        r.eq(fallback.status, .ready, "cancelled fallback retains ready status for old model")
+        r.eq(fallback.failure, nil, "cancelled fallback has no failure")
+        r.check(!fallback.didAutoFallback, "cancelled fallback does not claim a completed automatic recovery")
+        let cancelledPresentation = ModelRecoveryPresentation.make(active: fallback.activeLease?.identity, target: .qwen306B,
+            failure: fallback.failure, didAutoFallback: fallback.didAutoFallback, source: .official,
+            destination: folderB, isBusy: fallback.operationID != nil)
+        r.eq(cancelledPresentation.fallbackLabel, nil, "retained 0.6B lease never receives a false recovery label after cancellation")
     }
 }
 
