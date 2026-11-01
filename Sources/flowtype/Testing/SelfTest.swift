@@ -1,5 +1,6 @@
 import os
 import Foundation
+import AppKit
 import Combine
 import GRDB
 
@@ -354,6 +355,7 @@ enum SelfTest {
         testStableSessionPresentation(r) // no provider or streaming text in capsule
         testReadinessClassification(r)
         testReadinessPresentation(r)
+        await testDictationMenuDispatch(r)
         testReadinessRecoveryActions(r)
         testPermissionErrorActions(r)
         await testReadinessRecoveryBehavior(r)
@@ -363,6 +365,7 @@ enum SelfTest {
         testReadinessDebounce(r)
         testPermissionWatchOwnership(r)
         testReadinessSnapshotBuilder(r)
+        await testTerminalModelLoadPreflight(r)
         await testReadinessPreflight(r)
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
         await testOnboardingDemoDelivery(r) // notification-only final delivery, no active-app injection
@@ -1679,6 +1682,135 @@ enum SelfTest {
         r.eq(ReadinessSnapshotBuilder.logLine(level: .blocked(.microphoneDenied), snapshot: sensitive),
              "[ReadinessMonitor] level=blocked ax=unknown mic=denied local=unavailable cloud=provisioning apple=ready",
              "snapshot logging: only state tags survive associated error text and progress")
+    }
+
+    /// Replacing command validation with a live-state toggle must fail this test:
+    /// an old Stop selection may not open the microphone after capture completes.
+    @MainActor
+    static func testDictationMenuDispatch(_ r: Reporter) async {
+        func click(_ item: NSMenuItem) {
+            guard let target = item.target as? NSObject, let action = item.action else {
+                r.check(false, "menu dispatch: menu item retains its production target/action")
+                return
+            }
+            _ = target.perform(action, with: item)
+        }
+
+        let probe = ReadinessPreflightProbe()
+        let stage = StageRendezvous()
+        let session = SessionController(pipeline: [SuspensibleStage(rendezvous: stage, suspend: true)],
+                                        observers: [probe],
+                                        effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
+                                        readinessLevel: { .ready })
+        let menu = DictationMenuController(session: session)
+        let staleStart = menu.item.copy() as! NSMenuItem
+        click(menu.item)
+        r.eq(session.sessionState, .preparing, "menu dispatch: displayed Start begins capture preparation")
+        await stage.waitForInvocation()
+        r.eq(menu.item.title, "停止听写", "open menu: session change refreshes Start to Stop")
+        // Simulate opening during capture even on the original implementation.
+        menu.refresh(for: session.sessionState)
+        let staleStop = menu.item.copy() as! NSMenuItem
+        probe.context?.statePublisher.send(.processing(provider: "synthetic"))
+        r.eq(menu.item.title, "处理中…", "open menu: processing updates the visible title")
+        r.check(!menu.item.isEnabled, "open menu: processing disables dictation")
+        probe.context?.statePublisher.send(.notice("synthetic completion"))
+        r.eq(menu.item.title, "开始听写", "open menu: completion updates the visible title")
+        r.check(menu.item.isEnabled, "open menu: completion re-enables dictation without reopening")
+        // Complete the old capture's lifetime before dispatching its retained command.
+        session.cancel()
+        await stage.release()
+        let windowsBeforeStaleStop = probe.windowShows
+        click(staleStop)
+        r.eq(session.sessionState, .idle,
+             "menu dispatch: retained displayed Stop never starts after completion")
+        r.eq(probe.windowShows, windowsBeforeStaleStop, "menu dispatch: stale Stop opens no new capture window")
+        for _ in 0..<10 { await Task.yield() }
+        r.eq(await stage.invocationCount, 1, "menu dispatch: stale Stop starts no additional pipeline stage")
+        session.cancel()
+        await stage.release()
+
+        // The inverse stale command must not stop a newer capture either.
+        let secondStage = StageRendezvous()
+        let second = SessionController(pipeline: [SuspensibleStage(rendezvous: secondStage, suspend: true)], observers: [],
+                                       effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}),
+                                       readinessLevel: { .ready })
+        let secondMenu = DictationMenuController(session: second)
+        second.startRecording()
+        await secondStage.waitForInvocation()
+        // Keep the original item's target/action, but dispatch against this session.
+        staleStart.target = secondMenu.item.target
+        click(staleStart)
+        r.eq(second.sessionState, .preparing, "menu dispatch: stale Start cannot stop a newer capture")
+        secondMenu.refresh(for: second.sessionState)
+        click(secondMenu.item)
+        r.eq(second.sessionState, .idle, "menu dispatch: valid displayed Stop cancels preparation")
+        second.cancel()
+        await secondStage.release()
+    }
+
+    /// Publishing notLoaded after terminal auto-load failure must fail these
+    /// producer → snapshot → real SessionController preflight assertions.
+    @MainActor
+    static func testTerminalModelLoadPreflight(_ r: Reporter) async {
+        struct SyntheticLoadFailure: Error {}
+        var attemptedPresets: [String] = []
+        let model = QwenModelState(loadDownloadedPreset: { preset in
+            attemptedPresets.append(preset.id)
+            throw SyntheticLoadFailure()
+        })
+        var statuses: [QwenModelStatus] = []
+        let subscription = model.$status.sink { statuses.append($0) }
+        defer { subscription.cancel() }
+        var config = Configuration.default
+        config.hasCompletedOnboarding = true
+        config.asrRoutingPolicy = .localOnly
+        let fixture = config
+        func snapshot() -> ReadinessSnapshot {
+            ReadinessSnapshotBuilder.make(config: fixture, modelStatus: model.status,
+                                          accessibility: .granted, microphone: .granted,
+                                          speechRecognition: .granted, networkReachable: true,
+                                          appleAvailable: true, computedAt: Date(timeIntervalSince1970: 123))
+        }
+        r.eq(snapshot().localModel, .provisioning(progress: 0),
+             "terminal model: startup notLoaded retains provisioning anti-flicker")
+        r.eq(classifyReadiness(snapshot()), .degraded(.enginePreparing),
+             "terminal model: startup permits pending provisioning")
+        await model.handleDownloadCompleted(preset: .qwen306B)
+        r.eq(attemptedPresets, ["qwen3-0.6b-4bit"], "terminal model: completed preset is loaded once without retry")
+        r.eq(statuses.prefix(2).map { $0 }, [.notLoaded, .loading],
+             "terminal model: actual producer publishes loading before attempting auto-load")
+        if case .error(let reason, let retryable) = model.status {
+            r.check(!reason.isEmpty && retryable, "terminal model: load failure publishes an actionable terminal error")
+        } else {
+            r.check(false, "terminal model: load failure must publish error instead of notLoaded")
+        }
+        if case .unavailable = snapshot().localModel {
+            r.check(true, "terminal model: failed downloaded model is unavailable")
+        } else {
+            r.check(false, "terminal model: failed downloaded model must stop provisioning")
+        }
+        r.eq(classifyReadiness(snapshot()), .blocked(.noEngine),
+             "terminal model: localOnly failure blocks even with cloud network and Apple permission available")
+        let probe = ReadinessPreflightProbe()
+        let stage = StageRendezvous()
+        let session = SessionController(pipeline: [SuspensibleStage(rendezvous: stage, suspend: true)],
+                                        observers: [probe],
+                                        effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
+                                        readinessLevel: { classifyReadiness(snapshot()) })
+        session.startRecording()
+        r.eq(session.sessionState, .error("没有可用的语音识别引擎"),
+             "terminal model: fresh producer state blocks Start before recording")
+        r.eq(session.errorActions.first, .openASRSettings,
+             "terminal model: failed Start offers engine repair")
+        for _ in 0..<10 { await Task.yield() }
+        r.eq(await stage.invocationCount, 0, "terminal model: failed Start runs no pipeline or microphone stage")
+        session.cancel()
+        await stage.release()
+
+        let recovered = QwenModelState(loadDownloadedPreset: { _ in })
+        await recovered.handleDownloadCompleted(preset: .qwen306B)
+        r.eq(recovered.status, .ready, "terminal model: successful auto-load still publishes ready")
     }
 
     @MainActor

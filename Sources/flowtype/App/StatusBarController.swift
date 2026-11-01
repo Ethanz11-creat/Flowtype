@@ -2,6 +2,51 @@ import AppKit
 import SwiftUI
 import Combine
 
+/// Owns the presented menu command and the session effect boundary.
+@MainActor
+final class DictationMenuController: NSObject {
+    enum Command: Int { case start, stop, unavailable }
+
+    let item: NSMenuItem
+    private let session: SessionController
+    private var sessionCancellable: AnyCancellable?
+
+    init(session: SessionController) {
+        self.session = session
+        item = NSMenuItem(title: "", action: #selector(activate(_:)), keyEquivalent: "")
+        super.init()
+        item.target = self
+        refresh(for: session.sessionState)
+        // Session state is published on MainActor. Update synchronously, including
+        // during menu tracking; use the emitted value because @Published sends
+        // before session.sessionState itself changes.
+        sessionCancellable = session.$sessionState.sink { [weak self] state in
+            self?.refresh(for: state)
+        }
+    }
+
+    func refresh(for state: SessionState) {
+        item.title = StatusBarController.dictationMenuTitle(for: state)
+        item.isEnabled = StatusBarController.dictationMenuEnabled(for: state)
+        switch state {
+        case .preparing, .recording: item.tag = Command.stop.rawValue
+        case .idle, .notice, .error: item.tag = Command.start.rawValue
+        case .processing, .polishing, .injecting: item.tag = Command.unavailable.rawValue
+        }
+    }
+
+    @objc private func activate(_ sender: NSMenuItem) {
+        guard sender.isEnabled, let command = Command(rawValue: sender.tag) else { return }
+        // Dispatch the presented command, then validate against the live session.
+        // A queued Stop selection must never turn into Start after capture ends.
+        switch (command, session.sessionState) {
+        case (.stop, .preparing), (.stop, .recording): session.endRecording()
+        case (.start, .idle), (.start, .notice), (.start, .error): session.startRecording()
+        default: break
+        }
+    }
+}
+
 @MainActor
 class StatusBarController: NSObject, NSMenuDelegate {
     static let shared = StatusBarController()
@@ -12,7 +57,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
     private var statusMenuItem: NSMenuItem?
     private var sessionCancellable: AnyCancellable?
     private var readinessCancellable: AnyCancellable?
-    private var dictationMenuItem: NSMenuItem?
+    private var dictationMenuController: DictationMenuController?
     private var originalStatusImage: NSImage?
 
     private override init() {
@@ -72,6 +117,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     private func updateReadinessPresentation(level: ReadinessLevel, snapshot: ReadinessSnapshot) {
+        updateMenuItems()
         guard let button = statusItem?.button else { return }
         switch level {
         case .ready:
@@ -115,10 +161,9 @@ class StatusBarController: NSObject, NSMenuDelegate {
         statusMenuItem = readinessItem
         menu.addItem(readinessItem)
 
-        let dictationItem = NSMenuItem(title: "", action: #selector(toggleDictation), keyEquivalent: "")
-        dictationItem.target = self
-        dictationMenuItem = dictationItem
-        menu.addItem(dictationItem)
+        let dictation = DictationMenuController(session: SessionController.shared)
+        dictationMenuController = dictation
+        menu.addItem(dictation.item)
         updateMenuItems()
         menu.addItem(NSMenuItem.separator())
 
@@ -200,8 +245,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
         default: statusMenuItem?.isEnabled = false
         }
         let state = SessionController.shared.sessionState
-        dictationMenuItem?.title = Self.dictationMenuTitle(for: state)
-        dictationMenuItem?.isEnabled = Self.dictationMenuEnabled(for: state)
+        dictationMenuController?.refresh(for: state)
     }
 
     @objc private func repairReadiness() {
@@ -217,15 +261,6 @@ class StatusBarController: NSObject, NSMenuDelegate {
             monitor.startPermissionWatchIfNeeded()
         default:
             break
-        }
-    }
-
-    @objc private func toggleDictation() {
-        let session = SessionController.shared
-        switch session.sessionState {
-        case .preparing, .recording: session.endRecording()
-        case .idle, .notice, .error: session.startRecording()
-        case .processing, .polishing, .injecting: break
         }
     }
 

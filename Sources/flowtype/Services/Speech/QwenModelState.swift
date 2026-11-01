@@ -52,6 +52,16 @@ final class QwenModelState: ObservableObject {
 
     @Published private(set) var status: QwenModelStatus = .notLoaded
 
+    private let loadDownloadedPreset: @MainActor (ModelPreset) async throws -> Void
+
+    init(loadDownloadedPreset: @escaping @MainActor (ModelPreset) async throws -> Void = { preset in
+        let provider = ASRProviderRegistry.shared.qwenLocalProvider
+        if provider.isLoaded { provider.unloadModel() }
+        try await provider.loadPreset(preset)
+    }) {
+        self.loadDownloadedPreset = loadDownloadedPreset
+    }
+
     func loadModel(provider: QwenASRProvider) async {
         guard !status.isLoading else { return }
         if provider.isLoaded { status = .ready; return }
@@ -92,17 +102,15 @@ final class QwenModelState: ObservableObject {
     }
 
     func handleDownloadCompleted(preset: ModelPreset) async {
-        let provider = ASRProviderRegistry.shared.qwenLocalProvider
-        if provider.isLoaded {
-            provider.unloadModel()
-        }
         status = .loading
         do {
-            try await provider.loadPreset(preset)
+            try await loadDownloadedPreset(preset)
             status = .ready
             AppLogger.log("[ModelProvision] Auto-loaded downloaded preset \(preset.id)")
         } catch {
-            status = .notLoaded
+            // No recovery is pending on this path. Keep startup notLoaded for
+            // genuine provisioning, but make a terminal load failure unavailable.
+            status = .error(reason: "已下载的模型加载失败，请在设置中重新选择本地模型。", retryable: true)
             AppLogger.log("[ModelProvision] Auto-load failed for \(preset.id): \(error)")
         }
     }
