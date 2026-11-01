@@ -347,6 +347,8 @@ enum SelfTest {
         testReadinessRecoveryActions(r)
         await testReadinessRecoveryBehavior(r)
         testPermissionWatchPolicy(r)
+        testPermissionReminderPolicy(r)
+        testPermissionReminderLifetime(r)
         testReadinessDebounce(r)
         testPermissionWatchOwnership(r)
         testReadinessSnapshotBuilder(r)
@@ -1418,6 +1420,35 @@ enum SelfTest {
         r.eq(ReadinessLevel.degraded(.accessibilityMissing).reason,
              "全局热键不可用；可从菜单开始，结果写入剪贴板",
              "readiness: degraded level explains AX fallback")
+    }
+
+    static func testPermissionReminderPolicy(_ r: Reporter) {
+        r.check(!PermissionReminderController.shouldShow(accessibility: .granted, hasShownThisLaunch: false),
+                "reminder: granted never shows")
+        for state: PermissionState in [.denied, .notDetermined, .unknown] {
+            r.check(PermissionReminderController.shouldShow(accessibility: state, hasShownThisLaunch: false),
+                    "reminder: missing permission shows once")
+            r.check(!PermissionReminderController.shouldShow(accessibility: state, hasShownThisLaunch: true),
+                    "reminder: dismissal suppresses later reminders this launch")
+        }
+        r.check(!PermissionReminderController.shouldShow(accessibility: .granted, hasShownThisLaunch: true),
+                "reminder: granted stays suppressed after prior reminder")
+    }
+
+    static func testPermissionReminderLifetime(_ r: Reporter) {
+        var lifetime = PermissionReminderLifetime()
+        let reminder = lifetime.begin()
+        let restored = lifetime.begin()
+        r.check(!lifetime.finish(reminder), "reminder: stale timeout cannot dismiss restored message")
+        r.check(lifetime.finish(restored), "reminder: restored message owns its dismissal")
+        r.check(!lifetime.finish(restored), "reminder: finished message cannot dismiss twice")
+
+        let dismissed = lifetime.begin()
+        lifetime.dismiss()
+        r.check(!lifetime.finish(dismissed), "reminder: manual dismissal invalidates pending timeout")
+        let reopened = lifetime.begin()
+        r.check(!lifetime.finish(dismissed), "reminder: old timeout cannot close reopened panel")
+        r.check(lifetime.finish(reopened), "reminder: reopened panel has a fresh dismissal owner")
     }
 
     static func testPermissionWatchPolicy(_ r: Reporter) {
