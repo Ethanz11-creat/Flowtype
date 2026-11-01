@@ -1,0 +1,35 @@
+UTC: 2026-11-01T20:49:56.437253+00:00
+Product commit: 3a34a518073fc69afa06557bb745e2adc22641c9
+Sources/flowtype tree: ba7ed7b7edb109c3424309bf85599f455b50ffdc
+Executable: /Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/MacOS/FlowType
+Executable SHA256: a8bcdd51e1fa5f4faded9796e078199e1cb88044924fe3a5acda23443a421fd0
+macOS: 15.7.9
+Architecture: arm64
+Physical memory bytes: 17179869184
+Build: bash scripts/build-app.sh exit 0, final-app-build.log
+GUI: cua.getApp(exact bundle path) -> server error -10005 cgWindowNotFound.
+No current-binary GUI, model load/inference or V1-V5 Pass established.
+Ad-hoc signing, not a notarized release.
+Executable=/Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/MacOS/FlowType
+Identifier=com.flowtype.app
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20400 size=375401 flags=0x2(adhoc) hashes=11725+3 location=embedded
+VersionPlatform=1
+VersionMin=983040
+VersionSDK=1704192
+Hash type=sha256 size=32
+CandidateCDHash sha256=534e9339780406d69bc5fe83e4018e3050065778
+CandidateCDHashFull sha256=534e9339780406d69bc5fe83e4018e30500657785e16de51d3c452383ff8b327
+Hash choices=sha256
+CMSDigest=534e9339780406d69bc5fe83e4018e30500657785e16de51d3c452383ff8b327
+CMSDigestType=2
+Executable Segment base=0
+Executable Segment limit=23347200
+Executable Segment flags=0x1
+Page size=4096
+CDHash=534e9339780406d69bc5fe83e4018e3050065778
+Signature=adhoc
+Info.plist entries=14
+TeamIdentifier=not set
+Sealed Resources version=2 rules=13 files=6
+Internal requirements count=0 size=12

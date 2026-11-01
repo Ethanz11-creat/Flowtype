@@ -15,14 +15,14 @@ readiness=ready / AX=granted / mic=granted。没有把这次认可扩展成所�
 更新（2026-11-02）：M2-A/B/C 计划与子代理执行方式已批准，按 A → B → C 实施。
 M2-A 下载恢复已完成阶段修复与审查（eb840f8，1619/0）；M2-B 云端厂商接入已完成阶段修复与审查（6fc1973，2034/0）。
 M2-C 已实现 Qwen3-ASR MLX / WhisperKit Core ML 检测、严格离线运行库、统一生命周期和模型库 UI；C3 检查点 63db2e9 为 2263/0。
-C4 检查点后全 M2 审查发现三项 Important（普通重试意图、Whisper图合同、Qwen完整词表）；同一修复波次已处理，待控制器新一轮限定范围复审。源码回归记录见 [M2 证据](evidence/2026-11-01-m2-validation.md)；控制器全 M2 独立审查和最终门禁仍 Pending，不能从源码完成推导真机验收通过。
+C4 检查点后全 M2 审查发现三项 Important（普通重试意图、Whisper图合同、Qwen完整词表）；同一修复波次及掩码类型收紧已完成，独立限定范围复审确认三项 Important 和两项相关 Minor 全部关闭。源码回归记录见 [M2 证据](evidence/2026-11-01-m2-validation.md)；控制器全 M2 源码门禁已通过（3a34a51，2430/0），不能从源码通过推导真机验收通过。
 真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3–M5 范围保持不变，尚待各自实施与验收。
 [已批准设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)及[决策归档](evidence/2026-11-01-m2-rulings.md)是当前依据。
 下表 M2 行更新为当前状态；M3–M5 保留原核对结果，不代表本轮重新验收。
 
 | 项目 | 现状与剩余工作 | 代码证据 / 边界 |
 | --- | --- | --- |
-| **M2 模型修复 / 云端接入 / 本地导入** | 源码已实现并修复全 M2 三项 Important，控制器复审 Pending；共享预检/恢复、厂商合同及配置检查、多个本地模型的静态预览/切换/重新定位/移除均已接入。最终全 M2 审查、真实加载/听写及 GUI 验收 Pending。 | `QwenModelState` 单一事务协调器；`ImportedASRModelActions` 只管理预览；`ImportedASRModelList` 通过 UUID 操作。静态检查不保存选择，运行成功才提交。旧基线的三次不透明重试、写死 0.6B 卡片与单路径选择已被替换。 |
+| **M2 模型修复 / 云端接入 / 本地导入** | 源码及独立复审通过，三项 Important 已关闭；共享预检/恢复、厂商合同及配置检查、多个本地模型的静态预览/切换/重新定位/移除均已接入。真实加载/听写及 GUI 验收 Pending。 | `QwenModelState` 单一事务协调器；`ImportedASRModelActions` 只管理预览；`ImportedASRModelList` 通过 UUID 操作。静态检查不保存选择，运行成功才提交。旧基线的三次不透明重试、写死 0.6B 卡片与单路径选择已被替换。 |
 | **M3 自动交付** | 新 `.automatic` 模式、迁移、纯交付策略、粘贴优先及确定未发出时的兼容回退；跨应用验收。 | `DeliveryMode` 仍只有 unicode / pasteInSupportedApps，配置默认与缺省解码仍是 unicode，粘贴只有六个候选应用。现有目标身份核验、剪贴板事务、不确定结果不重发已做，应复用。 |
 | **M3 无语音预检** | 停止后、ASR 前判断无语音；静音不给幻觉文本或历史记录。 | `ASRStage` 对非空音频直接尝试识别；波形静音阈值与 `AudioFormatConverter.trimSilence` 不能替代该产品路径。`SpeechVAD` import 也不证明已接入停止后预检。 |
 | **M4 统一失败分级** | 用统一 FailureKind / RecoveryAction 覆盖权限、未就绪、临时 ASR、交付不确定、取消；统一动作与文案。 | M1 已做权限结构化与 readiness 修复动作，但 `ErrorRecoveryContext` 仍主要是 failedStage/error/rawText/retryable，`buildErrorActions` 仍按错误类型与 retryable 分支。属于部分基础已具备，尚未完成整体分类。 |

@@ -1,0 +1,5 @@
+UTC 2026-11-01T16:17:00Z
+https://hf-mirror.com aufklarer/Qwen3-ASR-0.6B-MLX-4bit FAIL kind=metadataInvalid status=308
+https://hf-mirror.com aufklarer/Qwen3-ASR-1.7B-MLX-4bit FAIL kind=metadataInvalid status=308
+https://huggingface.co aufklarer/Qwen3-ASR-0.6B-MLX-4bit PASS status=200 finalHost=huggingface.co path=/api/resolve-cache/models/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/bc441bd1e4295c1f42d9879f056049a925b6e013/config.json
+https://huggingface.co aufklarer/Qwen3-ASR-1.7B-MLX-4bit PASS status=200 finalHost=huggingface.co path=/api/resolve-cache/models/aufklarer/Qwen3-ASR-1.7B-MLX-4bit/d4f9fa3bb45489219f0fcbec671c92d9c1a68fb6/config.json

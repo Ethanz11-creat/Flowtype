@@ -1,6 +1,6 @@
 # M2-C 本地 Hugging Face 模型导入设计
 
-日期：2026-11-01；收口更新：2026-11-02。状态：Owner 已批准首批 Qwen3-ASR MLX 和 WhisperKit 兼容 Core ML 方案及 A → B → C 执行顺序。检测、严格离线运行库、统一生命周期和模型库 UI 已实现；真实加载/听写、GUI 与最终全 M2 审查仍 Pending。合成回归、静态模型检查和 tokenizer-only 实测不能替代真实推理验收。
+日期：2026-11-01；收口更新：2026-11-02。状态：Owner 已批准首批 Qwen3-ASR MLX 和 WhisperKit 兼容 Core ML 方案及 A → B → C 执行顺序。检测、严格离线运行库、统一生命周期和模型库 UI 已实现；最终全 M2 源码审查与修复复审已通过（3a34a51，2430/0）；真实加载/听写与 GUI 仍 Pending。合成回归、静态模型检查和 tokenizer-only 实测不能替代真实推理验收。
 总范围：[M2 设计](2026-11-01-m2-model-recovery-design.md)。
 
 ## 支持合同

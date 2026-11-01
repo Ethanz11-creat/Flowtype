@@ -1,6 +1,6 @@
 # M2 validation evidence — 2026-11-01 / closeout 2026-11-02
 
-以下 A3 / B3 记录为历史检查点，其计数不代表最终 M2。当前状态、C4 历史检查点与全 M2 修复证据见文末；控制器最终全范围门禁仍 Pending。
+以下 A3 / B3 记录为历史检查点，其计数不代表最终 M2。当前状态、C4 历史检查点与全 M2 修复证据见文末；最终全范围源码门禁已通过（3a34a51，2430/0）；真实环境验收仍 Pending。
 
 ## Historical M2-A Task 3 source identity
 
@@ -100,7 +100,7 @@ First full C4 GREEN after build 30.54s was **2304 passed / 0 failed** (`task-4-b
 - Source revision: the C4 commit containing this evidence, based on **63db2e9**; no source changes after the final suite. `git diff --check` clean. Final incremental build reports inherited AppLogger warning only; other previously documented warnings remain separate.
 - This completes C4 source/fixture verification only. Fresh controller task review, whole-M2 final gate, GUI/model/service/device acceptance remain explicitly Pending.
 
-## Whole-M2 final fix wave (base 73d5e74)
+## Historical whole-M2 final fix wave (base 73d5e74)
 
 The whole-M2 review found **three Important** source defects after the C4 checkpoint: ordinary retry changed automatic selection into an explicit fallback preset; Whisper relied on unsafe/incomplete graph dimension helpers; Qwen accepted truncated ordinary vocabularies/merges. This wave fixes all three. **Controller scoped rereview remains Pending**; the earlier review's Needs fixes verdict is not retroactively rewritten as Pass.
 
@@ -115,7 +115,7 @@ Behavioral focused RED was **164 passed / 54 failed**, then focused GREEN **267/
 
 Detailed per-finding changes, exact commands, compile iterations, pinned source/API hashes, self-review and limits: `whole-m2-fix-report.md` in the same workspace. Production helper `WhisperGraphContract.swift` stays focused on raw interfaces/ABI; added tests use the real coordinator/store and replace model compute. No actual Whisper full graph was available; public tiny tokenizer-only evidence stays separate. GUI/current binary, all actual full-model/quantization/hardware/service variants, measured memory/accuracy and mandatory V1–V5 remain **Pending**. Historical checkpoints and scratch evidence are retained.
 
-### Scoped-review continuation: exact update-mask type
+### Historical scoped-review continuation: exact update-mask type
 
 The same scoped reviewer found one remaining part of graph finding 2: accepting Float16 `kv_cache_update_mask` was unsupported by production evidence. Pinned `TextDecoder.prepareDecoderInputs` always allocates **Int32** (`TextDecoder.swift:275`), and `TextDecoderInput` stores/forwards it unchanged (`Models.swift:1016–1017,1033`). SDK `MLMultiArrayConstraint.dataType` is required; a manual upstream Float16 prediction fixture does not prove conversion in this production path.
 
@@ -124,3 +124,18 @@ Admission is now **Int32-only** for that feature. The canonical positive graph f
 Test-only RED build passed in **29.27s**, then focused RED **274 passed / 2 failed**, exactly the incorrect Float16 acceptance and metadata publication (`whole-m2-mask-red-build.log`, `whole-m2-mask-red-self-test.log`). Final changed-source sequential build passed in **30.35s** (`whole-m2-mask-final-build.log`, inherited AppLogger warning only); full GREEN **exit 0, 2430 passed / 0 failed** (`whole-m2-mask-final-self-test.log`, product build 4.56s). No product/test edits after that GREEN; `git diff --check` clean. Latest source hashes: `whole-m2-mask-final-source-hashes.txt`; detailed continuation appended to `whole-m2-fix-report.md`, all in the C workspace.
 
 Qwen inspector sources are unchanged, so the exact-product actual static PASS above was not redundantly rerun. No actual full graph/inference/GUI acceptance was added. `5be1b4f` release bundle is intermediate, built before these edits; the controller will rebuild after the stable correction commit. Same-reviewer incremental disposition, actual full models, GUI, services/devices and mandatory V1–V5 remain Pending.
+
+
+## Final source gate and application bundle — 2026-11-02
+
+**Source gate PASS:** final product commit **3a34a518073fc69afa06557bb745e2adc22641c9**, Sources/flowtype tree **ba7ed7b7edb109c3424309bf85599f455b50ffdc**. Fresh whole-M2 review covered 878725c → 73d5e74; the final worker fixed all three Important and two bounded Minor findings. The same independent scoped reviewer verified 73d5e74 → 5be1b4f and the narrow update-mask continuation 5be1b4f → 3a34a51, then returned **Spec PASS / Quality PASS**, no open Critical/Important. Earlier Pending/Needs-fixes entries above are historical checkpoints, not the current code-review status.
+
+Final changed-source commands ran sequentially: `swift build` **exit 0, 30.35s**, followed by `swift run FlowType --self-test` **exit 0, 2430 passed / 0 failed**. The inherited AppLogger warning remains; the new forced dictionary-cast warning was fixed. Product/test sources did not change after this run; subsequent closeout changes are documentation/evidence only, so the suite was not repeated on unchanged code.
+
+`bash scripts/build-app.sh` then completed **exit 0** against stable **3a34a51**. Application: `build/FlowType.app`, arm64, ad-hoc `com.flowtype.app`; executable SHA256 **a8bcdd51e1fa5f4faded9796e078199e1cb88044924fe3a5acda23443a421fd0**, CDHash **534e9339780406d69bc5fe83e4018e3050065778**. This is a development bundle, not a notarized release. Final CUA `getApp` using that exact bundle path returned **-10005 cgWindowNotFound**; no successful updated-window observation, restart, inference or actual delivery is claimed.
+
+Durable [review, logs and build identity archive](2026-11-01-m2-artifacts/README.md) preserves selected plain-text evidence and maps old scratch filenames before temporary SDD workspace cleanup. It includes final review/fix reports, source hashes, actual static/tokenizer-only checks, final full-suite logs and bundle identity. The [20 decision entries](2026-11-01-m2-rulings.md) preserve why and the cost if wrong. Historical scratch paths above identify original execution locations; use the archive index for retained evidence.
+
+**Actual acceptance remains mandatory Pending:** full Qwen/Whisper loading and inference (including .mlpackage), per-variant hardware/memory/accuracy, new GUI/current running binary, real cloud service acceptance and V1–V5. Existing Qwen static and public Whisper tokenizer-only PASS are narrower evidence. Current pinned WhisperKit 0.18 runtime rejects Intel's FloatType/cache ABI mismatch and Float16-declared update-mask exports; these are explicit current adapter limits. No existing models, caches, credentials or private audio/transcripts were changed or used as fixtures.
+
+Nonblocking follow-ups remain the native URLSession redirect-delegate callback fixture and credential-only router-health revision/reset (bounded 60-second recovery); neither is an open Critical/Important. Branch/worktree are preserved; no push or merge.

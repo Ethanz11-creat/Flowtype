@@ -1,6 +1,6 @@
 # M2-A Model Recovery Implementation Plan
 
-**执行状态（2026-11-02）：** 已批准并按 A → B → C 执行。A1/A2/A3 源码、回归、提交及阶段修复审查完成；最终阶段检查点 eb840f8，1619 passed / 0 failed。GUI/真实模型及 V1–V5 未运行变体 Pending。最终全 M2 门禁由控制器在 C4 提交后执行。
+**执行状态（2026-11-02）：** 已批准并按 A → B → C 执行。A1/A2/A3 源码、回归、提交及阶段修复审查完成；最终阶段检查点 eb840f8，1619 passed / 0 failed。GUI/真实模型及 V1–V5 未运行变体 Pending。最终全 M2 源码门禁已通过（3a34a51，2430/0）；真实验收仍按矩阵 Pending。
 
 证据：[M2 checkpoints](../../evidence/2026-11-01-m2-validation.md)、[V1–V5](../../evidence/2026-11-01-live-validation.md)、[A/B/C rulings](../../evidence/2026-11-01-m2-rulings.md)。空框若包含真实验收/最终审查，表示该部分待完成；历史计划正文保留，不把先前基线当作当前状态。
 

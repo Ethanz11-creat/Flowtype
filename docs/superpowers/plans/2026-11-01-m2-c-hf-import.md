@@ -1,6 +1,6 @@
 # M2-C Hugging Face Local Import Implementation Plan
 
-**执行状态（2026-11-02）：** 已批准并按 A → B → C 执行。C1 a36df21（2113/0）、C2 9f0c92e（2179/0）、C3 63db2e9（2263/0）已完成源码、回归和对应审查/交接。C4 模型库 UI 与文档源码完成；最终顺序 build 23.57s / self-test 2306 passed、0 failed，见 M2 证据。C4 Step 4 的 GUI/真实推理部分及 Step 5 的控制器最终全 M2 审查/门禁仍 Pending，不能视为整套验收通过。
+**执行状态（2026-11-02）：** 已批准并按 A → B → C 执行。C1 a36df21（2113/0）、C2 9f0c92e（2179/0）、C3 63db2e9（2263/0）已完成源码、回归和对应审查/交接。C4 模型库 UI 与文档源码完成；最终顺序 build 23.57s / self-test 2306 passed、0 failed，见 M2 证据。C4 Step 5 的最终全 M2 源码审查及修复复审已通过（3a34a51，顺序 build 30.35s / self-test 2430/0）。Step 4 的 GUI/真实推理部分仍 Pending，不能视为整套真机验收通过。
 
 证据：[M2 checkpoints](../../evidence/2026-11-01-m2-validation.md)、[V1–V5](../../evidence/2026-11-01-live-validation.md)、[A/B/C rulings](../../evidence/2026-11-01-m2-rulings.md)。空框若包含真实验收/最终审查，表示该部分待完成；历史计划正文保留，不把先前基线当作当前状态。
 
@@ -121,4 +121,4 @@ r.eq(concurrentInferenceCount.max(), 1, "serialized runtime access")
 - [x] **Step 2: 验证RED。** self-test看到旧Qwen卡片/单路径行为不满足；不为纯样式改动写镜像测试。
 - [x] **Step 3: 实现UI。** 独立“导入本地ASR模型”→选目录→检测结果/硬件提示→“加载并使用”；列表支持切换、重新定位、移除记录。帮助说明HF来源与支持的QwenMLX/WhisperCoreML格式，给相应来源链接，原始PyTorch目录显示需要兼容转换格式。保留两个preset的下载/恢复动作。
 - [ ] **Step 4: 顺序验证与真实证据。** build/self-test exit0；CUA检查导入/多项管理/失败恢复/真实身份。可用完整模型时在不删除现有模型前提下执行断网导入→加载→合成短句实际落字、超过窗口首尾、切回preset、取消恢复；每个family/量化/硬件单独记录。缺少Whisper完整模型时将该真实推理项标Pending，不能宣称M2真机验收全部完成。V1–V5继续作为主线并列环境前提、Owner物理动作和状态，不把无凭据/无设备变体写成Pass。
-- [ ] **Step 5: 提交和最终审查。** `git commit -m "feat: manage imported ASR models and document M2 validation"`。按选定执行技能fresh review整个M2范围（从878725c起至最终HEAD，连同A/B/C计划、spec和ledger），修复Important/Critical并跑顺序检查；保留明确的真实服务/模型/设备Pending。禁止push/merge，汇报最终源码与证据路径。
+- [x] **Step 5: 提交和最终审查。** `git commit -m "feat: manage imported ASR models and document M2 validation"`。按选定执行技能fresh review整个M2范围（从878725c起至最终HEAD，连同A/B/C计划、spec和ledger），修复Important/Critical并跑顺序检查；保留明确的真实服务/模型/设备Pending。禁止push/merge，汇报最终源码与证据路径。

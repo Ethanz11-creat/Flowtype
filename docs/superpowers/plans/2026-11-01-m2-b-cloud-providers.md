@@ -1,6 +1,6 @@
 # M2-B Cloud Providers Implementation Plan
 
-**执行状态（2026-11-02）：** 已批准并按 A → B → C 执行。B1/B2/B3 源码、回归、提交及阶段修复审查完成；最终阶段检查点 6fc1973，2034 passed / 0 failed。B3 Step 4 的源码验证已完成，GUI/真实服务部分 Pending；最终全 M2 门禁仍 Pending。
+**执行状态（2026-11-02）：** 已批准并按 A → B → C 执行。B1/B2/B3 源码、回归、提交及阶段修复审查完成；最终阶段检查点 6fc1973，2034 passed / 0 failed。B3 Step 4 的源码验证已完成，GUI/真实服务部分 Pending；最终全 M2 源码门禁已通过（3a34a51，2430/0），真实验收仍 Pending。
 
 证据：[M2 checkpoints](../../evidence/2026-11-01-m2-validation.md)、[V1–V5](../../evidence/2026-11-01-live-validation.md)、[A/B/C rulings](../../evidence/2026-11-01-m2-rulings.md)。空框若包含真实验收/最终审查，表示该部分待完成；历史计划正文保留，不把先前基线当作当前状态。
 

@@ -1,0 +1,2 @@
+PUBLIC TOKENIZER CONTRACT PASS: 99 languages; raw absent yue=Optional(50257); exact yue=nil; zh=50260
+Existing downloaded public tokenizer metadata only; expected graph dimensions supplied; no model graph/weights/GPU/inference.

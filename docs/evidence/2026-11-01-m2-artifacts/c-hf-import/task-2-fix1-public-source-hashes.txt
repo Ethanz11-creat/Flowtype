@@ -1,0 +1,4 @@
+ff550a20c1cbd8cece4d8993688e2eb88c7e760f1cdc830cb918dd014fe44dac  Sources/flowtype/Services/Speech/LocalWhisperTokenizer.swift
+435f30526ee48c505ac7b157ef3710e9c881a308c81522b4893bd525c1710c28  .superpowers/sdd/2026-11-01-m2-c-hf-import/task-2-fix1-public-types.swift
+27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566  .superpowers/sdd/2026-11-01-m2-c-hf-import/public-whisper-tiny-tokenizer.json
+2a4c4281cf9f51ac6ccc406fdc711a087afe6530f671fa7b80953edc498275ce  .superpowers/sdd/2026-11-01-m2-c-hf-import/public-whisper-tiny-tokenizer_config.json

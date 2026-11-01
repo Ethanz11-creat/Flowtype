@@ -1,0 +1,60 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'FlowType' complete! (4.56s)
+  ✗ FAIL: import: reject truncated ordinary vocabulary
+  ✗ FAIL: import: reject missing byte alphabet entry
+  ✗ FAIL: import: reject truncated merge list
+  ✗ FAIL: import: reject unknown merge operand
+  ✗ FAIL: import: reject malformed merge line
+  ✗ FAIL: import: reject duplicate merge
+  ✗ FAIL: import: reject invalid safetensors metadata type
+  ✗ FAIL: Whisper rejects raw graph: rank-one logits
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: rank-one logits — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: rank-one encoder output
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: rank-one encoder output — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: missing mel output
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: missing mel output — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: wrong mel feature type
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: wrong mel feature type — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: wrong audio type
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: wrong audio type — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: wrong audio rank
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: wrong audio rank — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: mel encoder interface mismatch
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: mel encoder interface mismatch — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: encoder decoder interface mismatch
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: encoder decoder interface mismatch — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: cache wrong rank
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: cache wrong rank — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: cache value dimension mismatch
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: cache value dimension mismatch — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: cache update size mismatch
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: cache update size mismatch — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: cache update wrong dtype
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: cache update wrong dtype — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: mask length mismatch
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: mask length mismatch — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: context shorter than runtime loop
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: context shorter than runtime loop — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: missing required decoder input
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: missing required decoder input — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: unknown required decoder input
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: unknown required decoder input — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: alignment length mismatch
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: alignment length mismatch — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: prefill incompatible cache
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: prefill incompatible cache — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: prefill missing value output
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: prefill missing value output — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: prefill task wrong type
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: prefill task wrong type — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: Whisper rejects raw graph: prefill wrong sequence
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: prefill wrong sequence — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+  ✗ FAIL: retry starts original automatic primary and still falls back — got ["qwen3-0.6b-4bit", "qwen3-0.6b-4bit"], want ["qwen3-1.7b-4bit", "qwen3-0.6b-4bit"]
+  ✗ FAIL: retry automatic fallback is reported
+  ✗ FAIL: retry success persists automatic intent, never current attempt ID — got Optional("qwen3-0.6b-4bit"), want nil
+  ✗ FAIL: retry automatic intent survives store restart — got Optional("qwen3-0.6b-4bit"), want nil
+  ✗ FAIL: restart does not convert local fallback to explicit selection — got Optional("qwen3-0.6b-4bit"), want nil
+=== FlowType --self-test ===
+=== M2 fix self-test: 164 passed, 54 failed ===

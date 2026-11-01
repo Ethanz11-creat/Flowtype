@@ -1,0 +1,22 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/11] Compiling FlowType CloudASRConnectionCheck.swift
+[6/11] Compiling FlowType CloudASRVendor.swift
+[7/11] Compiling FlowType CloudASRProviderList.swift
+[8/11] Compiling FlowType RealtimeASR.swift
+[9/11] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[9/12] Write Objects.LinkFileList
+[10/12] Linking FlowType
+[11/12] Applying FlowType
+Build complete! (30.47s)

@@ -1,0 +1,6 @@
+Reviewer /root/m2c_review1 BASE6fc1973 HEAD9e5dc57. SpecIssues/QualityNeedsfixes.
+Important SafetensorsManifest.swift:133–136 record overwritesearlieridentitywithoutcompare; WhisperModelInspector.swift:23/:34/:65 readsmodel.mil/Manifest.json thenrecordsagainduringwalk. Replacementbetweenthese stagesacceptedwitholdmetadatahashattachednewidentity, finalverify passes; changedMIL missingresourcescanpass. Rejectrepeatedpathwhoseidentitydiffersfirstobservation; deterministicread→replacement→recordregression.
+Minor SafetensorsManifest.swift:43 ignores__metadata__withoutcheckingstring-to-stringobject; malformedformat:123passesinspectorbutMLXloaderstringconversionfails (Cmlx/mlx/io/safetensors.cpp:140). DeferredwholeM2triage.
+Minor inheritedAppLogger.swift:27warningbuildlog:9.
+Strengths fullQweninventory/config/tokenchecks, boundedheaders/arithmetic/offsets/shardcorrespondence, purelibrary/stagedlegacy/configdecode, format-specificWhisper.
+Externalnamedriskinspector/runtime mismatchcheckedWeightLoading/TokenizerandMLXmetadataconversion. Readonly/no rerun, GREEN2109/0evidenceverified. CannotVerifyC2Whispergraphs/offlineruntime+C3successmigrationassignedlater; actual1.7staticdoesnotproveGPU.

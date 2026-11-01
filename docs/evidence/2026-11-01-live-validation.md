@@ -72,3 +72,8 @@ M2-C 的 Qwen 0.6B/1.7B × 4/8-bit 与 Whisper 各图规模、量化和硬件分
 当前仅有 Qwen 1.7B 4-bit 的实际静态检测和公开 Whisper tiny tokenizer-only 检查，均不构成完整图加载或推理 Pass。完整 Whisper 模型/设备未验证，全部真实推理变体 Pending。
 
 补充窄证据：2026-11-01T19:49:34Z 控制器以 C3 63db2e9 的精确检测源码再次对现有 Qwen 1.7B MLX 4-bit 静态检查 PASS（packed-U32 保守预留 860225536 bytes，大小/指纹未变）。这仍不是运行加载、实测内存或落字验收，不改变上述 Pending。
+
+
+## M2 source closeout — 2026-11-02
+
+M2 product source **3a34a51** passed independent whole-M2 source review and scoped fixes; sequential build/full self-test is **2430/0**. Final development bundle was rebuilt with the identity in [M2 evidence](2026-11-01-m2-validation.md). Exact-path CUA activation still returns `cgWindowNotFound`; current-binary GUI and real delivery cannot be observed. This source gate does not change any V1–V5 Pending cell above. Full model and service/device variants retain their prerequisites and Owner physical-action requirements. Selected evidence is retained in the [durable archive](2026-11-01-m2-artifacts/README.md).

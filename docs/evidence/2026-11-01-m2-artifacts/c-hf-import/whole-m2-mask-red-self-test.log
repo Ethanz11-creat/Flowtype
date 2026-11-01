@@ -1,0 +1,8 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'FlowType' complete! (4.55s)
+  ✗ FAIL: Whisper rejects raw graph: Float16 update mask incompatible with production Int32 input
+  ✗ FAIL: Whisper invalid graph cannot publish verified readiness: Float16 update mask incompatible with production Int32 input — got Optional(FlowType.WhisperRuntimeMetadata(variant: "small", logitsSize: 51865, encoderSize: 768, isMultilingual: true)), want nil
+=== FlowType --self-test ===
+=== M2 fix self-test: 274 passed, 2 failed ===
