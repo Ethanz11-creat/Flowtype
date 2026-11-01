@@ -1,6 +1,6 @@
 # M1 readiness 真机证据（部分记录）
 
-记录日期：2026-11-01，时区 Asia/Shanghai；续测覆盖至修复候选 13:19:37Z 的 tap 恢复及随后待执行的 Owner 物理触发。本文依据控制器的 observations、runtime-continuation、panel-runtime-boundary、panel-fix-report、geometry-review 与 fixed-runtime 记录整理。基线 `2d0eca9` 的 M1-4 已出现实际卡片不可见 **Fail**；修复 `2588d56` 尚无真机可见通过结果。七项完整用例均未完成，P1 / P3 验证矩阵保持 Pending；文档、隐藏 AppKit 回归及源码审查不能替代真机验收。
+记录日期：2026-11-01，时区 Asia/Shanghai；续测覆盖至修复候选 session #1 于 13:23:48Z 拒绝麦克风，以及 Owner 随后提供的可见卡片截图。本文依据控制器的 observations、runtime-continuation、panel-runtime-boundary、panel-fix-report、geometry-review 与 fixed-runtime 记录整理。基线 `2d0eca9` 的 M1-4 已出现实际卡片不可见 **Fail**；修复 `2588d56` 的拒绝卡片已由 Owner 截图确认可见，但完整 M1-4 尚未通过。七项完整用例均未完成，P1 / P3 验证矩阵保持 Pending；文档、隐藏 AppKit 回归及源码审查不能替代真机验收。
 
 ## 历史基线候选与环境（2d0eca9）
 
@@ -111,9 +111,9 @@ Owner 随后回报「现在双击没有弹出了」。在 `2d0eca9`、PID 79953 
 
 有效 RED：修复前自测实际 exit 1，**1323 passed / 4 failed**；240×70 的起点 / 终点被改为 y805，320×94 被改为 y781，四项均未保留期望 y880 / y940。其余五项新断言已通过。修复后顺序执行 `swift build`（exit 0，40.59s）及 `swift run FlowType --self-test`（exit 0，**1327 passed / 0 failed**）；日志为 `/tmp/flowtype-task15-geometry-build.log` 与 `/tmp/flowtype-task15-geometry-green.log`，RED 为 `/tmp/flowtype-task15-geometry-red.log`。回归同时覆盖 resize 中心 / origin / mask、非激活、不能成为 key / main、始终隐藏。不是只断言 API 选择的模拟测试，也不代表无 WindowServer 的 headless 验证。
 
-限定源码审查 `a1a80de..2588d56` 结论为 spec compliant、quality **Approved**，无 Critical / Important；审查未重复构建或自测。真实应用的 ordering / 可见位置 / 非激活 / 拖动验收仍待执行。所有上述检查均为已有执行结果，本次文档更新未重跑。
+限定源码审查 `a1a80de..2588d56` 结论为 spec compliant、quality **Approved**，无 Critical / Important；审查未重复构建或自测。当时真实应用的可见验收尚待执行；随后 Owner 的卡片截图见下节，精确位置 / 非激活 / 拖动仍未验证。所有上述检查均为已有执行结果，本次文档更新未重跑。
 
-## 当前固定修复候选（2588d56，等待 Owner）
+## 当前固定修复候选与 Owner 可见结果（2588d56）
 
 以下以控制器 `task-15-fixed-runtime.md` 为当前权威快照：
 
@@ -123,20 +123,28 @@ Owner 随后回报「现在双击没有弹出了」。在 `2d0eca9`、PID 79953 
 - SHA256 `3ec43fb892ca6aa69bb1dd0a058d6c38f96ca14749dabf7374142b542d908dc2`。
 - 13:18:12Z 按精确路径启动，PID **8002**；13:18:17Z 探测 AX denied、mic notDetermined、local ready。
 - 在已授权批次内，CUA 为新身份替换 AX 条目；同一 PID 于 13:19:32Z recreate、13:19:33Z tap created、13:19:37Z health none。没有精确 grant 时刻，仍不声称 ≤5s。
-- 新启动前系统 mic UI 为 OFF，但新身份探测为 notDetermined；不能仅根据 OFF 推定此进程已 denied。空白 TextEdit scratch 已聚焦，正在等待 Owner 物理双击 Command；如有初始麦克风提示则拒绝，并确认当前屏幕卡片。
+- 新启动前系统 mic UI 为 OFF，但新身份初始探测为 notDetermined；不能仅根据 OFF 推定启动时此进程已 denied。空白 TextEdit scratch 聚焦后，Owner 完成物理双击与拒绝，结果如下。
 
-当前固定进程尚未开始采集，修复后卡片实际可见性仍 **Pending**。release 保留 AudioDevice、AudioRecorder、AppleSpeechProvider、DownloadSource、ModelLocator、ProviderEditSheet、AppLogger 的已有警告，不声称仅有 AppLogger 警告或无警告。旧 deep / strict 签名限制未修复；本次没有新的 deep 验证结果，不能从身份可读或可启动推导签名完整有效。后续 live run 不应再次构建改变身份。
+Owner 回报「选不允许，出现了这个」，并提供下列产品 UI 截图，确认真实红色错误胶囊可见，含「出错了」、麦克风指引与「打开麦克风设置 / 重新检测 / 忽略」三个按钮。截图仅含产品错误 UI，无听写或私人文档内容。
+
+![Owner 提供的麦克风拒绝错误卡片](assets/2026-11-01-m1-microphone-denied.png)
+
+同一 PID 8002、source `2588d56` 的实际 session **#1**：13:23:45Z 物理触发，preparing ordered frame 为 `(673,880,240,70)`，complete frame 为 `(186,948,240,70)`、alpha 1；目标外屏 visibleFrame 仍为 `(-487,900,2560,1415)`，app inactive / not hidden。13:23:48Z 实际 `mic request result = false`，RecordingStage 约 3s 后结束并请求 error 展示。阶段开始仅表示权限获取路径，未观察到成功麦克风 Engine-start 或采集。
+
+本次不再出现原来的 y805 约束，Owner 截图直接支持修复后卡片可见；但动画期间 x 从 673 变为 186 的原因未独立确认，不能声称精确居中、最终 frame 完全符合预期、焦点不变、拖动或动画时序已通过。CUA 精确 app 仍只能捕获隐藏 0×0 根窗口；正在等待 Owner 点击「打开麦克风设置」并验证实际目的地。点击前仅观察到系统设置 AX 页，不能据此判定链接目的地正确或错误。恢复 mic ON、重新检测消卡片及新会话采集仍待执行，完整 M1-4 保持 **Partial / Pending**。
+
+release 保留 AudioDevice、AudioRecorder、AppleSpeechProvider、DownloadSource、ModelLocator、ProviderEditSheet、AppLogger 的已有警告，不声称仅有 AppLogger 警告或无警告。旧 deep / strict 签名限制未修复；本次没有新的 deep 验证结果，不能从身份可读或可启动推导签名完整有效。后续 live run 不应再次构建改变身份。
 
 ## 用例结果与证据缺口
 
-共同环境与各轮候选身份见上文；当前为修复候选 PID 8002，tap 已恢复、mic 探测 notDetermined。M1-3 的真实采集对应基线 PID 75257 的 session #1；诊断 PID 96438 的 #1 未成功采集，修复进程尚无会话。无会话则记 N/A。基线 M1-4 的可见失败保留，七项完整验收均未完成。
+共同环境与各轮候选身份见上文；当前为修复候选 PID 8002，tap 已恢复，session #1 实际 mic request false。M1-3 的真实采集对应基线 PID 75257 的 session #1；诊断 PID 96438 与修复 PID 8002 的 #1 均未成功采集。无会话则记 N/A。基线 M1-4 的可见失败保留，七项完整验收均未完成。
 
 | 用例 | 状态 | 实际事件顺序 / 与期望的差异 | 尚需执行 |
 | --- | --- | --- | --- |
 | M1-1 无 AX 启动 | Pending（部分） | 启动→tap 创建失败→本地模型加载成功→degraded→waitForPermission。依 spec §4.1 / classifier，有可用本地引擎而缺 AX 时应 degraded，覆盖 brief 中无条件红色 blocked 的表述。 | 核验可见图标、修复菜单项、无阻塞弹窗、提醒浮层、关闭后菜单、焦点和首次点击。 |
 | M1-2 热键可用但无引擎 | Pending | 当前为 localOnly 且本地模型 ready，未建立 AX 已授予 / auto / 无引擎场景。 | 可逆地建立无引擎场景；核验立即 error、「打开 ASR 设置 / 重新检测」，无 RecordingStage 启动、无 processing。 |
 | M1-3 运行中授权 | Pending（部分） | 同一 PID 75257，重建授权条目→11:55:49Z tap 创建成功→11:55:54Z none→12:01:22Z 真实 Command / session #1→12:01:26Z 采集启动；未测授权延迟，未核验完整 UI / 提示音。 | 实测授权后 ≤5s 恢复要求，核验正常图标、可见确认及提示音。 |
-| M1-4 麦克风被拒绝 | Fail（基线可见行为）；修复复测 Pending | 基线 PID 79953 四次物理触发均无卡片、无 RecordingStage；诊断 a1a80de 记录 mic false 与位于目标屏下方的 error panel。2588d56 源码修复及隐藏回归通过，固定应用尚未验证可见性。 | Owner 触发当前 PID 8002，核验目标屏卡片、「打开麦克风设置 / 重新检测 / 忽略」、正确设置面板、重授后消失及新会话录音；保留基线 Fail 历史。 |
+| M1-4 麦克风被拒绝 | Fail（基线可见行为）；修复 Partial / Pending | 基线 PID 79953 无卡片；诊断 a1a80de 的 error panel 位于目标屏下方。修复 2588d56、PID 8002 / #1 于 13:23:48Z mic false，Owner 截图确认红色卡片及三个恢复按钮可见，无成功采集。 | 等待 Owner 点击「打开麦克风设置」，核验真实目的地、重授后重新检测消卡片及新会话录音；精确位置 / 焦点 / 拖动 / 动画未验证，保留基线 Fail。 |
 | M1-5 受限策略下无引擎 | Pending | localOnly 已选，但本地引擎可用；当前无云端配置，不满足云端恢复前提。 | 可逆地建立无引擎并拒绝 Speech 场景；核验立即 error、「打开 ASR 设置 / 改为自动路由 / 忽略」、auto 持久化；仅在已有可用云端配置时核验恢复。全程无录音、无 processing。 |
 | M1-6 无 AX 菜单听写 | Pending | AX denied 启动仅部分观察；续测 AX 条目已重建并开启，仍未通过无 AX 菜单录音 / 停止、交付或粘贴。 | 在已同意的权限批次中建立无 AX 场景，使用合成 scratch 输入核验菜单操作、已复制提示及 TextEdit 内容完整性；不记录原文。 |
 | M1-7 状态变化不闪断 | Pending（部分） | 离线模型加载成功后日志为 degraded；未观察 UI 的 downloading / loading 转换或终态失败。 | 核验菜单首项 / 图标转换，ready 或 error 后 3s 内稳定，无 blocked 闪烁或卡死。 |
@@ -156,4 +164,4 @@ Tasks 4–14 已逐项审查。最终广泛源码审查的两个 Important 问�
 
 固定候选已经构建并审查。Owner 已明确同意 AX / 麦克风授权及临时关闭 / 恢复批次，并完成所需本机认证；不重复请求这项同意。Speech Recognition 不在已同意范围，若测试需授予它，须按计算机使用工具策略另行取得动作时确认或由用户操作。本文仅记录控制器提供的结果，不执行权限变更。
 
-当前等待 Owner 在固定修复候选 `2588d56`、PID 8002 下物理双击 Command，若出现初始麦克风提示则拒绝，并回报当前屏幕卡片；mic UI OFF 与进程 notDetermined 的区别见当前快照。CUA 未能发送纯修饰键，不伪造卡片、设置跳转或恢复结果。控制器先验证修复后实际位置、非激活与拖动，再继续 M1-4 按钮和恢复，补核 M1-1 可见 UI、M1-3 与 M1-6 权限恢复及合成 scratch 会话；随后在约定的可逆环境下验证 M1-2 / M1-5 / M1-7。无引擎测试不得删除模型目录，不得改凭据或假设空云端可恢复。每项记录操作时间、权限前后状态、真实 session id（无会话则 N/A）、脱敏日志与期望差异。控制器测试后恢复约定权限状态（含麦克风 ON）、记录 OS 重启要求，并复查原安装版本是否需重新授权。仅实际执行且满足验收时才更新 P1 / P3；全部所需真机结果具备前，Task 15 与 M1 验收继续开放。
+当前固定修复候选 `2588d56`、PID 8002 的拒绝卡片已获 Owner 截图确认，等待 Owner 点击「打开麦克风设置」后核验真实目的地；CUA 0×0 根窗口仍妨碍直接点击。继续完成 M1-4 重新授权 / 重新检测 / 新会话恢复，补核精确位置、非激活、拖动与动画；补核 M1-1 可见 UI、M1-3 与 M1-6 权限恢复及合成 scratch 会话；随后在约定的可逆环境下验证 M1-2 / M1-5 / M1-7。无引擎测试不得删除模型目录，不得改凭据或假设空云端可恢复。每项记录操作时间、权限前后状态、真实 session id（无会话则 N/A）、脱敏日志与期望差异。控制器测试后恢复约定权限状态（含麦克风 ON）、记录 OS 重启要求，并复查原安装版本是否需重新授权。仅实际执行且满足验收时才更新 P1 / P3；全部所需真机结果具备前，Task 15 与 M1 验收继续开放。
