@@ -342,6 +342,7 @@ enum SelfTest {
         testPolishOnStopConfig(r)  // default/migration and persisted opt-out
         testLegacySessionConfiguration(r) // pre-session settings and single-provider migration
         testStableSessionPresentation(r) // no provider or streaming text in capsule
+        testReadinessClassification(r)
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
         await testOnboardingDemoDelivery(r) // notification-only final delivery, no active-app injection
         await testOnboardingDeliveryCancellation(r)
@@ -1242,6 +1243,63 @@ enum SelfTest {
         }
         r.eq(await active.invocationCount, 1,
              "stage ownership: active execution invokes underlying stage once")
+    }
+
+    static func testReadinessClassification(_ r: Reporter) {
+        func snap(microphone: PermissionState = .granted,
+                  accessibility: PermissionState = .granted,
+                  local: EngineReadiness = .unavailable(reason: "off"),
+                  cloud: EngineReadiness = .unavailable(reason: "off"),
+                  apple: EngineReadiness = .unavailable(reason: "off")) -> ReadinessSnapshot {
+            ReadinessSnapshot(accessibility: accessibility, microphone: microphone,
+                              speechRecognition: .granted, localModel: local,
+                              cloudASR: cloud, appleSpeech: apple,
+                              computedAt: Date(timeIntervalSince1970: 0))
+        }
+        r.eq(classifyReadiness(snap(microphone: .denied, local: .ready)),
+             .blocked(.microphoneDenied), "readiness: mic denied blocks even with an engine")
+        r.eq(classifyReadiness(snap()), .blocked(.noEngine), "readiness: no engine at all blocks")
+        r.eq(classifyReadiness(snap(apple: .ready)), .degraded(.basicOnly),
+             "readiness: Apple-only is degraded basic mode")
+        r.eq(classifyReadiness(snap(local: .provisioning(progress: 0.4))),
+             .degraded(.enginePreparing), "readiness: provisioning only is degraded")
+        r.eq(classifyReadiness(snap(accessibility: .denied, local: .ready)),
+             .degraded(.accessibilityMissing), "readiness: ready engine without AX is degraded")
+        r.eq(classifyReadiness(snap(microphone: .notDetermined, local: .ready)),
+             .degraded(.microphoneNotDetermined), "readiness: undecided mic may trigger the system prompt")
+        r.eq(classifyReadiness(snap(local: .ready)), .ready, "readiness: local ready is ready")
+        r.eq(classifyReadiness(snap(cloud: .ready)), .ready, "readiness: cloud ready is ready")
+        r.eq(classifyReadiness(snap(microphone: .notDetermined)), .blocked(.noEngine),
+             "readiness: engine blockers outrank an undecided mic")
+        r.eq(ReadinessIssue.microphoneDenied.reason, "麦克风权限未开启",
+             "readiness: mic-denied copy")
+        r.eq(classifyReadiness(snap(cloud: .provisioning(progress: 0.4))),
+             .degraded(.enginePreparing), "readiness: cloud provisioning prevents blocking")
+        r.eq(classifyReadiness(snap(apple: .provisioning(progress: 0.4))),
+             .blocked(.noEngine), "readiness: Apple provisioning alone does not prevent blocking")
+        r.eq(classifyReadiness(snap(local: .provisioning(progress: 0.4), apple: .ready)),
+             .degraded(.basicOnly), "readiness: basic mode outranks engine preparation")
+        r.eq(classifyReadiness(snap(microphone: .unknown, local: .ready)),
+             .degraded(.microphoneNotDetermined), "readiness: unknown mic is not ready")
+        r.eq(classifyReadiness(snap(microphone: .notDetermined, accessibility: .unknown, local: .ready)),
+             .degraded(.accessibilityMissing), "readiness: missing AX outranks undecided mic")
+        r.eq(classifyReadiness(snap(local: .ready, cloud: .provisioning(progress: 0.4))),
+             .ready, "readiness: a ready engine outranks another engine preparing")
+        r.check(ReadinessLevel.blocked(.noEngine).isBlocked, "readiness: no engine prevents recording")
+        r.check(!ReadinessLevel.degraded(.basicOnly).isBlocked, "readiness: basic mode permits recording")
+        r.check(!ReadinessLevel.ready.isBlocked, "readiness: ready permits recording")
+        r.eq(ReadinessLevel.ready.reason, nil, "readiness: ready needs no explanation")
+        r.eq(ReadinessLevel.blocked(.noEngine).reason, "没有可用的语音识别引擎",
+             "readiness: blocked level explains missing engine")
+        r.eq(ReadinessLevel.degraded(.microphoneNotDetermined).reason, "首次听写时会请求麦克风权限",
+             "readiness: degraded level explains microphone prompt")
+        r.eq(ReadinessLevel.degraded(.enginePreparing).reason, "识别引擎正在准备",
+             "readiness: degraded level explains preparation")
+        r.eq(ReadinessLevel.degraded(.basicOnly).reason, "基础识别模式，准确率较低",
+             "readiness: degraded level explains basic mode")
+        r.eq(ReadinessLevel.degraded(.accessibilityMissing).reason,
+             "全局热键不可用；可从菜单开始，结果写入剪贴板",
+             "readiness: degraded level explains AX fallback")
     }
 
     static func testSessionExperience(_ r: Reporter) {
