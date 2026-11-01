@@ -92,6 +92,10 @@ enum CloudProviderSelfTests {
             ("https://example.test/v1/audio/transcriptions", "https://example.test/v1/audio/transcriptions"),
             ("https://example.test/proxy%2Ftenant/v1", "https://example.test/proxy%2Ftenant/v1/audio/transcriptions"),
             ("https://example.test", "https://example.test/audio/transcriptions"),
+            ("https://[::1]/v1", "https://[::1]/v1/audio/transcriptions"),
+            ("https://[2001:db8::1]:8443/v1", "https://[2001:db8::1]:8443/v1/audio/transcriptions"),
+            ("https://example.test:1/v1", "https://example.test:1/v1/audio/transcriptions"),
+            ("https://example.test:65535/v1", "https://example.test:65535/v1/audio/transcriptions"),
             ("https://example.test:8443/proxy/v1", "https://example.test:8443/proxy/v1/audio/transcriptions")
         ]
         for (input, expected) in validHTTP {
@@ -106,6 +110,9 @@ enum CloudProviderSelfTests {
                              "https://example.test/v1?", "https://example.test/v1#fragment", "https://example.test/v1#",
                              "https://example.test:0/v1", "https://example.test:65536/v1", "https://example.test:-1/v1",
                              "https://example.test:abc/v1", "https://example.test:/v1", "https://bad host/v1",
+                             "https://example.test:9999999999999999999999/v1",
+                             "https://[::1]:9999999999999999999999/v1", "https://[::1]:/v1",
+                             "https://[::1]:0/v1", "https://[::1]:65536/v1",
                              "https://{workspace}/v1", "https://example.test/%7Bworkspace%7D"]
         for input in invalidCommon + ["http://example.test/v1", "wss://example.test/v1", "/v1"] {
             do {
@@ -122,5 +129,9 @@ enum CloudProviderSelfTests {
         }
         let wss = "wss://example.test:8443/api-ws/v1/inference"
         r.eq(try? CloudASREndpoint.validateRealtimeURL(wss).absoluteString, wss, "endpoint: WSS keeps its own path")
+        for valid in ["wss://[::1]/api-ws/v1/inference", "wss://[2001:db8::1]:8443/api-ws/v1/inference",
+                      "wss://example.test:1/inference", "wss://example.test:65535/inference"] {
+            r.eq(try? CloudASREndpoint.validateRealtimeURL(valid).absoluteString, valid, "endpoint: valid WSS host/port retained")
+        }
     }
 }

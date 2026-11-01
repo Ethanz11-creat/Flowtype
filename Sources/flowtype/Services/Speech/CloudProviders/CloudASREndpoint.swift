@@ -31,11 +31,20 @@ enum CloudASREndpoint {
               parts.url != nil else {
             throw CloudASRError.invalidURL("地址必须使用 \(scheme.uppercased())，包含有效主机且不能包含账号、密码、查询参数、片段或占位符")
         }
-        // Foundation accepts an empty port (host:); require an actual valid port when specified.
+        // Foundation reports nil for both omitted and overflowing ports. Inspect the authority
+        // to distinguish omission from invalid explicit input, without treating IPv6 colons as ports.
         let authority = value.components(separatedBy: "://").dropFirst().joined(separator: "://")
             .split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
-        guard !authority.hasSuffix(":"), parts.port.map({ (1...65535).contains($0) }) ?? true else {
-            throw CloudASRError.invalidURL("地址端口必须在 1–65535 范围内")
+        let portSuffix: Substring
+        if authority.hasPrefix("["), let hostEnd = authority.firstIndex(of: "]") {
+            portSuffix = authority[authority.index(after: hostEnd)...]
+        } else {
+            portSuffix = authority.drop(while: { $0 != ":" })
+        }
+        if !portSuffix.isEmpty {
+            guard portSuffix.hasPrefix(":"), let port = parts.port, (1...65535).contains(port) else {
+                throw CloudASRError.invalidURL("地址端口必须在 1–65535 范围内")
+            }
         }
         return parts
     }
