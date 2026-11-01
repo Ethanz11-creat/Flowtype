@@ -308,6 +308,7 @@ enum SelfTest {
         testModelConfig(r)         // model provisioning fields: round-trip + legacy default
         testDownloadSource(r)      // DownloadSource endpoint mapping
         testModelLocator(r)        // ModelLocator completeness validation
+        await ModelProvisionSelfTests.runPreflight(r)
         testStatsDataModel(r)      // stats data model: language tag + legacy decode
         testStatsEngine(r)         // StatsEngine: metrics, streaks, heatmap
         testHeatmapDensity(r)      // StatsEngine: dense heatmap (full range, missing days = 0)

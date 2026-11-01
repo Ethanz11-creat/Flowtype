@@ -96,8 +96,13 @@ enum ModelLocator {
     }
 
     /// Resolves the active model directory and matching modelId from Configuration.
-    /// Uses preset-specific size thresholds for validation to avoid accepting a 0.6B download as 1.7B.
+    /// Identity is established from a known preset path or exact repository metadata, never size.
     static func resolveActiveModel(config: Configuration) -> ResolvedModel? {
+        resolveActiveModel(config: config, knownCacheDirectories: knownCacheDirs(), presetDirectory: { $0.localDirectory() })
+    }
+
+    static func resolveActiveModel(config: Configuration, knownCacheDirectories: [URL],
+                                   presetDirectory: (ModelPreset) -> URL) -> ResolvedModel? {
         let configured: URL?
         if let custom = config.customLocalModelPath, !custom.isEmpty {
             configured = URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true)
@@ -108,15 +113,11 @@ enum ModelLocator {
         }
 
         let selectedPreset = ModelPreset.preset(forID: config.selectedLocalModelID)
-        let autoMode = (selectedPreset == nil)
 
-        // Check custom path with default threshold (unknown size)
-        if let configured {
-            if validateComplete(configured) {
-                let recommended = ModelPreset.recommendedModel(for: HardwareProfiler.currentTier())
-                let modelId = selectedPreset?.repoId ?? recommended.repoId
-                return ResolvedModel(directory: configured, modelId: modelId)
-            }
+        if let configured, let identity = identifiedPreset(in: configured),
+           selectedPreset == nil || selectedPreset?.id == identity.id,
+           validateComplete(configured, minBytes: minValidBytes(for: identity)) {
+            return ResolvedModel(directory: configured, modelId: identity.repoId)
         }
 
         // Check preset directories with preset-specific thresholds
@@ -133,23 +134,38 @@ enum ModelLocator {
         }
 
         for preset in presetsToCheck {
-            let dir = preset.localDirectory()
+            let dir = presetDirectory(preset)
             let minBytes = minValidBytes(for: preset)
-            if validateComplete(dir, minBytes: minBytes) {
+            if identifiedPreset(in: dir)?.id == preset.id, validateComplete(dir, minBytes: minBytes) {
                 return ResolvedModel(directory: dir, modelId: preset.repoId)
             }
         }
 
-        // Legacy cache dirs — check for any valid preset
-        for cacheDir in knownCacheDirs() {
-            for preset in ModelPreset.allPresets {
-                if validateComplete(cacheDir, minBytes: minValidBytes(for: preset)) {
-                    return ResolvedModel(directory: cacheDir, modelId: preset.repoId)
-                }
+        for cacheDir in knownCacheDirectories {
+            guard let identity = identifiedPreset(in: cacheDir),
+                  selectedPreset == nil || selectedPreset?.id == identity.id else { continue }
+            if validateComplete(cacheDir, minBytes: minValidBytes(for: identity)) {
+                return ResolvedModel(directory: cacheDir, modelId: identity.repoId)
             }
         }
 
         return nil
+    }
+
+    private static func identifiedPreset(in directory: URL) -> ModelPreset? {
+        let resolvedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
+        let path = resolvedDirectory.path
+        let pathIdentity = ModelPreset.allPresets.first { preset in
+            path.hasSuffix("/" + preset.repoId)
+                || resolvedDirectory.lastPathComponent == preset.repoId.replacingOccurrences(of: "/", with: "_")
+                || path.contains("/models--" + preset.repoId.replacingOccurrences(of: "/", with: "--") + "/snapshots/")
+        }
+        let configURL = directory.appendingPathComponent("config.json")
+        let metadata = (try? Data(contentsOf: configURL)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let repoIDs = ["_name_or_path", "repo_id", "model_id"].compactMap { metadata?[$0] as? String }
+        let metadataIdentity = ModelPreset.allPresets.first { repoIDs.contains($0.repoId) }
+        if let pathIdentity, let metadataIdentity, pathIdentity.id != metadataIdentity.id { return nil }
+        return pathIdentity ?? metadataIdentity
     }
 
     /// Convenience: returns just the directory (for callers that don't need modelId).
