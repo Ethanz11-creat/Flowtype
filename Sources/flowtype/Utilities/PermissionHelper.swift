@@ -1,7 +1,49 @@
 import AppKit
+import AVFoundation
 import CoreGraphics
+import Speech
 
 enum PermissionHelper {
+    static func accessibilityState() -> PermissionState {
+        checkAccessibility() ? .granted : .denied
+    }
+
+    static func microphoneState() -> PermissionState {
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            return .granted
+        case .denied:
+            return .denied
+        case .undetermined:
+            return .notDetermined
+        @unknown default:
+            return .unknown
+        }
+    }
+
+    static func speechRecognitionState() -> PermissionState {
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .authorized:
+            return .granted
+        case .denied, .restricted:
+            return .denied
+        case .notDetermined:
+            return .notDetermined
+        @unknown default:
+            return .unknown
+        }
+    }
+
+    static func openMicrophoneSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    static func openSpeechRecognitionSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     /// Check accessibility permission using both API query and functional test
     static func checkAccessibility() -> Bool {
         // API check - may return false for unsigned apps even if permission is granted
