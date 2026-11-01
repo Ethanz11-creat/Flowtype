@@ -1,6 +1,6 @@
 # 未完成任务核对 — 2026-11-01
 
-核对基线：`flowtype-local` / `b9930bd`（产品源码最近变更 `2588d56`）。
+历史核对基线：`flowtype-local` / `b9930bd`（产品源码最近变更 `2588d56`）。
 核对范围：docs 中的路线图、spec、实施计划、验证矩阵，现有 SDD 台账，
 Typeless 逆向总报告 / 证据复核，以及相关生产代码。旧计划的空 checkbox
 不直接等于功能未实现；以下状态以新文档、代码与实际反馈交叉判定。
@@ -12,19 +12,17 @@ readiness=ready / AX=granted / mic=granted。没有把这次认可扩展成所�
 ## 1. 明确尚未完成的主线
 
 依据：[稳定性与交付设计 §10](superpowers/specs/2026-10-22-stability-and-delivery-design.md#10-分阶段路线图)。
-当前实施计划只覆盖 M0/M1；M2–M5 还需要各自实施计划和验收。
-Owner 后续将 M2 扩充为 M2-A 本地下载恢复、M2-B 云端厂商接入、M2-C 本地模型导入；
-最新澄清要求M2-C支持从Hugging Face自行下载的ASR模型，不能限于现有Qwen目录选择；
-Owner 随后回复“开发吧”，首批按已展示方案接入Qwen3-ASR MLX与Whisper Core ML；
-旧Qwen-only限制已撤回。M2-A/B/C实施计划已写入docs/superpowers/plans，等待计划审阅
-与执行方式选择，产品代码尚未改动。
-最新范围见 [M2 修订设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)。
-下表 M2 原始审计描述保留为下载恢复的代码基线，不代表扩充后的全部范围。
-设计文档仍标 Draft，未执行部分不能视为所有产品细节均已获批。
+更新（2026-11-02）：M2-A/B/C 计划与子代理执行方式已批准，按 A → B → C 实施。
+M2-A 下载恢复已完成阶段修复与审查（eb840f8，1619/0）；M2-B 云端厂商接入已完成阶段修复与审查（6fc1973，2034/0）。
+M2-C 已实现 Qwen3-ASR MLX / WhisperKit Core ML 检测、严格离线运行库、统一生命周期和模型库 UI；C3 检查点 63db2e9 为 2263/0。
+C4 的最终源码回归记录见 [M2 证据](evidence/2026-11-01-m2-validation.md)；控制器全 M2 独立审查和最终门禁仍 Pending，不能从源码完成推导真机验收通过。
+真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3–M5 范围保持不变，尚待各自实施与验收。
+[已批准设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)及[决策归档](evidence/2026-11-01-m2-rulings.md)是当前依据。
+下表 M2 行更新为当前状态；M3–M5 保留原核对结果，不代表本轮重新验收。
 
 | 项目 | 现状与剩余工作 | 代码证据 / 边界 |
 | --- | --- | --- |
-| **M2 模型修复** | 元数据 / 网络 / 不完整目录 / 加载失败分类；下载前端点预检；失败后可解释的恢复；自动模式下推荐 1.7B 失败再试 0.6B；卡片随真实 preset 更新。 | `QwenModelState.downloadWithRetry` 仍直接做最多三次尝试；无设计中的 `ModelProvisionError` / config.json 预检。`QwenModelStatusCard` 的 repo 与命令仍写死 0.6B。已有重试、镜像切换、目录导入，不应重新开发。M0 手动固定模型成功不等于自动下载已修好。 |
+| **M2 模型修复 / 云端接入 / 本地导入** | 源码实现完成；共享预检/恢复、厂商合同及配置检查、多个本地模型的静态预览/切换/重新定位/移除均已接入。最终全 M2 审查、真实加载/听写及 GUI 验收 Pending。 | `QwenModelState` 单一事务协调器；`ImportedASRModelActions` 只管理预览；`ImportedASRModelList` 通过 UUID 操作。静态检查不保存选择，运行成功才提交。旧基线的三次不透明重试、写死 0.6B 卡片与单路径选择已被替换。 |
 | **M3 自动交付** | 新 `.automatic` 模式、迁移、纯交付策略、粘贴优先及确定未发出时的兼容回退；跨应用验收。 | `DeliveryMode` 仍只有 unicode / pasteInSupportedApps，配置默认与缺省解码仍是 unicode，粘贴只有六个候选应用。现有目标身份核验、剪贴板事务、不确定结果不重发已做，应复用。 |
 | **M3 无语音预检** | 停止后、ASR 前判断无语音；静音不给幻觉文本或历史记录。 | `ASRStage` 对非空音频直接尝试识别；波形静音阈值与 `AudioFormatConverter.trimSilence` 不能替代该产品路径。`SpeechVAD` import 也不证明已接入停止后预检。 |
 | **M4 统一失败分级** | 用统一 FailureKind / RecoveryAction 覆盖权限、未就绪、临时 ASR、交付不确定、取消；统一动作与文案。 | M1 已做权限结构化与 readiness 修复动作，但 `ErrorRecoveryContext` 仍主要是 failedStage/error/rawText/retryable，`buildErrorActions` 仍按错误类型与 retryable 分支。属于部分基础已具备，尚未完成整体分类。 |

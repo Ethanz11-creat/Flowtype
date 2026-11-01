@@ -2,14 +2,8 @@ import SwiftUI
 import AppKit
 
 struct LocalModelPicker: View {
-    @ObservedObject private var store = ConfigurationStore.shared
     @ObservedObject private var downloader = ModelDownloader.shared
     @ObservedObject private var modelState = QwenModelState.shared
-    @State private var folderMessage: String?
-
-    private var configuredPath: String? {
-        [store.current.customLocalModelPath, store.current.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
-    }
 
     private var currentTier: HardwareTier {
         HardwareProfiler.currentTier()
@@ -28,30 +22,24 @@ struct LocalModelPicker: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Picker("", selection: Binding(get: { store.current.selectedLocalModelID }, set: { id in
-                    Task { await modelState.selectPreset(ModelPreset.preset(forID: id), automatic: id == nil) }
-                })) {
-                    Text("自动选择（推荐）").tag(String?.none)
-                    ForEach(ModelPreset.allPresets) { preset in
-                        let isRecommended = preset.recommendedTiers.contains(currentTier)
-                        let sizeStr = formatBytes(preset.expectedSizeBytes)
-                        Text("\(preset.name)\(isRecommended ? " ⭐️推荐" : "") (\(sizeStr))")
-                            .tag(Optional(preset.id))
+                Menu("选择内置下载预设") {
+                    Button("自动选择（推荐）") {
+                        Task { await modelState.selectPreset(nil, automatic: true) }
                     }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .disabled(modelState.operationID != nil)
+                    ForEach(ImportedASRModelPresentation.downloadablePresets) { preset in
+                        Button(preset.name) { Task { await modelState.selectPreset(preset) } }
+                    }
+                }.disabled(modelState.operationID != nil)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(ModelPreset.allPresets) { preset in
+                    ForEach(ImportedASRModelPresentation.downloadablePresets) { preset in
                         presetRow(preset)
                     }
                 }
 
                 Divider().opacity(0.5)
 
-                customFolderSection
+                ImportedASRModelList()
             }
             .padding(14)
             .glassCard(cornerRadius: 10)
@@ -98,6 +86,9 @@ struct LocalModelPicker: View {
                     .font(.system(size: 11))
                     .foregroundColor(.red.opacity(0.8))
                 } else if isDownloaded {
+                    Button("使用") {
+                        Task { await modelState.selectPreset(preset) }
+                    }.controlSize(.small).disabled(modelState.operationID != nil)
                     Button("删除") {
                         Task {
                             try? downloader.deleteModel(preset)
@@ -106,6 +97,7 @@ struct LocalModelPicker: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundColor(.red.opacity(0.8))
+                    .disabled(modelState.operationID != nil)
                 } else {
                     Button("下载") {
                         Task {
@@ -127,83 +119,6 @@ struct LocalModelPicker: View {
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
                     .monospacedDigit()
-            }
-        }
-    }
-
-    private var customFolderSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Button("指定本地模型文件夹") {
-                    pickModelFolder()
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .disabled(modelState.operationID != nil)
-
-                Button {
-                    NSWorkspace.shared.open(ModelPreset.modelsDirectory)
-                } label: {
-                    Text("打开模型文件夹")
-                }
-                .buttonStyle(.borderless)
-                .controlSize(.small)
-                .foregroundColor(.secondary)
-
-                Spacer()
-            }
-
-            if let path = configuredPath {
-                HStack(spacing: 6) {
-                    Button {
-                        ModelRecoveryActions(coordinator: modelState, store: store).removeFolderOverride()
-                        folderMessage = nil
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(modelState.operationID != nil)
-                    .help("移除模型文件夹选择")
-                    Text(path)
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer()
-                }
-            }
-
-            if let msg = folderMessage {
-                Text(msg)
-                    .font(.system(size: 10))
-                    .foregroundColor(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else if configuredPath == nil {
-                Text("已下载好模型的话，指到那个文件夹即可离线加载。")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-
-    private func pickModelFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "选择"
-        panel.message = "选择本地模型文件夹"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        Task {
-            do {
-                try await ModelRecoveryActions(coordinator: modelState, store: store).importOfflineModel(at: url)
-                folderMessage = nil
-            } catch {
-                folderMessage = (error as? ModelProvisionError).flatMap {
-                    ModelRecoveryPresentation.make(active: nil, target: nil, failure: $0, didAutoFallback: false).failureMessage
-                } ?? "模型加载已取消。"
             }
         }
     }

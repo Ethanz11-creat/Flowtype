@@ -1,12 +1,9 @@
 # M2 云端接入、本地模型与恢复设计
 
 日期：2026-11-01。基线：flowtype-local / b9930bd；承接稳定性设计 §4.3.3 / M2。
-状态：Owner 于本轮扩充范围，正在修订；此前书面设计审阅请求已被本次范围调整取代。
-Owner 最新澄清：应支持导入用户自行从 Hugging Face 下载的 ASR 模型。
-此前“首版仅 Qwen3-ASR MLX”的范围撤回，不能作为本地导入需求的完整实现。
-Owner 随后回复“开发吧”，承接已展示的多架构方案：首批Qwen3-ASR MLX和Whisper Core ML。
-书面设计阶段已通过；实施计划已形成，尚需按writing-plans完成计划审阅/执行方式选择。
-产品代码尚未改动。
+状态：Owner 已批准 A → B → C 方案与子代理执行方式。M2-A/B 和 M2-C 的检测、运行库、统一生命周期及模型库 UI 已实现；控制器最终全 M2 审查与真实环境验收仍 Pending。
+首批导入支持 Qwen3-ASR MLX 与 WhisperKit 兼容 Core ML，旧 Qwen-only 限制已撤回。
+历史基线 b9930bd 不代表当前源码。实现检查点、测试及真实验收边界见 [M2 证据](../../evidence/2026-11-01-m2-validation.md)；[决策归档](../../evidence/2026-11-01-m2-rulings.md)保留 A/B/C 逐项裁定。
 
 ## 目标与已确认的选择
 
@@ -50,8 +47,7 @@ V1–V5 真实环境验收继续作为必需主线，不因范围扩充取消。
 
 ## M2-B：云端接入方向
 
-现有实现已支持 OpenAI-compatible multipart HTTP 和 DashScope 实时 WSS，
-但“添加服务商”偏向协议选择，默认云端模型为空，尚未形成厂商即用体验。
+历史基线已支持 OpenAI-compatible multipart HTTP 和 DashScope 实时 WSS，但添加入口偏向协议、默认模型为空。本轮已实现以下厂商配置与能力合同；真实服务验收仍 Pending。
 
 - 提供硅基流动、OpenAI、阿里云 DashScope 和自定义兼容服务入口。内置厂商
   选择后填入默认 URL、默认 ASR 模型和对应协议；用户可改 URL / 模型。

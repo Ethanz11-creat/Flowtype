@@ -1,6 +1,8 @@
-# M2 validation evidence — 2026-11-01
+# M2 validation evidence — 2026-11-01 / closeout 2026-11-02
 
-## M2-A Task 3 source identity
+以下 A3 / B3 记录为历史检查点，其计数不代表最终 M2。当前状态与 C4 证据见文末；控制器最终全范围门禁仍 Pending。
+
+## Historical M2-A Task 3 source identity
 
 - Base commit: `964b616af43987361e55f025d675fb4c695ad25a`.
 - Validated `Sources/flowtype` tree SHA: `8c73e9b6e5c2a926e61a87c42ed04723d7747d50`. This Git tree identifies the exact Swift source used by the final sequential build/self-test; evidence/report prose does not change that source tree.
@@ -42,7 +44,7 @@ Both Important findings were reproduced through the actual shared UI action/coor
 
 Both folder pickers and card Retry now call ModelRecoveryActions. Offline retry uses the same verified import and successful ConfigurationStore.save action as initial import; failed/cancelled retries preserve folder A and its available lease. Cancellation clears the attempted fallback flag, so retaining an old 0.6B lease cannot imply a successful downgrade. The regression uses an isolated real ConfigurationStore and checks a re-created store after saving, with only model I/O replaced. GREEN result: sequential build exit 0; self-test exit 0, 1,559 passed and zero failed. No actual GUI/model cases or V1–V5 were promoted from Pending.
 
-## M2-B Task 3 — cloud setup and revision-owned checks
+## Historical M2-B Task 3 — cloud setup and revision-owned checks
 
 - Base commit: `042706e9ad698688ee8d493db9388c6e3a33d061`.
 - Validated `Sources/flowtype` tree SHA: `92ab669df4373da9113a83c29b1f7ee91482715d`. The evidence/report prose does not change this source tree.
@@ -56,3 +58,44 @@ TDD RED first established the missing tracker API. Self-review then reproduced a
 **GUI Pending:** vendor selection/defaults, URL editing, advanced fields and zero-network configuration checks await controller CUA on the newly built revision. The worker did not use GUI automation; the already running old PID 10836 is not evidence for this source revision.
 
 **V1 Pending:** actual SiliconFlow and OpenAI model/field acceptance, each under normal network, weak network, offline and cancellation conditions. No authorized live configuration was used, no paid vendor request was made, and fixture success does not establish live support. Actual WSS handshake/recognition also remains Pending; the settings check explicitly performs local validation only, with real connection verification at recording. Existing V2–V5 Pending status is unchanged.
+
+## Current M2 A → B → C checkpoints (2026-11-02)
+
+| Checkpoint | Source / fixture evidence | Actual acceptance boundary |
+| --- | --- | --- |
+| A final stage | eb840f8; sequential build + self-test **1619/0**, stage-fix-report.md and progress.md in A workspace; scoped review clean | Download/recovery GUI and real-model switching not established |
+| B final stage | 6fc1973; sequential build + self-test **2034/0**, B stage-fix-report.md and progress.md; scoped review clean | Actual SiliconFlow/OpenAI/WSS service variants Pending |
+| C1 inspection/library | a36df21; **2113/0**, review/fix clean | Actual existing Qwen 1.7B MLX 4-bit static probe 4 PASS at 2026-11-01T18:40:27Z; size 2225411512 bytes; fingerprint 135f5b023e282e0c860d7b10a893487c5274dd012af5a203293d353eed3b1f22; no load/GPU/inference claim |
+| C2 Whisper runtime | 9f0c92e; **2179/0**, task-2-report.md; exact WhisperKit 0.18.0, transformers 1.1.9 | Public HF tiny tokenizer metadata GET 2026-11-01T19:03:10Z HTTP 200; product adapter tokenizer-only harness PASS, 99 languages, exact yue=nil, zh=50260. No model graph/GPU/inference claim |
+| C3 lifecycle/resources | 63db2e9; sequential build 22.43s + self-test **2263/0**, task-3-report.md / task-3-self-test-final.log | Synthetic providers establish ownership/config/capture/history behavior, not real-model correctness |
+| C4 library/preview | This commit; base 63db2e9; final sequential verification below | GUI, full-model inference and final controller whole-M2 review Pending |
+
+C workspaces and logs are under `.superpowers/sdd/2026-11-01-m2-c-hf-import/`; A/B evidence directories use the corresponding plan names. Actual C1 static log is `actual-17-static-probe-4.log`. These local handoffs are retained, not erased by C4.
+
+Latest narrow actual static check: controller compiled the exact four inspector files at C3 source **63db2e9** and recorded hashes (`actual-17-static-c3-source-hashes.txt`). At **2026-11-01T19:49:34Z**, the existing Qwen **1.7B MLX 4-bit** directory passed static inspection again: size **2225411512**, unchanged fingerprint **135f5b023e282e0c860d7b10a893487c5274dd012af5a203293d353eed3b1f22**, conservative packed-U32 reservation **860225536 bytes**. Logs: `actual-17-static-c3-build.log` / `actual-17-static-c3-probe.log`. This reads local metadata only, with no shared build, runtime/GPU/model inference, networking or configuration changes; reservation is policy, not measured residency or peak.
+
+### C4 implementation and evidence
+
+
+`ImportedASRModelPresentation.make(model:assessment:isActive:)` provides real engine/variant/quantization, local path, disk size, active-lease status and hardware advice. `ImportedASRModelActions` owns cancellable off-main inspection previews and UUID actions only; `QwenModelState` remains the sole loader and success-only configuration writer. A preview never saves a path or active UUID. Existing/moved paths are inspected, then explicitly loaded; directory ownership is rechecked against current library state. Removing records leaves files and active/captured leases intact. Both download presets, recovery actions and explicit preset transactions remain available.
+
+Settings/status/onboarding expose the same library and truthful engine/readiness descriptions. Help links cover both Qwen MLX presets and WhisperKit-compatible Core ML. Original PyTorch weights, scripts, Python installation, automatic conversion, model upload/copy and online file completion remain unsupported. Disk size is never claimed as peak memory; unknown residency/peak stays explicit.
+
+Behavioral RED used the existing immediate-load picker action: sequential `swift build` exit 0 (`task-4-red-build-2.log`, 28.70s), then `swift run FlowType --self-test` exit 1 (`task-4-red.log`), **2264 passed / 1 failed**: selecting a folder invoked the runtime once, expected zero. An earlier compile-only iteration (`task-4-red-build.log`) exposed test ordering under Swift 6 isolation; moving the new main-actor fixture into the existing main-actor test group resolved it without production changes. Expanded regressions exercise actual preview actions/shared coordinator using temporary files, isolated UserDefaults and synthetic providers; no real model, user configuration, keys or audio.
+
+First full C4 GREEN after build 30.54s was **2304 passed / 0 failed** (`task-4-build-green-1.log`, `task-4-self-test-green-1.log`). Self-review then added ownership checks for late load completion after preview dismissal, with a regression; the final sequential results below cover that additional change. Final controller scope is 878725c → final HEAD, including plans/specs/ledger; it has **not** passed in advance.
+
+### Remaining actual acceptance and deferred review triage
+
+- GUI Pending: old PID 10836 maps to M1 source 2588d56. The B-only 6fc1973 release bundle was built but not launched, and is not a current C4 binary. Earlier CUA `getApp` failed with `cgWindowNotFound`; fresh controller inventory has no matching native FlowType/TextEdit/Finder/System Settings/Activity Monitor surfaces and browser host is unavailable. No blind UI/shell substitute or restart occurred. Controller will build a final bundle after source stability and retry CUA.
+- Full Qwen 0.6B / 1.7B × 4-bit / 8-bit and Whisper graph/quantization/hardware variants remain individually Pending for actual offline import/load, short synthetic dictation landing in a target app, long audio head/tail, cancellation, preset switch and failure recovery. Existing Qwen static success and Whisper tokenizer-only success are narrowly scoped above.
+- V1–V5 remain mandatory, with credentials/network/device and Owner physical-action prerequisites in [live validation](2026-11-01-live-validation.md). No missing-credential/device variant is Pass; M3–M5 scope is unchanged.
+- Final reviewer retains explicit minor triage: A native redirect delegate callback fixture absent (pure policy + actual metadata probes exist); C1 safetensors `__metadata__` string-to-string validation absent; C2 forced dictionary-cast warning; B credential-only bounded router-health recovery follow-up. These were not silently removed or refactored by C4.
+- [Rulings archive](2026-11-01-m2-rulings.md) preserves every current A/B/C `Ruling:` ledger entry verbatim and in order, including C3's conservative reservation-policy decision. Reasons and cost-if-wrong remain with their entries.
+
+### C4 final sequential verification
+
+- `swift build > .superpowers/sdd/2026-11-01-m2-c-hf-import/task-4-build-final.log 2>&1`: exit **0**, **23.57s**.
+- Followed by `swift run FlowType --self-test > .superpowers/sdd/2026-11-01-m2-c-hf-import/task-4-self-test-final.log 2>&1`: exit **0**, **2306 passed / 0 failed** (product build **4.56s**).
+- Source revision: the C4 commit containing this evidence, based on **63db2e9**; no source changes after the final suite. `git diff --check` clean. Final incremental build reports inherited AppLogger warning only; other previously documented warnings remain separate.
+- This completes C4 source/fixture verification only. Fresh controller task review, whole-M2 final gate, GUI/model/service/device acceptance remain explicitly Pending.

@@ -1,5 +1,9 @@
 # M2-B Cloud Providers Implementation Plan
 
+**执行状态（2026-11-02）：** 已批准并按 A → B → C 执行。B1/B2/B3 源码、回归、提交及阶段修复审查完成；最终阶段检查点 6fc1973，2034 passed / 0 failed。B3 Step 4 的源码验证已完成，GUI/真实服务部分 Pending；最终全 M2 门禁仍 Pending。
+
+证据：[M2 checkpoints](../../evidence/2026-11-01-m2-validation.md)、[V1–V5](../../evidence/2026-11-01-live-validation.md)、[A/B/C rulings](../../evidence/2026-11-01-m2-rulings.md)。空框若包含真实验收/最终审查，表示该部分待完成；历史计划正文保留，不把先前基线当作当前状态。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 用户选择云端厂商后获得可用的URL/模型/协议默认值，填Key即可配置识别，并能准确验证和恢复。
@@ -46,7 +50,7 @@
 - Extend profile with`vendorID: CloudASRVendorID`、custom字段开关；decode旧配置按确切provider值迁移，未知保留原名并用custom，不靠域名contains。
 - Produce `CloudASREndpoint.transcriptionURL(_ input: String) throws -> URL`、`validateRealtimeURL(_ input: String) throws -> URL`。
 
-- [ ] **Step 1: 写失败回归。** `CloudProviderSelfTests.runConfiguration(_:)`使用内存JSON与合成Key：
+- [x] **Step 1: 写失败回归。** `CloudProviderSelfTests.runConfiguration(_:)`使用内存JSON与合成Key：
 
 ```swift
 r.eq(sf.model, "FunAudioLLM/SenseVoiceSmall", "vendor has default ASR")
@@ -58,10 +62,10 @@ r.eq(migrated.model, legacy.model, "existing model not overwritten")
 ```
 
 覆盖空host、userinfo/query/fragment、HTTP、非法端口、WSS/HTTPS混用、custom默认无模型、所有旧Key关联不变。URL无效时报错，不截去敏感部分再发送。
-- [ ] **Step 2: 验证RED。** build失败于未定义接口或self-test默认模型/URL断言失败。
-- [ ] **Step 3: 实现目录/迁移/URL。** defaults按spec，未知服务需要模型ID。OpenAI先采用最小file/model/response_format=json合同，在线文档访问限制记录到证据，不新增未经核实的其他模型能力。SiliconFlow只发file/model；DashScope保持现有WSS默认值。
-- [ ] **Step 4: 验证GREEN。** 依次build/self-test，exit0且失败0；无真实配置读写。
-- [ ] **Step 5: 提交。** 精确git add；`git commit -m "feat: add cloud ASR vendor presets and endpoint contracts"`。
+- [x] **Step 2: 验证RED。** build失败于未定义接口或self-test默认模型/URL断言失败。
+- [x] **Step 3: 实现目录/迁移/URL。** defaults按spec，未知服务需要模型ID。OpenAI先采用最小file/model/response_format=json合同，在线文档访问限制记录到证据，不新增未经核实的其他模型能力。SiliconFlow只发file/model；DashScope保持现有WSS默认值。
+- [x] **Step 4: 验证GREEN。** 依次build/self-test，exit0且失败0；无真实配置读写。
+- [x] **Step 5: 提交。** 精确git add；`git commit -m "feat: add cloud ASR vendor presets and endpoint contracts"`。
 
 ## Task 2: 厂商请求、返回、取消与脱敏
 
@@ -73,7 +77,7 @@ r.eq(migrated.model, legacy.model, "existing model not overwritten")
 - Extend配置快照/health identity包含厂商及有效能力，避免改能力后沿用旧测试/健康结果；保持其Equatable/Sendable。
 - Keep `CloudASRProvider.transcribe(_:)`、`testConnection(provider:apiKey:)`对调用方兼容；增加`validateConfiguration(provider:apiKey:) -> Result<String, CloudASRError>`纯本地检查。
 
-- [ ] **Step 1: 写失败回归。** `runTransport(_:) async`用URLProtocol核对WAV头/样本、Bearer、multipart boundary/file/model。断言SF不含prompt/language/temperature，OpenAI最小合同JSON与明确语言/prompt能力，自定义默认只发最小字段，global sendContext=false始终不发prompt。覆盖Base/完整URL同址、WSS从不走multipart、网络取消不标普通失败、capture后切配置仍发原URL/Key/模型。
+- [x] **Step 1: 写失败回归。** `runTransport(_:) async`用URLProtocol核对WAV头/样本、Bearer、multipart boundary/file/model。断言SF不含prompt/language/temperature，OpenAI最小合同JSON与明确语言/prompt能力，自定义默认只发最小字段，global sendContext=false始终不发prompt。覆盖Base/完整URL同址、WSS从不走multipart、网络取消不标普通失败、capture后切配置仍发原URL/Key/模型。
 
 ```swift
 r.eq(crossOriginFollowedRequests, 0, "no credential/audio redirect")
@@ -83,10 +87,10 @@ r.eq(requestModelAfterSettingsChanged, capturedModel, "snapshot is immutable")
 ```
 
 覆盖400/401/403/404/429/5xx、非HTTP、text缺失/类型错误、异常JSON、超时、过期响应；错误正文/URL中的合成Key不进日志。响应支持JSON text；旧plain-text兼容仅在明确自定义适配策略允许时保留。
-- [ ] **Step 2: 验证RED。** self-test观察旧实现字段/redirect/响应断言失败。
-- [ ] **Step 3: 实现传输与错误。** 工厂能力控制字段，拒绝跨源跳转；统一鉴权/模型/限流/网络/响应原因的安全摘要，继续使用现有CompletionBudget和取消语义。真实连接测试复用同一builder，避免“测试能过、听写不同协议”。
-- [ ] **Step 4: 验证GREEN。** 顺序build/self-test exit0；既有实时、路由generation/半开恢复、取消与唯一交付回归保持通过。
-- [ ] **Step 5: 提交。** `git commit -m "feat: adapt ASR requests to vendor capabilities"`。
+- [x] **Step 2: 验证RED。** self-test观察旧实现字段/redirect/响应断言失败。
+- [x] **Step 3: 实现传输与错误。** 工厂能力控制字段，拒绝跨源跳转；统一鉴权/模型/限流/网络/响应原因的安全摘要，继续使用现有CompletionBudget和取消语义。真实连接测试复用同一builder，避免“测试能过、听写不同协议”。
+- [x] **Step 4: 验证GREEN。** 顺序build/self-test exit0；既有实时、路由generation/半开恢复、取消与唯一交付回归保持通过。
+- [x] **Step 5: 提交。** `git commit -m "feat: adapt ASR requests to vendor capabilities"`。
 
 ## Task 3: 即用配置UI与诚实测试状态
 
@@ -96,8 +100,8 @@ r.eq(requestModelAfterSettingsChanged, capturedModel, "snapshot is immutable")
 - Consume Task1/2纯校验、profile及真实测试。
 - Produce `CloudASRCheckToken: Equatable, Sendable`（profileID、revision UUID）；`CloudASRConnectionCheck.begin(profileID: UUID) -> CloudASRCheckToken`、`invalidate(profileID:)`、`accepts(_:) -> Bool`。编辑任一配置字段/Key、删除profile都invalidate；不把Key写入token或诊断。
 
-- [ ] **Step 1: 写失败回归。** `runConnectionOwnership(_:) async`断言编辑URL/模型/Key或删除后旧token均拒绝、另一profile测试不串、纯校验零transport调用、没有模型的custom不可ready、重复点击不发并行测试；旧录音快照不受新UI值影响。
-- [ ] **Step 2: 验证RED。** self-test看到过期测试被接受或缺少token接口。
-- [ ] **Step 3: 实现UI。** 添加菜单按厂商显示；普通路径预选URL/模型，Key SecureField；高级入口更换模型/自定义字段；profile绑定按UUID而非容易失效的数组index。分别显示“检查配置”和说明发送合成音频/可能计费的“测试识别”，WSS显示原配置验证边界。旧测试不能显示新配置已连接；诊断不展示整段响应。
+- [x] **Step 1: 写失败回归。** `runConnectionOwnership(_:) async`断言编辑URL/模型/Key或删除后旧token均拒绝、另一profile测试不串、纯校验零transport调用、没有模型的custom不可ready、重复点击不发并行测试；旧录音快照不受新UI值影响。
+- [x] **Step 2: 验证RED。** self-test看到过期测试被接受或缺少token接口。
+- [x] **Step 3: 实现UI。** 添加菜单按厂商显示；普通路径预选URL/模型，Key SecureField；高级入口更换模型/自定义字段；profile绑定按UUID而非容易失效的数组index。分别显示“检查配置”和说明发送合成音频/可能计费的“测试识别”，WSS显示原配置验证边界。旧测试不能显示新配置已连接；诊断不展示整段响应。
 - [ ] **Step 4: 验证与证据。** 顺序build/self-test exit0；CUA检查厂商选择、默认值、URL输入和不联网配置校验。不读取/输出用户Key；真实SF/OpenAI正常/弱网/断网/取消验证仅在有已授权可用配置时执行，未跑项写入M2 evidence和V1 Pending，不伪造Pass。
-- [ ] **Step 5: 提交并审查。** `git commit -m "feat: simplify cloud ASR setup and reject stale checks"`；按选定执行技能做fresh review后进入M2-C。
+- [x] **Step 5: 提交并审查。** `git commit -m "feat: simplify cloud ASR setup and reject stale checks"`；按选定执行技能做fresh review后进入M2-C。

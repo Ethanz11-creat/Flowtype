@@ -4,7 +4,7 @@ import AppKit
 struct QwenModelStatusCard: View {
     @ObservedObject private var modelState = QwenModelState.shared
     @ObservedObject private var store = ConfigurationStore.shared
-    @State private var folderMessage: String?
+    @State private var showsLibrary = false
 
     private var configuredPath: String? {
         [store.current.customLocalModelPath, store.current.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
@@ -45,15 +45,19 @@ struct QwenModelStatusCard: View {
                 Image(systemName: modelState.activeLease == nil ? "circle.dashed" : "checkmark.circle.fill")
                     .foregroundColor(modelState.activeLease == nil ? .orange : .green)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(p.activeName.map { "可用模型：\($0)" } ?? "本地模型未就绪")
+                    Text(ImportedASRModelPresentation.availability(modelState.activeLease?.identity))
                         .font(.system(size: 13, weight: .medium))
                     if let fallback = p.fallbackLabel { Text(fallback).font(.system(size: 11)).foregroundColor(.orange) }
                     if let target = p.targetName {
-                        Text("目标：\(target)").font(.system(size: 11)).foregroundColor(.secondary)
+                        Text("目标：\(targetDescription ?? target)").font(.system(size: 11)).foregroundColor(.secondary)
                     }
                     if let repo = p.repoID { Text(repo).font(.system(size: 10)).foregroundColor(.secondary) }
                 }
                 Spacer()
+            }
+            if let path = targetPath {
+                Text(path).font(.system(size: 10)).foregroundColor(.secondary)
+                    .lineLimit(2).truncationMode(.middle).textSelection(.enabled)
             }
             progressArea
             if let source = p.failureSourceName {
@@ -90,23 +94,12 @@ struct QwenModelStatusCard: View {
                 Text(command).font(.system(size: 9, design: .monospaced)).foregroundColor(.secondary)
                     .textSelection(.enabled).lineLimit(2).truncationMode(.middle)
             }
-            HStack {
-                Button("指定模型文件夹") { pickModelFolder() }.controlSize(.small)
-                    .disabled(modelState.operationID != nil)
-                if let path = configuredPath {
-                    Button("移除") {
-                        ModelRecoveryActions(coordinator: modelState, store: store).removeFolderOverride()
-                        folderMessage = nil
-                    }.controlSize(.small).disabled(modelState.operationID != nil)
-                    Text(path).font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
-                }
-                Spacer()
-            }
-            Text(folderMessage ?? "指定已下载的模型文件夹，仅在离线加载成功后保存路径。")
-                .font(.system(size: 10)).foregroundColor(.secondary)
+            Button("导入与管理本地 ASR 模型") { showsLibrary = true }
+                .controlSize(.small).disabled(modelState.operationID != nil)
         }
         .padding(14)
         .glassCard(cornerRadius: 10)
+        .sheet(isPresented: $showsLibrary) { ImportedASRModelLibrarySheet() }
     }
 
     @ViewBuilder private var progressArea: some View {
@@ -147,21 +140,9 @@ struct QwenModelStatusCard: View {
         }
     }
 
-    private func pickModelFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
-        panel.prompt = "选择"; panel.message = "选择已下载的本地模型文件夹"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task {
-            do {
-                try await ModelRecoveryActions(coordinator: modelState, store: store).importOfflineModel(at: url)
-                folderMessage = nil
-            } catch {
-                folderMessage = (error as? ModelProvisionError).flatMap {
-                    ModelRecoveryPresentation.make(active: nil, target: nil, failure: $0, didAutoFallback: false).failureMessage
-                } ?? "模型加载已取消。"
-            }
-        }
+    private var targetDescription: String? {
+        guard case .imported(let model) = modelState.target else { return nil }
+        return "\(model.name) · \(ImportedASRModelPresentation.engineName(model.engine.rawValue))"
     }
 
     private func copy(_ text: String) {

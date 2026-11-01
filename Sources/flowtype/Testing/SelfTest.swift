@@ -374,6 +374,7 @@ enum SelfTest {
         testReadinessSnapshotBuilder(r)
         await ModelProvisionSelfTests.runCoordinator(r)
         await ImportedLifecycleSelfTests.run(r)
+        await ImportedModelUISelfTests.run(r)
         await ModelProvisionSelfTests.runPresentationAndRouting(r)
         await testTerminalModelLoadPreflight(r)
         await testReadinessPreflight(r)

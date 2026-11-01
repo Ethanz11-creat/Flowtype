@@ -28,7 +28,10 @@ struct ASRModelStatusCard: View {
     }
 
     private var localStatusView: some View {
-        QwenModelStatusCard()
+        VStack(alignment: .leading, spacing: 6) {
+            Text("本地离线识别").font(.system(size: 12, weight: .medium))
+            QwenModelStatusCard()
+        }
     }
 
     private var cloudStatusView: some View {

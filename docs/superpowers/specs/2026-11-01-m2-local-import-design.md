@@ -1,8 +1,6 @@
 # M2-C 本地 Hugging Face 模型导入设计
 
-日期：2026-11-01。状态：按 Owner 最新澄清修订为 Hugging Face 自下载 ASR 模型导入。
-此前仅 Qwen 的首版范围已撤回；Owner 随后回复“开发吧”，本轮按已展示方案接入
-Qwen3-ASR MLX和Whisper Core ML。实施计划已形成，尚未开始产品实现。
+日期：2026-11-01；收口更新：2026-11-02。状态：Owner 已批准首批 Qwen3-ASR MLX 和 WhisperKit 兼容 Core ML 方案及 A → B → C 执行顺序。检测、严格离线运行库、统一生命周期和模型库 UI 已实现；真实加载/听写、GUI 与最终全 M2 审查仍 Pending。合成回归、静态模型检查和 tokenizer-only 实测不能替代真实推理验收。
 总范围：[M2 设计](2026-11-01-m2-model-recovery-design.md)。
 
 ## 支持合同
@@ -29,8 +27,8 @@ Omnilingual保留候选，不纳入本轮已实现承诺。
 
 | 候选 | 可研究的HF模型格式/来源 | 已有依据与接入代价 |
 | --- | --- | --- |
-| Qwen3-ASR | 当前兼容MLX目录；0.6B/1.7B、4/8-bit、group size64 | 已链接speech-swift Qwen3ASR；仍需严格结构检测和自定义身份 |
-| Whisper | `argmaxinc/whisperkit-coreml` 的兼容Core ML子目录及同布局自定义导出 | 已获取WhisperKit官方README；需要新增/固定运行库版本及完整离线tokenizer检查，未集成 |
+| Qwen3-ASR | 当前兼容MLX目录；0.6B/1.7B、4/8-bit、group size64 | 已链接 speech-swift Qwen3ASR，严格结构检测和自定义身份已实现；真实变体验收 Pending |
+| Whisper | `argmaxinc/whisperkit-coreml` 的兼容Core ML子目录及同布局自定义导出 | 已获取WhisperKit官方README；已集成 exact WhisperKit 0.18.0 及完整离线 tokenizer 检查；真实图加载/推理 Pending |
 | Parakeet TDT | `aufklarer/Parakeet-TDT-v3-CoreML-INT8` 同布局模型 | 已有依赖提供独立product，产品未链接；注意其语言范围和单窗口截断，不能直接当作完整长录音识别 |
 | Omnilingual CTC | speech-swift文档所列Core ML/MLX转换布局 | 已有依赖提供独立product，产品未链接；需要独立分词器、窗口/时长及取消适配 |
 
@@ -138,5 +136,4 @@ WeightLoader，以及本产品CustomModelScanner / ModelLocator。公开HF confi
 新增调研还读取了当前依赖ParakeetASR / OmnilingualASR的模型文档和加载源码，
 以及[WhisperKit官方README](https://github.com/argmaxinc/WhisperKit)（本轮已获取）。
 后续已读取WhisperKit v0.18.0完整源码（临时只读参考clone），核实本地模型加载、
-tokenizer联网兜底、override hook与公开协议；具体接口固化在实施计划。未运行真实
-模型或安装产品依赖，不将源码能力当作已完成离线推理验收。
+tokenizer联网兜底、override hook与公开协议；具体接口固化在实施计划。产品已固定依赖并实现适配，未运行完整真实模型推理；不将源码能力或 tokenizer-only 证据当作已完成离线推理验收。

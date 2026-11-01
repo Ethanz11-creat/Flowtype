@@ -12,7 +12,7 @@ extension SettingsPage {
                 Spacer()
             }
 
-            Text("Flowtype 同时支持本地（Qwen3-ASR MLX / Whisper Core ML，离线）与云端（硅基流动、OpenAI、自定义兼容接口 / Paraformer 实时）识别。自动模式下默认优先云端，网络不佳时无感切换到本地兜底；断网时本地路径可用且音频不出设备。")
+            Text("Flowtype 同时支持本地（Qwen3-ASR MLX / Whisper Core ML，离线）与云端（硅基流动、OpenAI、自定义兼容接口 / Paraformer 实时）识别。自动模式下默认优先云端，网络不佳时无感切换到本地兜底；成功加载本地模型后，断网时可离线识别且音频不出设备。")
                 .font(.system(size: 11))
                 .foregroundColor(.secondary)
                 .lineLimit(nil)

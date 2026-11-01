@@ -52,3 +52,23 @@ Deviation / remaining prerequisite / restored state:
 协议细节继续沿用 [实时ASR矩阵](../2026-10-14-realtime-asr-validation.md)；
 会话与交付变体沿用 [产品矩阵](../2026-10-14-flowtype-product-validation.md)。
 本文件将它们收束为必做工作包，不取代更细的既有测试步骤。
+
+## M2 收口时的执行前提（2026-11-02）
+
+V1–V5 仍是必做主线，所有表中 Pending 保持不变。此前 Owner 的 TextEdit/麦克风认可仅适用于当时 M0/M1 源码，不能推广为当前 M2 验收。
+旧进程 PID 10836 对应 M1 源码 2588d56；B-only 的 6fc1973 release bundle 曾成功构建但未启动，不是当前 M2-C 证据。
+控制器此前 CUA 返回 `cgWindowNotFound`；本次重新读取 inventory 仍无匹配的 FlowType / TextEdit / Finder / System Settings / Activity Monitor 原生窗口，浏览器 host 亦不可用。
+未以 AppleScript、shell 或盲操作替代 GUI，也未重启、退出或改用户配置。待源码稳定后由控制器串行构建最终 bundle，重试 CUA 并核对源码/二进制身份。
+
+| 主线 | 环境前提 | Owner 物理动作 / 控制器职责 | 当前状态 |
+| --- | --- | --- | --- |
+| V1 云端 | 已授权有效配置、实际服务、可控正常/弱网/断网条件，本地兜底已加载 | Owner 提供本机认证/网络条件；控制器记录真实服务、协议与单次交付 | Pending；不以无凭据变体作 Pass |
+| V2 跨应用 | 可用桌面与各测试应用文本框、AX 权限 | Owner 执行物理热键/合成短句；控制器 CUA 核对目标和完整文本 | Pending；旧 TextEdit 认可不覆盖新 M2 或其他应用 |
+| V3 剪贴板 | 测试者创建的多类型合成剪贴板与并发复制 | Owner 触发另一次复制；控制器核对所有权及完整恢复 | Pending |
+| V4 取消 | 可进入各阶段的可用模型/服务与桌面 | Owner 在阶段执行 Escape；控制器核对超时后旧回调及新会话 | Pending |
+| V5 设备 | 实际 USB / 蓝牙麦克风和可用权限 | Owner 拔出/断开/重连设备；控制器记录选定设备、错误与恢复 | Pending；无设备不是 Pass |
+
+M2-C 的 Qwen 0.6B/1.7B × 4/8-bit 与 Whisper 各图规模、量化和硬件分别验收：断网导入→静态预览→成功加载→合成短句实际落字、超过引擎窗口首尾完整性、取消与恢复、切回内置预设。
+当前仅有 Qwen 1.7B 4-bit 的实际静态检测和公开 Whisper tiny tokenizer-only 检查，均不构成完整图加载或推理 Pass。完整 Whisper 模型/设备未验证，全部真实推理变体 Pending。
+
+补充窄证据：2026-11-01T19:49:34Z 控制器以 C3 63db2e9 的精确检测源码再次对现有 Qwen 1.7B MLX 4-bit 静态检查 PASS（packed-U32 保守预留 860225536 bytes，大小/指纹未变）。这仍不是运行加载、实测内存或落字验收，不改变上述 Pending。

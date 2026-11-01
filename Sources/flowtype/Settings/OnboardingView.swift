@@ -8,6 +8,7 @@ struct OnboardingView: View {
     @State private var micCheckDone = false
     @State private var showAccessibilityHint = false
     @ObservedObject private var modelState = QwenModelState.shared
+    @State private var showsModelLibrary = false
     @StateObject private var store = ConfigurationStore.shared
 
     var body: some View {
@@ -360,13 +361,19 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
 
             HStack(spacing: 8) {
-                Text(modelState.activeLease.map { "可用模型：\($0.identity.displayName)" } ?? "本地模型尚未就绪，可稍后配置。")
+                Text(ImportedASRModelPresentation.availability(modelState.activeLease?.identity))
                     .font(.system(size: 11)).foregroundColor(.secondary)
                 if modelState.activeLease == nil {
                     Button("准备本地模型") { Task { await modelState.retryConfiguredModel() } }
                         .controlSize(.small).disabled(modelState.operationID != nil)
                 }
             }
+
+            Text("离线识别支持 Qwen3-ASR MLX 与 Whisper Core ML；须先成功加载兼容模型。")
+                .font(.system(size: 11)).foregroundColor(.secondary)
+            Button("导入与管理本地 ASR 模型") { showsModelLibrary = true }
+                .controlSize(.small).disabled(modelState.operationID != nil)
+                .sheet(isPresented: $showsModelLibrary) { ImportedASRModelLibrarySheet() }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("录音结果会显示在这里：")
