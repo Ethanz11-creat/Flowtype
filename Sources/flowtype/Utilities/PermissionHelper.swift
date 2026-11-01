@@ -3,6 +3,17 @@ import AVFoundation
 import CoreGraphics
 import Speech
 
+enum PermissionError: LocalizedError, Equatable {
+    case microphoneDenied
+
+    var errorDescription: String? {
+        switch self {
+        case .microphoneDenied:
+            return "麦克风权限未开启。请前往「系统设置 → 隐私与安全性 → 麦克风」，找到 Flowtype 并开启。"
+        }
+    }
+}
+
 enum PermissionHelper {
     static func accessibilityState() -> PermissionState {
         checkAccessibility() ? .granted : .denied

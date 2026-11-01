@@ -346,6 +346,7 @@ enum SelfTest {
         testReadinessClassification(r)
         testReadinessPresentation(r)
         testReadinessRecoveryActions(r)
+        testPermissionErrorActions(r)
         await testReadinessRecoveryBehavior(r)
         testPermissionWatchPolicy(r)
         testPermissionReminderPolicy(r)
@@ -465,6 +466,17 @@ enum SelfTest {
         await waitForSession(session) { if case .notice = $0 { return true }; return $0 == .idle }
         r.eq(log.events, ["delivered:你好，世界。", "history", "notice"], "session: complete processed delivery precedes single history save and gentle notice")
         session.cancel()
+    }
+
+    static func testPermissionErrorActions(_ r: Reporter) {
+        let recovery = ErrorRecoveryContext(failedStage: "Recording",
+                                            error: PermissionError.microphoneDenied,
+                                            rawText: nil, retryable: false)
+        r.eq(SessionController.buildErrorActions(from: recovery),
+             [.openMicrophoneSettings, .recheckReadiness, .dismiss],
+             "mic error: permission failure is actionable, not a notice")
+        r.check(PermissionError.microphoneDenied.errorDescription?.contains("麦克风") == true,
+                "mic error: copy names the microphone permission")
     }
 
     @MainActor

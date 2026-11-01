@@ -560,6 +560,9 @@ final class SessionController: ObservableObject {
 
     nonisolated static func buildErrorActions(from recovery: ErrorRecoveryContext) -> [ErrorAction] {
         guard !(recovery.error is CancellationError) else { return [] }
+        if recovery.error is PermissionError {
+            return [.openMicrophoneSettings, .recheckReadiness, .dismiss]
+        }
         let hasText = recovery.rawText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         guard recovery.retryable || hasText else { return [] }
         var actions: [ErrorAction] = []

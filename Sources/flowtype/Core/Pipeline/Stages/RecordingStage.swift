@@ -52,11 +52,10 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 let granted = await audioRecorder.requestPermission()
                 guard granted else {
                     let status = audioRecorder.authorizationStatus()
-                    let message = micPermissionMessage(status: status)
-                    AppLogger.log("[RecordingStage#\(sessionID)] Mic permission denied (status=\(status)): \(message)")
+                    AppLogger.log("[RecordingStage#\(sessionID)] Mic permission denied (status=\(status))")
                     return .suspend(ErrorRecoveryContext(
                         failedStage: name,
-                        error: AudioRecorderError.permissionDenied,
+                        error: PermissionError.microphoneDenied,
                         rawText: nil,
                         retryable: false
                     ))
@@ -207,13 +206,4 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
         recorder.clearCallbacks(ownerID: ownerID)
     }
 
-    private func micPermissionMessage(status: Int) -> String {
-        if status == 0 {
-            return "麦克风权限未响应。请先退出 Flowtype，重新打开后再试一次。"
-        } else if status == 1 {
-            return "麦克风权限已拒绝。请前往「系统设置 → 隐私与安全性 → 麦克风」，找到 Flowtype 并开启。"
-        } else {
-            return "请在系统设置中允许麦克风访问"
-        }
-    }
 }
