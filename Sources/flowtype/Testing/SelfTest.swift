@@ -344,6 +344,8 @@ enum SelfTest {
         testLegacySessionConfiguration(r) // pre-session settings and single-provider migration
         testStableSessionPresentation(r) // no provider or streaming text in capsule
         testReadinessClassification(r)
+        testReadinessRecoveryActions(r)
+        await testReadinessRecoveryBehavior(r)
         testPermissionWatchPolicy(r)
         testReadinessDebounce(r)
         testPermissionWatchOwnership(r)
@@ -1164,6 +1166,116 @@ enum SelfTest {
             r.eq(received.value, [], "onboarding teardown: late completion sends no notification (\(state))")
             session.cancel()
         }
+    }
+
+    static func testReadinessRecoveryActions(_ r: Reporter) {
+        typealias ErrorAction = SessionController.ErrorAction
+        r.eq(SessionController.readinessActions(for: .microphoneDenied, policy: .auto),
+             [.openMicrophoneSettings, .recheckReadiness, .dismiss],
+             "readiness actions: mic denied opens the mic pane")
+        r.eq(SessionController.readinessActions(for: .noEngine, policy: .auto),
+             [.openASRSettings, .recheckReadiness, .dismiss],
+             "readiness actions: no engine opens ASR settings")
+        for policy in [ASRRoutingPolicy.localOnly, .cloudOnly] {
+            r.eq(SessionController.readinessActions(for: .noEngine, policy: policy),
+                 [.openASRSettings, .useAutomaticRouting, .dismiss],
+                 "readiness actions: constrained routing offers automatic routing (\(policy))")
+        }
+        r.eq(SessionController.readinessActions(for: .accessibilityMissing, policy: .auto),
+             [.openAccessibilitySettings, .recheckReadiness, .dismiss],
+             "readiness actions: missing AX opens the accessibility pane")
+        for issue in [ReadinessIssue.microphoneNotDetermined, .enginePreparing, .basicOnly] {
+            r.eq(SessionController.readinessActions(for: issue, policy: .auto),
+                 [.recheckReadiness, .dismiss], "readiness actions: other issues allow recheck (\(issue))")
+        }
+        r.eq(ErrorAction.openAccessibilitySettings.displayName, "打开辅助功能设置", "readiness actions: AX action copy")
+        r.eq(ErrorAction.openMicrophoneSettings.displayName, "打开麦克风设置", "readiness actions: mic action copy")
+        r.eq(ErrorAction.openASRSettings.displayName, "打开 ASR 设置", "readiness actions: ASR action copy")
+        r.eq(ErrorAction.recheckReadiness.displayName, "重新检测", "readiness actions: recheck copy")
+        r.eq(ErrorAction.useAutomaticRouting.displayName, "改为自动路由", "readiness actions: reroute copy")
+    }
+
+    @MainActor
+    private final class ReadinessRecoveryProbe {
+        var level: ReadinessLevel = .blocked(.noEngine)
+        var policies: [ASRRoutingPolicy] = []
+    }
+
+    @MainActor
+    static func testReadinessRecoveryBehavior(_ r: Reporter) async {
+        let suite = "FlowTypeSelfTest.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            r.check(false, "readiness recovery: isolated defaults available")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var initial = Configuration()
+        initial.asrRoutingPolicy = .localOnly
+        initial.maxRecordingDuration = 137
+        initial.enableAudioFeedback = false
+        defaults.set(try! JSONEncoder().encode(initial), forKey: "flowtype.config")
+        defaults.set(5, forKey: "flowtype.migrationVersion")
+        let store = ConfigurationStore(defaults: defaults)
+        defer { store.flushPendingSave() }
+        let readiness = ReadinessRecoveryProbe()
+        let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+        let session = SessionController(pipeline: [RetryASRStage(ledger: RetryLedger())], observers: [],
+                                        effects: effects, configurationStore: store, refreshReadiness: {
+            readiness.policies.append(store.current.asrRoutingPolicy)
+            return readiness.level
+        })
+        defer { session.cancel() }
+        session.startRecording()
+        await waitForSession(session) { if case .error = $0 { return true }; return false }
+        let originalState = session.sessionState
+        let originalActions = session.errorActions
+        r.check(!originalActions.isEmpty, "readiness recovery: fixture enters actionable error")
+        session.recheckReadiness()
+        r.eq(session.sessionState, originalState, "readiness recovery: blocked recheck keeps the error card")
+        r.eq(session.errorActions, originalActions, "readiness recovery: blocked recheck preserves actions")
+        readiness.level = .degraded(.basicOnly)
+        session.recheckReadiness()
+        r.eq(session.sessionState, .idle, "readiness recovery: raw degraded readiness dismisses error immediately")
+        r.eq(session.errorActions, [], "readiness recovery: successful recheck clears recovery actions")
+        r.eq(readiness.policies, [.localOnly, .localOnly], "readiness recovery: each recheck refreshes without changing policy")
+
+        // Enter another real stage failure before repairing its routing policy.
+        let reroute = SessionController(pipeline: [RetryASRStage(ledger: RetryLedger())], observers: [],
+                                        effects: effects, configurationStore: store, refreshReadiness: {
+            readiness.policies.append(store.current.asrRoutingPolicy)
+            return .blocked(.noEngine)
+        })
+        defer { reroute.cancel() }
+        reroute.startRecording()
+        await waitForSession(reroute) { if case .error = $0 { return true }; return false }
+        reroute.useAutomaticRouting()
+        r.eq(reroute.sessionState, .idle, "readiness recovery: automatic routing dismisses error even if still blocked")
+        r.eq(reroute.errorActions, [], "readiness recovery: automatic routing clears old retry actions")
+        r.eq(store.current.asrRoutingPolicy, .auto, "readiness recovery: automatic routing updates current policy")
+        r.eq(readiness.policies.last, .auto, "readiness recovery: refresh observes the saved automatic policy")
+        // Exercise the real debounce: a mere assignment to current never writes the defaults.
+        try? await Task.sleep(for: .milliseconds(650))
+        let persisted = defaults.data(forKey: "flowtype.config").flatMap {
+            try? JSONDecoder().decode(Configuration.self, from: $0)
+        }
+        r.eq(persisted?.asrRoutingPolicy, .auto, "readiness recovery: automatic routing persists through ConfigurationStore.save")
+        r.eq(persisted?.maxRecordingDuration, 137, "readiness recovery: automatic routing preserves unrelated recording preference")
+        r.eq(persisted?.enableAudioFeedback, false, "readiness recovery: automatic routing preserves unrelated feedback preference")
+
+        // Recovery controls cannot cancel a newly started session when invoked late.
+        let rendezvous = StageRendezvous()
+        let active = SessionController(pipeline: [SuspensibleStage(rendezvous: rendezvous, suspend: true)],
+                                       observers: [], effects: effects, configurationStore: store,
+                                       refreshReadiness: { .ready })
+        active.startRecording()
+        await rendezvous.waitForInvocation()
+        active.recheckReadiness()
+        active.useAutomaticRouting()
+        r.eq(active.sessionState, .preparing, "readiness recovery: late actions do not dismiss an active session")
+        active.cancel()
+        await rendezvous.release()
+        for _ in 0..<10 { await Task.yield() }
+        r.eq(active.sessionState, .idle, "readiness recovery: cancellation rejects the old stage completion")
     }
 
     // MARK: - Session experience: readiness and ownership contract

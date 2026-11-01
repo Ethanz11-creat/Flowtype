@@ -4,11 +4,9 @@ import SwiftUI
 @MainActor
 class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
+    private let navigation = SettingsNavigation()
 
-    convenience init() {
-        let mainView = MainWindowView()
-        let hostingView = NSHostingView(rootView: mainView)
-
+    convenience init(initialTab: AppTab = .overview) {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -16,7 +14,6 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.title = "FlowType"
-        window.contentView = hostingView
         window.contentMinSize = NSSize(width: StatsConfig.minWindowWidth, height: StatsConfig.minWindowHeight)
         window.center()
         window.isReleasedWhenClosed = false
@@ -27,7 +24,13 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.backgroundColor = .clear
 
         self.init(window: window)
+        navigation.requestedTab = initialTab
+        window.contentView = NSHostingView(rootView: MainWindowView(initialTab: initialTab, navigation: navigation))
         window.delegate = self
+    }
+
+    func selectTab(_ tab: AppTab) {
+        navigation.requestedTab = tab
     }
 
     func windowWillClose(_ notification: Notification) {

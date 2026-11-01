@@ -96,7 +96,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(asrStatusItem)
         menu.addItem(NSMenuItem.separator())
 
-        let showItem = NSMenuItem(title: "显示 Flowtype", action: #selector(openSettings), keyEquivalent: ",")
+        let showItem = NSMenuItem(title: "显示 Flowtype", action: #selector(showSettings), keyEquivalent: ",")
         showItem.target = self
         menu.addItem(showItem)
 
@@ -136,14 +136,19 @@ class StatusBarController: NSObject, NSMenuDelegate {
         statusItem?.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
     }
 
-    @objc private func openSettings() {
+    @objc private func showSettings() {
+        openSettings(tab: .settings)
+    }
+
+    func openSettings(tab: AppTab = .settings) {
         if settingsWindowController == nil {
-            let controller = SettingsWindowController()
+            let controller = SettingsWindowController(initialTab: tab)
             controller.onClose = { [weak self] in
                 self?.settingsWindowController = nil
             }
             settingsWindowController = controller
         }
+        settingsWindowController?.selectTab(tab)
         settingsWindowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

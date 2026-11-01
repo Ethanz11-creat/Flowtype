@@ -135,6 +135,15 @@ struct CapsuleView: View {
                         case .retry: session.retryFailedStage()
                         case .copyRaw, .copyResult: session.copyRawText()
                         case .dismiss: session.dismissError()
+                        case .openAccessibilitySettings:
+                            PermissionHelper.openAccessibilitySettings()
+                            ReadinessMonitor.shared.startPermissionWatchIfNeeded()
+                        case .openMicrophoneSettings:
+                            PermissionHelper.openMicrophoneSettings()
+                        case .openASRSettings:
+                            StatusBarController.shared.openSettings(tab: .settings)
+                        case .recheckReadiness: session.recheckReadiness()
+                        case .useAutomaticRouting: session.useAutomaticRouting()
                         }
                     }
                     .buttonStyle(.borderless)

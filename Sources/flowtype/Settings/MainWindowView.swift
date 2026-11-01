@@ -30,8 +30,24 @@ enum AppTab: String, CaseIterable, Identifiable {
     }
 }
 
+/// External navigation requests also reach a window that is already showing.
+@MainActor
+final class SettingsNavigation: ObservableObject {
+    @Published var requestedTab: AppTab
+
+    init(initialTab: AppTab = .overview) {
+        requestedTab = initialTab
+    }
+}
+
 struct MainWindowView: View {
-    @State private var selectedTab: AppTab = .overview
+    @State private var selectedTab: AppTab
+    @ObservedObject private var navigation: SettingsNavigation
+
+    init(initialTab: AppTab = .overview, navigation: SettingsNavigation? = nil) {
+        _selectedTab = State(initialValue: initialTab)
+        self.navigation = navigation ?? SettingsNavigation(initialTab: initialTab)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -46,6 +62,7 @@ struct MainWindowView: View {
         .background(Theme.pageBackground)
         .tint(Brand.accent)
         .frame(minWidth: StatsConfig.minWindowWidth, minHeight: StatsConfig.minWindowHeight)
+        .onReceive(navigation.$requestedTab) { selectedTab = $0 }
     }
 
     private var sidebar: some View {

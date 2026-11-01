@@ -74,6 +74,8 @@ final class SessionController: ObservableObject {
     private let pipeline: [PipelineStage]
     private let observers: [SessionObserver]
     private let effects: SessionEffects
+    private let configurationStore: ConfigurationStore
+    private let refreshReadiness: @MainActor () -> ReadinessLevel
     private let asrRegistry = ASRProviderRegistry.shared
 
     var qwenProvider: QwenASRProvider { asrRegistry.qwenLocalProvider }
@@ -135,12 +137,19 @@ final class SessionController: ObservableObject {
     init(
         pipeline: [PipelineStage] = PipelineRegistry.defaultPipeline(),
         observers: [SessionObserver] = PipelineRegistry.defaultObservers(),
-        effects: SessionEffects = .live
+        effects: SessionEffects = .live,
+        configurationStore: ConfigurationStore = .shared,
+        refreshReadiness: @escaping @MainActor () -> ReadinessLevel = {
+            ReadinessMonitor.shared.refresh()
+            return ReadinessMonitor.shared.rawLevel
+        }
     ) {
         self.pipeline = pipeline
         self.observers = observers
 
         self.effects = effects
+        self.configurationStore = configurationStore
+        self.refreshReadiness = refreshReadiness
         effects.prepare()
     }
 
@@ -342,6 +351,22 @@ final class SessionController: ObservableObject {
         resetToIdle()
     }
 
+    func recheckReadiness() {
+        guard !refreshReadiness().isBlocked else {
+            AppLogger.log("[SessionController] Readiness recheck remains blocked")
+            return
+        }
+        dismissError()
+    }
+
+    func useAutomaticRouting() {
+        var config = configurationStore.current
+        config.asrRoutingPolicy = .auto
+        configurationStore.save(config)
+        _ = refreshReadiness()
+        dismissError()
+    }
+
     func copyRawText() {
         guard let rawText = suspendedContext?.rawText else { return }
         NSPasteboard.general.clearContents()
@@ -478,6 +503,20 @@ final class SessionController: ObservableObject {
     }
 
     // MARK: - Error Actions
+
+    nonisolated static func readinessActions(for issue: ReadinessIssue,
+                                             policy: ASRRoutingPolicy) -> [ErrorAction] {
+        switch issue {
+        case .microphoneDenied:
+            return [.openMicrophoneSettings, .recheckReadiness, .dismiss]
+        case .noEngine:
+            return [.openASRSettings, policy == .auto ? .recheckReadiness : .useAutomaticRouting, .dismiss]
+        case .accessibilityMissing:
+            return [.openAccessibilitySettings, .recheckReadiness, .dismiss]
+        default:
+            return [.recheckReadiness, .dismiss]
+        }
+    }
 
     nonisolated static func buildErrorActions(from recovery: ErrorRecoveryContext) -> [ErrorAction] {
         guard !(recovery.error is CancellationError) else { return [] }
@@ -721,6 +760,11 @@ extension SessionController {
         case copyRaw
         case copyResult
         case dismiss
+        case openAccessibilitySettings
+        case openMicrophoneSettings
+        case openASRSettings
+        case recheckReadiness
+        case useAutomaticRouting
 
         var displayName: String {
             switch self {
@@ -734,6 +778,11 @@ extension SessionController {
             case .copyRaw: return "复制原文"
             case .copyResult: return "复制结果"
             case .dismiss: return "忽略"
+            case .openAccessibilitySettings: return "打开辅助功能设置"
+            case .openMicrophoneSettings: return "打开麦克风设置"
+            case .openASRSettings: return "打开 ASR 设置"
+            case .recheckReadiness: return "重新检测"
+            case .useAutomaticRouting: return "改为自动路由"
             }
         }
     }
