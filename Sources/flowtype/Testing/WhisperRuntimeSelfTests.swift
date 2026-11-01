@@ -244,6 +244,7 @@ enum WhisperRuntimeSelfTests {
         bad("cache update size mismatch") { _, _, d, _ in d.outputs["key_cache_updates"]?.shape = [1,768,1,1] }
         bad("cache update wrong dtype") { _, _, d, _ in d.outputs["value_cache_updates"]?.dataType = .float32 }
         bad("mask length mismatch") { _, _, d, _ in d.inputs["kv_cache_update_mask"]?.shape = [1,223] }
+        bad("Float16 update mask incompatible with production Int32 input") { _, _, d, _ in d.inputs["kv_cache_update_mask"]?.dataType = .float16 }
         bad("unverified mask numeric type") { _, _, d, _ in d.inputs["kv_cache_update_mask"]?.dataType = .double }
         bad("optional required output") { _, _, d, _ in d.outputs["key_cache_updates"]?.isOptional = true }
         bad("context shorter than runtime loop") { _, _, d, _ in d.inputs["key_cache"]?.shape = [1,9216,1,16] }
@@ -439,7 +440,7 @@ enum WhisperGraphFixtures {
     static let decoder = WhisperGraphDescription(inputs: [
         "input_ids": F(shape: [1], dataType: .int32), "cache_length": F(shape: [1], dataType: .int32),
         "key_cache": F(shape: [1,9216,1,224], dataType: .float16), "value_cache": F(shape: [1,9216,1,224], dataType: .float16),
-        "kv_cache_update_mask": F(shape: [1,224], dataType: .float16), "decoder_key_padding_mask": F(shape: [1,224], dataType: .float16),
+        "kv_cache_update_mask": F(shape: [1,224], dataType: .int32), "decoder_key_padding_mask": F(shape: [1,224], dataType: .float16),
         "encoder_output_embeds": F(shape: [1,768,1,1500], dataType: .float16)
     ], outputs: ["logits": F(shape: [1,1,51865], dataType: .float16),
         "key_cache_updates": F(shape: [1,9216,1,1], dataType: .float16), "value_cache_updates": F(shape: [1,9216,1,1], dataType: .float16)])

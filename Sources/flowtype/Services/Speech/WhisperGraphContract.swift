@@ -110,9 +110,9 @@ enum WhisperGraphContract {
               (224...448).contains(context) else { throw OfflineWhisperError.incompatibleGraph }
         try shape(key, [1,width,1,context])
         try match(key, array(decoder.inputs, "value_cache", rank: 4, types: [.float16]))
-        // Pinned prepareDecoderInputs emits Int32 update masks; its decoder fixtures
-        // also exercise Float16 masks. Do not infer arbitrary numeric conversions.
-        try shape(array(decoder.inputs, "kv_cache_update_mask", rank: 2, types: [.int32, .float16]), [1,context])
+        // Pinned prepareDecoderInputs emits Int32, forwarded unchanged by TextDecoderInput.
+        // A manually supplied Float16 fixture does not establish production conversion.
+        try shape(array(decoder.inputs, "kv_cache_update_mask", rank: 2, types: [.int32]), [1,context])
         try shape(array(decoder.inputs, "decoder_key_padding_mask", rank: 2, types: [.float16]), [1,context])
         for name in ["key_cache_updates", "value_cache_updates"] {
             try shape(array(decoder.outputs, name, rank: 4, types: [.float16], output: true), [1,width,1,1])

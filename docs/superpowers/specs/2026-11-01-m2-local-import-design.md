@@ -81,7 +81,12 @@ tokenizer_config.json；可选TextDecoderContextPrefill。需校验Core ML图输
 仓库根有多个变体时要求选择具体子目录；单个模型子目录可独立导入。
 完整图检查在 WhisperKit 的维度快捷访问器之前读取原始 Core ML 描述：必要名称、
 MultiArray 类型、rank、30秒音频/3000 mel帧/1500编码帧、编码器与解码器接口、
-KV缓存/更新/mask和可选prefill一致性均须通过。输出不允许声明不兼容的可变形状；
+KV缓存/更新/mask和可选prefill一致性均须通过。`kv_cache_update_mask`必须声明为
+Int32：固定运行库的生产构造器创建Int32数组并原样转交Core ML，没有显式转换适配。
+Float16更新掩码导出当前不支持，除非后续实现适配或取得该生产合同的实际转换证据；
+上游手工传入Float16的预测测试不证明生产路径可转换。因此“WhisperKit兼容”仅指
+满足本产品实际图接口合同的导出，不表示所有WhisperKit导出均被接受。
+输出不允许声明不兼容的可变形状；
 输入可以包含更宽的可接受形状，但运行时只传递已检查的固定默认尺寸。
 缓存允许224…448上下文、1…32个解码层的整倍数宽度，保留distil/turbo减层变体；
 身份仍只报告图可证实的家族，不把相同维度冒充某个具体checkpoint。
