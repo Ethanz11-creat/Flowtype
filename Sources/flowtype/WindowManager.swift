@@ -76,12 +76,20 @@ final class OptionTapDetector: @unchecked Sendable {
 
 // MARK: - Window Manager
 
+enum EventTapHealthAction: Equatable, Sendable {
+    case none, enableExisting, recreate, waitForPermission
+}
+
 @MainActor
 class WindowManager: ObservableObject {
     static let shared = WindowManager()
     var panel: FloatingPanel?
 
     private var eventTapPort: CFMachPort?
+    private var eventTapRunLoopSource: CFRunLoopSource?
+    private var eventTapFailureCount = 0
+    private var healthTimerStarted = false
+    private var lastHealthAction: EventTapHealthAction = .none
     private var reloadWorkItem: DispatchWorkItem?
 
     /// Periodic timer to ensure the CGEvent tap stays enabled after system events.
@@ -152,6 +160,12 @@ class WindowManager: ObservableObject {
 
     // MARK: - Hotkey Setup
 
+    nonisolated static func eventTapHealthAction(tapExists: Bool, tapEnabled: Bool,
+                                                 accessibilityTrusted: Bool) -> EventTapHealthAction {
+        if tapExists { return tapEnabled ? .none : .enableExisting }
+        return accessibilityTrusted ? .recreate : .waitForPermission
+    }
+
     func setupGlobalHotkey() {
         AppLogger.log("[WindowManager] setupGlobalHotkey called")
         let accessibilityEnabled = PermissionHelper.checkAccessibility()
@@ -163,7 +177,8 @@ class WindowManager: ObservableObject {
         Self.cachedInteractionMode.value = ConfigurationStore.shared.current.interactionMode
         AppLogger.log("[WindowManager] Cached triggerKey: \(triggerKey.displayName), interactionMode: \(Self.cachedInteractionMode.value.displayName)")
 
-        setupCGEventTap()
+        _ = installEventTap()
+        startEventTapHealthCheck()
         AppLogger.log("[WindowManager] Global hotkey registered (double-tap \(triggerKey.displayName) to start, single-tap to stop)")
     }
 
@@ -181,16 +196,8 @@ class WindowManager: ObservableObject {
             Self.cachedSawOtherKeyDuringHold.value = false
             Self.cachedKeyDownTime.value = nil
             OptionTapDetector.shared.cancelPendingTaps()
-            self.eventTapHealthTimer.cancel()
-            if let tap = self.eventTapPort {
-                CGEvent.tapEnable(tap: tap, enable: false)
-                if let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) {
-                    CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-                }
-                CFMachPortInvalidate(tap)
-                self.eventTapPort = nil
-            }
-            self.setupCGEventTap()
+            self.tearDownEventTap()
+            _ = self.installEventTap()
             AppLogger.log("[WindowManager] Hotkey reloaded with trigger key: \(self.triggerKey.displayName)")
         }
         reloadWorkItem = workItem
@@ -198,27 +205,58 @@ class WindowManager: ObservableObject {
     }
 
     private func startEventTapHealthCheck() {
+        guard !healthTimerStarted else { return }
+        healthTimerStarted = true
         eventTapHealthTimer.schedule(
             withTimeInterval: eventTapHealthInterval,
             repeats: true
         ) { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                if let tap = self.eventTapPort {
-                    if !CGEvent.tapIsEnabled(tap: tap) {
-                        AppLogger.log("[WindowManager] Event tap was disabled by system, re-enabling...")
-                        CGEvent.tapEnable(tap: tap, enable: true)
-                    }
-                } else {
-                    AppLogger.log("[WindowManager] Event tap health check: tap is nil, re-creating...")
-                    self.setupCGEventTap()
-                }
+                self.repairEventTap()
             }
         }
     }
 
-    private func setupCGEventTap() {
-        AppLogger.log("[WindowManager] setupCGEventTap called")
+    func repairEventTap() {
+        // An installed tap is stronger evidence than a trust query for unsigned
+        // apps. Only probe permission when there is no tap to repair.
+        let trusted = eventTapPort != nil || PermissionHelper.checkAccessibility()
+        let action = Self.eventTapHealthAction(
+            tapExists: eventTapPort != nil,
+            tapEnabled: eventTapPort.map { CGEvent.tapIsEnabled(tap: $0) } ?? false,
+            accessibilityTrusted: trusted
+        )
+        if action != lastHealthAction {
+            AppLogger.log("[WindowManager] Event tap health action: \(action)")
+            lastHealthAction = action
+        }
+        switch action {
+        case .none, .waitForPermission:
+            break
+        case .enableExisting:
+            if let tap = eventTapPort { CGEvent.tapEnable(tap: tap, enable: true) }
+        case .recreate:
+            tearDownEventTap()
+            _ = installEventTap()
+        }
+    }
+
+    private func tearDownEventTap() {
+        if let source = eventTapRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        if let tap = eventTapPort {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+        }
+        eventTapRunLoopSource = nil
+        eventTapPort = nil
+    }
+
+    @discardableResult
+    func installEventTap() -> Bool {
+        guard eventTapPort == nil else { return true }
         let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
                       | CGEventMask(1 << CGEventType.keyDown.rawValue)
                       | CGEventMask(1 << CGEventType.keyUp.rawValue)
@@ -231,19 +269,29 @@ class WindowManager: ObservableObject {
             callback: Self.eventTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            AppLogger.log("[WindowManager] FAILED to create CGEvent tap")
-            return
+            return recordEventTapFailure()
         }
 
-        self.eventTapPort = tap
-
-        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        if let source = runLoopSource {
-            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+            return recordEventTapFailure()
         }
+        eventTapPort = tap
+        eventTapRunLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        eventTapFailureCount = 0
         CGEvent.tapEnable(tap: tap, enable: true)
-        startEventTapHealthCheck()
         AppLogger.log("[EventTap] CGEvent tap created and enabled successfully")
+        return true
+    }
+
+    private func recordEventTapFailure() -> Bool {
+        eventTapFailureCount += 1
+        if eventTapFailureCount == 1 || eventTapFailureCount.isMultiple(of: 12) {
+            AppLogger.log("[WindowManager] FAILED to create CGEvent tap (attempt \(eventTapFailureCount))")
+        }
+        return false
     }
 
     /// CGEventTap callback — runs on the main thread since source is added to main RunLoop.

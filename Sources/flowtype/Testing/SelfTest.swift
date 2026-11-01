@@ -338,6 +338,7 @@ enum SelfTest {
         testStopGestureTimeline(r) // first-release stop, pending taps, idle compatibility
         testNonModifierRepeat(r)
         testNonModifierReleasePolicy(r)
+        testEventTapHealthAction(r)
         testAudioFeedbackTimeline(r)
         testPolishOnStopConfig(r)  // default/migration and persisted opt-out
         testLegacySessionConfiguration(r) // pre-session settings and single-provider migration
@@ -3288,6 +3289,23 @@ enum SelfTest {
                     "wss://user:password@example.invalid/ws", "ws://example.invalid/ws"] {
             r.check(CloudProbe.probeEndpoint(fromBaseURL: url) == nil, "probe: invalid or insecure target rejected (\(url))")
         }
+    }
+
+    // Breaks caught: abandoning missing taps after permission grant, rebuilding a
+    // working tap on a false trust probe, or failing to re-enable an existing tap.
+    static func testEventTapHealthAction(_ r: Reporter) {
+        r.eq(WindowManager.eventTapHealthAction(tapExists: true, tapEnabled: true, accessibilityTrusted: true),
+             .none, "tap health: enabled tap is left alone")
+        r.eq(WindowManager.eventTapHealthAction(tapExists: true, tapEnabled: false, accessibilityTrusted: true),
+             .enableExisting, "tap health: disabled tap is re-enabled")
+        r.eq(WindowManager.eventTapHealthAction(tapExists: false, tapEnabled: false, accessibilityTrusted: true),
+             .recreate, "tap health: missing tap is recreated when trusted")
+        r.eq(WindowManager.eventTapHealthAction(tapExists: false, tapEnabled: false, accessibilityTrusted: false),
+             .waitForPermission, "tap health: missing tap waits without permission")
+        r.eq(WindowManager.eventTapHealthAction(tapExists: true, tapEnabled: true, accessibilityTrusted: false),
+             .none, "tap health: a working tap is not torn down by a false trust probe")
+        r.eq(WindowManager.eventTapHealthAction(tapExists: true, tapEnabled: false, accessibilityTrusted: false),
+             .enableExisting, "tap health: an existing disabled tap is still re-enabled")
     }
 
     // Breaks caught: repeated capture reservations, wall-clock cooldowns,
