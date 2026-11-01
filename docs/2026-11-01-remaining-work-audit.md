@@ -15,7 +15,9 @@ readiness=ready / AX=granted / mic=granted。没有把这次认可扩展成所�
 当前实施计划只覆盖 M0/M1；M2–M5 还需要各自实施计划和验收。
 Owner 后续将 M2 扩充为 M2-A 本地下载恢复、M2-B 云端厂商接入、M2-C 本地模型导入；
 最新澄清要求M2-C支持从Hugging Face自行下载的ASR模型，不能限于现有Qwen目录选择；
-首批多架构/格式及运行库支持清单正在设计，旧Qwen-only限制已撤回。
+Owner 随后回复“开发吧”，首批按已展示方案接入Qwen3-ASR MLX与Whisper Core ML；
+旧Qwen-only限制已撤回。M2-A/B/C实施计划已写入docs/superpowers/plans，等待计划审阅
+与执行方式选择，产品代码尚未改动。
 最新范围见 [M2 修订设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)。
 下表 M2 原始审计描述保留为下载恢复的代码基线，不代表扩充后的全部范围。
 设计文档仍标 Draft，未执行部分不能视为所有产品细节均已获批。

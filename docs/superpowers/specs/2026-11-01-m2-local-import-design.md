@@ -1,7 +1,8 @@
 # M2-C 本地 Hugging Face 模型导入设计
 
 日期：2026-11-01。状态：按 Owner 最新澄清修订为 Hugging Face 自下载 ASR 模型导入。
-此前仅 Qwen 的首版范围已撤回；首批架构/格式和运行库清单待设计定稿，尚不可执行。
+此前仅 Qwen 的首版范围已撤回；Owner 随后回复“开发吧”，本轮按已展示方案接入
+Qwen3-ASR MLX和Whisper Core ML。实施计划已形成，尚未开始产品实现。
 总范围：[M2 设计](2026-11-01-m2-model-recovery-design.md)。
 
 ## 支持合同
@@ -18,12 +19,13 @@
 不执行模型仓库脚本或trust_remote_code。新增运行库属于本工作包的显式实现范围，
 不能只预留适配器而将尚不能使用的模型标为支持。
 
-## 运行方案与首批候选（提案）
+## 运行方案与首批范围
 
 推荐原生多引擎适配：统一导入/模型库/生命周期，按各架构加载。相较于直接沿用
 Qwen目录选择，它需要扩展本地provider、路由和readiness的身份表示；这些改动
 属于实现用户要求所需的范围。首批建议Qwen3-ASR MLX + Whisper Core ML，
-再按具体目标仓库核对变体；这仍是提案，不将此前的Qwen-only答复当作本清单批准。
+再按具体目标仓库核对变体。Owner 的后续“开发吧”承接这个方案；Parakeet和
+Omnilingual保留候选，不纳入本轮已实现承诺。
 
 | 候选 | 可研究的HF模型格式/来源 | 已有依据与接入代价 |
 | --- | --- | --- |
@@ -37,7 +39,8 @@ PyTorch、包版本和分发维护，并非所有仓库都能用同一个pipelin
 自行运行本地模型服务再填API，它可作未来扩展，不能替代本轮本机文件导入。
 不会未经决定就引入Python环境或下载模型运行库。
 
-当前已询问Owner是否有首批目标仓库；即使未提供，也按上述候选形成具体支持清单。
+Owner 未指定具体仓库，不再以此为阻塞；按Qwen兼容MLX和WhisperKit兼容Core ML
+形成首批清单，后续具体仓库逐项记录兼容性。
 特别注意 `openai/whisper-*` 原始权重与WhisperKit兼容Core ML导出不是同一格式；
 选择Whisper Core ML不能宣称已经支持前者，原始权重/自动转换需单独评估。
 
@@ -58,7 +61,7 @@ Qwen底层依赖从modelId推断规模/位数，其导入适配层只在检测�
 离线加载仍指向用户目录，绝不把这个内部兼容身份当作联网补齐的repo。
 
 校验按各运行库分别实现，不对Core ML等格式强制要求safetensors/vocab.json。
-以下保留Qwen适配器的静态校验细则，其他首批架构需在定稿时补齐对应文件合同：
+以下为Qwen适配器的静态校验细则；Whisper的对应文件合同见后文：
 
 1. 目录可读、config可解析；限制元数据读取大小，避免整文件读入权重。
 2. 分词器按当前加载器实际需求检查 vocab.json 及需要的配套文件，不能仅有
@@ -72,6 +75,18 @@ Qwen底层依赖从modelId推断规模/位数，其导入适配层只在检测�
 
 这些检查只证明文件布局通过静态校验。运行库会容忍部分缺失权重，因此
 不能仅以fromPretrained未抛错替代必要张量检查；最终还需要离线加载结果。
+
+Whisper采用WhisperKit exact0.18.0，要求MelSpectrogram、AudioEncoder、TextDecoder
+的兼容mlmodelc/mlpackage，以及本包或明确tokenizer子目录中的tokenizer.json、
+tokenizer_config.json；可选TextDecoderContextPrefill。需校验Core ML图输入/输出、
+模型维度、多语言/英语词表和special token匹配，不能将原始PyTorch权重直接接受。
+仓库根有多个变体时要求选择具体子目录；单个模型子目录可独立导入。
+
+严格离线通过OfflineWhisperKit覆写本地tokenizer加载实现，使用AutoTokenizer的
+modelFolder入口和产品内的WhisperTokenizer协议适配器，避免上游内部wrapper不可访问
+和ModelUtilities解析失败后联网的兜底。modelFolder/tokenizerFolder显式设置，
+download=false、load=false后显式加载。上游私有setter的modelVariant不用于本产品
+身份或推理配置；本产品从实际模型图确定variant及textDecoder多语言标志。
 
 ## 硬件与导入事务
 
@@ -122,5 +137,6 @@ WeightLoader，以及本产品CustomModelScanner / ModelLocator。公开HF confi
 超时，尚未在线复核模型卡/许可或实际自定义仓库兼容性；依赖能力不等于仓库实测。
 新增调研还读取了当前依赖ParakeetASR / OmnilingualASR的模型文档和加载源码，
 以及[WhisperKit官方README](https://github.com/argmaxinc/WhisperKit)（本轮已获取）。
-README描述Core ML模型和自定义repo支持，不足以证明完整离线初始化；其config源码
-本轮抓取超时，实施前需核实模型、tokenizer与禁止自动下载的完整合同。
+后续已读取WhisperKit v0.18.0完整源码（临时只读参考clone），核实本地模型加载、
+tokenizer联网兜底、override hook与公开协议；具体接口固化在实施计划。未运行真实
+模型或安装产品依赖，不将源码能力当作已完成离线推理验收。
