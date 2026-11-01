@@ -142,3 +142,16 @@ $ ps -o pid,lstart,comm -p 84353
 - 当前构建只在启动时创建 tap；运行中授权不会自愈——这正是 M1 要实现的 `installEventTap` / `repairEventTap`。M0 基线以「授权后重启」为准。
 - adhoc 签名意味着每次重新构建 app 都会改变 cdhash；M1 Task 15 必须沿用当前 `/Applications/FlowType.app` 身份，重新构建后需要重新确认 TCC 记录（尤其麦克风）。
 - 本文件不含 API Key、配置 JSON 或听写内容。
+
+## 基线听写（2026-11-01 续接）
+
+- 结论：**M0 PASS（Owner 实测确认）**。Owner 反馈「我感觉还可以，我这里可以通过了」。
+- 应用：原有 `/Applications/FlowType.app`，PID 89106，adhoc 签名身份未替换；TextEdit 1.20（`com.apple.TextEdit`）。
+- 引擎：本地 Qwen3-ASR 1.7B，`qwen-local`，`localOnly`，没有 ASR fallback。模型补齐及离线加载见 `2026-11-01-m0-model-bootstrap.md`。
+- 采用最近的成功会话 #3 作为主要基线：开始 `2026-11-01T09:43:47Z`，停止 `09:43:58Z`；采样音频 10885ms，Qwen ASR 2477ms，润色 1671ms，交付阶段 63ms，停止 → 交付事件 4233ms。日志于 `09:44:01Z` 记录 ASR 完成，`09:44:02Z` 保存历史；秒级日志只能支持停止 → 原始 ASR 约 3s，不能给出精修文本完成的独立精确时刻。
+- 数据库对应记录 `08D31126-0050-432B-A87D-B0EE011F2F1B`；交付为 `typedDispatched`。这表示键入事件已发出；目标落字由 Owner 的现场验收确认，不冒充 AX 回读确认。
+- 前一成功会话 #2：音频 7285ms，ASR 6980ms，润色 1706ms，停止 → 交付事件 8949ms；目标同为 TextEdit，单独保存一条历史。两次成功会话分别对应一个历史条目，没有发现单一会话重复保存。更早的 #1 在准备期间被停止，样本为 0，取消后无交付，不计为成功基线。
+- 字面量 / 重复交付：Owner 接受实测结果；Controller 未导出真实文本，未进行固定参考句的逐字比对，也未独立观测 TextEdit 每次插入。不得把这两项写成自动化证明。
+- 验收裁定：以 Owner 实际完成的会话及明确通过反馈关闭 M0；此次实测使用润色停止手势，与计划中的固定参考句 / 原文停止步骤存在差异，按 Owner 认可接受并如实保留差异。M1 可继续；后续真机矩阵仍需单独记录。
+
+采集方式：按本次启动时间筛选诊断日志中的 SessionController / RecordingStage / QwenASR 事件；只读查询 `flowtype.sqlite` 的会话 ID、时间、目标应用、provider、耗时、交付结果字段。未查询或输出转写文本和凭据。
