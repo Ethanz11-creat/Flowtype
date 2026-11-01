@@ -343,6 +343,10 @@ enum SelfTest {
         testLegacySessionConfiguration(r) // pre-session settings and single-provider migration
         testStableSessionPresentation(r) // no provider or streaming text in capsule
         testReadinessClassification(r)
+        testPermissionWatchPolicy(r)
+        testReadinessDebounce(r)
+        testPermissionWatchOwnership(r)
+        testReadinessSnapshotBuilder(r)
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
         await testOnboardingDemoDelivery(r) // notification-only final delivery, no active-app injection
         await testOnboardingDeliveryCancellation(r)
@@ -1300,6 +1304,147 @@ enum SelfTest {
         r.eq(ReadinessLevel.degraded(.accessibilityMissing).reason,
              "全局热键不可用；可从菜单开始，结果写入剪贴板",
              "readiness: degraded level explains AX fallback")
+    }
+
+    static func testPermissionWatchPolicy(_ r: Reporter) {
+        r.check(PermissionWatchPolicy.shouldStop(accessibility: .granted, pollsCompleted: 0),
+                "watch: granted stops immediately")
+        r.check(!PermissionWatchPolicy.shouldStop(accessibility: .denied, pollsCompleted: 29),
+                "watch: denied keeps polling before the cap")
+        r.check(PermissionWatchPolicy.shouldStop(accessibility: .denied, pollsCompleted: 30),
+                "watch: denied stops at the 60s cap")
+        r.check(PermissionWatchPolicy.shouldStop(accessibility: .notDetermined, pollsCompleted: 30),
+                "watch: undetermined also stops at the cap")
+        r.check(!PermissionWatchPolicy.shouldStop(accessibility: .unknown, pollsCompleted: 1),
+                "watch: unknown continues before the cap")
+        r.check(PermissionWatchPolicy.shouldStop(accessibility: .unknown, pollsCompleted: 31),
+                "watch: cap remains terminal after its boundary")
+    }
+
+    static func testReadinessDebounce(_ r: Reporter) {
+        var debounce = ReadinessDebounce(level: .ready)
+        r.eq(debounce.level, .ready, "readiness debounce: initial level publishes immediately")
+        r.eq(debounce.receive(.ready), nil, "readiness debounce: unchanged level needs no timer")
+        guard let first = debounce.receive(.blocked(.noEngine)) else {
+            r.check(false, "readiness debounce: changed level starts a timer")
+            return
+        }
+        r.eq(debounce.level, .ready, "readiness debounce: candidate does not publish early")
+        for _ in 0..<5 {
+            r.eq(debounce.receive(.blocked(.noEngine)), nil,
+                 "readiness debounce: repeated pending candidate keeps original deadline")
+        }
+        r.eq(debounce.publish(first), .blocked(.noEngine),
+             "readiness debounce: original deadline publishes despite repeated refreshes")
+        r.eq(debounce.publish(first), nil, "readiness debounce: timer publishes only once")
+
+        guard let cancelled = debounce.receive(.ready) else {
+            r.check(false, "readiness debounce: recovery schedules publication")
+            return
+        }
+        _ = debounce.receive(.blocked(.noEngine))
+        r.check(!debounce.hasPending, "readiness debounce: return to published level cancels pending")
+        r.eq(debounce.publish(cancelled), nil, "readiness debounce: cancelled candidate cannot publish")
+
+        guard let stale = debounce.receive(.ready),
+              let latest = debounce.receive(.degraded(.enginePreparing)) else {
+            r.check(false, "readiness debounce: new candidate replaces prior timer")
+            return
+        }
+        r.eq(debounce.publish(stale), nil, "readiness debounce: stale timer cannot publish")
+        r.check(debounce.hasPending, "readiness debounce: stale completion preserves newer candidate")
+        r.eq(debounce.publish(latest), .degraded(.enginePreparing),
+             "readiness debounce: latest candidate publishes at its deadline")
+    }
+
+    static func testPermissionWatchOwnership(_ r: Reporter) {
+        var watch = PermissionWatchOwnership()
+        r.eq(watch.start(accessibility: .granted), nil, "watch ownership: granted never starts polling")
+        guard let old = watch.start(accessibility: .denied) else {
+            r.check(false, "watch ownership: missing permission starts a watch")
+            return
+        }
+        r.eq(watch.start(accessibility: .denied), nil, "watch ownership: repeated start cannot overlap")
+        watch.stop()
+        guard let current = watch.start(accessibility: .notDetermined) else {
+            r.check(false, "watch ownership: stopped watch can restart")
+            return
+        }
+        r.check(!watch.finish(old), "watch ownership: cancelled old task cannot clear replacement")
+        r.eq(watch.start(accessibility: .denied), nil,
+             "watch ownership: replacement remains active after old cancellation")
+        r.check(watch.finish(current), "watch ownership: current completion clears its watch")
+        r.check(watch.start(accessibility: .unknown) != nil,
+                "watch ownership: completed watch permits explicit restart")
+        watch.stop()
+        r.check(!watch.finish(current), "watch ownership: stopped completion has no ownership")
+    }
+
+    static func testReadinessSnapshotBuilder(_ r: Reporter) {
+        var config = Configuration.default
+        config.cloudASRConfig = CloudASRConfig()
+        let date = Date(timeIntervalSince1970: 123)
+        func snapshot(_ status: QwenModelStatus = .notLoaded,
+                      speech: PermissionState = .granted,
+                      network: Bool = true, apple: Bool = true) -> ReadinessSnapshot {
+            ReadinessSnapshotBuilder.make(config: config, modelStatus: status,
+                                          accessibility: .denied, microphone: .notDetermined,
+                                          speechRecognition: speech, networkReachable: network,
+                                          appleAvailable: apple, computedAt: date)
+        }
+        let initial = snapshot()
+        r.eq(initial.accessibility, .denied, "snapshot: AX probe is preserved")
+        r.eq(initial.microphone, .notDetermined, "snapshot: mic probe is preserved")
+        r.eq(initial.computedAt, date, "snapshot: sample timestamp is preserved")
+        r.eq(initial.localModel, .unavailable(reason: "本地模型未加载"),
+             "snapshot: fresh onboarding does not promise model loading")
+        config.hasCompletedOnboarding = true
+        r.eq(snapshot().localModel, .provisioning(progress: 0),
+             "snapshot: completed onboarding anticipates local provisioning")
+        r.eq(snapshot(.ready).localModel, .ready, "snapshot: loaded local model is ready")
+        r.eq(snapshot(.loading).localModel, .provisioning(progress: 0), "snapshot: local loading is provisioning")
+        r.eq(snapshot(.stalled).localModel, .provisioning(progress: 0), "snapshot: stalled model is provisioning")
+        r.eq(snapshot(.downloading(progress: 0.4, speedMBps: 2, etaSeconds: 3)).localModel,
+             .provisioning(progress: 0.4), "snapshot: download progress is preserved")
+        r.eq(snapshot(.error(reason: "synthetic failure", retryable: true)).localModel,
+             .unavailable(reason: "synthetic failure"), "snapshot: model failure stays unavailable")
+        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置"), "snapshot: missing cloud provider is unavailable")
+        r.eq(snapshot().appleSpeech, .ready, "snapshot: permitted available Apple recognizer is ready in auto")
+        for state: PermissionState in [.denied, .notDetermined, .unknown] {
+            r.eq(snapshot(speech: state).appleSpeech, .unavailable(reason: "语音识别权限未开启"),
+                 "snapshot: Apple requires granted speech permission")
+        }
+        r.eq(snapshot(apple: false).appleSpeech, .unavailable(reason: "Apple 识别不可用"),
+             "snapshot: unavailable locale recognizer cannot supply Apple fallback")
+
+        let provider = CloudASRProviderConfig(name: "test", provider: "test", baseURL: "https://example.invalid",
+                                             model: "test", isActive: true)
+        config.cloudASRConfig = CloudASRConfig(providers: [provider])
+        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置"), "snapshot: empty cloud key is unavailable")
+        config.cloudASRConfig.providerAPIKeys[provider.id.uuidString] = "synthetic-key"
+        r.eq(snapshot().cloudASR, .ready, "snapshot: configured reachable cloud is ready")
+        r.eq(snapshot(network: false).cloudASR, .unavailable(reason: "网络不可达"),
+             "snapshot: configured unreachable cloud is unavailable")
+        config.cloudASRConfig.providers[0].baseURL = ""
+        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置"), "snapshot: empty cloud endpoint is unavailable")
+        config.cloudASRConfig.providers[0] = provider
+        config.cloudASRConfig.providers[0].model = ""
+        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置"), "snapshot: empty cloud model is unavailable")
+        config.cloudASRConfig.providers[0] = provider
+        config.asrRoutingPolicy = .localOnly
+        r.eq(snapshot().cloudASR, .unavailable(reason: "仅本地模式"), "snapshot: local-only excludes configured cloud")
+        r.check(snapshot().appleSpeech != .ready, "snapshot: local-only excludes Apple fallback")
+        config.asrRoutingPolicy = .cloudOnly
+        r.eq(snapshot(.ready).localModel, .unavailable(reason: "仅云端模式"), "snapshot: cloud-only excludes loaded local")
+        r.check(snapshot().appleSpeech != .ready, "snapshot: cloud-only excludes Apple fallback")
+        r.eq(snapshot().cloudASR, .ready, "snapshot: cloud-only includes configured cloud")
+
+        let sensitive = ReadinessSnapshot(accessibility: .unknown, microphone: .denied, speechRecognition: .granted,
+                                          localModel: .unavailable(reason: "synthetic private text"),
+                                          cloudASR: .provisioning(progress: 0.42), appleSpeech: .ready, computedAt: date)
+        r.eq(ReadinessSnapshotBuilder.logLine(level: .blocked(.microphoneDenied), snapshot: sensitive),
+             "[ReadinessMonitor] level=blocked ax=unknown mic=denied local=unavailable cloud=provisioning apple=ready",
+             "snapshot logging: only state tags survive associated error text and progress")
     }
 
     static func testSessionExperience(_ r: Reporter) {
