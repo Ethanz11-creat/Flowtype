@@ -49,6 +49,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         AudioRecorder.restorePendingDeviceIfNeeded()
         StatusBarController.shared.setup()
 
+        ReadinessMonitor.shared.onAccessibilityGranted = {
+            WindowManager.shared.repairEventTap()
+            PermissionReminderController.shared.showRestored()
+            SoundFeedback.playPermissionGranted()
+        }
+        ReadinessMonitor.shared.refresh()
+
         AppLogger.log("[AppDelegate] Setting up global hotkey...")
         WindowManager.shared.setupGlobalHotkey()
         AppLogger.log("[AppDelegate] Flowtype launched successfully")
@@ -56,9 +63,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !ConfigurationStore.shared.current.hasCompletedOnboarding {
             showOnboarding()
         } else {
-            let hasAccessibility = PermissionHelper.checkAccessibility()
-            if !hasAccessibility {
-                PermissionHelper.showPermissionGuide()
+            let accessibility = ReadinessMonitor.shared.snapshot.accessibility
+            if accessibility != .granted {
+                PermissionReminderController.shared.showIfNeeded(accessibility: accessibility)
+                ReadinessMonitor.shared.startPermissionWatchIfNeeded()
             }
         }
 
