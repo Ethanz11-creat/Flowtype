@@ -520,6 +520,7 @@ final class SessionController: ObservableObject {
     // MARK: - Error Actions
 
     private func presentReadinessBlocked(_ issue: ReadinessIssue, context: SessionContext) {
+        AppLogger.log("[SessionController#\(context.sessionID)] Readiness preflight blocked reason=\(issue)")
         errorDismissTask?.cancel()
         errorDismissTask = nil
         currentTask?.cancel()

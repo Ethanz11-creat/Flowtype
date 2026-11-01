@@ -91,6 +91,7 @@ class WindowManager: ObservableObject {
     private var healthTimerStarted = false
     private var lastHealthAction: EventTapHealthAction = .none
     private var reloadWorkItem: DispatchWorkItem?
+    private var lastPanelPresentationLogs: [String: String] = [:]
 
     /// Periodic timer to ensure the CGEvent tap stays enabled after system events.
     private var eventTapHealthTimer = CancellableTimer()
@@ -470,11 +471,13 @@ class WindowManager: ObservableObject {
     private static let slideOffset: CGFloat = 60
 
     func showWindow() {
+        logPanelPresentation("show-request")
         guard let panel = panel else { return }
         panel.setCapsuleSize(SessionController.shared.sessionState.capsuleSize)
         guard let screen = NSScreen.main else {
             panel.alphaValue = 1
             panel.orderFront(nil)
+            logPanelPresentation("show-ordered-no-screen")
             return
         }
         // Already visible — don't replay the slide-in animation (e.g. .polishing → .notice).
@@ -487,12 +490,46 @@ class WindowManager: ObservableObject {
         panel.setFrameOrigin(NSPoint(x: targetX, y: targetY - Self.slideOffset))
         panel.alphaValue = 0
         panel.orderFront(nil)
-        NSAnimationContext.runAnimationGroup { ctx in
+        logPanelPresentation("show-ordered")
+        NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.28
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrameOrigin(NSPoint(x: targetX, y: targetY))
             panel.animator().alphaValue = 1
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                self?.logPanelPresentation("show-complete")
+            }
+        })
+    }
+
+    /// State only, at presentation boundaries; never log session/error content.
+    private func logPanelPresentation(_ phase: String) {
+        let stateCategory: String
+        switch SessionController.shared.sessionState {
+        case .idle: stateCategory = "idle"
+        case .preparing: stateCategory = "preparing"
+        case .recording: stateCategory = "recording"
+        case .processing: stateCategory = "processing"
+        case .polishing: stateCategory = "polishing"
+        case .injecting: stateCategory = "injecting"
+        case .notice: stateCategory = "notice"
+        case .error: stateCategory = "error"
         }
+        let appState = "appActive=\(NSApp?.isActive ?? false) appHidden=\(NSApp?.isHidden ?? false)"
+        let panelState: String
+        if let panel {
+            let screenFrame = NSScreen.main.map { NSStringFromRect($0.visibleFrame) } ?? "nil"
+            panelState = "visible=\(panel.isVisible) alpha=\(panel.alphaValue) frame=\(NSStringFromRect(panel.frame)) screenFrame=\(screenFrame) panelScreen=\(panel.screen != nil) hidesOnDeactivate=\(panel.hidesOnDeactivate)"
+        } else {
+            panelState = "panel=nil"
+        }
+        let message = "[WindowManager] \(phase) state=\(stateCategory) \(panelState) \(appState)"
+        // Four fixed call-site phases bound this cache. Elapsed time and all
+        // associated state payloads are excluded, so timer ticks cannot spam it.
+        guard lastPanelPresentationLogs[phase] != message else { return }
+        lastPanelPresentationLogs[phase] = message
+        AppLogger.log(message)
     }
 
     func hide() {
