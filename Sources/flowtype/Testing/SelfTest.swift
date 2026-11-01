@@ -318,6 +318,7 @@ enum SelfTest {
         testJSONMigration(r)       // JSONMigration: idempotent import + sttBackend tagging
         testPrivacyConfig(r)       // storeTranscriptText: round-trip + legacy default true
         testASRConfig(r)           // ASR engine config: round-trip + legacy default
+        CloudProviderSelfTests.runConfiguration(r)
         testRealtimeASRContracts(r)
         testRealtimeAudioIngress(r)
         await testRealtimeIngressWakeups(r)
@@ -2588,7 +2589,7 @@ enum SelfTest {
         r.eq(decoded?.cloudASRSendContext, true, "asrcfg: missing key → cloudASRSendContext true")
         r.eq(decoded?.cloudASRConfig.providers.count, 1, "asrcfg: legacy missing key → default SiliconFlow provider")
         r.eq(decoded?.cloudASRConfig.providers.first?.provider, "SiliconFlow", "asrcfg: default provider is SiliconFlow")
-        r.eq(decoded?.cloudASRConfig.providers.first?.model, "", "asrcfg: default model is empty (user must select)")
+        r.eq(decoded?.cloudASRConfig.providers.first?.model, "FunAudioLLM/SenseVoiceSmall", "asrcfg: newly defaulted provider has an ASR model")
     }
 
     // MARK: - Realtime ASR: offline wire/config/audio fixtures
@@ -3566,7 +3567,7 @@ enum SelfTest {
         r.check(!cfg.cloudASRConfig.providers.isEmpty, "inject-edge: default cloudASRConfig has providers")
         r.check(cfg.cloudASRConfig.providerAPIKeys.isEmpty, "inject-edge: default cloudASRConfig has no API keys")
         if let activeProvider = cfg.cloudASRConfig.activeProvider {
-            r.eq(activeProvider.model, "", "inject-edge: default cloud ASR provider model is empty")
+            r.eq(activeProvider.model, "FunAudioLLM/SenseVoiceSmall", "inject-edge: new cloud ASR provider has a model")
         } else {
             r.check(false, "inject-edge: default cloudASRConfig has active provider")
         }

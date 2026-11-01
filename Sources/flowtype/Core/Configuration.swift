@@ -251,9 +251,13 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
     var model: String
     var isActive: Bool
     var protocolKind: CloudASRProtocolKind
+    var vendorID: CloudASRVendorID
+    /// Used only for custom compatible services; optional fields require explicit opt-in.
+    var customFieldCapabilities: CloudASRFieldCapabilities
 
     init(id: UUID = UUID(), name: String, provider: String, baseURL: String, model: String,
-         isActive: Bool = false, protocolKind: CloudASRProtocolKind = .openAICompatible) {
+         isActive: Bool = false, protocolKind: CloudASRProtocolKind = .openAICompatible,
+         vendorID: CloudASRVendorID? = nil, customFieldCapabilities: CloudASRFieldCapabilities = .init()) {
         self.id = id
         self.name = name
         self.provider = provider
@@ -261,10 +265,12 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
         self.model = model
         self.isActive = isActive
         self.protocolKind = protocolKind
+        self.vendorID = vendorID ?? CloudASRVendor.legacyVendorID(for: provider)
+        self.customFieldCapabilities = customFieldCapabilities
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, provider, baseURL, model, isActive, protocolKind
+        case id, name, provider, baseURL, model, isActive, protocolKind, vendorID, customFieldCapabilities
     }
 
     init(from decoder: Decoder) throws {
@@ -276,6 +282,8 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
         model = try c.decode(String.self, forKey: .model)
         isActive = try c.decode(Bool.self, forKey: .isActive)
         protocolKind = try c.decodeIfPresent(CloudASRProtocolKind.self, forKey: .protocolKind) ?? .openAICompatible
+        vendorID = try c.decodeIfPresent(CloudASRVendorID.self, forKey: .vendorID) ?? CloudASRVendor.legacyVendorID(for: provider)
+        customFieldCapabilities = try c.decodeIfPresent(CloudASRFieldCapabilities.self, forKey: .customFieldCapabilities) ?? .init()
     }
 
     static func defaultParaformer(id: UUID = UUID(), isActive: Bool = false) -> CloudASRProviderConfig {
@@ -292,7 +300,7 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
             name: "硅基流动",
             provider: "SiliconFlow",
             baseURL: "https://api.siliconflow.cn/v1",
-            model: "",
+            model: CloudASRModelPreset.senseVoiceSmall.modelId,
             isActive: isActive
         )
     }
