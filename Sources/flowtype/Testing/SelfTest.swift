@@ -84,6 +84,15 @@ enum SelfTest {
              "inject: non-text control → clipboard (row 2)")
         r.eq(decideInjection(FocusSignals(secureInputActive: false, focus: .blindOrUnknown)), .inject,
              "inject: blind/unknown → inject, fail open (row 3)")
+
+        r.eq(applyAccessibilityGate(.inject, accessibilityTrusted: false), .clipboard,
+             "inject: no AX downgrades typing to clipboard")
+        r.eq(applyAccessibilityGate(.clipboard, accessibilityTrusted: false), .clipboard,
+             "inject: no AX keeps an existing clipboard decision")
+        r.eq(applyAccessibilityGate(.inject, accessibilityTrusted: true), .inject,
+             "inject: AX trust preserves typing")
+        r.eq(applyAccessibilityGate(.clipboard, accessibilityTrusted: true), .clipboard,
+             "inject: AX trust does not turn clipboard into typing")
     }
 
     // MARK: - Appearance preference: round-trip + legacy default
@@ -458,7 +467,7 @@ enum SelfTest {
         let failure = PolishStage(configuration: { config }, streamFactory: { _, _, _ in
             AsyncThrowingStream { $0.yield("partial"); $0.finish(throwing: LLMError.invalidResponse) }
         })
-        let delivery = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
+        let delivery = InjectionStage(settle: {}, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
                                      copy: { text in log.events.append("delivered:\(text)") })
         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in log.events.append("history") })
         let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects, readinessLevel: { .ready })
@@ -720,21 +729,21 @@ enum SelfTest {
             let context = SessionContext(sessionID: 305)
             let stage = InjectionStage(settle: {
                 await context.cancel()
-            }, focus: { FocusSignals(secureInputActive: clipboard, focus: .blindOrUnknown) },
+            }, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: clipboard, focus: .blindOrUnknown) },
             inject: { text, _ in delivery.append(text) }, copy: { text in delivery.append(text) })
             _ = await stage.execute(payload: .polished("完整文本。", raw: "完整文本"), context: context)
         }
         r.eq(delivery.value, [], "injection: cancellation during focus settle prevents keyboard and clipboard effects")
         let deliveredOnce = DeliveryLog()
         let once = SessionContext(sessionID: 306)
-        let stage = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
+        let stage = InjectionStage(settle: {}, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
                                    inject: { text, _ in deliveredOnce.append(text) }, copy: { text in deliveredOnce.append(text) })
         _ = await stage.execute(payload: .polished("只送一次。", raw: "只送一次"), context: once)
         _ = await stage.execute(payload: .polished("只送一次。", raw: "只送一次"), context: once)
         r.eq(deliveredOnce.value, ["只送一次。"], "injection: one terminal delivery across duplicate stage executions")
         let concurrentContext = SessionContext(sessionID: 311)
         let concurrentDeliveries = DeliveryLog()
-        let concurrentStage = InjectionStage(settle: { await Task.yield() },
+        let concurrentStage = InjectionStage(settle: { await Task.yield() }, accessibilityTrusted: { true },
             focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
             copy: { text in concurrentDeliveries.append(text) })
         async let first = concurrentStage.execute(payload: .polished("并发只送一次。", raw: "并发只送一次"), context: concurrentContext)
@@ -771,7 +780,7 @@ enum SelfTest {
 
         let afterInject = SessionContext(sessionID: 310)
         afterInject.deliveryTarget = DeliveryTargetSnapshot(pid: 42)
-        let cancelledDuringInject = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: false, focus: .blindOrUnknown) },
+        let cancelledDuringInject = InjectionStage(settle: {}, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: false, focus: .blindOrUnknown) },
             inject: { _, context in await context.cancel(); throw LLMError.invalidResponse },
             copy: { text in events.append(text) })
         _ = await cancelledDuringInject.execute(payload: .polished("禁止回退。", raw: "禁止回退"), context: afterInject)
@@ -779,7 +788,7 @@ enum SelfTest {
         let partial = SessionContext(sessionID: 312)
         partial.deliveryTarget = DeliveryTargetSnapshot(pid: 42)
         let partialEvents = DeliveryLog()
-        let partialStage = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: false, focus: .editableText) },
+        let partialStage = InjectionStage(settle: {}, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: false, focus: .editableText) },
             inject: { _, context in
                 try KeyboardInjector.postIfActive(context: context) { partialEvents.append("first-event") }
                 throw InjectionError.eventCreationFailed
@@ -817,7 +826,7 @@ enum SelfTest {
             context.deliveryTarget = a
             context.finalText = "交付。"
             let events = DeliveryLog()
-            let stage = InjectionStage(settle: {}, currentTarget: { current }, inject: { _, ctx in
+            let stage = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { current }, inject: { _, ctx in
                 try KeyboardInjector.postIfActive(context: ctx) { events.append("typed") }
             }, copy: { _ in events.append("copied") })
             _ = await stage.execute(payload: .polished("交付。", raw: "交付"), context: context)
@@ -825,6 +834,22 @@ enum SelfTest {
             r.eq(context.deliveryOutcome, expected, "delivery stage: target validation propagates explicit outcome")
             r.eq(events.value, [expected == .clipboard ? "copied" : "typed"], "delivery stage: duplicate attempt has one destination")
             r.check(context.claimHistorySave() && !context.claimHistorySave(), "delivery: terminal outcome saves history once")
+        }
+        for mode in [DeliveryMode.unicode, .pasteInSupportedApps] {
+            let context = SessionContext(sessionID: 327)
+            context.deliveryTarget = a
+            let events = DeliveryLog()
+            let stage = InjectionStage(settle: {}, accessibilityTrusted: { false }, currentTarget: { a },
+                inject: { _, ctx in
+                    try KeyboardInjector.postIfActive(context: ctx) { events.append("typed") }
+                }, mode: { mode }, bundleID: { _ in "com.apple.TextEdit" },
+                paste: { _, _, _ in events.append("paste"); return .dispatched },
+                copy: { text in events.append("copied:\(text)") })
+            _ = await stage.execute(payload: .polished("no-ax", raw: "no-ax"), context: context)
+            _ = await stage.execute(payload: .polished("no-ax", raw: "no-ax"), context: context)
+            r.eq(events.value, ["copied:no-ax"], "delivery: no AX copies once without typing or paste in either mode")
+            r.eq(context.deliveryOutcome, .clipboard, "delivery: no AX completes with clipboard outcome")
+            r.check(context.completionNotice != nil, "delivery: no AX surfaces the copied notice")
         }
         // Stop selects B even when capture-start was A; a late app C must never
         // become the target of an in-flight collection for B.
@@ -858,7 +883,7 @@ enum SelfTest {
             let context = SessionContext(sessionID: 323)
             context.deliveryTarget = a
             let events = DeliveryLog()
-            let stage = InjectionStage(settle: {}, currentTarget: { a }, inject: { _, ctx in
+            let stage = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { a }, inject: { _, ctx in
                 if afterFirstEvent {
                     try KeyboardInjector.postIfActive(context: ctx) { events.append("first") }
                 }
@@ -873,7 +898,7 @@ enum SelfTest {
         let taskCancelledContext = SessionContext(sessionID: 326)
         taskCancelledContext.deliveryTarget = a
         let taskEvents = DeliveryLog()
-        let taskCancelledStage = InjectionStage(settle: {}, currentTarget: { a }, inject: { _, ctx in
+        let taskCancelledStage = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { a }, inject: { _, ctx in
             try KeyboardInjector.postIfActive(context: ctx) { taskEvents.append("first") }
             withUnsafeCurrentTask { $0?.cancel() }
             try KeyboardInjector.postIfActive(context: ctx) { taskEvents.append("forbidden") }
@@ -887,7 +912,7 @@ enum SelfTest {
         let beforeFirstEvent = SessionContext(sessionID: 324)
         beforeFirstEvent.deliveryTarget = a
         let fallback = DeliveryLog()
-        let failing = InjectionStage(settle: {}, currentTarget: { a }, inject: { _, ctx in
+        let failing = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { a }, inject: { _, ctx in
             let started = ctx.deliveryEffectStarted
             if started { throw InjectionError.noEventsDispatched }
             throw InjectionError.eventCreationFailed
@@ -4451,7 +4476,7 @@ extension SelfTest {
         unsafeBoard.incomplete = true
         var unsafeCopies = 0
         let unsafeTarget = DeliveryTargetSnapshot(pid: 42, signals: FocusSignals(secureInputActive: false, focus: .editableText))
-        let unsafeStage = InjectionStage(settle: {}, currentTarget: { unsafeTarget }, mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" },
+        let unsafeStage = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { unsafeTarget }, mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" },
             paste: { text, context, _ in await ClipboardTransaction().paste(text, context: context, board: unsafeBoard, validate: { true }, prepareDispatch: { {} }, settle: {}) },
             copy: { _ in unsafeCopies += 1 })
         let unsafeContext = SessionContext(sessionID: 414); unsafeContext.deliveryTarget = unsafeTarget
@@ -4485,7 +4510,7 @@ extension SelfTest {
             ctx.deliveryTarget = target
             ctx.stopRecordingAt = Date().addingTimeInterval(-1)
             let log = DeliveryLog()
-            let stage = InjectionStage(settle: {}, currentTarget: { target },
+            let stage = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
                 inject: { _, ctx in try KeyboardInjector.postIfActive(context: ctx) { log.append("typed") } },
                 mode: { mode }, bundleID: { _ in bundle }, paste: { _, _, _ in log.append("paste"); return result },
                 copy: { _ in log.append("copied") })

@@ -44,6 +44,10 @@ func decideDelivery(target: DeliveryTargetSnapshot?, current: DeliveryTargetSnap
     return decideInjection(current.signals)
 }
 
+func applyAccessibilityGate(_ decision: InjectionDecision, accessibilityTrusted: Bool) -> InjectionDecision {
+    decision == .inject && !accessibilityTrusted ? .clipboard : decision
+}
+
 /// A process switch during asynchronous AX collection invalidates the entire
 /// sample, including a switch back to the original stop target.
 func deliverySnapshotAfterCollection(_ sample: DeliveryTargetSnapshot, frontmostPID: Int32?) -> DeliveryTargetSnapshot {

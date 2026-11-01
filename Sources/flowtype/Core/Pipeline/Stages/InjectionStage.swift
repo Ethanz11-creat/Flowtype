@@ -5,6 +5,7 @@ import AppKit
 final class InjectionStage: PipelineStage, @unchecked Sendable {
     var name: String { "Injection" }
     private let settle: @Sendable () async throws -> Void
+    private let accessibilityTrusted: @MainActor @Sendable () -> Bool
     private let currentTarget: @Sendable () async -> DeliveryTargetSnapshot
     private let focus: (@MainActor @Sendable () -> FocusSignals)?
     private let inject: @Sendable (String, SessionContext) async throws -> Void
@@ -14,6 +15,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
     private let copy: @MainActor @Sendable (String) -> Void
 
     init(settle: @escaping @Sendable () async throws -> Void = { try await Task.sleep(nanoseconds: 50_000_000) },
+         accessibilityTrusted: @escaping @MainActor @Sendable () -> Bool = { PermissionHelper.checkAccessibility() },
          focus: (@MainActor @Sendable () -> FocusSignals)? = nil,
          currentTarget: @escaping @Sendable () async -> DeliveryTargetSnapshot = { await KeyboardInjector.currentDeliveryTarget() },
          inject: @escaping @Sendable (String, SessionContext) async throws -> Void = { text, context in
@@ -34,6 +36,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
              SoundFeedback.playCopiedToClipboard()
          }) {
         self.settle = settle
+        self.accessibilityTrusted = accessibilityTrusted
         self.focus = focus
         self.currentTarget = currentTarget
         self.inject = inject
@@ -64,8 +67,12 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 current = await DeliveryTargetSnapshot(pid: target?.pid, signals: focus())
             } else { current = await currentTarget() }
             try checkActive(context)
+            let trusted = await MainActor.run { accessibilityTrusted() }
+            try checkActive(context)
+            let decision = applyAccessibilityGate(decideDelivery(target: target, current: current),
+                                                  accessibilityTrusted: trusted)
             let outcome: DeliveryOutcome
-            switch decideDelivery(target: target, current: current) {
+            switch decision {
             case .clipboard:
                 try await copyToClipboard(text, context: context)
                 outcome = .clipboard
