@@ -13,6 +13,7 @@ enum LocalModelImportSelfTests {
         defer { try? FileManager.default.removeItem(at: root) }
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try repeatedFileIdentity(root, r)
             for (large, bits) in [(false, 4), (false, 8), (true, 4), (true, 8)] {
                 let dir = root.appendingPathComponent("unrelated-\(large)-\(bits)")
                 try qwenFixture(dir, large: large, bits: bits)
@@ -139,6 +140,38 @@ enum LocalModelImportSelfTests {
             do { _ = try ASRModelInspector.inspect(directory: multi); r.check(false, "import: root variants rejected") }
             catch let error as ASRModelInspectionError { r.eq(error.code, .chooseSubdirectory, "import: explicit variant choice") }
         } catch { r.check(false, "import fixture: \(error)") }
+    }
+
+    /// Mirrors Whisper's metadata read followed by its later package walk, without timing races.
+    private static func repeatedFileIdentity(_ root: URL, _ r: SelfTest.Reporter) throws {
+        let url = root.appendingPathComponent("model.mil")
+        try Data("original graph".utf8).write(to: url)
+        let files = LocalInspectionFiles()
+        _ = try files.read(url)
+        let firstIdentity = try files.identity(url)
+        let firstFingerprint = files.fingerprint
+        try files.record(url, before: firstIdentity)
+        try files.verify()
+        r.eq(files.fingerprint, firstFingerprint, "import: unchanged repeated record preserves metadata fingerprint")
+
+        let replacement = root.appendingPathComponent("replacement.mil")
+        try Data("replacement graph with different resources".utf8).write(to: replacement)
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.moveItem(at: replacement, to: url)
+        let laterIdentity = try files.identity(url)
+        do {
+            try files.record(url, before: laterIdentity)
+            r.check(false, "import: replacement between metadata read and package walk is rejected")
+        } catch let error as ASRModelInspectionError {
+            r.eq(error.code, .changedDuringInspection, "import: repeated record reports changed file identity")
+        }
+        r.eq(files.fingerprint, firstFingerprint, "import: rejected replacement cannot overwrite first identity or hash")
+        do {
+            try files.verify()
+            r.check(false, "import: final verification still compares against first observation")
+        } catch let error as ASRModelInspectionError {
+            r.eq(error.code, .changedDuringInspection, "import: first identity remains authoritative after rejection")
+        }
     }
 
     private static func json(_ object: Any, _ url: URL) throws { try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]).write(to: url) }

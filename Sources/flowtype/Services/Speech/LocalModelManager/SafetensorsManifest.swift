@@ -131,8 +131,12 @@ final class LocalInspectionFiles {
                         created: attrs[.creationDate] as? Date ?? .distantPast)
     }
     func record(_ url: URL, before: Identity, data: Data? = nil) throws {
-        guard try identity(url) == before else { throw failure(.changedDuringInspection, "检查期间模型文件发生变化，请重新检查。") }
-        records[url.path] = before
+        let first = records[url.path]
+        guard first == nil || first == before, try identity(url) == before else {
+            throw failure(.changedDuringInspection, "检查期间模型文件发生变化，请重新检查。")
+        }
+        // A later package walk must never replace the identity associated with parsed metadata.
+        if first == nil { records[url.path] = before }
         if let data { hashes[url.path] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
     }
     func read(_ url: URL, limit: Int = SafetensorsManifest.metadataLimit) throws -> Data {
