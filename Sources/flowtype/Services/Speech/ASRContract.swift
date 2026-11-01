@@ -17,6 +17,7 @@ struct ASRCapabilities: Sendable, Equatable {
 /// provider 身份的唯一事实来源 —— 避免字符串字面量在多处漂移。
 enum ASRProviderID {
     static let qwenLocal = "qwen-local"
+    static let local = qwenLocal
     static let cloud = "cloud-asr"
 }
 

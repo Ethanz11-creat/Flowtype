@@ -4,16 +4,12 @@ import Foundation
 final class ASRProviderRegistry: @unchecked Sendable {
     static let shared = ASRProviderRegistry()
 
-    private let localLock = NSLock()
-    private var localProvider: QwenASRProvider
-    var qwenLocalProvider: QwenASRProvider { localLock.withLock { localProvider } }
-
-    // Interim bridge until routing takes immutable LocalASRLease snapshots.
-    func adoptLocalProvider(_ provider: QwenASRProvider) { localLock.withLock { localProvider = provider } }
+    /// Legacy compatibility instance. Live local routing always uses a captured lease.
+    let qwenLocalProvider: QwenASRProvider
     let cloudProvider: CloudASRProvider
 
     private init() {
-        self.localProvider = QwenASRProvider()
+        self.qwenLocalProvider = QwenASRProvider()
         self.cloudProvider = CloudASRProvider()
     }
 

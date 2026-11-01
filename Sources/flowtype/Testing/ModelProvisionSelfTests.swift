@@ -494,6 +494,8 @@ extension ModelProvisionSelfTests {
         }
         downloader.startDownload(preset: .qwen317B)
         await until { await downloaderLoader.calls == 1 }
+        r.check(downloader.isDownloading(preset: .qwen317B), "picker recognizes only the facade-owned in-flight target")
+        r.check(!downloader.isDownloading(preset: .qwen306B), "picker does not label another preset as in-flight")
         downloader.cancelDownload()
         await downloaderLoader.complete(stale)
         await until { downloaderState.operationID == nil }
@@ -505,12 +507,14 @@ extension ModelProvisionSelfTests {
         await downloaderLoader.fail(.loadFailed())
         await until { downloaderState.operationID == nil }
         for _ in 0..<10 { await Task.yield() }
+        r.check(!downloader.isDownloading(preset: .qwen317B), "failed terminal download is not in-flight")
         downloader.startDownload(preset: .qwen306B)
         await until { await downloaderLoader.calls == 3 }
         r.eq(await downloaderLoader.calls, 3, "failed downloader terminal record does not block retry")
         await downloaderLoader.complete(stale)
         await until { downloaderState.operationID == nil }
         r.eq(downloader.currentDownload?.status, .completed, "successful downloader maps coordinator commit")
+        r.check(!downloader.isDownloading(preset: .qwen306B), "completed terminal download is not in-flight")
         for _ in 0..<10 { await Task.yield() }
         let unrelated = Task { await downloaderState.perform(.init(target: .preset(.qwen317B), source: .official, origin: .manual)) }
         await until { await downloaderLoader.calls == 4 }
@@ -556,4 +560,153 @@ extension ModelProvisionSelfTests {
         r.eq(sharedEnvironment.history(), ["https://hf-mirror.com", "original-endpoint", nil, "original-endpoint"], "endpoint scope never overlaps")
 
     }
+}
+
+
+extension ModelProvisionSelfTests {
+    @MainActor
+    static func runPresentationAndRouting(_ r: SelfTest.Reporter) async {
+        var config = Configuration()
+        config.hasCompletedOnboarding = true
+        config.asrRoutingPolicy = .localOnly
+        let deferred = ReadinessSnapshotBuilder.make(config: config, modelStatus: .notLoaded,
+            accessibility: .granted, microphone: .granted, speechRecognition: .granted,
+            networkReachable: false, appleAvailable: true, computedAt: Date())
+        r.eq(deferred.localModel, .unavailable(reason: "本地模型未加载"),
+             "deferred setup never invents a provisioning operation")
+        r.eq(classifyReadiness(deferred), .blocked(.noEngine), "deferred local-only setup remains unready")
+
+        let usable = ReadinessSnapshotBuilder.make(config: config, modelStatus: .error(reason: "candidate failed", retryable: true),
+            accessibility: .granted, microphone: .granted, speechRecognition: .granted,
+            networkReachable: false, appleAvailable: true, computedAt: Date(), localUsable: true)
+        r.eq(classifyReadiness(usable), .ready, "candidate failure cannot hide a usable lease")
+        r.eq(deferred.appleSpeech, .unavailable(reason: "当前路由未启用 Apple 识别"), "Apple basic stays disabled in local-only")
+        config.asrRoutingPolicy = .auto
+        let basic = ReadinessSnapshotBuilder.make(config: config, modelStatus: .notLoaded,
+            accessibility: .granted, microphone: .granted, speechRecognition: .granted,
+            networkReachable: false, appleAvailable: true, computedAt: Date())
+        r.eq(classifyReadiness(basic), .degraded(.basicOnly), "Apple basic is available only under auto")
+        config.asrRoutingPolicy = .cloudOnly
+        let cloudOnly = ReadinessSnapshotBuilder.make(config: config, modelStatus: .ready,
+            accessibility: .granted, microphone: .granted, speechRecognition: .granted,
+            networkReachable: false, appleAvailable: true, computedAt: Date(), localUsable: true)
+        r.eq(classifyReadiness(cloudOnly), .blocked(.noEngine), "forced cloud never enables local or Apple basic")
+
+        let p17 = ModelRecoveryPresentation.make(active: nil, target: .qwen317B, failure: .metadataInvalid(),
+            didAutoFallback: false, source: .official, destination: URL(fileURLWithPath: "/fixture/1.7B"))
+        r.eq(p17.targetName, "Qwen3-ASR 1.7B (4-bit)", "recovery displays the actual 1.7B target")
+        r.eq(p17.repoID, "aufklarer/Qwen3-ASR-1.7B-MLX-4bit", "recovery repo follows target")
+        r.eq(p17.downloadCommand, "HF_ENDPOINT='https://huggingface.co' hf download 'aufklarer/Qwen3-ASR-1.7B-MLX-4bit' --local-dir '/fixture/1.7B'",
+             "recovery command uses target repo, selected source and destination")
+        r.check(p17.actions.contains(.retry), "terminal failure offers a real manual retry")
+        let small = LocalModelIdentity(id: "qwen3-0.6b-4bit", displayName: "Qwen3-ASR 0.6B (4-bit)", engine: "qwen",
+            repoID: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit", directory: URL(fileURLWithPath: "/fixture/0.6B"))
+        config.selectedLocalModelID = nil
+        config.customLocalModelPath = "/fixture/custom"
+        config.localModelPath = "/fixture/legacy"
+        let fallback = ModelRecoveryPresentation.make(active: small, target: .qwen317B, failure: nil,
+            didAutoFallback: true, source: .custom("https://models.example:8443/hub"), destination: URL(fileURLWithPath: "/fixture/next"))
+        r.eq(fallback.fallbackLabel, "已退回 0.6B", "fallback label reflects committed smaller lease")
+        r.eq(config.selectedLocalModelID, nil, "displaying fallback does not pin automatic selection")
+        r.eq(config.customLocalModelPath, "/fixture/custom", "presentation never clears explicit custom path")
+        r.eq(fallback.sourceName, "自定义 (models.example:8443)", "custom source stays custom")
+        r.check(fallback.downloadCommand?.contains("https://models.example:8443/hub") == true, "custom command uses configured endpoint")
+        let terminal = ModelRecoveryPresentation.make(active: small, target: .qwen317B, failure: .stalled(),
+            didAutoFallback: false, source: .official, destination: URL(fileURLWithPath: "/fixture/next"))
+        r.check(terminal.failureMessage?.contains("正在自动重试") == false, "terminal stall never promises an automatic retry")
+        let busy = ModelRecoveryPresentation.make(active: small, target: .qwen317B, failure: nil,
+            didAutoFallback: false, source: .official, destination: URL(fileURLWithPath: "/fixture/next"), isBusy: true)
+        r.eq(busy.actions, [.cancel], "draining operation cannot offer a concurrent retry")
+        let unresolved = ModelRecoveryPresentation.make(active: nil, target: nil, failure: .incompleteLocal(),
+            didAutoFallback: false, source: .official, customPath: "/fixture/custom")
+        r.eq(unresolved.targetName, "自定义模型", "unresolved folder stays a custom target")
+        r.eq(unresolved.downloadCommand, nil, "unresolved custom path never advertises a recommendation download")
+        ModelRecoveryPresentation.selectSmallerModel(in: &config)
+        r.eq(config.selectedLocalModelID, "qwen3-0.6b-4bit", "manual smaller action pins its explicit target")
+        r.eq(config.customLocalModelPath, nil, "only explicit smaller action clears conflicting custom path")
+        r.eq(config.localModelPath, nil, "manual smaller action clears legacy override too")
+
+        let failedFallback = ModelRecoveryPresentation.make(active: small, target: .qwen306B, failure: .network(),
+            didAutoFallback: true, source: .official, destination: URL(fileURLWithPath: "/fixture/0.6B"))
+        r.eq(failedFallback.fallbackLabel, nil, "failed fallback cannot relabel a retained old 0.6B lease as newly recovered")
+        let pendingFallback = ModelRecoveryPresentation.make(active: small, target: .qwen306B, failure: nil,
+            didAutoFallback: true, source: .official, destination: URL(fileURLWithPath: "/fixture/0.6B"), isBusy: true)
+        r.eq(pendingFallback.fallbackLabel, nil, "pending fallback cannot claim a successful recovery")
+        let explicitProbe = ProvisionProbe()
+        let explicitLease = lease("explicit-before-onboarding")
+        let explicit = fixture(load: { target, _, _ in await explicitProbe.record(target); return explicitLease })
+        await explicit.retryConfiguredModel()
+        r.eq(explicit.activeLease, explicitLease, "explicit onboarding recovery action is allowed to provision a model")
+        r.eq((await explicitProbe.loadedTargets).count, 1, "explicit onboarding action does real work")
+
+        let importedURL = URL(fileURLWithPath: "/fixture/import")
+        let importedModel = ResolvedModel(directory: importedURL, modelId: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
+        let importProbe = ProvisionProbe()
+        let importedLease = lease("imported")
+        let offlineLease = LocalASRLease(id: UUID(), identity: .init(id: "qwen3-0.6b-4bit", displayName: "Offline", engine: "qwen",
+            repoID: importedModel.modelId, directory: importedURL), provider: importedLease.provider)
+        let importer = fixture(preflight: { _, _ in await importProbe.preflight() }, load: { target, offline, _ in
+            await importProbe.record(target)
+            guard offline else { throw ModelProvisionError.network() }
+            return offlineLease
+        }, localModel: { cfg in cfg.customLocalModelPath == "/fixture/import" ? importedModel : nil })
+        do { try await importer.importOfflineModel(at: importedURL) }
+        catch { r.check(false, "shared folder import failed: \(error)") }
+        r.eq(importer.activeLease, offlineLease, "shared folder import commits the offline lease")
+        r.eq(await importProbe.preflights, 0, "folder import never contacts the model host")
+        do {
+            try await importer.importOfflineModel(at: URL(fileURLWithPath: "/fixture/incomplete"))
+            r.check(false, "unresolved custom import must fail")
+        } catch { r.eq(importer.activeLease, offlineLease, "invalid folder keeps the available lease") }
+
+        let oldProvider = LeaseSpeechFixture(name: "old")
+        let newProvider = LeaseSpeechFixture(name: "new", id: "whisper-local")
+        let oldLease = LocalASRLease(id: UUID(), identity: small, provider: oldProvider)
+        let newIdentity = LocalModelIdentity(id: "future-whisper", displayName: "Custom Whisper", engine: "whisper",
+            repoID: nil, directory: URL(fileURLWithPath: "/fixture/whisper"))
+        let newLease = LocalASRLease(id: UUID(), identity: newIdentity, provider: newProvider)
+        let box = LeaseBox(oldLease)
+        var localConfig = Configuration(); localConfig.asrRoutingPolicy = .localOnly
+        let capturedConfig = localConfig
+        let router = ASRRouter(startMonitoring: false, configuration: { capturedConfig }, localAvailable: { true },
+                               localLease: { box.get() })
+        let captured = await router.captureStartRoute()
+        box.set(newLease)
+        let samples: [Float] = (0..<3207).map { Float($0) / 4000 }
+        let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in box.get()?.provider })
+        let first = SessionContext(sessionID: 8001); first.captureRoute = captured
+        _ = await stage.execute(payload: .audio(samples: samples, previewText: ""), context: first)
+        r.eq(first.rawTranscript, "old:3207", "recording finishes with its captured local provider after replacement")
+        r.eq(await oldProvider.samples, samples, "captured local provider receives every saved sample")
+        r.eq(await newProvider.samples, [], "replacement provider never receives old recording samples")
+        let next = SessionContext(sessionID: 8002); next.captureRoute = await router.captureStartRoute()
+        _ = await stage.execute(payload: .audio(samples: samples, previewText: ""), context: next)
+        r.eq(next.rawTranscript, "new:3207", "next recording uses the replacement lease")
+        r.eq(next.usedProviderID, "qwen-local", "future engines still occupy the single compatible local routing slot")
+        r.eq(SessionController.backendLabel(forProviderID: next.usedProviderID, localIdentity: next.captureRoute?.localLease?.identity),
+             "whisper", "history labels the captured engine instead of the legacy routing slot")
+    }
+}
+
+
+private actor LeaseSpeechFixture: ASRProvider {
+    nonisolated let id: String
+    nonisolated let displayName: String
+    nonisolated let capabilities = ASRCapabilities(supportsLanguageHint: false, supportsContextHint: false,
+        requiresNetwork: false, location: .onDevice)
+    var samples: [Float] = []
+    var isAvailable: Bool { true }
+    init(name: String, id: String = "qwen-local") { displayName = name; self.id = id }
+    func transcribe(_ request: ASRRequest) async throws -> ASRResult {
+        samples = request.samples
+        return ASRResult(text: "\(displayName):\(samples.count)", providerID: id, latencyMs: 1)
+    }
+}
+
+private final class LeaseBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lease: LocalASRLease?
+    init(_ lease: LocalASRLease?) { self.lease = lease }
+    func get() -> LocalASRLease? { lock.withLock { lease } }
+    func set(_ value: LocalASRLease?) { lock.withLock { lease = value } }
 }

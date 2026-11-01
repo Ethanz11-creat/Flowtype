@@ -369,6 +369,7 @@ enum SelfTest {
         testPermissionWatchOwnership(r)
         testReadinessSnapshotBuilder(r)
         await ModelProvisionSelfTests.runCoordinator(r)
+        await ModelProvisionSelfTests.runPresentationAndRouting(r)
         await testTerminalModelLoadPreflight(r)
         await testReadinessPreflight(r)
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
@@ -1672,8 +1673,8 @@ enum SelfTest {
         r.eq(initial.localModel, .unavailable(reason: "本地模型未加载"),
              "snapshot: fresh onboarding does not promise model loading")
         config.hasCompletedOnboarding = true
-        r.eq(snapshot().localModel, .provisioning(progress: 0),
-             "snapshot: completed onboarding anticipates local provisioning")
+        r.eq(snapshot().localModel, .unavailable(reason: "本地模型未加载"),
+             "snapshot: completed onboarding alone does not invent local provisioning")
         r.eq(snapshot(.ready).localModel, .ready, "snapshot: loaded local model is ready")
         r.eq(snapshot(.loading).localModel, .provisioning(progress: 0), "snapshot: local loading is provisioning")
         r.eq(snapshot(.stalled).localModel, .provisioning(progress: 0), "snapshot: stalled model is provisioning")
@@ -1812,10 +1813,10 @@ enum SelfTest {
                                           speechRecognition: .granted, networkReachable: true,
                                           appleAvailable: true, computedAt: Date(timeIntervalSince1970: 123))
         }
-        r.eq(snapshot().localModel, .provisioning(progress: 0),
-             "terminal model: startup notLoaded retains provisioning anti-flicker")
-        r.eq(classifyReadiness(snapshot()), .degraded(.enginePreparing),
-             "terminal model: startup permits pending provisioning")
+        r.eq(snapshot().localModel, .unavailable(reason: "本地模型未加载"),
+             "terminal model: idle notLoaded truthfully stays unavailable")
+        r.eq(classifyReadiness(snapshot()), .blocked(.noEngine),
+             "terminal model: idle startup has no pending operation")
         await model.handleDownloadCompleted(preset: .qwen306B)
         r.eq(attemptedPresets, ["qwen3-0.6b-4bit"], "terminal model: completed preset is loaded once without retry")
         r.check(hadOperationOwnership, "terminal model: injected loader runs under coordinator ownership")

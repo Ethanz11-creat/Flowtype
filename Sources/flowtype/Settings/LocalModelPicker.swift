@@ -4,6 +4,7 @@ import AppKit
 struct LocalModelPicker: View {
     @ObservedObject private var store = ConfigurationStore.shared
     @ObservedObject private var downloader = ModelDownloader.shared
+    @ObservedObject private var modelState = QwenModelState.shared
     @State private var folderMessage: String?
 
     private var currentTier: HardwareTier {
@@ -34,6 +35,7 @@ struct LocalModelPicker: View {
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()
+                .disabled(modelState.operationID != nil)
 
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(ModelPreset.allPresets) { preset in
@@ -48,10 +50,14 @@ struct LocalModelPicker: View {
             .padding(14)
             .glassCard(cornerRadius: 10)
         }
+        .onChange(of: store.current.selectedLocalModelID) { _, _ in
+            guard store.current.customLocalModelPath == nil, store.current.localModelPath == nil else { return }
+            Task { await modelState.retryConfiguredModel() }
+        }
     }
 
     private func presetRow(_ preset: ModelPreset) -> some View {
-        let isDownloading = downloader.currentDownload?.preset.id == preset.id
+        let isDownloading = downloader.isDownloading(preset: preset)
         let isDownloaded = downloader.isModelDownloaded(preset)
         let isRecommended = preset.recommendedTiers.contains(currentTier)
 
@@ -107,6 +113,7 @@ struct LocalModelPicker: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundColor(Brand.accent)
+                    .disabled(modelState.operationID != nil)
                 }
             }
 
@@ -130,6 +137,7 @@ struct LocalModelPicker: View {
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
+                .disabled(modelState.operationID != nil)
 
                 Button {
                     NSWorkspace.shared.open(ModelPreset.modelsDirectory)
@@ -184,13 +192,18 @@ struct LocalModelPicker: View {
         panel.message = "选择本地模型文件夹"
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        let minBytes: Int64 = 600 * 1024 * 1024
-        do {
-            _ = try CustomModelScanner.validateModelDirectory(url, minBytes: minBytes)
-            store.current.customLocalModelPath = url.path
-            folderMessage = nil
-        } catch {
-            folderMessage = error.localizedDescription
+        Task {
+            do {
+                try await modelState.importOfflineModel(at: url)
+                store.current.customLocalModelPath = url.path
+                store.current.localModelPath = nil
+                store.current.selectedLocalModelID = nil
+                folderMessage = nil
+            } catch {
+                folderMessage = (error as? ModelProvisionError).flatMap {
+                    ModelRecoveryPresentation.make(active: nil, target: nil, failure: $0, didAutoFallback: false).failureMessage
+                } ?? "模型加载已取消。"
+            }
         }
     }
 

@@ -54,6 +54,16 @@ final class ModelDownloader: ObservableObject {
         }
     }
 
+    /// A terminal download record is history, never an in-flight operation.
+    func isDownloading(preset: ModelPreset) -> Bool {
+        guard downloadTask != nil, let current = currentDownload, current.preset.id == preset.id else { return false }
+        switch current.status {
+        case .pending: return true
+        case .downloading, .verifying: return coordinator.operationID != nil
+        case .completed, .failed: return false
+        }
+    }
+
     func cancelDownload() {
         guard downloadTask != nil else { return }
         cancelRequested = true

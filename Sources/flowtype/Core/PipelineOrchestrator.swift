@@ -60,7 +60,7 @@ struct SessionEffects {
             ASRRouter.shared.startProbing()
             let cfg = ConfigurationStore.shared.current
             guard cfg.asrRoutingPolicy != .cloudOnly else { return }
-            await QwenModelState.shared.loadModel(provider: ASRProviderRegistry.shared.qwenLocalProvider)
+            await QwenModelState.shared.loadModel()
         }
     }, showWindow: { WindowManager.shared.showWindow() }, hideWindow: { WindowManager.shared.hide() })
 }
@@ -77,9 +77,6 @@ final class SessionController: ObservableObject {
     private let configurationStore: ConfigurationStore
     private let refreshReadiness: @MainActor () -> ReadinessLevel
     private let readinessLevel: @MainActor @Sendable () -> ReadinessLevel
-    private let asrRegistry = ASRProviderRegistry.shared
-
-    var qwenProvider: QwenASRProvider { asrRegistry.qwenLocalProvider }
 
     // MARK: - Published State
 
@@ -621,9 +618,9 @@ final class SessionController: ObservableObject {
     }
 
     /// sttBackend 文案：不再依赖 provider 类型判断。
-    nonisolated static func backendLabel(forProviderID id: String?) -> String {
+    nonisolated static func backendLabel(forProviderID id: String?, localIdentity: LocalModelIdentity? = nil) -> String {
         switch id {
-        case ASRProviderID.qwenLocal: return "qwen"
+        case ASRProviderID.local: return localIdentity?.engine ?? "qwen"
         case ASRProviderID.cloud: return "cloud"
         default: return "apple"
         }
@@ -650,7 +647,7 @@ final class SessionController: ObservableObject {
             durationMs = nil
         }
         let mode: PolishMode = SessionController.historyMode(usePolish: context.usePolish, polishFailed: context.polishFailed)
-        let sttBackend = SessionController.backendLabel(forProviderID: context.usedProviderID)
+        let sttBackend = SessionController.backendLabel(forProviderID: context.usedProviderID, localIdentity: context.captureRoute?.localLease?.identity)
         var session = DictationSession(
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,

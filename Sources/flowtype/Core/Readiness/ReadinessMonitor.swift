@@ -67,18 +67,19 @@ enum ReadinessSnapshotBuilder {
     static func make(config: Configuration, modelStatus: QwenModelStatus,
                      accessibility: PermissionState, microphone: PermissionState,
                      speechRecognition: PermissionState, networkReachable: Bool,
-                     appleAvailable: Bool, computedAt: Date) -> ReadinessSnapshot {
+                     appleAvailable: Bool, computedAt: Date, localUsable: Bool = false) -> ReadinessSnapshot {
         let local: EngineReadiness
         if config.asrRoutingPolicy == .cloudOnly {
             local = .unavailable(reason: "仅云端模式")
+        } else if localUsable {
+            local = .ready
         } else {
             switch modelStatus {
             case .ready: local = .ready
             case .downloading(let progress, _, _): local = .provisioning(progress: progress)
             case .loading, .stalled: local = .provisioning(progress: 0)
             case .notLoaded:
-                local = config.hasCompletedOnboarding
-                    ? .provisioning(progress: 0) : .unavailable(reason: "本地模型未加载")
+                local = .unavailable(reason: "本地模型未加载")
             case .error(let reason, _): local = .unavailable(reason: reason)
             }
         }
@@ -148,6 +149,9 @@ final class ReadinessMonitor: ObservableObject {
         debounce = ReadinessDebounce(level: level)
 
         QwenModelState.shared.$status.sink { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }.store(in: &subscriptions)
+        QwenModelState.shared.$activeLease.sink { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }.store(in: &subscriptions)
         ConfigurationStore.shared.$current.sink { [weak self] _ in
@@ -233,6 +237,6 @@ final class ReadinessMonitor: ObservableObject {
             config: config, modelStatus: QwenModelState.shared.status,
             accessibility: PermissionHelper.accessibilityState(), microphone: PermissionHelper.microphoneState(),
             speechRecognition: speechRecognition, networkReachable: ASRRouter.shared.snapshot().networkReachable,
-            appleAvailable: appleAvailable, computedAt: Date())
+            appleAvailable: appleAvailable, computedAt: Date(), localUsable: QwenModelState.shared.activeLease != nil)
     }
 }

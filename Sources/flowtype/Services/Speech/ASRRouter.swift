@@ -14,6 +14,7 @@ struct ASRRouteSnapshot: Sendable, Equatable {
     var language: String? = nil
     var healthGeneration: UInt64 = 0
     var isHealthRecovery: Bool = false
+    var localLease: LocalASRLease? = nil
     var cloudIdentity: CloudASRHealthIdentity? { cloudConfiguration.map { CloudASRHealthIdentity(provider: $0.provider) } }
 
     var shouldStartRealtime: Bool {
@@ -254,19 +255,22 @@ final class ASRRouter: @unchecked Sendable {
 
     private let configuration: @MainActor @Sendable () -> Configuration
     private let localAvailable: @MainActor @Sendable () -> Bool
+    private let localLease: @MainActor @Sendable () -> LocalASRLease?
     private let uptimeNanoseconds: @Sendable () -> UInt64
     private let measureProbe: @Sendable (String, UInt16, TimeInterval) async -> Double?
 
     /// Dependencies keep the real capture/probe boundary runnable offline.
     init(startMonitoring: Bool = true,
          configuration: @escaping @MainActor @Sendable () -> Configuration = { ConfigurationStore.shared.current },
-         localAvailable: @escaping @MainActor @Sendable () -> Bool = { ASRProviderRegistry.shared.qwenLocalProvider.isLoaded },
+         localAvailable: @escaping @MainActor @Sendable () -> Bool = { QwenModelState.shared.activeLease != nil },
+         localLease: @escaping @MainActor @Sendable () -> LocalASRLease? = { QwenModelState.shared.activeLease },
          uptimeNanoseconds: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
          measureProbe: @escaping @Sendable (String, UInt16, TimeInterval) async -> Double? = {
              await CloudProbe.measureLatency(host: $0, port: $1, timeout: $2)
          }) {
         self.configuration = configuration
         self.localAvailable = localAvailable
+        self.localLease = localLease
         self.uptimeNanoseconds = uptimeNanoseconds
         self.measureProbe = measureProbe
         guard startMonitoring else { return }
@@ -366,9 +370,11 @@ final class ASRRouter: @unchecked Sendable {
         // Diagnostic selection never spends the user-session recovery slot.
         let route = await MainActor.run {
             self.synchronizeConfigurationIdentity()
-            return makeASRRouteSnapshot(configuration: self.configuration(), localAvailable: self.localAvailable(), health: self.snapshot())
+            return makeASRRouteSnapshot(configuration: self.configuration(), localAvailable: self.localAvailable(), health: self.snapshot(), localLease: self.localLease())
         }
-        return route.candidateIDs.compactMap { ASRProviderRegistry.shared.provider(forID: $0) }
+        return route.candidateIDs.compactMap { id in
+            id == ASRProviderID.local ? route.localLease?.provider : ASRProviderRegistry.shared.provider(forID: id)
+        }
     }
 
     /// Snapshot routing exactly once at capture start. The returned identity is
@@ -377,11 +383,12 @@ final class ASRRouter: @unchecked Sendable {
     @MainActor
     func captureStartRoute() async -> ASRRouteSnapshot {
         let cfg = configuration()
+        let lease = localLease()
         let local = localAvailable()
         let uptime = uptimeNanoseconds()
         return health.withLock {
             reserveASRCaptureRoute(configuration: cfg, localAvailable: local, health: &$0,
-                                   now: Date(), uptimeNanoseconds: uptime)
+                                   now: Date(), uptimeNanoseconds: uptime, localLease: lease)
         }
     }
 
@@ -432,7 +439,7 @@ struct CompletionBudget: Sendable, Equatable {
 
 /// Pure capture route construction also makes privacy gating testable offline.
 func makeASRRouteSnapshot(configuration cfg: Configuration, localAvailable: Bool,
-                          health: RouterHealthSnapshot, now: Date = Date()) -> ASRRouteSnapshot {
+                          health: RouterHealthSnapshot, now: Date = Date(), localLease: LocalASRLease? = nil) -> ASRRouteSnapshot {
     let effective = cfg.effectiveCloudASRConfig
     let cloud = effective.map {
         CloudASRRequestConfiguration(provider: $0.provider, apiKey: $0.apiKey, sendContext: cfg.cloudASRSendContext)
@@ -451,16 +458,16 @@ func makeASRRouteSnapshot(configuration cfg: Configuration, localAvailable: Bool
                                localAvailable: localAvailable, cloudAvailable: available, now: now)
     return ASRRouteSnapshot(policy: cfg.asrRoutingPolicy, selectedProviderID: selectASRChain(inputs).first,
                             localAvailable: localAvailable, cloudAvailable: available,
-                            cloudConfiguration: cloud, language: cfg.asrLanguage.qwenLanguageCode, healthGeneration: health.generation)
+                            cloudConfiguration: cloud, language: cfg.asrLanguage.qwenLanguageCode, healthGeneration: health.generation, localLease: localLease)
 }
 
 /// Caller owns the health lock: decision and reservation are indivisible.
 func reserveASRCaptureRoute(configuration cfg: Configuration, localAvailable: Bool,
                             health: inout RouterHealthSnapshot, now: Date,
-                            uptimeNanoseconds uptime: UInt64) -> ASRRouteSnapshot {
+                            uptimeNanoseconds uptime: UInt64, localLease: LocalASRLease? = nil) -> ASRRouteSnapshot {
     let identity = cfg.effectiveCloudASRConfig.map { CloudASRHealthIdentity(provider: $0.provider) }
     health.synchronizeIdentity(identity)
-    let route = makeASRRouteSnapshot(configuration: cfg, localAvailable: localAvailable, health: health, now: now)
+    let route = makeASRRouteSnapshot(configuration: cfg, localAvailable: localAvailable, health: health, now: now, localLease: localLease)
     guard route.policy == .auto, route.localAvailable, route.cloudAvailable,
           route.selectedProviderID == ASRProviderID.qwenLocal, health.networkReachable else { return route }
     if let last = health.lastHalfOpenUptimeNanoseconds {
@@ -470,7 +477,7 @@ func reserveASRCaptureRoute(configuration cfg: Configuration, localAvailable: Bo
     return ASRRouteSnapshot(policy: route.policy, selectedProviderID: ASRProviderID.cloud,
                             localAvailable: route.localAvailable, cloudAvailable: route.cloudAvailable,
                             cloudConfiguration: route.cloudConfiguration, language: route.language,
-                            healthGeneration: route.healthGeneration, isHealthRecovery: true)
+                            healthGeneration: route.healthGeneration, isHealthRecovery: true, localLease: route.localLease)
 }
 
 func completionStageTimeout(remaining: TimeInterval, cloud: Bool, policy: ASRRoutingPolicy,

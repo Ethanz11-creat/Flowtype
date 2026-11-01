@@ -60,17 +60,15 @@ private final class ProvisionProgress: @unchecked Sendable {
 
 @MainActor
 final class QwenModelState: ObservableObject {
-    static let shared = QwenModelState(commit: { lease in
-        if let provider = lease.provider as? QwenASRProvider {
-            ASRProviderRegistry.shared.adoptLocalProvider(provider)
-        }
-    })
+    static let shared = QwenModelState()
 
     @Published private(set) var status: QwenModelStatus = .notLoaded
     @Published private(set) var activeLease: LocalASRLease?
     @Published private(set) var failure: ModelProvisionError?
     @Published private(set) var operationID: UUID?
     @Published private(set) var didAutoFallback = false
+    @Published private(set) var target: ModelProvisionTarget?
+    @Published private(set) var operationSource: DownloadSource?
 
     private let preflight: @Sendable (ModelPreset, DownloadSource) async throws -> Void
     private let load: @Sendable (ModelProvisionTarget, Bool, @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease
@@ -159,6 +157,7 @@ final class QwenModelState: ObservableObject {
         guard operationID == nil, !Task.isCancelled else { return }
         let id = UUID()
         operationID = id; failure = nil; didAutoFallback = false; userCancelled = false
+        target = request.target; operationSource = request.source
         status = .loading
         let task = Task { await run(request, id: id) }
         operation = task
@@ -176,12 +175,23 @@ final class QwenModelState: ObservableObject {
         operation?.cancel()
     }
 
-    func loadModel(provider: QwenASRProvider) async {
+    func loadModel(provider: QwenASRProvider? = nil) async {
         guard operationID == nil else { return }
         if activeLease != nil { return }
+        await prepareConfiguredModel(allowDownload: configuration().hasCompletedOnboarding)
+    }
+
+    /// Explicit settings actions may download during onboarding and replace a usable lease.
+    func retryConfiguredModel() async {
+        await prepareConfiguredModel(allowDownload: true)
+    }
+
+    private func prepareConfiguredModel(allowDownload: Bool) async {
+        guard operationID == nil else { return }
         let config = configuration()
         let explicitPath = [config.customLocalModelPath, config.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
         if let explicitPath {
+            target = nil
             let wanted = URL(fileURLWithPath: (explicitPath as NSString).expandingTildeInPath).resolvingSymlinksInPath()
             guard let resolved = localModel(config), resolved.directory.resolvingSymlinksInPath() == wanted else {
                 publish(.incompleteLocal()); return
@@ -205,13 +215,35 @@ final class QwenModelState: ObservableObject {
             }
             // Preserve preset identity and origin so a failed automatic local 1.7B can try
             // 0.6B. Before onboarding, local loading is allowed but network fallback is not.
-            let target: ModelProvisionTarget = config.hasCompletedOnboarding ? .preset(installedPreset) : .offline(resolved)
+            let target: ModelProvisionTarget = allowDownload ? .preset(installedPreset) : .offline(resolved)
             await perform(.init(target: target, source: config.downloadSource, origin: origin))
             return
         }
-        guard config.hasCompletedOnboarding else { return }
+        guard allowDownload else { return }
         let preset = selectedPreset ?? ModelPreset.recommendedModel(for: HardwareProfiler.currentTier())
         await perform(.init(target: .preset(preset), source: config.downloadSource, origin: origin))
+    }
+
+    /// All folder pickers share this strictly offline entry point. Callers persist paths only after success.
+    func importOfflineModel(at directory: URL) async throws {
+        guard operationID == nil else { throw ModelProvisionError.loadFailed() }
+        var config = configuration()
+        config.selectedLocalModelID = nil
+        config.customLocalModelPath = directory.path
+        config.localModelPath = nil
+        let wanted = directory.resolvingSymlinksInPath().standardizedFileURL
+        guard let resolved = localModel(config),
+              resolved.directory.resolvingSymlinksInPath().standardizedFileURL == wanted else {
+            throw ModelProvisionError.incompleteLocal()
+        }
+        let previous = activeLease?.id
+        await perform(.init(target: .offline(resolved), source: config.downloadSource, origin: .offlineImport))
+        try Task.checkCancellation()
+        if let failure { throw failure }
+        guard let activeLease, activeLease.id != previous,
+              activeLease.identity.directory.resolvingSymlinksInPath().standardizedFileURL == wanted else {
+            throw CancellationError()
+        }
     }
 
     func handleDownloadCompleted(preset: ModelPreset) async {
@@ -252,6 +284,7 @@ final class QwenModelState: ObservableObject {
     }
 
     private func provision(_ target: ModelProvisionTarget, source: DownloadSource, attempts: Int, id: UUID) async throws -> LocalASRLease {
+        self.target = target
         if case .offline = target { return try await attempt(target, offline: true, id: id) }
         guard case .preset(let preset) = target else { throw ModelProvisionError.incompleteLocal() }
         var config = Configuration()

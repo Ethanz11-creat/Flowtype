@@ -329,8 +329,8 @@ struct OnboardingView: View {
             Spacer()
 
             HStack {
-                Button("跳过") {
-                    completeOnboarding()
+                Button("稍后配置") {
+                    completeOnboarding(startModel: false)
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
@@ -358,6 +358,15 @@ struct OnboardingView: View {
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+
+            HStack(spacing: 8) {
+                Text(modelState.activeLease.map { "可用模型：\($0.identity.displayName)" } ?? "本地模型尚未就绪，可稍后配置。")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+                if modelState.activeLease == nil {
+                    Button("准备本地模型") { Task { await modelState.retryConfiguredModel() } }
+                        .controlSize(.small).disabled(modelState.operationID != nil)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("录音结果会显示在这里：")
@@ -400,15 +409,15 @@ struct OnboardingView: View {
             Spacer()
 
             HStack {
-                Button("跳过") {
-                    completeOnboarding()
+                Button("稍后配置") {
+                    completeOnboarding(startModel: false)
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
 
                 Spacer()
 
-                Button(action: completeOnboarding) {
+                Button(action: { completeOnboarding() }) {
                     Text("开始使用 FlowType")
                         .frame(width: 160)
                 }
@@ -448,14 +457,13 @@ struct OnboardingView: View {
         OnboardingPipeline.cancelDemo(demoSession)
     }
 
-    private func completeOnboarding() {
+    private func completeOnboarding(startModel: Bool = true) {
         store.current.hasCompletedOnboarding = true
         store.save(store.current)
         AppLogger.log("[Onboarding] Completed and saved")
-        if case .notLoaded = modelState.status {
+        if startModel, modelState.activeLease == nil, modelState.operationID == nil {
             Task {
-                let provider = SessionController.shared.qwenProvider
-                await modelState.loadModel(provider: provider)
+                await modelState.loadModel()
             }
         }
         NSApp.keyWindow?.close()

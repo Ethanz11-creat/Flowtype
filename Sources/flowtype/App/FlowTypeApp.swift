@@ -99,9 +99,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func loadQwenASRModel() async {
-        let provider = SessionController.shared.qwenProvider
         AppLogger.log("[AppDelegate] Loading Qwen3-ASR model...")
-        await QwenModelState.shared.loadModel(provider: provider)
+        await QwenModelState.shared.loadModel()
         if case .ready = QwenModelState.shared.status {
             AppLogger.log("[AppDelegate] Qwen3-ASR model loaded successfully")
         } else {

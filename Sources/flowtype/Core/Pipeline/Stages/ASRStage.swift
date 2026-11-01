@@ -42,6 +42,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         let ids = route.candidateIDs
         var firstFailure: Error?
         var finalResult: ASRResult?
+        var finalProviderID: String?
         var usedFallback = false
         defer {
             if let live {
@@ -89,7 +90,8 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                         throw error
                     }
                 } else {
-                    guard let provider = providerForID(id) else { throw SpeechProviderError.notAvailable }
+                    let captured = id == ASRProviderID.local ? route.localLease?.provider : nil
+                    guard let provider = captured ?? providerForID(id) else { throw SpeechProviderError.notAvailable }
                     result = try await withAsyncDeadline(seconds: timeout) { try await provider.transcribe(request) }
                 }
                 guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
@@ -97,6 +99,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                     throw ASRStageError.transcriptionFailed(message: "未识别到完整文字，请重试")
                 }
                 finalResult = result
+                finalProviderID = id
                 let latencyMs = Int(budget.elapsedSeconds * 1000)
                 await healthRecorder(id, route.isRealtime ? latencyMs : result.latencyMs, route)
                 break
@@ -107,7 +110,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                 if firstFailure == nil { firstFailure = error }
                 usedFallback = true
                 await healthRecorder(id, nil, route)
-                AppLogger.log("[ASRStage#\(context.sessionID)] transport=\(route.isRealtime ? "realtime" : "batch") fallback=\(fallbackReason(for: error))")
+                AppLogger.log("[ASRStage#\(context.sessionID)] engine=\(id == ASRProviderID.local ? route.localLease?.identity.engine ?? "local" : "cloud") transport=\(route.isRealtime ? "realtime" : "batch") fallback=\(fallbackReason(for: error))")
             }
         }
         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
@@ -115,7 +118,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             let ms = Int(budget.elapsedSeconds * 1000)
             await MainActor.run {
                 guard !context.isCancelled else { return }
-                context.usedProviderID = result.providerID
+                context.usedProviderID = finalProviderID
                 context.asrMs = ms
                 context.rawTranscript = result.text
                 context.usedFallback = usedFallback
