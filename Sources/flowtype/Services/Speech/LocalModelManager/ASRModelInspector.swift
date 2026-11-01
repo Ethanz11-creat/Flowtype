@@ -179,28 +179,59 @@ enum ASRModelInspector {
         var vocab: [String: Int64] = [:]; var ids: [Int64: String] = [:]
         for (token, value) in raw {
             let id = try LocalInspectionFiles.integer(value)
-            guard id >= 0, id < 151936, ids[id] == nil else { throw failure(.invalidMetadata, "词表 token ID 越界或重复。") }
+            guard !token.isEmpty, id >= 0, id < 151936, ids[id] == nil else { throw failure(.invalidMetadata, "词表 token ID 越界或重复。") }
             vocab[token] = id; ids[id] = token
         }
-        guard !vocab.isEmpty else { throw failure(.incompleteModel, "词表为空。") }
+        // Qwen's 151936 embedding rows include padding: only 0..<151643 are
+        // ordinary byte-BPE tokens. Added tokens must never conceal missing base rows.
+        let baseCount = 151643
+        guard (0..<baseCount).allSatisfy({ ids[Int64($0)] != nil }) else {
+            throw failure(.incompleteModel, "Qwen 基础词表不完整（需要连续的 0…151642 token ID）。")
+        }
+        let bytes = Array(33...126) + Array(161...172) + Array(174...255)
+        let alphabet = Set((bytes + Array(256..<(512 - bytes.count))).compactMap(Unicode.Scalar.init))
+        let base = vocab.filter { $0.value < Int64(baseCount) }
+        guard alphabet.allSatisfy({ base[String($0)] != nil }),
+              base.keys.allSatisfy({ $0.unicodeScalars.allSatisfy(alphabet.contains) }) else {
+            throw failure(.invalidMetadata, "Qwen 基础词表必须包含完整的 byte-BPE 字母表。")
+        }
         let config = try files.json(directory.appendingPathComponent("tokenizer_config.json"))
         if let additions = config["added_tokens_decoder"] {
             guard let tokens = additions as? [String: [String: Any]] else { throw failure(.invalidMetadata, "added_tokens_decoder 格式无效。") }
             for (key, value) in tokens {
-                guard let id = Int64(key), id >= 0, id < 151936, let token = value["content"] as? String,
+                guard let id = Int64(key), id >= 0, id < 151936, let token = value["content"] as? String, !token.isEmpty,
                       ids[id] == nil || ids[id] == token, vocab[token] == nil || vocab[token] == id else {
                     throw failure(.invalidMetadata, "附加 token 与词表冲突。")
                 }
                 vocab[token] = id; ids[id] = token
             }
         }
+        // IDs 151643...151704 are added/special tokens. 151705..<151936 are
+        // padded model slots, not missing vocabulary; converters may leave them absent.
+        guard (151643...151704).allSatisfy({ ids[Int64($0)] != nil }) else {
+            throw failure(.incompleteModel, "Qwen 附加 token 集合不完整。")
+        }
         for (token, id) in ["<|endoftext|>":151643,"<|im_start|>":151644,"<|im_end|>":151645,"<|audio_start|>":151669,"<|audio_end|>":151670,"<|audio_pad|>":151676,"<asr_text>":151704,"Ċ":198,"system":8948,"user":872,"assistant":77091] {
             guard vocab[token] == Int64(id) else { throw failure(.incompleteModel, "词表缺少加载器需要的特殊 token：\(token)") }
         }
         let merges = try files.read(directory.appendingPathComponent("merges.txt"))
-        guard let string = String(data: merges, encoding: .utf8),
-              string.split(separator: "\n").contains(where: { !$0.hasPrefix("#") && $0.split(separator: " ").count == 2 }) else {
-            throw failure(.incompleteModel, "缺少可用的 BPE merges.txt。")
+        guard let string = String(data: merges, encoding: .utf8) else {
+            throw failure(.invalidMetadata, "BPE merges.txt 必须是 UTF-8 文本。")
+        }
+        var reachable = Set(alphabet.map(String.init))
+        var pairs = Set<String>()
+        for (index, line) in string.components(separatedBy: .newlines).enumerated() {
+            if line.isEmpty || (index == 0 && line == "#version: 0.2") { continue }
+            // '#' itself is a valid byte token; only the version header is a comment.
+            let pair = line.components(separatedBy: " ")
+            guard pair.count == 2, pair.allSatisfy({ !$0.isEmpty && base[$0] != nil && reachable.contains($0) }),
+                  base[pair.joined()] != nil, pairs.insert(line).inserted,
+                  reachable.insert(pair.joined()).inserted else {
+                throw failure(.invalidMetadata, "BPE 合并规则包含无效引用、重复结果或错误顺序。")
+            }
+        }
+        guard reachable == Set(base.keys), pairs.count == baseCount - alphabet.count else {
+            throw failure(.incompleteModel, "BPE 合并规则不完整，不能覆盖全部基础词表。")
         }
     }
 }

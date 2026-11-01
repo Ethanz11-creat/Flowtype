@@ -27,8 +27,8 @@ struct ModelRecoveryActions {
             try await coordinator.importOfflineModel(at: directory)
         } else if case .imported(let model) = coordinator.target {
             try await coordinator.useImportedModel(model)
-        } else if let target = coordinator.target {
-            await coordinator.perform(.init(target: target, source: store.current.downloadSource, origin: .manual))
+        } else if coordinator.target != nil {
+            await coordinator.retrySelection(source: store.current.downloadSource)
         } else { await coordinator.retryConfiguredModel() }
     }
 }

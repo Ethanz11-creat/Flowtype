@@ -34,7 +34,10 @@ struct LocalModelHardwareAssessment: Sendable, Equatable {
                   recommendedMinimumMemory: recommendation, minimumResidentBytes: floor)
         }
         if model.engine == .qwenMLX && !isAppleSilicon {
-            return result(.incompatible, "此 MLX 运行路径需要 Apple Silicon；请选择兼容的 Core ML 模型或其他设备。")
+            return result(.incompatible, "此 MLX 运行路径需要 Apple Silicon；请选择其他识别引擎或设备。")
+        }
+        if model.engine == .whisperCoreML && !isAppleSilicon {
+            return result(.incompatible, "当前 WhisperKit 0.18 运行库的缓存布局不支持 Intel Mac；请使用 Apple Silicon 或其他识别引擎。这不是 Core ML 格式本身的限制。")
         }
         if let floor {
             let combined = floor.addingReportingOverflow(activeModelBytes ?? 0)

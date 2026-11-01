@@ -224,7 +224,10 @@ enum ImportedLifecycleSelfTests {
         small.bits = 8
         r.eq(assess(small).recommendedMinimumMemory, nil, "8-bit peak recommendation stays unknown")
         r.eq(assess(small, silicon: false).compatibility, .incompatible, "MLX rejects other architecture")
-        r.eq(assess(model(.whisperCoreML, name: "coreml"), silicon: false).compatibility, .warning, "Core ML does not inherit MLX architecture restriction")
+        let intelWhisper = assess(model(.whisperCoreML, name: "coreml"), silicon: false)
+        r.eq(intelWhisper.compatibility, .incompatible, "Whisper rejects pinned runtime Intel cache ABI")
+        r.check(intelWhisper.explanation.contains("WhisperKit 0.18") && intelWhisper.explanation.contains("不是 Core ML"), "Whisper Intel explanation distinguishes runtime from format")
+        r.eq(assess(model(.whisperCoreML, name: "coreml")).compatibility, .warning, "Whisper Apple Silicon retains unknown memory warning")
         r.eq(assess(small, available: nil).compatibility, .warning, "unknown available memory is honest warning")
         r.eq(assess(small, available: gib / 4).compatibility, .incompatible, "candidate below packed-weight reservation is blocked")
         r.eq(assess(small, physical: gib, available: gib, old: gib).compatibility, .incompatible, "old plus candidate reservation over physical budget blocks")

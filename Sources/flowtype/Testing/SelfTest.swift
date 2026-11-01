@@ -281,6 +281,14 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m2-fix-only") {
+            LocalModelImportSelfTests.runInspection(r)
+            await WhisperRuntimeSelfTests.run(r)
+            await WholeM2FixSelfTests.runRetry(r)
+            await WholeM2FixSelfTests.runGraphAdmission(r)
+            print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
         testLLMURL(r)            // B1
         testSSEParse(r)          // B8
         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
@@ -372,6 +380,8 @@ enum SelfTest {
         testReadinessDebounce(r)
         testPermissionWatchOwnership(r)
         testReadinessSnapshotBuilder(r)
+        await WholeM2FixSelfTests.runRetry(r)
+        await WholeM2FixSelfTests.runGraphAdmission(r)
         await ModelProvisionSelfTests.runCoordinator(r)
         await ImportedLifecycleSelfTests.run(r)
         await ImportedModelUISelfTests.run(r)

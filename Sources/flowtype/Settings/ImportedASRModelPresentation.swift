@@ -18,7 +18,7 @@ struct ImportedASRModelPresentation {
         ("Qwen3-ASR MLX 1.7B", URL(string: "https://huggingface.co/aufklarer/Qwen3-ASR-1.7B-MLX-4bit")!),
         ("WhisperKit 兼容 Core ML", URL(string: "https://huggingface.co/argmaxinc/whisperkit-coreml")!)
     ]
-    static let importHelp = "仅在本机读取并记录目录，不上传、不复制权重。支持 Qwen3-ASR 0.6B / 1.7B MLX 4/8-bit（group size 64）与 WhisperKit 兼容 Core ML 目录。原始 PyTorch 权重不受支持，请自行准备兼容转换格式；不安装 Python、不执行仓库脚本、不自动转换或联网补齐文件。"
+    static let importHelp = "仅在本机读取并记录目录，不上传、不复制权重。支持 Qwen3-ASR 0.6B / 1.7B MLX 4/8-bit（group size 64）与 WhisperKit 兼容 Core ML 目录。当前 WhisperKit 0.18 运行库不支持 Intel Mac，需 Apple Silicon；这是运行库限制，不是 Core ML 格式限制。原始 PyTorch 权重不受支持，请自行准备兼容转换格式；不安装 Python、不执行仓库脚本、不自动转换或联网补齐文件。"
     static let removalHelp = "移除记录不会删除模型文件；已加载模型及进行中的录音仍可继续使用。"
 
     static func engineName(_ engine: String) -> String {

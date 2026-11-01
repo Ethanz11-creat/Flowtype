@@ -72,6 +72,8 @@ final class QwenModelState: ObservableObject {
     @Published private(set) var hardwareAssessment: LocalModelHardwareAssessment?
     @Published private(set) var importFailureDetail: String?
     private(set) var pendingImportDirectory: URL?
+    // Selection intent survives mutable attempt targets (especially automatic fallback).
+    private var selectionRequest: ModelProvisionRequest?
 
     private let preflight: @Sendable (ModelPreset, DownloadSource) async throws -> Void
     private let load: @Sendable (ModelProvisionTarget, Bool, @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease
@@ -174,6 +176,7 @@ final class QwenModelState: ObservableObject {
         hardwareAssessment = nil; importFailureDetail = nil
         if case .imported(let model) = request.target { pendingImportDirectory = model.directory }
         else { pendingImportDirectory = nil }
+        selectionRequest = request
         target = request.target; operationSource = request.source
         status = .loading
         let task = Task { await run(request, id: id) }
@@ -203,10 +206,16 @@ final class QwenModelState: ObservableObject {
         await prepareConfiguredModel(allowDownload: true)
     }
 
+    func retrySelection(source: DownloadSource) async {
+        guard let request = selectionRequest else { await retryConfiguredModel(); return }
+        await perform(.init(target: request.target, source: source, origin: request.origin))
+    }
+
     /// Forget a removed folder intent without unloading the lease recordings may still use.
     func resetConfiguredRecovery() {
         guard operationID == nil else { return }
         target = nil
+        selectionRequest = nil
         operationSource = nil
         failure = nil
         importFailureDetail = nil
@@ -221,6 +230,7 @@ final class QwenModelState: ObservableObject {
         let config = configuration()
         operationSource = config.downloadSource
         target = nil
+        selectionRequest = nil
         if let activeID = config.activeImportedASRModelID {
             guard let model = config.importedASRModels.first(where: { $0.id == activeID }) else {
                 publish(.incompleteLocal()); return
@@ -267,6 +277,7 @@ final class QwenModelState: ObservableObject {
         catch {
             pendingImportDirectory = directory
             target = nil
+            selectionRequest = nil
             operationSource = configuration().downloadSource
             didAutoFallback = false
             importFailureDetail = (error as? ASRModelInspectionError)?.detail

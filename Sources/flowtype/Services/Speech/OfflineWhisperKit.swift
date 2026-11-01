@@ -5,6 +5,7 @@ import Tokenizers
 enum OfflineWhisperError: Error, LocalizedError {
     case invalidLocalDirectory, incompatibleGraph, incompatibleTokenizer, tokenizerUnavailable
     case invalidSampleRate, unsupportedLanguage
+    case incompatibleRuntime
     var errorDescription: String? {
         switch self {
         case .invalidLocalDirectory: "请选择完整的本机 Whisper 模型和分词器目录。"
@@ -13,6 +14,7 @@ enum OfflineWhisperError: Error, LocalizedError {
         case .tokenizerUnavailable: "本机 Whisper 分词器缺失或损坏；不会联网补齐。"
         case .invalidSampleRate: "Whisper 需要 16kHz 单声道音频。"
         case .unsupportedLanguage: "此 Whisper 模型不支持所选语言。"
+        case .incompatibleRuntime: "当前 WhisperKit 0.18 运行库的缓存布局不支持 Intel Mac；请使用 Apple Silicon 或其他识别引擎。"
         }
     }
 }
@@ -52,9 +54,13 @@ final class OfflineWhisperKit: WhisperKit {
 
     override func loadTokenizerIfNeeded() async throws {
         guard let folder = tokenizerFolder, folder.isFileURL else { throw OfflineWhisperError.invalidLocalDirectory }
-        guard let logits = textDecoder.logitsSize, let encoder = audioEncoder.embedSize,
-              let decoder = textDecoder.embedSize else { throw OfflineWhisperError.incompatibleGraph }
-        let metadata = try WhisperRuntimeMetadata(logitsSize: logits, encoderSize: encoder, decoderSize: decoder)
+        detectedMetadata = nil
+        guard let mel = (featureExtractor as? WhisperGraphDescribing)?.rawGraphDescription,
+              let encoder = (audioEncoder as? WhisperGraphDescribing)?.rawGraphDescription,
+              let decoder = (textDecoder as? WhisperGraphDescribing)?.rawGraphDescription else { throw OfflineWhisperError.incompatibleGraph }
+        let prefill = (textDecoder.prefillData as? WhisperGraphDescribing)?.rawGraphDescription
+        guard textDecoder.prefillData == nil || prefill != nil else { throw OfflineWhisperError.incompatibleGraph }
+        let metadata = try WhisperGraphContract.validate(mel: mel, encoder: encoder, decoder: decoder, prefill: prefill)
         let local = try await Self.localTokenizer(at: folder)
         try local.validate(for: metadata)
         textDecoder.isModelMultilingual = metadata.isMultilingual
@@ -169,6 +175,7 @@ actor WhisperKitBackend: OfflineWhisperBackend {
     }
 
     static func load(_ options: WhisperOfflineLoadOptions) async throws -> WhisperKitBackend {
+        try WhisperGraphContract.validateRuntimeABI()
         let kit = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: options.modelDirectory.path,
             tokenizerFolder: options.tokenizerDirectory, verbose: false, logLevel: .none,
             prewarm: false, load: options.load, download: options.download))

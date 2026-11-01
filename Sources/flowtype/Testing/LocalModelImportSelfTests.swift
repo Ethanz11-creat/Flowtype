@@ -60,6 +60,16 @@ enum LocalModelImportSelfTests {
             try rejected("untied output head config") { try convertedConfig(dir,large:false,bits:4); try editJSON(dir,"config.json") { var t = $0["text_decoder"] as! [String:Any]; t["tie_word_embeddings"] = false; $0["text_decoder"] = t } }
             try rejected("arbitrary extra tensor") { var ts = tensors(); ts["unknown.weight"] = ("F16",[1]); try weights(ts,to:dir.appendingPathComponent("model.safetensors")) }
             try rejected("missing deep layer tensor") { var ts = tensors(); ts.removeValue(forKey: "model.layers.27.mlp.down_proj.biases"); try weights(ts, to: dir.appendingPathComponent("model.safetensors")) }
+            try rejected("truncated ordinary vocabulary") { try editJSON(dir, "vocab.json") { $0.removeValue(forKey: "!!") } }
+            try rejected("base row hidden in added tokens") { try editJSON(dir, "vocab.json") { $0.removeValue(forKey: "!!") }; try editJSON(dir, "tokenizer_config.json") { $0["added_tokens_decoder"] = [String(Self.tokenizerFixture.vocab["!!"]!): ["content": "!!"]] } }
+            try rejected("missing non-prompt added token") { try editJSON(dir, "vocab.json") { $0.removeValue(forKey: "<reserved151700>") } }
+            try rejected("merge reordered before operands") { var lines = Self.tokenizerFixture.merges.components(separatedBy: "\n"); lines.swapAt(1, 2); try Data(lines.joined(separator: "\n").utf8).write(to: dir.appendingPathComponent("merges.txt")) }
+            try rejected("missing byte alphabet entry") { try editJSON(dir, "vocab.json") { $0.removeValue(forKey: "!") } }
+            try rejected("truncated merge list") { try Data("#version: 0.2\n! !\n".utf8).write(to: dir.appendingPathComponent("merges.txt")) }
+            try rejected("unknown merge operand") { try Data((Self.tokenizerFixture.merges + "not-in-vocab !\n").utf8).write(to: dir.appendingPathComponent("merges.txt")) }
+            try rejected("malformed merge line") { try Data((Self.tokenizerFixture.merges + "! ! !\n").utf8).write(to: dir.appendingPathComponent("merges.txt")) }
+            try rejected("duplicate merge") { try Data((Self.tokenizerFixture.merges + "! !\n").utf8).write(to: dir.appendingPathComponent("merges.txt")) }
+            try rejected("invalid safetensors metadata type") { try weights(tensors(), to: dir.appendingPathComponent("model.safetensors"), metadata: ["format": 7]) }
             try rejected("missing special token") { try editJSON(dir, "vocab.json") { $0.removeValue(forKey: "<|audio_pad|>") } }
             try rejected("missing ASR text token") { try editJSON(dir, "vocab.json") { $0.removeValue(forKey: "<asr_text>") } }
             try rejected("wrong prompt role ID") { try editJSON(dir, "vocab.json") { $0["system"] = 8949 } }
@@ -198,13 +208,52 @@ enum LocalModelImportSelfTests {
     private static func qwenFixture(_ dir: URL, large: Bool = false, bits: Int = 4) throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try json(["model_type": "qwen3_asr", "quantization": ["bits": bits, "group_size": 64], "thinker_config": ["audio_config": ["d_model": large ? 1024 : 896, "encoder_layers": large ? 24 : 18, "encoder_attention_heads": large ? 16 : 14, "encoder_ffn_dim": large ? 4096 : 3584, "num_mel_bins": 128, "output_dim": large ? 2048 : 1024, "downsample_hidden_size": 480], "text_config": ["hidden_size": large ? 2048 : 1024, "num_hidden_layers": 28, "num_attention_heads": 16, "num_key_value_heads": 8, "head_dim": 128, "intermediate_size": large ? 6144 : 3072, "vocab_size": 151936, "tie_word_embeddings": true]]], dir.appendingPathComponent("config.json"))
-        try json(["a": 0, "b": 1, "ab": 2, "<|endoftext|>": 151643, "<|im_start|>":151644, "<|im_end|>":151645, "<|audio_start|>":151669, "<|audio_end|>":151670, "<|audio_pad|>":151676, "<asr_text>":151704, "Ċ":198, "system":8948, "user":872, "assistant":77091], dir.appendingPathComponent("vocab.json"))
+        try json(Self.tokenizerFixture.vocab, dir.appendingPathComponent("vocab.json"))
         try json(["added_tokens_decoder": [:]], dir.appendingPathComponent("tokenizer_config.json"))
-        try Data("#version: 0.2\na b\n".utf8).write(to: dir.appendingPathComponent("merges.txt"))
+        try Data(Self.tokenizerFixture.merges.utf8).write(to: dir.appendingPathComponent("merges.txt"))
         try weights(tensors(large: large, bits: bits), to: dir.appendingPathComponent("model.safetensors"))
     }
+    // Complete synthetic byte BPE, independent of any installed/public model metadata.
+    private static let tokenizerFixture: (vocab: [String: Int], merges: String) = {
+        let bytes = Array(33...126) + Array(161...172) + Array(174...255)
+        let alphabet = (bytes + Array(256..<(512 - bytes.count))).map { String(Unicode.Scalar($0)!) }
+        var tokens = alphabet
+        var known = Set(tokens)
+        var merges = "#version: 0.2\n"
+        func append(_ left: String, _ right: String) {
+            let token = left + right
+            if known.insert(token).inserted { tokens.append(token); merges += left + " " + right + "\n" }
+        }
+        for word in ["system", "user", "assistant"] {
+            var prefix = ""
+            for character in word.map(String.init) {
+                if !prefix.isEmpty { append(prefix, character) }
+                prefix += character
+            }
+        }
+        for left in alphabet { for right in alphabet { append(left, right) } }
+        outer: for left in alphabet { for middle in alphabet { for right in alphabet {
+            if tokens.count == 151643 { break outer }
+            append(left + middle, right)
+        } } }
+        for (token, id) in [("system", 8948), ("user", 872), ("assistant", 77091)] {
+            tokens.swapAt(tokens.firstIndex(of: token)!, id)
+        }
+        var vocab = Dictionary(uniqueKeysWithValues: tokens.enumerated().map { ($0.element, $0.offset) })
+        for id in 151643...151704 { vocab["<reserved\(id)>"] = id }
+        for (token, id) in ["<|endoftext|>":151643,"<|im_start|>":151644,"<|im_end|>":151645,"<|audio_start|>":151669,"<|audio_end|>":151670,"<|audio_pad|>":151676,"<asr_text>":151704] { vocab.removeValue(forKey: "<reserved\(id)>"); vocab[token] = id }
+        return (vocab, merges)
+    }()
+
     private static func convertedConfig(_ dir: URL, large: Bool, bits: Int) throws {
         // Public converter schema; independent synthetic values, never a copied user config.
+        var vocab = Self.tokenizerFixture.vocab
+        var added: [String: [String: Any]] = [:]
+        for (token, id) in Self.tokenizerFixture.vocab where id >= 151643 {
+            vocab.removeValue(forKey: token); added[String(id)] = ["content": token]
+        }
+        try json(vocab, dir.appendingPathComponent("vocab.json"))
+        try json(["added_tokens_decoder": added], dir.appendingPathComponent("tokenizer_config.json"))
         try json(["model_type":"qwen3_asr", "model_size":large ? "1.7B":"0.6B",
                   "audio_encoder":["hidden_dim":large ? 1024:896,"num_layers":large ? 24:18,"num_heads":large ? 16:14,"head_dim":64,"ffn_dim":large ? 4096:3584,"num_mel_bins":128],
                   "text_decoder":["hidden_size":large ? 2048:1024,"num_layers":28,"num_heads":16,"num_kv_heads":8,"head_dim":128,"intermediate_size":large ? 6144:3072,"vocab_size":151936,"rope_theta":1000000.0,"rms_norm_eps":0.000001],
@@ -237,12 +286,13 @@ enum LocalModelImportSelfTests {
         }
         return result
     }
-    private static func weights(_ tensors: [String: (String, [Int])], to url: URL) throws {
+    private static func weights(_ tensors: [String: (String, [Int])], to url: URL, metadata: [String: Any]? = ["format": "mlx"]) throws {
         var header: [String: Any] = [:]; var offset: UInt64 = 0
         for name in tensors.keys.sorted() {
             let (type,shape) = tensors[name]!; let end = offset + UInt64(shape.reduce(1, *) * (type == "U32" ? 4 : 2))
             header[name] = ["dtype":type,"shape":shape,"data_offsets":[offset,end]]; offset = end
         }
+        if let metadata { header["__metadata__"] = metadata }
         let body = try JSONSerialization.data(withJSONObject: header, options: [.sortedKeys]); var count = UInt64(body.count).littleEndian
         var data = withUnsafeBytes(of: &count) { Data($0) }; data.append(body); try data.write(to: url)
         let handle = try FileHandle(forWritingTo: url); defer { try? handle.close() }

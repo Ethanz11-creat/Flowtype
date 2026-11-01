@@ -1,6 +1,6 @@
 # M2 validation evidence — 2026-11-01 / closeout 2026-11-02
 
-以下 A3 / B3 记录为历史检查点，其计数不代表最终 M2。当前状态与 C4 证据见文末；控制器最终全范围门禁仍 Pending。
+以下 A3 / B3 记录为历史检查点，其计数不代表最终 M2。当前状态、C4 历史检查点与全 M2 修复证据见文末；控制器最终全范围门禁仍 Pending。
 
 ## Historical M2-A Task 3 source identity
 
@@ -68,7 +68,7 @@ TDD RED first established the missing tracker API. Self-review then reproduced a
 | C1 inspection/library | a36df21; **2113/0**, review/fix clean | Actual existing Qwen 1.7B MLX 4-bit static probe 4 PASS at 2026-11-01T18:40:27Z; size 2225411512 bytes; fingerprint 135f5b023e282e0c860d7b10a893487c5274dd012af5a203293d353eed3b1f22; no load/GPU/inference claim |
 | C2 Whisper runtime | 9f0c92e; **2179/0**, task-2-report.md; exact WhisperKit 0.18.0, transformers 1.1.9 | Public HF tiny tokenizer metadata GET 2026-11-01T19:03:10Z HTTP 200; product adapter tokenizer-only harness PASS, 99 languages, exact yue=nil, zh=50260. No model graph/GPU/inference claim |
 | C3 lifecycle/resources | 63db2e9; sequential build 22.43s + self-test **2263/0**, task-3-report.md / task-3-self-test-final.log | Synthetic providers establish ownership/config/capture/history behavior, not real-model correctness |
-| C4 library/preview | This commit; base 63db2e9; final sequential verification below | GUI, full-model inference and final controller whole-M2 review Pending |
+| C4 library/preview | 73d5e74; base 63db2e9; 2306/0 historical checkpoint below | GUI, full-model inference and final controller whole-M2 review Pending |
 
 C workspaces and logs are under `.superpowers/sdd/2026-11-01-m2-c-hf-import/`; A/B evidence directories use the corresponding plan names. Actual C1 static log is `actual-17-static-probe-4.log`. These local handoffs are retained, not erased by C4.
 
@@ -99,3 +99,18 @@ First full C4 GREEN after build 30.54s was **2304 passed / 0 failed** (`task-4-b
 - Followed by `swift run FlowType --self-test > .superpowers/sdd/2026-11-01-m2-c-hf-import/task-4-self-test-final.log 2>&1`: exit **0**, **2306 passed / 0 failed** (product build **4.56s**).
 - Source revision: the C4 commit containing this evidence, based on **63db2e9**; no source changes after the final suite. `git diff --check` clean. Final incremental build reports inherited AppLogger warning only; other previously documented warnings remain separate.
 - This completes C4 source/fixture verification only. Fresh controller task review, whole-M2 final gate, GUI/model/service/device acceptance remain explicitly Pending.
+
+## Whole-M2 final fix wave (base 73d5e74)
+
+The whole-M2 review found **three Important** source defects after the C4 checkpoint: ordinary retry changed automatic selection into an explicit fallback preset; Whisper relied on unsafe/incomplete graph dimension helpers; Qwen accepted truncated ordinary vocabularies/merges. This wave fixes all three. **Controller scoped rereview remains Pending**; the earlier review's Needs fixes verdict is not retroactively rewritten as Pass.
+
+- Shared Retry now preserves the original selection target/origin separately from each mutable attempt target, refreshes the source from the current store, and retains automatic fallback and nil selection across persisted restart. Explicit retries stay explicit.
+- Raw Core ML interfaces are checked before any pinned WhisperKit dimension helper: names/types/ranks, fixed output constraints, mel/encoder/decoder shapes, caches/masks/updates/alignment and optional prefill. All size families remain covered, including reduced decoder layer counts for distil/turbo; identity remains graph-derived family identity. Fixed Float16 pointer-copy outputs and strict matching intermediate dtypes follow the pinned runtime; arbitrary numeric coercions are not claimed. The pinned 0.18 Intel Float32/Float16 cache ABI mismatch is rejected at early hardware admission and runtime entry, with a specific help message and controller ruling. This is a current-runtime limitation, not a Core ML format limitation.
+- Qwen requires full base IDs 0...151642, 256-byte alphabet, complete ordered/referenced BPE merges, and added IDs 151643...151704 with exact critical token IDs. Absent padded model slots remain legal; vocab/config split converted tokenizers remain accepted. Fixtures synthesize the complete vocabulary and merges without copying installed metadata.
+- The two bounded minor items are fixed: safetensors `__metadata__` string-to-string type validation and the new forced dictionary bridge warning. Native redirect callback fixture and credential-only router-health reset remain explicit **nonblocking follow-ups**. Existing AppLogger warning is separate.
+
+Behavioral focused RED was **164 passed / 54 failed**, then focused GREEN **267/0**. RED includes actual shared retry/persist/restart, ordinary token/merge truncation and raw graph rejection/readiness assertions. Final self-review further narrowed masks and added required-output regressions. Final sequential build: **exit 0, 30.08s** (`whole-m2-final-build.log`). Final full self-test: **exit 0, 2427 passed / 0 failed** (`whole-m2-final-self-test.log`, product build 4.64s). No product/test source changes after that full GREEN; `git diff --check` clean. The focused scope is `swift run FlowType --self-test --m2-fix-only`; all its tests also execute in the full suite. No `swift test`.
+
+**Separate actual static acceptance:** exact four product inspector sources plus existing `inspect-probe-c3.swift` compiled successfully and inspected the authorized existing Qwen 1.7B MLX 4-bit directory at **2026-11-01T20:20:39Z**. Static PASS; **2225411512 bytes**, fingerprint **135f5b023e282e0c860d7b10a893487c5274dd012af5a203293d353eed3b1f22**, conservative packed-U32 reservation **860225536 bytes**, all unchanged. Logs/source hashes: `whole-m2-actual-static-build.log`, `whole-m2-actual-static-probe.log`, `whole-m2-actual-static-source-hashes.txt` in the C workspace. No payload read/GPU/load/inference/network/model/config/key changes. Structural completeness does not establish weight/tokenizer semantic equivalence or transcription quality.
+
+Detailed per-finding changes, exact commands, compile iterations, pinned source/API hashes, self-review and limits: `whole-m2-fix-report.md` in the same workspace. Production helper `WhisperGraphContract.swift` stays focused on raw interfaces/ABI; added tests use the real coordinator/store and replace model compute. No actual Whisper full graph was available; public tiny tokenizer-only evidence stays separate. GUI/current binary, all actual full-model/quantization/hardware/service variants, measured memory/accuracy and mandatory V1–V5 remain **Pending**. Historical checkpoints and scratch evidence are retained.

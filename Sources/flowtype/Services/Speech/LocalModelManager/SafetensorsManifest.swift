@@ -38,6 +38,9 @@ struct SafetensorsManifest: Sendable {
             let header = try handle.read(upToCount: Int(length)) ?? Data()
             guard header.count == Int(length) else { throw failure(.invalidTensor, "权重文件头截断。") }
             let object = try LocalInspectionFiles.object(header)
+            if let metadata = object["__metadata__"], !(metadata is [String: String]) {
+                throw failure(.invalidTensor, "safetensors __metadata__ 必须是字符串到字符串的映射。")
+            }
             let payload = before.size - 8 - Int64(length)
             var ranges: [(Int64, Int64)] = []
             for (name, value) in object where name != "__metadata__" {

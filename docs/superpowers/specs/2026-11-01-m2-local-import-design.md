@@ -79,6 +79,18 @@ Whisper采用WhisperKit exact0.18.0，要求MelSpectrogram、AudioEncoder、Text
 tokenizer_config.json；可选TextDecoderContextPrefill。需校验Core ML图输入/输出、
 模型维度、多语言/英语词表和special token匹配，不能将原始PyTorch权重直接接受。
 仓库根有多个变体时要求选择具体子目录；单个模型子目录可独立导入。
+完整图检查在 WhisperKit 的维度快捷访问器之前读取原始 Core ML 描述：必要名称、
+MultiArray 类型、rank、30秒音频/3000 mel帧/1500编码帧、编码器与解码器接口、
+KV缓存/更新/mask和可选prefill一致性均须通过。输出不允许声明不兼容的可变形状；
+输入可以包含更宽的可接受形状，但运行时只传递已检查的固定默认尺寸。
+缓存允许224…448上下文、1…32个解码层的整倍数宽度，保留distil/turbo减层变体；
+身份仍只报告图可证实的家族，不把相同维度冒充某个具体checkpoint。
+
+Qwen基础byte-BPE词表必须覆盖0…151642、完整256字节字母表及151387条有序、
+无重复、引用有效且覆盖全基础词表的合并规则；附加token覆盖151643…151704，
+加载器关键token保持确切ID。附加词条可位于vocab或tokenizer_config；
+151705…151935是合法的模型填充槽，缺少对应词条不视为词表截断。
+
 
 严格离线通过OfflineWhisperKit覆写本地tokenizer加载实现，使用AutoTokenizer的
 modelFolder入口和产品内的WhisperTokenizer协议适配器，避免上游内部wrapper不可访问
@@ -90,7 +102,11 @@ download=false、load=false后显式加载。上游私有setter的modelVariant�
 
 读取本机处理器架构、物理内存和可用内存估计，展示模型体积与硬件建议。
 硬件条件按运行库判断；当前MLX运行路径仅对支持的Apple Silicon环境开放加载，
-Core ML等运行路径另列条件，不能把Qwen的限制套给所有ASR。硬件不兼容直接解释原因。
+Core ML等运行路径另列条件，不能把Qwen的限制套给所有ASR。当前固定的WhisperKit
+0.18在Intel上将FloatType定义为Float，却分配Float16缓存并按FloatType字节宽度复制，
+因此此运行库路径在Intel上提前拒绝，并在原始图验证入口再次检查ABI；Apple Silicon
+路径保持开放。这不是Core ML格式或所有Whisper实现不支持Intel的结论，后续运行库
+适配可重新评估。硬件不兼容直接解释原因。
 4-bit已知预设沿用现有0.6B最低4GiB、1.7B最低8GiB及现有推荐档位，但将其
 标为产品建议，不能当作实际峰值。8-bit只显示有依据的估算/建议；没有验证数据
 就显示“运行内存需求未实测”，不从文件大小生成保证可运行的标签。

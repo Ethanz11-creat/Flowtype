@@ -64,7 +64,7 @@ enum WhisperRuntimeSelfTests {
         incompleteModel.removeValue(forKey: "merges")
         missingMerges["model"] = incompleteModel
         do {
-            try OfflineWhisperKit.validateTokenizerMetadata(missingMerges as! [String: Any])
+            try OfflineWhisperKit.validateTokenizerMetadata(Dictionary(uniqueKeysWithValues: missingMerges.map { ($0.key as String, $0.value) }))
             r.check(false, "Whisper rejects missing merges before upstream fatalError")
         } catch { r.check(true, "Whisper rejects missing merges before upstream fatalError") }
         do {
@@ -166,7 +166,7 @@ enum WhisperRuntimeSelfTests {
                     try Data("{}".utf8).write(to: root.appendingPathComponent("tokenizer_config.json"))
                 }
                 let kit = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: root.path, tokenizerFolder: root,
-                    audioEncoder: WhisperFixtureEncoder(), textDecoder: WhisperFixtureDecoder(),
+                    featureExtractor: WhisperFixtureMel(), audioEncoder: WhisperFixtureEncoder(), textDecoder: WhisperFixtureDecoder(),
                     verbose: false, prewarm: false, load: false, download: false))
                 do {
                     // Real override must reject local failure without calling upstream fallback.
@@ -182,9 +182,10 @@ enum WhisperRuntimeSelfTests {
             let model = ImportedASRModel(name: "Selected", directory: root, engine: .whisperCoreML,
                 variant: "unverified", sizeBytes: 1, tokenizerDirectory: root.appendingPathComponent("selected-tokenizer"), fileFingerprint: "fixture")
             try writeTokenizer(to: root)
+            await graphContracts(root, r)
             let decoder = WhisperFixtureDecoder()
             let loaded = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: root.path, tokenizerFolder: root,
-                audioEncoder: WhisperFixtureEncoder(), textDecoder: decoder,
+                featureExtractor: WhisperFixtureMel(), audioEncoder: WhisperFixtureEncoder(), textDecoder: decoder,
                 verbose: false, prewarm: false, load: false, download: false))
             try await loaded.loadTokenizerIfNeeded()
             r.eq(loaded.detectedVariant, "small", "Whisper real override records verified non-tiny graph")
@@ -217,6 +218,96 @@ enum WhisperRuntimeSelfTests {
                 r.check(false, "Whisper rejects wrong sample rate")
             } catch { r.check(true, "Whisper rejects wrong sample rate") }
         } catch { r.check(false, "Whisper offline load fixture: \(error)") }
+    }
+
+    private static func graphContracts(_ root: URL, _ r: SelfTest.Reporter) async {
+        typealias G = WhisperGraphDescription
+        typealias F = G.Feature
+        var failures: [(String, G, G, G, G?)] = []
+        func bad(_ name: String, _ edit: (inout G, inout G, inout G, inout G?) -> Void) {
+            var mel = WhisperGraphFixtures.mel, encoder = WhisperGraphFixtures.encoder, decoder = WhisperGraphFixtures.decoder
+            var prefill: G? = nil
+            edit(&mel, &encoder, &decoder, &prefill)
+            failures.append((name, mel, encoder, decoder, prefill))
+        }
+        bad("flexible unsafe output extents") { _, _, d, _ in d.outputs["logits"]?.hasFixedShape = false }
+        bad("rank-one logits") { _, _, d, _ in d.outputs["logits"]?.shape = [51865] }
+        bad("rank-one encoder output") { _, e, _, _ in e.outputs["encoder_output_embeds"]?.shape = [768] }
+        bad("missing mel output") { m, _, _, _ in m.outputs.removeValue(forKey: "melspectrogram_features") }
+        bad("wrong mel feature type") { m, _, _, _ in m.outputs["melspectrogram_features"]?.isMultiArray = false }
+        bad("wrong audio type") { m, _, _, _ in m.inputs["audio"]?.dataType = .int32 }
+        bad("wrong audio rank") { m, _, _, _ in m.inputs["audio"]?.shape = [1,480000] }
+        bad("mel encoder interface mismatch") { _, e, _, _ in e.inputs["melspectrogram_features"]?.shape = [1,128,1,3000] }
+        bad("encoder decoder interface mismatch") { _, _, d, _ in d.inputs["encoder_output_embeds"]?.shape = [1,768,1,1499] }
+        bad("cache wrong rank") { _, _, d, _ in d.inputs["key_cache"]?.shape = [1,9216] }
+        bad("cache value dimension mismatch") { _, _, d, _ in d.inputs["value_cache"]?.shape = [1,768,1,224] }
+        bad("cache update size mismatch") { _, _, d, _ in d.outputs["key_cache_updates"]?.shape = [1,768,1,1] }
+        bad("cache update wrong dtype") { _, _, d, _ in d.outputs["value_cache_updates"]?.dataType = .float32 }
+        bad("mask length mismatch") { _, _, d, _ in d.inputs["kv_cache_update_mask"]?.shape = [1,223] }
+        bad("unverified mask numeric type") { _, _, d, _ in d.inputs["kv_cache_update_mask"]?.dataType = .double }
+        bad("optional required output") { _, _, d, _ in d.outputs["key_cache_updates"]?.isOptional = true }
+        bad("context shorter than runtime loop") { _, _, d, _ in d.inputs["key_cache"]?.shape = [1,9216,1,16] }
+        bad("missing required decoder input") { _, _, d, _ in d.inputs.removeValue(forKey: "input_ids") }
+        bad("unknown required decoder input") { _, _, d, _ in d.inputs["unprovided"] = F(shape: [1], dataType: .int32) }
+        bad("alignment length mismatch") { _, _, d, _ in d.outputs["alignment_heads_weights"] = F(shape: [1,100], dataType: .float16) }
+        bad("prefill incompatible cache") { _, _, _, p in p = WhisperGraphFixtures.prefill; p?.outputs["key_cache_prefill"]?.shape = [1,768,1,3] }
+        bad("prefill missing value output") { _, _, _, p in p = WhisperGraphFixtures.prefill; p?.outputs.removeValue(forKey: "value_cache_prefill") }
+        bad("prefill task wrong type") { _, _, _, p in p = WhisperGraphFixtures.prefill; p?.inputs["task"]?.dataType = .float16 }
+        bad("prefill wrong sequence") { _, _, _, p in p = WhisperGraphFixtures.prefill; p?.outputs["value_cache_prefill"]?.shape = [1,9216,1,224] }
+        for (name, mel, encoder, decoder, prefill) in failures {
+            do {
+                let text = WhisperFixtureDecoder(graph: decoder)
+                if let prefill { text.prefillData = WhisperFixturePrefill(graph: prefill) }
+                let kit = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: root.path, tokenizerFolder: root,
+                    featureExtractor: WhisperFixtureMel(graph: mel), audioEncoder: WhisperFixtureEncoder(graph: encoder), textDecoder: text,
+                    verbose: false, prewarm: false, load: false, download: false))
+                do {
+                    try await kit.loadTokenizerIfNeeded()
+                    r.check(false, "Whisper rejects raw graph: \(name)")
+                } catch { r.check(true, "Whisper rejects raw graph: \(name)") }
+                r.eq(text.dimensionReads, 0, "Whisper validates raw graph before unsafe dimension helpers: \(name)")
+                r.eq(kit.detectedMetadata, nil, "Whisper invalid graph cannot publish verified readiness: \(name)")
+            } catch { r.check(false, "Whisper graph fixture construction: \(error)") }
+        }
+        for (logits, size, layers, variant) in [(51864,384,4,"tiny.en"), (51864,512,6,"base.en"),
+            (51864,768,12,"small.en"), (51864,1024,24,"medium.en"), (51865,384,4,"tiny"),
+            (51865,512,6,"base"), (51865,768,12,"small"), (51865,1024,24,"medium"),
+            (51865,1280,32,"large-v1/v2"), (51866,1280,32,"large-v3"), (51866,1280,4,"large-v3"),
+            (51865,768,2,"small")] {
+            var mel = WhisperGraphFixtures.mel, encoder = WhisperGraphFixtures.encoder, decoder = WhisperGraphFixtures.decoder
+            mel.outputs["melspectrogram_features"]?.shape[1] = logits == 51866 ? 128 : 80
+            encoder.inputs["melspectrogram_features"] = mel.outputs["melspectrogram_features"]
+            encoder.outputs["encoder_output_embeds"]?.shape[1] = size
+            decoder.inputs["encoder_output_embeds"] = encoder.outputs["encoder_output_embeds"]
+            decoder.outputs["logits"]?.shape[2] = logits
+            for name in ["key_cache", "value_cache"] { decoder.inputs[name]?.shape = [1,size * layers,1,448] }
+            for name in ["kv_cache_update_mask", "decoder_key_padding_mask"] { decoder.inputs[name]?.shape = [1,448] }
+            for name in ["key_cache_updates", "value_cache_updates"] { decoder.outputs[name]?.shape[1] = size * layers }
+            decoder.outputs["alignment_heads_weights"] = F(shape: [1,1500], dataType: .float16)
+            decoder.inputs["optional_unused"] = F(shape: [1], dataType: .int32, isOptional: true)
+            decoder.inputs["input_ids"]?.isOptional = true // always supplied by the runtime
+            decoder.inputs["kv_cache_update_mask"]?.dataType = .int32
+            // Inputs may advertise flexibility: the runtime always supplies these fixed
+            // default shapes. Outputs must not advertise incompatible dimensions.
+            decoder.inputs["key_cache"]?.hasFixedShape = false
+            do {
+                let metadata = try WhisperGraphContract.validate(mel: mel, encoder: encoder, decoder: decoder, prefill: nil)
+                r.eq(metadata.variant, variant, "Whisper raw supported family/layers \(size)/\(layers)/\(logits)")
+            } catch { r.check(false, "Whisper raw supported family/layers \(size)/\(layers)/\(logits): \(error)") }
+        }
+        do { try WhisperGraphContract.validateRuntimeABI(floatStride: 2); r.check(true, "Whisper Float16 ABI accepted") }
+        catch { r.check(false, "Whisper Float16 ABI accepted") }
+        do { try WhisperGraphContract.validateRuntimeABI(floatStride: 4); r.check(false, "Whisper incompatible Intel cache copy ABI rejected") }
+        catch { r.check(true, "Whisper incompatible Intel cache copy ABI rejected") }
+        do {
+            let text = WhisperFixtureDecoder()
+            text.prefillData = WhisperFixturePrefill(graph: WhisperGraphFixtures.prefill)
+            let kit = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: root.path, tokenizerFolder: root,
+                featureExtractor: WhisperFixtureMel(), audioEncoder: WhisperFixtureEncoder(), textDecoder: text,
+                verbose: false, prewarm: false, load: false, download: false))
+            try await kit.loadTokenizerIfNeeded()
+            r.eq(kit.detectedVariant, "small", "Whisper complete raw interfaces and optional prefill accepted")
+        } catch { r.check(false, "Whisper complete graph fixture: \(error)") }
     }
 
     private static func fixtureTokenizer(omit: String? = nil, logitsSize: Int = 51865, noSpeechToken: String = "<|nospeech|>") throws -> any Tokenizer {
@@ -304,19 +395,25 @@ private final class WhisperNetworkTrap: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
-private struct WhisperFixtureEncoder: AudioEncoding {
+private struct WhisperFixtureEncoder: AudioEncoding, WhisperGraphDescribing {
+    var graph = WhisperGraphFixtures.encoder
+    var rawGraphDescription: WhisperGraphDescription? { graph }
     var embedSize: Int? { 768 }
     func encodeFeatures(_ features: any FeatureExtractorOutputType) async throws -> (any AudioEncoderOutputType)? {
         throw OfflineWhisperError.incompatibleGraph
     }
 }
 
-private final class WhisperFixtureDecoder: TextDecoding {
+private final class WhisperFixtureDecoder: TextDecoding, WhisperGraphDescribing {
+    var graph: WhisperGraphDescription
+    var rawGraphDescription: WhisperGraphDescription? { graph }
+    init(graph: WhisperGraphDescription = WhisperGraphFixtures.decoder) { self.graph = graph }
     var tokenizer: (any WhisperTokenizer)?
     var prefillData: (any WhisperMLModel)?
     var isModelMultilingual = false
     var supportsWordTimestamps: Bool { false }
-    var logitsSize: Int? { 51865 }
+    var dimensionReads = 0
+    var logitsSize: Int? { dimensionReads += 1; return 51865 }
     var logitsFilters: [any LogitsFiltering]?
     var kvCacheEmbedDim: Int? { nil }
     var kvCacheMaxSequenceLength: Int? { nil }
@@ -331,4 +428,36 @@ private final class WhisperFixtureDecoder: TextDecoding {
     func detectLanguage(from encoderOutput: any AudioEncoderOutputType, using decoderInputs: any DecodingInputsType,
                         sampler tokenSampler: TokenSampling, options: DecodingOptions,
                         temperature: FloatType) async throws -> DecodingResult { throw OfflineWhisperError.incompatibleGraph }
+}
+
+enum WhisperGraphFixtures {
+    typealias F = WhisperGraphDescription.Feature
+    static let mel = WhisperGraphDescription(inputs: ["audio": F(shape: [480000], dataType: .float32)],
+        outputs: ["melspectrogram_features": F(shape: [1,80,1,3000], dataType: .float16)])
+    static let encoder = WhisperGraphDescription(inputs: ["melspectrogram_features": F(shape: [1,80,1,3000], dataType: .float16)],
+        outputs: ["encoder_output_embeds": F(shape: [1,768,1,1500], dataType: .float16)])
+    static let decoder = WhisperGraphDescription(inputs: [
+        "input_ids": F(shape: [1], dataType: .int32), "cache_length": F(shape: [1], dataType: .int32),
+        "key_cache": F(shape: [1,9216,1,224], dataType: .float16), "value_cache": F(shape: [1,9216,1,224], dataType: .float16),
+        "kv_cache_update_mask": F(shape: [1,224], dataType: .float16), "decoder_key_padding_mask": F(shape: [1,224], dataType: .float16),
+        "encoder_output_embeds": F(shape: [1,768,1,1500], dataType: .float16)
+    ], outputs: ["logits": F(shape: [1,1,51865], dataType: .float16),
+        "key_cache_updates": F(shape: [1,9216,1,1], dataType: .float16), "value_cache_updates": F(shape: [1,9216,1,1], dataType: .float16)])
+    static let prefill = WhisperGraphDescription(inputs: ["task": F(shape: [1], dataType: .int32), "language": F(shape: [1], dataType: .int32)],
+        outputs: ["key_cache_prefill": F(shape: [1,9216,1,3], dataType: .float16), "value_cache_prefill": F(shape: [1,9216,1,3], dataType: .float16)])
+}
+private struct WhisperFixtureMel: FeatureExtracting, WhisperGraphDescribing {
+    var graph = WhisperGraphFixtures.mel
+    var rawGraphDescription: WhisperGraphDescription? { graph }
+    var melCount: Int? { 80 }
+    var windowSamples: Int? { 480000 }
+    func logMelSpectrogram(fromAudio inputAudio: any AudioProcessorOutputType) async throws -> (any FeatureExtractorOutputType)? {
+        throw OfflineWhisperError.incompatibleGraph
+    }
+}
+private final class WhisperFixturePrefill: WhisperMLModel, WhisperGraphDescribing {
+    var model: MLModel?
+    var graph: WhisperGraphDescription
+    var rawGraphDescription: WhisperGraphDescription? { graph }
+    init(graph: WhisperGraphDescription) { self.graph = graph }
 }
