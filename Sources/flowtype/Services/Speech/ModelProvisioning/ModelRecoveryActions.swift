@@ -15,6 +15,15 @@ struct ModelRecoveryActions {
         store.save(config)
     }
 
+    func removeFolderOverride() {
+        guard coordinator.operationID == nil else { return }
+        var config = store.current
+        config.customLocalModelPath = nil
+        config.localModelPath = nil
+        store.save(config)
+        coordinator.resetConfiguredRecovery()
+    }
+
     func retry() async throws {
         if case .offline(let resolved) = coordinator.target {
             try await importOfflineModel(at: resolved.directory)

@@ -7,6 +7,10 @@ struct LocalModelPicker: View {
     @ObservedObject private var modelState = QwenModelState.shared
     @State private var folderMessage: String?
 
+    private var configuredPath: String? {
+        [store.current.customLocalModelPath, store.current.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
+    }
+
     private var currentTier: HardwareTier {
         HardwareProfiler.currentTier()
     }
@@ -151,16 +155,18 @@ struct LocalModelPicker: View {
                 Spacer()
             }
 
-            if let path = store.current.customLocalModelPath {
+            if let path = configuredPath {
                 HStack(spacing: 6) {
                     Button {
-                        store.current.customLocalModelPath = nil
+                        ModelRecoveryActions(coordinator: modelState, store: store).removeFolderOverride()
                         folderMessage = nil
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.borderless)
+                    .disabled(modelState.operationID != nil)
+                    .help("移除模型文件夹选择")
                     Text(path)
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
@@ -175,7 +181,7 @@ struct LocalModelPicker: View {
                     .font(.system(size: 10))
                     .foregroundColor(.orange)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if store.current.customLocalModelPath == nil {
+            } else if configuredPath == nil {
                 Text("已下载好模型的话，指到那个文件夹即可离线加载。")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)

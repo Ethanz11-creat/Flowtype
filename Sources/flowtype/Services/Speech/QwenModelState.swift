@@ -186,12 +186,23 @@ final class QwenModelState: ObservableObject {
         await prepareConfiguredModel(allowDownload: true)
     }
 
+    /// Forget a removed folder intent without unloading the lease recordings may still use.
+    func resetConfiguredRecovery() {
+        guard operationID == nil else { return }
+        target = nil
+        operationSource = nil
+        failure = nil
+        didAutoFallback = false
+        status = activeLease == nil ? .notLoaded : .ready
+    }
+
     private func prepareConfiguredModel(allowDownload: Bool) async {
         guard operationID == nil else { return }
         let config = configuration()
+        operationSource = config.downloadSource
+        target = nil
         let explicitPath = [config.customLocalModelPath, config.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
         if let explicitPath {
-            target = nil
             let wanted = URL(fileURLWithPath: (explicitPath as NSString).expandingTildeInPath).resolvingSymlinksInPath()
             guard let resolved = localModel(config), resolved.directory.resolvingSymlinksInPath() == wanted else {
                 publish(.incompleteLocal()); return

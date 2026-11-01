@@ -32,7 +32,7 @@ struct QwenModelStatusCard: View {
         ModelRecoveryPresentation.make(active: modelState.activeLease?.identity, target: targetPreset,
             failure: modelState.failure, didAutoFallback: modelState.didAutoFallback,
             source: store.current.downloadSource, isBusy: modelState.operationID != nil,
-            customPath: targetPath)
+            customPath: targetPath, failureSource: modelState.operationSource)
     }
 
     var body: some View {
@@ -53,6 +53,9 @@ struct QwenModelStatusCard: View {
                 Spacer()
             }
             progressArea
+            if let source = p.failureSourceName {
+                Text("失败操作来源：\(source)").font(.system(size: 10)).foregroundColor(.secondary)
+            }
             if let message = p.failureMessage {
                 Text(message).font(.system(size: 11)).foregroundColor(.orange)
                     .fixedSize(horizontal: false, vertical: true)
@@ -90,6 +93,10 @@ struct QwenModelStatusCard: View {
                 Button("指定模型文件夹") { pickModelFolder() }.controlSize(.small)
                     .disabled(modelState.operationID != nil)
                 if let path = configuredPath {
+                    Button("移除") {
+                        ModelRecoveryActions(coordinator: modelState, store: store).removeFolderOverride()
+                        folderMessage = nil
+                    }.controlSize(.small).disabled(modelState.operationID != nil)
                     Text(path).font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()

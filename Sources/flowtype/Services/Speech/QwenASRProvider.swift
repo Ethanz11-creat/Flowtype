@@ -92,21 +92,13 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws {
         AppLogger.log("[QwenASR] Loading model: \(modelId) offline=\(offlineMode) cacheDir=\(cacheDir?.path ?? "default")")
-        let loaded: Qwen3ASRModel
-        do {
-            loaded = try await Qwen3ASRModel.fromPretrained(
+        let loaded = try await Self.withProvisionErrors {
+            try await Qwen3ASRModel.fromPretrained(
                 modelId: modelId,
                 cacheDir: cacheDir,
                 offlineMode: offlineMode,
                 progressHandler: progressHandler
             )
-        } catch {
-            if Task.isCancelled || error is CancellationError { throw CancellationError() }
-            if let download = error as? DownloadError, case .failedToDownload = download {
-                throw ModelProvisionError.network()
-            }
-            if error is URLError { throw ModelProvisionError.network() }
-            throw ModelProvisionError.loadFailed()
         }
         try Task.checkCancellation()
         queue.sync {
@@ -114,6 +106,36 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
             loadedModelId = modelId
         }
         AppLogger.log("[QwenASR] Model loaded successfully")
+    }
+
+    /// The provider boundary discards unsafe dependency strings before publishing recovery errors.
+    static func withProvisionErrors<Value>(_ operation: () async throws -> Value) async throws -> Value {
+        do { return try await operation() }
+        catch {
+            if Task.isCancelled { throw CancellationError() }
+            throw classifyProvisionError(error)
+        }
+    }
+
+    private static func classifyProvisionError(_ error: any Error, depth: Int = 0) -> any Error {
+        if error is CancellationError { return CancellationError() }
+        if let failure = error as? ModelProvisionError { return failure }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cancelled: return CancellationError()
+            case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost,
+                 .dnsLookupFailed, .notConnectedToInternet:
+                return ModelProvisionError.network()
+            default: return ModelProvisionError.loadFailed()
+            }
+        }
+        // speech-swift flattens arbitrary snapshot errors into this string-only wrapper.
+        // Do not parse its text or multiply its existing three snapshot attempts.
+        if error is DownloadError { return ModelProvisionError.loadFailed() }
+        if depth < 4, let underlying = (error as NSError).userInfo[NSUnderlyingErrorKey] as? any Error {
+            return classifyProvisionError(underlying, depth: depth + 1)
+        }
+        return ModelProvisionError.loadFailed()
     }
 
     func unloadModel() {

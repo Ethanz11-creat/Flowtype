@@ -1,4 +1,5 @@
 import Foundation
+import AudioCommon
 
 /// Fixtures intercept every URL; these tests never contact a model host or use live configuration.
 enum ModelProvisionSelfTests {
@@ -660,6 +661,7 @@ extension ModelProvisionSelfTests {
         } catch { r.eq(importer.activeLease, offlineLease, "invalid folder keeps the available lease") }
 
         await runRecoveryActionRegressions(r)
+        await runStageRecoveryRegressions(r)
 
         let oldProvider = LeaseSpeechFixture(name: "old")
         let newProvider = LeaseSpeechFixture(name: "new", id: "whisper-local")
@@ -796,4 +798,133 @@ private final class LeaseBox: @unchecked Sendable {
     init(_ lease: LocalASRLease?) { self.lease = lease }
     func get() -> LocalASRLease? { lock.withLock { lease } }
     func set(_ value: LocalASRLease?) { lock.withLock { lease = value } }
+}
+
+
+extension ModelProvisionSelfTests {
+    @MainActor
+    private static func runStageRecoveryRegressions(_ r: SelfTest.Reporter) async {
+        let suite = "flowtype-stage-recovery-\(UUID())"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            r.check(false, "stage recovery fixture defaults unavailable"); return
+        }
+        let store = ConfigurationStore(defaults: defaults)
+        defer { store.flushPendingSave(); defaults.removePersistentDomain(forName: suite) }
+        var config = Configuration()
+        config.downloadSource = .mirror
+        config.selectedLocalModelID = "qwen3-1.7b-4bit"
+        store.save(config)
+        let summary = ModelEndpointSummary(url: URL(string: "https://user:secret@hf-mirror.com/repo/resolve/main/config.json?token=secret#secret")!, httpStatus: 308)
+        let sourceProbe = RecoverySourceProbe()
+        let sourceState = fixture(preflight: { _, source in
+            await sourceProbe.record(source)
+            throw ModelProvisionError.metadataInvalid(summary: summary)
+        }, load: { _, _, _ in
+            await sourceProbe.loaded()
+            throw ModelProvisionError.loadFailed()
+        }, configuration: { store.current })
+        await sourceState.perform(.init(target: .preset(.qwen317B), source: .mirror, origin: .manual))
+        store.current.downloadSource = .official
+        let terminal = ModelRecoveryPresentation.make(active: nil, target: .qwen317B,
+            failure: sourceState.failure, didAutoFallback: false, source: store.current.downloadSource,
+            failureSource: sourceState.operationSource)
+        r.check(terminal.failureMessage?.contains("308") == true, "terminal failure exposes HTTP 308")
+        r.check(terminal.failureMessage?.contains("hf-mirror.com/repo/resolve/main/config.json") == true,
+                "terminal failure exposes safe endpoint and path")
+        r.check(terminal.failureMessage?.contains("secret") == false, "terminal diagnostics omit credentials query and fragment")
+        r.eq(sourceState.operationSource, .mirror, "changing next source retains failed operation source")
+        r.eq(terminal.failureSourceName, "镜像", "terminal presentation retains failed mirror association")
+        r.eq(terminal.sourceName, "官方", "terminal presentation distinguishes next retry source")
+        r.check(terminal.downloadCommand?.contains("https://huggingface.co") == true, "next retry command uses newly selected official source")
+        try? await ModelRecoveryActions(coordinator: sourceState, store: store).retry()
+        r.eq(await sourceProbe.sources, [.custom("https://hf-mirror.com"), .custom("https://huggingface.co")],
+             "shared retry changes endpoint only on the next operation")
+        r.eq(await sourceProbe.loads, 0, "both rejected metadata operations skip the loader")
+
+        let folder = URL(fileURLWithPath: "/fixture/stage-folder-A")
+        let resolved = ResolvedModel(directory: folder, modelId: ModelPreset.qwen317B.repoId)
+        let folderLease = LocalASRLease(id: UUID(), identity: .init(id: "folder-A", displayName: "Folder A", engine: "qwen",
+            repoID: resolved.modelId, directory: folder), provider: QwenASRProvider())
+        let presetLease = lease("preset-after-removal")
+        let removalProbe = ProvisionProbe()
+        let removal = fixture(load: { target, _, _ in
+            await removalProbe.record(target)
+            if case .offline = target {
+                return LocalASRLease(id: UUID(), identity: folderLease.identity, provider: folderLease.provider)
+            }
+            return presetLease
+        }, configuration: { store.current }, localModel: { config in
+            (config.customLocalModelPath == folder.path || config.localModelPath == folder.path) ? resolved : nil
+        })
+        let actions = ModelRecoveryActions(coordinator: removal, store: store)
+        try? await actions.importOfflineModel(at: folder)
+        let importedLease = removal.activeLease
+        store.current.localModelPath = "/fixture/legacy-conflict"
+        actions.removeFolderOverride()
+        r.eq(store.current.customLocalModelPath, nil, "shared removal clears custom override")
+        r.eq(store.current.localModelPath, nil, "shared removal clears legacy override")
+        r.eq(removal.activeLease, importedLease, "removing configuration preserves available folder lease")
+        try? await actions.retry()
+        r.eq(removal.activeLease, presetLease, "load after removal replaces old folder from configured preset")
+        r.eq(store.current.customLocalModelPath, nil, "retry after removal cannot resurrect removed folder")
+        r.eq((await removalProbe.loadedTargets).filter { if case .offline = $0 { return true }; return false }.count, 1,
+             "removed folder is loaded only by the initial import")
+        store.current.customLocalModelPath = nil
+        store.current.localModelPath = folder.path
+        await removal.retryConfiguredModel()
+        actions.removeFolderOverride()
+        try? await actions.retry()
+        r.eq(store.current.localModelPath, nil, "legacy-only folder removal clears legacy selection")
+        r.eq(store.current.customLocalModelPath, nil, "legacy-only removal cannot migrate removed folder back to custom selection")
+        r.eq(removal.activeLease, presetLease, "legacy-only removal rebases recovery to preset")
+        store.flushPendingSave()
+        defaults.set(5, forKey: "flowtype.migrationVersion")
+        let restarted = ConfigurationStore(defaults: defaults)
+        r.eq(restarted.current.customLocalModelPath, nil, "removed custom folder stays removed after restart")
+        r.eq(restarted.current.localModelPath, nil, "removed legacy folder stays removed after restart")
+
+        let cases: [(String, any Error, ModelProvisionError?, Int)] = [
+            ("opaque deterministic download", DownloadError.failedToDownload("HTTP 404 secret token"), .loadFailed(), 1),
+            ("opaque transient-looking string", DownloadError.failedToDownload("timed out secret token"), .loadFailed(), 1),
+            ("unsafe remote name", DownloadError.invalidRemoteFileName("secret"), .loadFailed(), 1),
+            ("known timeout", URLError(.timedOut), .network(), 3),
+            ("deterministic URL", URLError(.badURL), .loadFailed(), 1),
+            ("URL cancellation", URLError(.cancelled), nil, 1),
+            ("structured metadata", ModelProvisionError.metadataInvalid(summary: summary), .metadataInvalid(summary: summary), 1),
+            ("structured network", ModelProvisionError.network(summary: summary), .network(summary: summary), 3),
+            ("wrapped timeout", NSError(domain: "fixture", code: 7, userInfo: [NSUnderlyingErrorKey: URLError(.timedOut)]), .network(), 3)
+        ]
+        for (name, error, expected, attempts) in cases {
+            let probe = ProvisionProbe()
+            let state = fixture(preflight: { _, _ in await probe.preflight() }, load: { target, _, _ in
+                await probe.record(target)
+                return try await QwenASRProvider.withProvisionErrors { throw error }
+            }, sleep: { try await probe.delay($0) })
+            await state.perform(.init(target: .preset(.qwen317B), source: .official, origin: .manual))
+            r.eq(state.failure, expected, "provider boundary: \(name) has conservative typed classification")
+            r.eq(await probe.attempts.count, attempts, "provider boundary: \(name) has bounded outer attempts")
+            r.eq(await probe.preflights, attempts, "provider boundary: \(name) preflight count follows real attempts")
+            r.eq(await probe.delays, attempts == 3 ? [10, 20] : [], "provider boundary: \(name) backs off only for known transient causes")
+        }
+        for transient in [false, true] {
+            let probe = ProvisionProbe()
+            let state = fixture(load: { target, _, _ in
+                await probe.record(target)
+                return try await QwenASRProvider.withProvisionErrors {
+                    if transient { throw URLError(.networkConnectionLost) }
+                    throw DownloadError.failedToDownload("deterministic snapshot failure")
+                }
+            }, sleep: { try await probe.delay($0) })
+            await state.perform(.init(target: .preset(.qwen317B), source: .official, origin: .automatic))
+            r.eq(await probe.attempts.count, transient ? 4 : 2, "automatic recovery keeps primary plus one fallback budget at provider boundary")
+            r.eq((await probe.attempts).filter { $0 == "qwen3-0.6b-4bit" }.count, 1, "provider boundary permits exactly one automatic fallback")
+        }
+    }
+}
+
+private actor RecoverySourceProbe {
+    var sources: [DownloadSource] = []
+    var loads = 0
+    func record(_ source: DownloadSource) { sources.append(source) }
+    func loaded() { loads += 1 }
 }
