@@ -85,6 +85,161 @@ enum CloudProviderSelfTests {
         runEndpoints(r)
     }
 
+    /// Exercises the same actions as the settings UI with in-memory configuration and HTTP fixtures.
+    @MainActor
+    static func runConnectionOwnership(_ r: SelfTest.Reporter) async {
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [CloudTransportProtocol.self]
+        let session = URLSession(configuration: sessionConfig)
+        defer { session.invalidateAndCancel() }
+        let client = CloudASRProvider(session: session, logger: { _ in })
+        let checks = CloudASRConnectionCheck(service: client)
+        var first = CloudASRVendor.makeProfile(.custom, isActive: true)
+        first.baseURL = "https://ownership.invalid/v1"
+        first.model = "original-model"
+        let second = CloudASRVendor.makeProfile(.openAI, isActive: false)
+        var config = CloudASRConfig(providers: [first, second], providerAPIKeys: [first.id.uuidString: "synthetic-original-key"])
+        let a = checks.begin(profileID: first.id)
+        let b = checks.begin(profileID: second.id)
+        r.check(checks.accepts(a) && checks.accepts(b), "ownership: profiles own independent revisions")
+        checks.invalidate(profileID: first.id)
+        r.check(!checks.accepts(a) && checks.accepts(b), "ownership: invalidation stays within profile")
+
+        // Removing any one invalidation path must allow a stale token and fail this test.
+        let edits: [(inout CloudASRProviderConfig) -> Void] = [
+            { $0.baseURL = "https://changed.invalid/v1" }, { $0.model = "replacement-model" },
+            { $0.name = "renamed" }, { $0.provider = "renamed vendor" }, { $0.isActive.toggle() },
+            { $0.protocolKind = .dashScopeRealtime }, { $0.vendorID = .siliconFlow },
+            { $0.customFieldCapabilities.sendPrompt.toggle() }, { $0.customFieldCapabilities.sendLanguage.toggle() },
+            { $0.customFieldCapabilities.sendTemperature.toggle() }, { $0.customFieldCapabilities.sendResponseFormat.toggle() }
+        ]
+        for edit in edits {
+            config.providers[0] = first
+            let token = checks.begin(profileID: first.id)
+            var edited = first
+            edit(&edited)
+            checks.updateProfile(edited, in: &config)
+            r.check(!checks.accepts(token), "ownership: every profile field edit rejects previous revision")
+            r.eq(checks.state(for: first.id), .idle, "ownership: edited profile is not connected")
+        }
+        config.providers[0] = first
+        let snapshot = CloudASRRequestConfiguration(provider: first, apiKey: config.providerAPIKeys[first.id.uuidString]!, sendContext: false)
+        let keyToken = checks.begin(profileID: first.id)
+        checks.updateAPIKey("synthetic-replacement-key", profileID: first.id, in: &config)
+        r.check(!checks.accepts(keyToken), "ownership: key edit rejects old result")
+        var edited = first
+        edited.baseURL = "https://changed.invalid/v1"
+        edited.model = "replacement-model"
+        edited.vendorID = .openAI
+        checks.updateProfile(edited, in: &config)
+        r.eq(config.providers[0].id, first.id, "ownership: vendor edit preserves UUID")
+        r.eq(config.providers[0].baseURL, "https://changed.invalid/v1", "ownership: vendor edit preserves user URL")
+        r.eq(config.providers[0].model, "replacement-model", "ownership: vendor edit preserves user model")
+        r.eq(config.providerAPIKeys[first.id.uuidString], "synthetic-replacement-key", "ownership: vendor edit preserves key association")
+        CloudTransportProtocol.reset()
+        _ = try? await client.transcribe(ASRRequest(samples: [0], sampleRate: 16000, language: nil, context: nil,
+            timeout: 2, cloudConfiguration: snapshot))
+        let captured = CloudTransportProtocol.snapshot().requests.first!
+        r.eq(captured.url?.host, "ownership.invalid", "ownership: prior recording retains endpoint after UI edit")
+        r.eq(captured.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-original-key", "ownership: prior recording retains key after UI edit")
+        r.check(String(decoding: captured.httpBody!, as: UTF8.self).contains("original-model"), "ownership: prior recording retains model after UI edit")
+
+        CloudTransportProtocol.reset()
+        checks.checkConfiguration(provider: first, apiKey: "synthetic-key")
+        r.eq(checks.state(for: first.id), .configurationValid, "ownership: pure check does not claim connected")
+        var missingModel = first
+        missingModel.model = "  "
+        checks.checkConfiguration(provider: missingModel, apiKey: "synthetic-key")
+        if case .failure = checks.state(for: first.id) { r.check(true, "ownership: model required by UI check") }
+        else { r.check(false, "ownership: model required by UI check") }
+        var readiness = Configuration.default
+        readiness.cloudASRConfig = CloudASRConfig(providers: [missingModel], providerAPIKeys: [first.id.uuidString: "synthetic-key"])
+        func cloudReadiness() -> EngineReadiness {
+            ReadinessSnapshotBuilder.make(config: readiness, modelStatus: .notLoaded, accessibility: .granted,
+                microphone: .granted, speechRecognition: .denied, networkReachable: true,
+                appleAvailable: false, computedAt: Date()).cloudASR
+        }
+        r.check(cloudReadiness() != .ready, "ownership: whitespace model cannot be ready")
+        readiness.cloudASRConfig.providers[0] = first
+        readiness.cloudASRConfig.providers[0].baseURL = "http://ownership.invalid/v1"
+        r.check(cloudReadiness() != .ready, "ownership: invalid endpoint cannot be ready")
+        readiness.cloudASRConfig.providers[0] = first
+        readiness.cloudASRConfig.providerAPIKeys[first.id.uuidString] = "  "
+        r.check(cloudReadiness() != .ready, "ownership: whitespace key cannot be ready")
+        let wss = CloudASRVendor.makeProfile(.dashScope, isActive: false)
+        await checks.testRecognition(provider: wss, apiKey: "synthetic-key")?.value
+        r.eq(checks.state(for: wss.id), .configurationValid, "ownership: WSS check never claims handshake")
+        r.eq(CloudTransportProtocol.snapshot().requests.count, 0, "ownership: UI configuration checks perform zero HTTP I/O")
+
+        CloudTransportProtocol.reset()
+        let queuedBeforeEdit = checks.testRecognition(provider: first, apiKey: "synthetic-key")!
+        checks.updateAPIKey("edited-before-task-start", profileID: first.id, in: &config)
+        await queuedBeforeEdit.value
+        r.eq(checks.state(for: first.id), .idle, "ownership: click reserves revision before queued task can race an edit")
+        r.eq(CloudTransportProtocol.snapshot().requests.count, 0, "ownership: edit before queued action suppresses obsolete upload")
+        r.check(!checks.isTesting(first.id), "ownership: skipped queued action releases busy slot")
+
+        for status in [200, 401] {
+            CloudTransportProtocol.reset(status: status, delay: 0.08)
+            let running = checks.testRecognition(provider: first, apiKey: "synthetic-key")!
+            for _ in 0..<100 {
+                if !CloudTransportProtocol.snapshot().requests.isEmpty { break }
+                try? await Task.sleep(for: .milliseconds(2))
+            }
+            r.check(checks.isTesting(first.id), "ownership: real test owns busy state")
+            await checks.testRecognition(provider: first, apiKey: "synthetic-key")?.value
+            checks.updateAPIKey("edited-while-testing-\(status)", profileID: first.id, in: &config)
+            await checks.testRecognition(provider: first, apiKey: "synthetic-key")?.value
+            r.eq(CloudTransportProtocol.snapshot().requests.count, 1, "ownership: duplicate clicks and edits cannot start concurrent tests")
+            await running.value
+            r.eq(checks.state(for: first.id), .idle, "ownership: late success or failure cannot update edited configuration")
+            r.check(!checks.isTesting(first.id), "ownership: obsolete completion releases its busy slot")
+        }
+        CloudTransportProtocol.reset()
+        await checks.testRecognition(provider: first, apiKey: "synthetic-key")?.value
+        r.eq(checks.state(for: first.id), .connected, "ownership: current successful recognition can claim connection")
+        var renamed = config.providers.first(where: { $0.id == first.id })!
+        renamed.name = "edited after success"
+        checks.updateProfile(renamed, in: &config)
+        r.eq(checks.state(for: first.id), .idle, "ownership: completed connection badge clears on edit")
+        let activationA = checks.begin(profileID: first.id)
+        let activationB = checks.begin(profileID: second.id)
+        checks.setActive(true, profileID: second.id, in: &config)
+        r.check(!checks.accepts(activationA) && !checks.accepts(activationB), "ownership: activation invalidates each changed profile")
+        r.eq(config.providers.filter(\.isActive).map(\.id), [second.id], "ownership: activation resolves by UUID")
+        let externalToken = checks.begin(profileID: second.id)
+        let beforeExternalEdit = config
+        config.providers[1].model = "externally-edited-model"
+        checks.synchronize(old: beforeExternalEdit, new: config)
+        r.check(!checks.accepts(externalToken), "ownership: external configuration edits invalidate results")
+        checks.setActive(true, profileID: first.id, in: &config)
+        CloudTransportProtocol.reset(error: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled))
+        await checks.testRecognition(provider: first, apiKey: "synthetic-key")?.value
+        r.eq(checks.state(for: first.id), .idle, "ownership: cancellation is not a connection result")
+
+        CloudTransportProtocol.reset(delay: 0.08)
+        let deletedTest = checks.testRecognition(provider: first, apiKey: "synthetic-key")!
+        for _ in 0..<100 {
+            if !CloudTransportProtocol.snapshot().requests.isEmpty { break }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        let deletedToken = checks.begin(profileID: first.id)
+        checks.deleteProfile(first.id, in: &config)
+        await deletedTest.value
+        r.check(!checks.accepts(deletedToken), "ownership: deletion rejects old revision")
+        r.eq(checks.state(for: first.id), .idle, "ownership: deleted profile result stays absent")
+        r.eq(config.providers.map(\.id), [second.id], "ownership: deleting preceding profile shifts safely")
+        r.check(config.providers[0].isActive, "ownership: deleting active profile activates remaining UUID")
+        r.eq(config.providerAPIKeys[first.id.uuidString], nil, "ownership: deletion removes only deleted key association")
+        var shifted = second
+        shifted.model = "shifted-model"
+        checks.updateProfile(shifted, in: &config)
+        checks.updateProfile(first, in: &config)
+        checks.updateAPIKey("must-not-recreate", profileID: first.id, in: &config)
+        r.eq(config.providers.first?.model, "shifted-model", "ownership: UUID editing targets shifted profile and ignores deleted binding")
+        r.eq(config.providerAPIKeys[first.id.uuidString], nil, "ownership: deleted key binding cannot recreate association")
+    }
+
     /// Tests exercise the real provider; only HTTP I/O is replaced. Every host is synthetic.
     static func runTransport(_ r: SelfTest.Reporter) async {
         let sessionConfig = URLSessionConfiguration.ephemeral

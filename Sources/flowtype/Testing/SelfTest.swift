@@ -389,6 +389,7 @@ enum SelfTest {
         await testDeliveryModeStage(r)
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
+        await CloudProviderSelfTests.runConnectionOwnership(r)
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }

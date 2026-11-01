@@ -88,8 +88,8 @@ enum ReadinessSnapshotBuilder {
         if config.asrRoutingPolicy == .localOnly {
             cloud = .unavailable(reason: "仅本地模式")
         } else if let cloudConfig = config.effectiveCloudASRConfig,
-                  !cloudConfig.apiKey.isEmpty, !cloudConfig.provider.baseURL.isEmpty,
-                  !cloudConfig.provider.model.isEmpty {
+                  (try? CloudTranscriptionRequestBuilder.validate(provider: cloudConfig.provider,
+                                                                 apiKey: cloudConfig.apiKey)) != nil {
             cloud = networkReachable ? .ready : .unavailable(reason: "网络不可达")
         } else {
             cloud = .unavailable(reason: "云端未配置")

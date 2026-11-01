@@ -2,14 +2,7 @@ import SwiftUI
 
 struct CloudASRProviderList: View {
     @ObservedObject private var store = ConfigurationStore.shared
-    @State private var testStatus: [UUID: TestState] = [:]
-
-    fileprivate enum TestState: Equatable {
-        case idle
-        case testing
-        case success(String)
-        case failure(String)
-    }
+    @StateObject private var checks = CloudASRConnectionCheck()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -17,142 +10,54 @@ struct CloudASRProviderList: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.secondary)
 
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(store.current.cloudASRConfig.providers.enumerated()), id: \.element.id) { index, provider in
-                    CloudASRProviderCard(
-                        provider: provider,
-                        index: index,
-                        testStatus: testStatus[provider.id] ?? .idle,
-                        onDelete: { deleteProvider(provider.id) },
-                        onTest: { apiKey in
-                            await runTest(for: provider, apiKey: apiKey)
-                        },
-                        onUpdateTestStatus: { status in
-                            testStatus[provider.id] = status
-                        }
-                    )
-                }
+            ForEach(store.current.cloudASRConfig.providers) { provider in
+                CloudASRProviderCard(provider: provider, checks: checks)
             }
 
             Menu("添加云端服务商") {
-                Button("OpenAI 兼容 HTTP") { addProvider() }
-                Button("阿里云 Paraformer 实时") {
-                    store.current.cloudASRConfig.providers.append(.defaultParaformer(isActive: store.current.cloudASRConfig.providers.isEmpty))
-                }
+                Button("硅基流动 SiliconFlow") { addProvider(.siliconFlow) }
+                Button("OpenAI") { addProvider(.openAI) }
+                Button("阿里云 Paraformer 实时") { addProvider(.dashScope) }
+                Button("自定义兼容服务") { addProvider(.custom) }
             }
             .buttonStyle(.plain)
             .foregroundColor(Brand.accent)
         }
-    }
-
-    private func addProvider() {
-        let newProvider = CloudASRProviderConfig(
-            name: "新服务商",
-            provider: "SiliconFlow",
-            baseURL: "https://api.siliconflow.cn/v1",
-            model: "",
-            isActive: store.current.cloudASRConfig.providers.isEmpty
-        )
-        store.current.cloudASRConfig.providers.append(newProvider)
-    }
-
-    private func deleteProvider(_ id: UUID) {
-        let wasActive = store.current.cloudASRConfig.providers.first(where: { $0.id == id })?.isActive ?? false
-        store.current.cloudASRConfig.providers.removeAll(where: { $0.id == id })
-        store.current.cloudASRConfig.providerAPIKeys.removeValue(forKey: id.uuidString)
-        testStatus.removeValue(forKey: id)
-        if wasActive, !store.current.cloudASRConfig.providers.isEmpty {
-            store.current.cloudASRConfig.providers[0].isActive = true
+        .onChange(of: store.current.cloudASRConfig) { old, new in
+            checks.synchronize(old: old, new: new)
         }
     }
 
-    private func runTest(for provider: CloudASRProviderConfig, apiKey: String) async -> TestState {
-        await MainActor.run {
-            testStatus[provider.id] = .testing
-        }
-        let service = CloudASRProvider()
-        let result = await service.testConnection(provider: provider, apiKey: apiKey)
-        switch result {
-        case .success(let message):
-            return .success(message)
-        case .failure(let error):
-            return .failure(error.localizedDescription)
-        }
+    private func addProvider(_ vendor: CloudASRVendorID) {
+        store.current.cloudASRConfig.providers.append(
+            CloudASRVendor.makeProfile(vendor, isActive: store.current.cloudASRConfig.providers.isEmpty))
     }
 }
 
 private struct CloudASRProviderCard: View {
     let provider: CloudASRProviderConfig
-    let index: Int
-    let testStatus: CloudASRProviderList.TestState
-    let onDelete: () -> Void
-    let onTest: (String) async -> CloudASRProviderList.TestState
-    let onUpdateTestStatus: (CloudASRProviderList.TestState) -> Void
-
+    @ObservedObject var checks: CloudASRConnectionCheck
     @ObservedObject private var store = ConfigurationStore.shared
-    @State private var isCustomModel: Bool
 
-    init(provider: CloudASRProviderConfig, index: Int, testStatus: CloudASRProviderList.TestState, onDelete: @escaping () -> Void, onTest: @escaping (String) async -> CloudASRProviderList.TestState, onUpdateTestStatus: @escaping (CloudASRProviderList.TestState) -> Void) {
-        self.provider = provider
-        self.index = index
-        self.testStatus = testStatus
-        self.onDelete = onDelete
-        self.onTest = onTest
-        self.onUpdateTestStatus = onUpdateTestStatus
-
-        let presetIds = Set(CloudASRModelPreset.siliconFlowModels.map(\.modelId))
-        let model = provider.model
-        self._isCustomModel = State(initialValue: !model.isEmpty && !presetIds.contains(model))
-    }
-
+    // Resolve by UUID on every access: cards can outlive an array insertion/deletion.
     private var binding: Binding<CloudASRProviderConfig> {
         Binding(
-            get: { store.current.cloudASRConfig.providers[index] },
-            set: { store.current.cloudASRConfig.providers[index] = $0 }
+            get: { store.current.cloudASRConfig.providers.first(where: { $0.id == provider.id }) ?? provider },
+            set: { checks.updateProfile($0, in: &store.current.cloudASRConfig) }
         )
     }
 
     private var apiKeyBinding: Binding<String> {
         Binding(
             get: { store.current.cloudASRConfig.providerAPIKeys[provider.id.uuidString] ?? "" },
-            set: { store.current.cloudASRConfig.providerAPIKeys[provider.id.uuidString] = $0 }
+            set: { checks.updateAPIKey($0, profileID: provider.id, in: &store.current.cloudASRConfig) }
         )
     }
 
     private var isActiveBinding: Binding<Bool> {
         Binding(
-            get: { provider.isActive },
-            set: { newValue in
-                if newValue {
-                    for i in store.current.cloudASRConfig.providers.indices {
-                        store.current.cloudASRConfig.providers[i].isActive = (i == index)
-                    }
-                } else {
-                    store.current.cloudASRConfig.providers[index].isActive = false
-                }
-            }
-        )
-    }
-
-    private var isSiliconFlow: Bool {
-        provider.provider == "SiliconFlow" || provider.baseURL.contains("siliconflow.cn")
-    }
-
-    private var pickerSelection: Binding<String> {
-        Binding(
-            get: {
-                if isCustomModel { return "__custom__" }
-                return binding.model.wrappedValue
-            },
-            set: { newValue in
-                if newValue == "__custom__" {
-                    isCustomModel = true
-                    binding.model.wrappedValue = ""
-                } else {
-                    isCustomModel = false
-                    binding.model.wrappedValue = newValue
-                }
-            }
+            get: { binding.wrappedValue.isActive },
+            set: { checks.setActive($0, profileID: provider.id, in: &store.current.cloudASRConfig) }
         )
     }
 
@@ -162,175 +67,144 @@ private struct CloudASRProviderCard: View {
                 Circle()
                     .fill(provider.isActive ? Brand.accent : Color.gray.opacity(0.4))
                     .frame(width: 8, height: 8)
-
                 TextField("名称", text: binding.name)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13, weight: .semibold))
-
-                Text(provider.provider)
-                    .font(.system(size: 10))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12))
-                    .clipShape(Capsule())
-
                 Spacer()
-
                 Toggle("启用", isOn: isActiveBinding)
                     .toggleStyle(.switch)
                     .controlSize(.small)
-                    .font(.system(size: 11))
-
                 Button(role: .destructive) {
-                    onDelete()
+                    checks.deleteProfile(provider.id, in: &store.current.cloudASRConfig)
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.red.opacity(0.8))
+                .accessibilityLabel("删除服务商")
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Picker("识别协议", selection: binding.protocolKind) {
-                    Text("OpenAI 兼容 HTTP").tag(CloudASRProtocolKind.openAICompatible)
-                    Text("DashScope 实时 WSS").tag(CloudASRProtocolKind.dashScopeRealtime)
-                }
+            Text("服务：\(vendorName) · 模型：\(provider.model.isEmpty ? "待填写" : provider.model)")
                 .font(.system(size: 11))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Base URL")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
-                    TextField("https://api.siliconflow.cn/v1", text: binding.baseURL)
-                        .textFieldStyle(.plain)
+                .foregroundColor(.secondary)
+                .textSelection(.enabled)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(provider.protocolKind == .dashScopeRealtime ? "WSS URL" : "Base URL / 完整转写 URL")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                TextField(provider.protocolKind == .dashScopeRealtime ? "wss://服务地址/路径" : "https://服务地址/v1", text: binding.baseURL)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12, design: .monospaced))
+            }
+            SecureField("输入 API Key", text: apiKeyBinding)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12, design: .monospaced))
+
+            if provider.vendorID == .custom && provider.model.isEmpty {
+                Text("请在高级配置中填写模型 ID；自定义服务还需提供 URL 和 API Key。")
+                    .font(.system(size: 10))
+                    .foregroundColor(.orange)
+            }
+
+            DisclosureGroup("高级配置（模型与请求字段）") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("厂商", selection: binding.vendorID) {
+                        Text("硅基流动 SiliconFlow").tag(CloudASRVendorID.siliconFlow)
+                        Text("OpenAI").tag(CloudASRVendorID.openAI)
+                        Text("阿里云 DashScope").tag(CloudASRVendorID.dashScope)
+                        Text("自定义兼容服务").tag(CloudASRVendorID.custom)
+                    }
+                    Text("更换厂商保留现有 URL、模型与 Key，请按服务商要求修改。")
+                        .font(.system(size: 10)).foregroundColor(.secondary)
+                    Picker("识别协议", selection: binding.protocolKind) {
+                        Text("OpenAI 兼容 HTTP").tag(CloudASRProtocolKind.openAICompatible)
+                        Text("DashScope 实时 WSS").tag(CloudASRProtocolKind.dashScopeRealtime)
+                    }
+                    TextField("模型 ID", text: binding.model)
+                        .textFieldStyle(.roundedBorder)
                         .font(.system(size: 12, design: .monospaced))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Model")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
-
-                    if isSiliconFlow {
-                        Picker("", selection: pickerSelection) {
-                            Text("请选择模型...").tag("")
-                            ForEach(CloudASRModelPreset.siliconFlowModels) { preset in
-                                Text(preset.name).tag(preset.modelId)
-                            }
-                            Divider()
-                            Text("自定义模型 ID...").tag("__custom__")
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if isCustomModel {
-                            TextField("输入模型 ID", text: binding.model)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 12, design: .monospaced))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color(nsColor: .textBackgroundColor))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                                )
-                        }
-
-                        if binding.model.wrappedValue.isEmpty && !isCustomModel {
-                            Text("请选择一个 ASR 模型")
-                                .font(.system(size: 10))
-                                .foregroundColor(.orange)
-                        }
-                    } else {
-                        TextField("输入模型 ID，如 FunAudioLLM/SenseVoiceSmall", text: binding.model)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 12, design: .monospaced))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color(nsColor: .textBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                            )
+                        .accessibilityLabel("模型 ID")
+                    if provider.vendorID == .custom && provider.protocolKind == .openAICompatible {
+                        Text("仅在服务商文档确认支持时启用下列字段；返回值须为包含 text 字符串的 JSON。")
+                            .font(.system(size: 10)).foregroundColor(.secondary)
+                        Toggle("发送 language（识别语言）", isOn: binding.customFieldCapabilities.sendLanguage)
+                        Toggle("发送 prompt（上下文，仍受全局开关控制）", isOn: binding.customFieldCapabilities.sendPrompt)
+                        Toggle("发送 temperature=0", isOn: binding.customFieldCapabilities.sendTemperature)
+                        Toggle("发送 response_format=json", isOn: binding.customFieldCapabilities.sendResponseFormat)
                     }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("API Key")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
-                    HStack(spacing: 8) {
-                        SecureField("输入 API Key（需用户自行配置）", text: apiKeyBinding)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 12, design: .monospaced))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color(nsColor: .textBackgroundColor))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                            )
-
-                        HStack(spacing: 4) {
-                            switch testStatus {
-                            case .idle:
-                                EmptyView()
-                            case .testing:
-                                ProgressView()
-                                    .controlSize(.small)
-                                    .frame(width: 14, height: 14)
-                            case .success:
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.green)
-                            case .failure:
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.red)
-                            }
-
-                            Button {
-                                Task {
-                                    let status = await onTest(apiKeyBinding.wrappedValue)
-                                    onUpdateTestStatus(status)
-                                }
-                            } label: {
-                                Text(provider.protocolKind == .dashScopeRealtime ? "验证配置" : "测试连接")
-                                    .font(.system(size: 11))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(testStatus == .testing)
-                        }
-                    }
-                    Text(provider.protocolKind == .dashScopeRealtime ? "使用阿里云 DashScope API Key；验证配置不连接服务、不发送音频。" : "使用服务商 API Key；仅随识别请求发送给该服务商。")
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                }
-
-                if case let .success(msg) = testStatus {
-                    Text(msg).font(.system(size: 10)).foregroundColor(.secondary)
-                }
-                if case let .failure(msg) = testStatus {
-                    Text(msg)
-                        .font(.system(size: 10))
-                        .foregroundColor(.red)
+                    Text(capabilityDescription)
+                        .font(.system(size: 10)).foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(.top, 6)
             }
+            .font(.system(size: 11))
+
+            HStack(spacing: 12) {
+                Button("检查配置") {
+                    checks.checkConfiguration(provider: binding.wrappedValue, apiKey: apiKeyBinding.wrappedValue)
+                }
+                if provider.protocolKind == .openAICompatible {
+                    Button("测试识别") {
+                        checks.testRecognition(provider: binding.wrappedValue, apiKey: apiKeyBinding.wrappedValue)
+                    }
+                }
+                if checks.isTesting(provider.id) {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(checks.isTesting(provider.id))
+
+            Text(provider.protocolKind == .dashScopeRealtime
+                 ? "检查配置仅本地校验，不联网、不发送音频；尚未连接。实时连接与识别将在真实录音时验证。"
+                 : "检查配置不联网。测试识别会向当前 URL 发送 API Key 与 0.5 秒合成静音音频，可能产生费用；不使用麦克风录音。")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            statusView
         }
         .padding(14)
         .glassCard(active: provider.isActive, cornerRadius: 10)
+    }
+
+    @ViewBuilder private var statusView: some View {
+        switch checks.state(for: provider.id) {
+        case .idle:
+            Text("尚未连接").foregroundColor(.secondary)
+        case .testing:
+            Text("正在发送合成音频测试…").foregroundColor(.secondary)
+        case .configurationValid:
+            Text("配置有效；尚未连接").foregroundColor(.secondary)
+        case .connected:
+            Text("测试识别成功；当前配置已连接").foregroundColor(.green)
+        case .failure(let message):
+            Text(message).foregroundColor(.red)
+        }
+    }
+
+    private var vendorName: String {
+        switch provider.vendorID {
+        case .siliconFlow: return "硅基流动 SiliconFlow"
+        case .openAI: return "OpenAI"
+        case .dashScope: return "阿里云 DashScope"
+        case .custom: return "自定义兼容服务"
+        }
+    }
+
+    private var capabilityDescription: String {
+        if provider.protocolKind == .dashScopeRealtime {
+            return "实时协议使用独立音频通道；这里不进行 WebSocket 握手或识别测试。"
+        }
+        let capabilities = CloudASRVendor.capabilities(for: provider)
+        if provider.vendorID == .custom {
+            return "默认仅发送 file / model；可选字段由上述开关决定。启用字段不代表已验证服务端支持。"
+        }
+        if capabilities.sendResponseFormat {
+            return "当前请求发送 file / model / response_format=json；暂不发送 language、prompt 或 temperature。模型在线可用性需测试识别确认。"
+        }
+        return "当前请求仅发送 file / model；暂不发送 language、prompt、temperature 或 response_format。模型在线可用性需测试识别确认。"
     }
 }
