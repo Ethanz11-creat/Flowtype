@@ -31,6 +31,11 @@ enum ModelScanError: Error, LocalizedError {
 }
 
 enum CustomModelScanner {
+    /// Strict multi-format inspection for imported candidates. Legacy provisioning API remains until C3.
+    static func inspectModelDirectory(_ directory: URL) throws -> ImportedASRModel {
+        try ASRModelInspector.inspect(directory: directory)
+    }
+
     static func validateModelDirectory(_ dir: URL, minBytes: Int64) throws -> ScannedModelInfo {
         let fm = FileManager.default
         var isDir: ObjCBool = false

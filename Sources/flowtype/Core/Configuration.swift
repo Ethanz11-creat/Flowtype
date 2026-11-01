@@ -424,6 +424,8 @@ struct Configuration: Codable, Equatable {
     var cloudASRConfig: CloudASRConfig = .defaultSiliconFlow
     var selectedLocalModelID: String? = nil
     var customLocalModelPath: String? = nil
+    var importedASRModels: [ImportedASRModel] = []
+    var activeImportedASRModelID: UUID? = nil
 
     // Constants
     let temperature: Double = 0.3
@@ -519,6 +521,8 @@ struct Configuration: Codable, Equatable {
         cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
+        importedASRModels = try c.decodeIfPresent([ImportedASRModel].self, forKey: .importedASRModels) ?? []
+        activeImportedASRModelID = try c.decodeIfPresent(UUID.self, forKey: .activeImportedASRModelID)
         deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? .unicode
         storeTranscriptText = (try? c.decodeIfPresent(Bool.self, forKey: .storeTranscriptText)) ?? true
         providerAPIKeys = (try? c.decodeIfPresent([String: String].self, forKey: .providerAPIKeys)) ?? [:]
@@ -566,6 +570,8 @@ extension Configuration {
         case cloudASRConfig
         case selectedLocalModelID
         case customLocalModelPath
+        case importedASRModels
+        case activeImportedASRModelID
         case storeTranscriptText
         case providerAPIKeys
         // Legacy keys (for migration only, not stored properties)
@@ -597,6 +603,8 @@ extension Configuration {
         try container.encode(cloudASRConfig, forKey: .cloudASRConfig)
         try container.encode(selectedLocalModelID, forKey: .selectedLocalModelID)
         try container.encode(customLocalModelPath, forKey: .customLocalModelPath)
+        try container.encode(importedASRModels, forKey: .importedASRModels)
+        try container.encodeIfPresent(activeImportedASRModelID, forKey: .activeImportedASRModelID)
         try container.encode(storeTranscriptText, forKey: .storeTranscriptText)
         try container.encode(providerAPIKeys, forKey: .providerAPIKeys)
     }

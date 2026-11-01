@@ -6,6 +6,11 @@ struct ResolvedModel: Equatable {
 }
 
 enum ModelLocator {
+    /// Resolves only the explicit legacy path; failure never falls through to another model/cache.
+    static func inspectLegacyCandidate(config: Configuration) throws -> ImportedASRModel? {
+        try LocalModelLibrary.inspectLegacyCandidate(in: config)
+    }
+
     static let defaultMinWeightsBytes: Int64 = 600 * 1024 * 1024
 
     static func validateComplete(_ dir: URL, minBytes: Int64 = defaultMinWeightsBytes) -> Bool {
@@ -161,7 +166,7 @@ enum ModelLocator {
                 || path.contains("/models--" + preset.repoId.replacingOccurrences(of: "/", with: "--") + "/snapshots/")
         }
         let configURL = directory.appendingPathComponent("config.json")
-        let metadata = (try? Data(contentsOf: configURL)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let metadata = try? LocalInspectionFiles().json(configURL)
         let repoIDs = ["_name_or_path", "repo_id", "model_id"].compactMap { metadata?[$0] as? String }
         let metadataIdentity = ModelPreset.allPresets.first { repoIDs.contains($0.repoId) }
         if let pathIdentity, let metadataIdentity, pathIdentity.id != metadataIdentity.id { return nil }
