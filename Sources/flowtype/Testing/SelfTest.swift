@@ -350,6 +350,7 @@ enum SelfTest {
         testReadinessDebounce(r)
         testPermissionWatchOwnership(r)
         testReadinessSnapshotBuilder(r)
+        await testReadinessPreflight(r)
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
         await testOnboardingDemoDelivery(r) // notification-only final delivery, no active-app injection
         await testOnboardingDeliveryCancellation(r)
@@ -425,11 +426,11 @@ enum SelfTest {
     static func testSessionRecoveryDelivery(_ r: Reporter) async {
         let ledger = RetryLedger()
         let quietEffects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
-        let recovery = SessionController(pipeline: [RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects)
+        let recovery = SessionController(pipeline: [RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
         recovery.startRecording()
         await waitForSession(recovery) { if case .error = $0 { return true }; return false }
         let immediateLedger = RetryLedger()
-        let immediate = SessionController(pipeline: [RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects)
+        let immediate = SessionController(pipeline: [RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
         immediate.startRecording()
         await waitForSession(immediate) { if case .error = $0 { return true }; return false }
         immediate.retryFailedStage()
@@ -456,7 +457,7 @@ enum SelfTest {
         let delivery = InjectionStage(settle: {}, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
                                      copy: { text in log.events.append("delivered:\(text)") })
         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in log.events.append("history") })
-        let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects)
+        let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects, readinessLevel: { .ready })
         session.startRecording()
         await waitForSession(session) { if case .notice = $0 { return true }; return $0 == .idle }
         r.eq(log.events, ["delivered:你好，世界。", "history", "notice"], "session: complete processed delivery precedes single history save and gentle notice")
@@ -1153,7 +1154,7 @@ enum SelfTest {
             let rendezvous = StageRendezvous()
             let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
             let session = SessionController(pipeline: [SuspendedDemoStage(state: state, rendezvous: rendezvous),
-                                                       DemoInjectionStage()], observers: [], effects: effects)
+                                                       DemoInjectionStage()], observers: [], effects: effects, readinessLevel: { .ready })
             session.startRecording()
             await rendezvous.waitForInvocation()
             r.eq(session.sessionState, state, "onboarding teardown: exercise actual suspended state (\(state))")
@@ -1223,7 +1224,7 @@ enum SelfTest {
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return readiness.level
-        })
+        }, readinessLevel: { .ready })
         defer { session.cancel() }
         session.startRecording()
         await waitForSession(session) { if case .error = $0 { return true }; return false }
@@ -1244,7 +1245,7 @@ enum SelfTest {
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return .blocked(.noEngine)
-        })
+        }, readinessLevel: { .ready })
         defer { reroute.cancel() }
         reroute.startRecording()
         await waitForSession(reroute) { if case .error = $0 { return true }; return false }
@@ -1266,7 +1267,7 @@ enum SelfTest {
         let rendezvous = StageRendezvous()
         let active = SessionController(pipeline: [SuspensibleStage(rendezvous: rendezvous, suspend: true)],
                                        observers: [], effects: effects, configurationStore: store,
-                                       refreshReadiness: { .ready })
+                                       refreshReadiness: { .ready }, readinessLevel: { .ready })
         active.startRecording()
         await rendezvous.waitForInvocation()
         active.recheckReadiness()
@@ -1558,6 +1559,96 @@ enum SelfTest {
         r.eq(ReadinessSnapshotBuilder.logLine(level: .blocked(.microphoneDenied), snapshot: sensitive),
              "[ReadinessMonitor] level=blocked ax=unknown mic=denied local=unavailable cloud=provisioning apple=ready",
              "snapshot logging: only state tags survive associated error text and progress")
+    }
+
+    @MainActor
+    private final class ReadinessPreflightProbe: @preconcurrency SessionObserver {
+        var level: ReadinessLevel = .blocked(.noEngine)
+        var context: SessionContext?
+        var preparationCalls = 0
+        var windowShows = 0
+        var historySaves = 0
+        func sessionDidTransition(from oldState: SessionState, to newState: SessionState, context: SessionContext) {
+            self.context = context
+        }
+    }
+
+    @MainActor
+    static func testReadinessPreflight(_ r: Reporter) async {
+        let probe = ReadinessPreflightProbe()
+        let rendezvous = StageRendezvous()
+        let effects = SessionEffects(prepare: { probe.preparationCalls += 1 },
+                                     showWindow: { probe.windowShows += 1 }, hideWindow: {},
+                                     saveHistory: { _ in probe.historySaves += 1 })
+        let session = SessionController(pipeline: [SuspensibleStage(rendezvous: rendezvous, suspend: true)],
+                                        observers: [probe], effects: effects, readinessLevel: { probe.level })
+        defer { session.cancel() }
+        session.startRecording()
+        r.eq(session.sessionState, .error("没有可用的语音识别引擎"),
+             "preflight: blocked readiness enters error immediately")
+        r.eq(session.errorActions.first, .openASRSettings,
+             "preflight: blocked actions lead with the ASR settings repair")
+        r.check(session.errorActions.contains(.dismiss), "preflight: blocked actions remain dismissible")
+        r.eq(session.lastErrorRawText, nil, "preflight: blocked error has no stale transcript")
+        r.eq(probe.windowShows, 1, "preflight: blocked error displays its recovery panel")
+        r.eq(probe.preparationCalls, 1, "preflight: blocked start does not repeat initialization effects")
+        for _ in 0..<10 { await Task.yield() }
+        r.eq(await rendezvous.invocationCount, 0, "preflight: blocked start begins no pipeline or microphone work")
+        let blockedContext = probe.context
+        session.dismissError()
+        r.eq(session.sessionState, .idle, "preflight: dismiss returns to idle")
+        r.check(blockedContext?.isCancelled == true, "preflight: dismiss cancels the blocked context")
+        r.eq(session.errorActions, [], "preflight: dismiss clears repair actions")
+
+        // The same real controller starts successfully after readiness changes.
+        probe.level = .degraded(.basicOnly)
+        session.startRecording()
+        r.eq(session.sessionState, .preparing, "preflight: degraded readiness starts preparation")
+        r.eq(session.preparationNotice, "基础模式 · 准确率较低", "preflight: preparation displays the current degradation")
+        await rendezvous.waitForInvocation()
+        let captureContext = probe.context
+        r.eq(await rendezvous.invocationCount, 1, "preflight: repaired readiness starts the pipeline once")
+        blockedContext?.statePublisher.send(.processing(provider: "stale"))
+        blockedContext?.markReady()
+        r.eq(session.sessionState, .preparing, "preflight: dismissed blocked context cannot change the new session")
+        captureContext?.markReady()
+        r.eq(session.sessionState, .recording(elapsedSeconds: 0), "preflight: degraded session records after valid audio readiness")
+        r.eq(session.preparationNotice, nil, "preflight: recording clears the preparation notice")
+        session.cancel()
+        r.check(captureContext?.isCancelled == true, "preflight: cancellation owns the active capture context")
+
+        // A late stage completion must not replace a subsequent blocked error.
+        probe.level = .blocked(.microphoneDenied)
+        session.startRecording()
+        r.eq(session.sessionState, .error("麦克风权限未开启"), "preflight: fresh readiness is read on each start")
+        r.eq(session.errorActions, [.openMicrophoneSettings, .recheckReadiness, .dismiss],
+             "preflight: microphone blocker offers its repair actions")
+        await rendezvous.release()
+        for _ in 0..<10 { await Task.yield() }
+        captureContext?.markReady()
+        captureContext?.statePublisher.send(.injecting)
+        r.eq(session.sessionState, .error("麦克风权限未开启"), "preflight: late prior work cannot replace the blocked session")
+        r.eq(await rendezvous.invocationCount, 1, "preflight: blocked restart starts no additional stage")
+        r.eq(probe.historySaves, 0, "preflight: blocked and cancelled sessions save no history")
+        session.dismissError()
+
+        probe.level = .degraded(.enginePreparing)
+        session.startRecording()
+        r.eq(session.preparationNotice, "识别引擎准备中", "preflight: a new preparation uses fresh degradation copy")
+        session.cancel()
+        r.eq(session.preparationNotice, nil, "preflight: cancellation during preparation clears the notice")
+        r.eq(session.sessionState, .idle, "preflight: preparation cancellation returns to idle")
+
+        r.eq(SessionController.readinessPreflight(.degraded(.basicOnly)), nil, "preflight: degraded readiness is allowed")
+        r.eq(SessionController.readinessPreflight(.ready), nil, "preflight: ready readiness is allowed")
+        r.eq(SessionController.readinessPreflight(.blocked(.microphoneDenied)), .microphoneDenied,
+             "preflight: blocked mic is reported")
+        r.eq(SessionController.preparationSubtitle(for: .degraded(.basicOnly)), "基础模式 · 准确率较低", "preflight: basic mode is labelled")
+        r.eq(SessionController.preparationSubtitle(for: .degraded(.accessibilityMissing)), "无辅助功能 · 结果将复制", "preflight: no-AX is labelled")
+        r.eq(SessionController.preparationSubtitle(for: .degraded(.enginePreparing)), "识别引擎准备中", "preflight: provisioning is labelled")
+        r.eq(SessionController.preparationSubtitle(for: .degraded(.microphoneNotDetermined)), "首次使用 · 将请求麦克风权限", "preflight: first microphone request is labelled")
+        r.eq(SessionController.preparationSubtitle(for: .ready), nil, "preflight: ready has no subtitle")
+        r.eq(SessionController.preparationSubtitle(for: .blocked(.noEngine)), nil, "preflight: blocked has no preparation subtitle")
     }
 
     static func testSessionExperience(_ r: Reporter) {

@@ -76,6 +76,7 @@ final class SessionController: ObservableObject {
     private let effects: SessionEffects
     private let configurationStore: ConfigurationStore
     private let refreshReadiness: @MainActor () -> ReadinessLevel
+    private let readinessLevel: @MainActor @Sendable () -> ReadinessLevel
     private let asrRegistry = ASRProviderRegistry.shared
 
     var qwenProvider: QwenASRProvider { asrRegistry.qwenLocalProvider }
@@ -86,6 +87,7 @@ final class SessionController: ObservableObject {
     @Published private(set) var spectrum: [Float] = []
     @Published private(set) var lastErrorRawText: String?
     @Published private(set) var errorActions: [ErrorAction] = []
+    @Published private(set) var preparationNotice: String?
 
     // MARK: - Session Identity
 
@@ -142,6 +144,10 @@ final class SessionController: ObservableObject {
         refreshReadiness: @escaping @MainActor () -> ReadinessLevel = {
             ReadinessMonitor.shared.refresh()
             return ReadinessMonitor.shared.rawLevel
+        },
+        readinessLevel: @escaping @MainActor @Sendable () -> ReadinessLevel = {
+            ReadinessMonitor.shared.refresh()
+            return ReadinessMonitor.shared.rawLevel
         }
     ) {
         self.pipeline = pipeline
@@ -150,6 +156,7 @@ final class SessionController: ObservableObject {
         self.effects = effects
         self.configurationStore = configurationStore
         self.refreshReadiness = refreshReadiness
+        self.readinessLevel = readinessLevel
         effects.prepare()
     }
 
@@ -184,6 +191,13 @@ final class SessionController: ObservableObject {
         let context = SessionContext(sessionID: newID, statePublisher: statePublisher)
         currentContext = context
 
+        let readiness = readinessLevel()
+        if let issue = Self.readinessPreflight(readiness) {
+            presentReadinessBlocked(issue, context: context)
+            return
+        }
+        preparationNotice = Self.preparationSubtitle(for: readiness)
+
         // Reset state
         spectrum = []
 
@@ -213,6 +227,7 @@ final class SessionController: ObservableObject {
                                              isCancelled: ctx.isCancelled),
                       ctx.isReady else { return }
                 ctx.recordingStartTime = Date()
+                self.preparationNotice = nil
                 self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx)
                 self.startRecordingTimer(sessionID: newID, context: ctx)
             }
@@ -504,6 +519,31 @@ final class SessionController: ObservableObject {
 
     // MARK: - Error Actions
 
+    private func presentReadinessBlocked(_ issue: ReadinessIssue, context: SessionContext) {
+        errorDismissTask?.cancel()
+        errorDismissTask = nil
+        currentTask?.cancel()
+        currentTask = nil
+        lastErrorRawText = nil
+        errorActions = Self.readinessActions(for: issue, policy: configurationStore.current.asrRoutingPolicy)
+        transition(to: .error(issue.reason), context: context)
+    }
+
+    nonisolated static func readinessPreflight(_ level: ReadinessLevel) -> ReadinessIssue? {
+        if case .blocked(let issue) = level { return issue }
+        return nil
+    }
+
+    nonisolated static func preparationSubtitle(for level: ReadinessLevel) -> String? {
+        switch level {
+        case .degraded(.basicOnly): return "基础模式 · 准确率较低"
+        case .degraded(.accessibilityMissing): return "无辅助功能 · 结果将复制"
+        case .degraded(.enginePreparing): return "识别引擎准备中"
+        case .degraded(.microphoneNotDetermined): return "首次使用 · 将请求麦克风权限"
+        default: return nil
+        }
+    }
+
     nonisolated static func readinessActions(for issue: ReadinessIssue,
                                              policy: ASRRoutingPolicy) -> [ErrorAction] {
         switch issue {
@@ -709,6 +749,7 @@ final class SessionController: ObservableObject {
         readinessCancellable = nil
         lastErrorRawText = nil
         errorActions = []
+        preparationNotice = nil
         suspendedContext = nil
         suspendedPayload = nil
         suspendedStageIndex = nil
