@@ -74,7 +74,57 @@ enum WhisperRuntimeSelfTests {
             ])
             r.eq(segments, ["首段", "中段", "尾段"], "Whisper flattens every framework result and ordered segment")
             r.eq(WhisperKitBackend.textSegments([]), [], "Whisper framework empty array is safe")
+            do {
+                let hf = try LocalWhisperTokenizer(tokenizer: fixtureTokenizer(noSpeechToken: "<|nocaptions|>"))
+                try hf.validate(for: WhisperRuntimeMetadata(logitsSize: 51865, encoderSize: 384, decoderSize: 384))
+                r.eq(hf.specialTokens.noSpeechToken, 50362, "Whisper standard no-captions spelling supplies exact no-speech token")
+            } catch { r.check(false, "Whisper standard no-captions spelling must load: \(error)") }
+            var conflict = fixtureTokenizerData(noSpeechToken: "<|nocaptions|>")
+            var conflictModel = conflict["model"] as! [String: Any]
+            var conflictVocab = conflictModel["vocab"] as! [NSString: Any]
+            conflictVocab.removeValue(forKey: "unused50360")
+            conflictVocab["<|nospeech|>"] = 50360
+            conflictModel["vocab"] = conflictVocab
+            conflict["model"] = conflictModel
+            do {
+                let raw = try PreTrainedTokenizer(tokenizerConfig: Config(["tokenizer_class": "WhisperTokenizer", "unk_token": "<|endoftext|>"] as [NSString: Any]), tokenizerData: Config(conflict))
+                _ = try LocalWhisperTokenizer(tokenizer: raw)
+                r.check(false, "Whisper rejects conflicting no-speech alias IDs")
+            } catch { r.check(true, "Whisper rejects conflicting no-speech alias IDs") }
             let tokenizer = try LocalWhisperTokenizer(tokenizer: fixtureTokenizer())
+            r.eq(tokenizer.allLanguageTokens.count, 99, "Whisper unknown fallback is excluded from language inventory")
+            r.check(!tokenizer.allLanguageTokens.contains(tokenizer.specialTokens.endToken), "Whisper end token is never a language")
+            r.eq(tokenizer.convertTokenToId("<|yue|>"), nil, "Whisper absent Cantonese is not an unknown/end token")
+            r.eq(tokenizer.convertTokenToId("<|en|>"), 50259, "Whisper existing English language token retained")
+            if let chinese = tokenizer.convertTokenToId("<|zh|>") {
+                r.eq(tokenizer.convertIdToToken(chinese), "<|zh|>", "Whisper existing Chinese language round-trips")
+            } else { r.check(false, "Whisper Chinese language exists") }
+            for hint in ["yue", "Cantonese"] {
+                do {
+                    _ = try WhisperKitBackend.languageCode(hint, tokenizer: tokenizer, isMultilingual: true)
+                    r.check(false, "Whisper rejects absent Cantonese hint instead of using end token")
+                } catch OfflineWhisperError.unsupportedLanguage {
+                    r.check(true, "Whisper rejects absent Cantonese hint instead of using end token")
+                }
+            }
+            r.eq(try WhisperKitBackend.languageCode("Chinese", tokenizer: tokenizer, isMultilingual: true), "zh", "Whisper supported Chinese hint still resolves")
+            r.eq(try WhisperKitBackend.languageCode("en", tokenizer: tokenizer, isMultilingual: true), "en", "Whisper supported English hint still resolves")
+            r.eq(try WhisperKitBackend.languageCode("auto", tokenizer: tokenizer, isMultilingual: true), nil, "Whisper automatic language remains automatic")
+            for (logits, size) in [(51864, 512), (51866, 1280)] {
+                let alternate = try LocalWhisperTokenizer(tokenizer: fixtureTokenizer(logitsSize: logits))
+                let metadata = try WhisperRuntimeMetadata(logitsSize: logits, encoderSize: size, decoderSize: size)
+                try alternate.validate(for: metadata)
+                r.eq(alternate.allLanguageTokens.count, logits == 51866 ? 100 : 99, "Whisper English/v3 inventory accepts standard unknown token")
+                if logits == 51866 {
+                    r.eq(try WhisperKitBackend.languageCode("Cantonese", tokenizer: alternate, isMultilingual: true), "yue", "Whisper v3 Cantonese remains supported")
+                } else {
+                    r.eq(try WhisperKitBackend.languageCode("English", tokenizer: alternate, isMultilingual: false), "en", "Whisper English-only hint remains supported")
+                    do {
+                        _ = try WhisperKitBackend.languageCode("zh", tokenizer: alternate, isMultilingual: false)
+                        r.check(false, "Whisper English-only graph rejects non-English hint")
+                    } catch OfflineWhisperError.unsupportedLanguage { r.check(true, "Whisper English-only graph rejects non-English hint") }
+                }
+            }
             let graph = try WhisperRuntimeMetadata(logitsSize: 51865, encoderSize: 768, decoderSize: 768)
             try tokenizer.validate(for: graph)
             r.eq(graph.variant, "small", "Whisper non-tiny graph identity")
@@ -169,19 +219,19 @@ enum WhisperRuntimeSelfTests {
         } catch { r.check(false, "Whisper offline load fixture: \(error)") }
     }
 
-    private static func fixtureTokenizer(omit: String? = nil) throws -> any Tokenizer {
-        try PreTrainedTokenizer(tokenizerConfig: Config(["tokenizer_class": "WhisperTokenizer"] as [NSString: Any]),
-                                tokenizerData: Config(fixtureTokenizerData(omit: omit)))
+    private static func fixtureTokenizer(omit: String? = nil, logitsSize: Int = 51865, noSpeechToken: String = "<|nospeech|>") throws -> any Tokenizer {
+        try PreTrainedTokenizer(tokenizerConfig: Config(["tokenizer_class": "WhisperTokenizer", "unk_token": "<|endoftext|>"] as [NSString: Any]),
+                                tokenizerData: Config(fixtureTokenizerData(omit: omit, logitsSize: logitsSize, noSpeechToken: noSpeechToken)))
     }
 
     private static func writeTokenizer(to directory: URL) throws {
         try JSONSerialization.data(withJSONObject: fixtureTokenizerData()).write(to: directory.appendingPathComponent("tokenizer.json"))
-        try JSONSerialization.data(withJSONObject: ["tokenizer_class": "WhisperTokenizer"]).write(to: directory.appendingPathComponent("tokenizer_config.json"))
+        try JSONSerialization.data(withJSONObject: ["tokenizer_class": "WhisperTokenizer", "unk_token": "<|endoftext|>"]).write(to: directory.appendingPathComponent("tokenizer_config.json"))
     }
 
-    private static func fixtureTokenizerData(omit: String? = nil) -> [NSString: Any] {
+    private static func fixtureTokenizerData(omit: String? = nil, logitsSize: Int = 51865, noSpeechToken: String = "<|nospeech|>") -> [NSString: Any] {
         var vocab: [NSString: Any] = [:]
-        for id in 0..<51865 { vocab[NSString(string: "unused\(id)")] = id }
+        for id in 0..<logitsSize { vocab[NSString(string: "unused\(id)")] = id }
         func token(_ value: String, _ id: Int) {
             vocab.removeValue(forKey: NSString(string: "unused\(id)"))
             if value != omit { vocab[NSString(string: value)] = id }
@@ -191,12 +241,15 @@ enum WhisperRuntimeSelfTests {
         for (id, scalar) in (rawBytes + Array(256..<(256 + 256 - rawBytes.count))).enumerated() {
             token(String(Unicode.Scalar(scalar)!), id)
         }
-        for (value, id) in ["<|endoftext|>":50257, "<|startoftranscript|>":50258,
-            "<|translate|>":50358, "<|transcribe|>":50359, "<|startofprev|>":50361,
-            "<|nospeech|>":50362, "<|notimestamps|>":50363] { token(value, id) }
+        let end = logitsSize == 51864 ? 50256 : 50257
+        let translate = logitsSize - 1507
+        for (value, id) in ["<|endoftext|>":end, "<|startoftranscript|>":end + 1,
+            "<|translate|>":translate, "<|transcribe|>":translate + 1, "<|startofprev|>":translate + 3,
+            noSpeechToken:translate + 4, "<|notimestamps|>":translate + 5] { token(value, id) }
         let languages = ["en"] + Set(Constants.languages.values).subtracting(["en", "yue"]).sorted()
-        for (i, language) in languages.enumerated() { token("<|\(language)|>", 50259 + i) }
-        for i in 0...1500 { token(String(format: "<|%.2f|>", Double(i) * 0.02), 50364 + i) }
+        for (i, language) in languages.enumerated() { token("<|\(language)|>", end + 2 + i) }
+        if logitsSize == 51866 { token("<|yue|>", 50358) }
+        for i in 0...1500 { token(String(format: "<|%.2f|>", Double(i) * 0.02), translate + 6 + i) }
         return ["model": ["type": "BPE", "vocab": vocab, "merges": []],
                 "pre_tokenizer": ["type": "ByteLevel", "add_prefix_space": false],
                 "decoder": ["type": "ByteLevel"]]

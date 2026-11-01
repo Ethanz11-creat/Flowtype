@@ -19,13 +19,19 @@ final class LocalWhisperTokenizer: WhisperTokenizer {
         guard tokenizer.decode(tokens: [space]) == " " else {
             throw OfflineWhisperError.incompatibleTokenizer
         }
+        // Hugging Face uses nocaptions; other Whisper exports use nospeech.
+        // Accept an explicit, exact token only, and reject conflicting aliases.
+        let noSpeechIDs = Set(["<|nospeech|>", "<|nocaptions|>"].compactMap { Self.exactTokenID($0, in: tokenizer) })
+        guard noSpeechIDs.count == 1, let noSpeechID = noSpeechIDs.first else {
+            throw OfflineWhisperError.incompatibleTokenizer
+        }
         specialTokens = try SpecialTokens(endToken: required("<|endoftext|>"), englishToken: required("<|en|>"),
-            noSpeechToken: required("<|nospeech|>"), noTimestampsToken: required("<|notimestamps|>"),
+            noSpeechToken: noSpeechID, noTimestampsToken: required("<|notimestamps|>"),
             specialTokenBegin: required("<|endoftext|>"), startOfPreviousToken: required("<|startofprev|>"),
             startOfTranscriptToken: required("<|startoftranscript|>"), timeTokenBegin: required("<|0.00|>"),
             transcribeToken: required("<|transcribe|>"), translateToken: required("<|translate|>"), whitespaceToken: space)
         self.tokenizer = tokenizer
-        allLanguageTokens = Set(Constants.languages.values.compactMap { tokenizer.convertTokenToId("<|\($0)|>") })
+        allLanguageTokens = Set(Constants.languages.values.compactMap { Self.exactTokenID("<|\($0)|>", in: tokenizer) })
     }
 
     func validate(for graph: WhisperRuntimeMetadata) throws {
@@ -59,7 +65,14 @@ final class LocalWhisperTokenizer: WhisperTokenizer {
 
     func encode(text: String) -> [Int] { tokenizer.encode(text: text, addSpecialTokens: false) }
     func decode(tokens: [Int]) -> String { tokenizer.decode(tokens: tokens) }
-    func convertTokenToId(_ token: String) -> Int? { tokenizer.convertTokenToId(token) }
+    // BPE lookup can return unknownTokenId for an absent token. Whisper uses this
+    // API to test special/language-token presence, so require an exact round-trip.
+    private static func exactTokenID(_ token: String, in tokenizer: any Tokenizer) -> Int? {
+        guard let id = tokenizer.convertTokenToId(token), tokenizer.convertIdToToken(id) == token else { return nil }
+        return id
+    }
+
+    func convertTokenToId(_ token: String) -> Int? { Self.exactTokenID(token, in: tokenizer) }
     func convertIdToToken(_ id: Int) -> String? { tokenizer.convertIdToToken(id) }
 
     func splitToWordTokens(tokenIds: [Int]) -> (words: [String], wordTokens: [[Int]]) {

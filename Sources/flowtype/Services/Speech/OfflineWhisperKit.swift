@@ -183,22 +183,28 @@ actor WhisperKitBackend: OfflineWhisperBackend {
 
     func transcribe(samples: [Float], language: String?, prompt: String?) async throws -> [String] {
         guard !samples.isEmpty else { return [] }
-        let code: String?
-        if let language, !language.isEmpty, language.lowercased() != "auto" {
-            let normalized = language.lowercased()
-            code = Constants.languages[normalized] ?? normalized
-            guard let code, Constants.languages.values.contains(code),
-                  verifiedMetadata?.isMultilingual == true || code == "en",
-                  kit.tokenizer?.convertTokenToId("<|\(code)|>") != nil else {
-                throw OfflineWhisperError.unsupportedLanguage
-            }
-        } else { code = nil }
+        guard let tokenizer = kit.tokenizer else { throw OfflineWhisperError.tokenizerUnavailable }
+        let code = try Self.languageCode(language, tokenizer: tokenizer, isMultilingual: verifiedMetadata?.isMultilingual == true)
         let options = DecodingOptions(verbose: false, language: code,
             detectLanguage: code == nil && verifiedMetadata?.isMultilingual == true,
-            skipSpecialTokens: true, promptTokens: prompt.map { kit.tokenizer?.encode(text: $0) ?? [] },
+            skipSpecialTokens: true, promptTokens: prompt.map { tokenizer.encode(text: $0) },
             concurrentWorkerCount: 1)
         let results: [TranscriptionResult] = try await kit.transcribe(audioArray: samples, decodeOptions: options)
         return Self.textSegments(results)
+    }
+
+    nonisolated static func languageCode(_ language: String?, tokenizer: any WhisperTokenizer, isMultilingual: Bool) throws -> String? {
+        if let language, !language.isEmpty, language.lowercased() != "auto" {
+            let normalized = language.lowercased()
+            let code = Constants.languages[normalized] ?? normalized
+            let token = "<|\(code)|>"
+            guard Constants.languages.values.contains(code), isMultilingual || code == "en",
+                  let id = tokenizer.convertTokenToId(token), tokenizer.convertIdToToken(id) == token else {
+                throw OfflineWhisperError.unsupportedLanguage
+            }
+            return code
+        }
+        return nil
     }
 
     nonisolated static func textSegments(_ results: [TranscriptionResult]) -> [String] {
