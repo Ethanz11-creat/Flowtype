@@ -2,6 +2,14 @@ import Foundation
 
 /// Value transformations only. The coordinator persists successful owned loads in a later transaction.
 enum LocalModelLibrary {
+    /// Resolve the durable ID before constructing a provider/lease, including symlink aliases.
+    static func canonicalizing(_ model: ImportedASRModel, in configuration: Configuration) -> ImportedASRModel {
+        var result = model
+        if let existing = configuration.importedASRModels.first(where: {
+            $0.id == model.id || canonical($0.directory) == canonical(model.directory)
+        }) { result.id = existing.id }
+        return result
+    }
     static func upserting(_ model: ImportedASRModel, in configuration: Configuration) -> Configuration {
         var result = configuration
         var model = model
@@ -40,5 +48,5 @@ enum LocalModelLibrary {
         return try ASRModelInspector.inspect(directory: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
     }
 
-    private static func canonical(_ url: URL) -> String { url.standardizedFileURL.path }
+    private static func canonical(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path }
 }

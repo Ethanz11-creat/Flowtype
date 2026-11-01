@@ -373,6 +373,7 @@ enum SelfTest {
         testPermissionWatchOwnership(r)
         testReadinessSnapshotBuilder(r)
         await ModelProvisionSelfTests.runCoordinator(r)
+        await ImportedLifecycleSelfTests.run(r)
         await ModelProvisionSelfTests.runPresentationAndRouting(r)
         await testTerminalModelLoadPreflight(r)
         await testReadinessPreflight(r)

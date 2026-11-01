@@ -99,12 +99,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     private func loadQwenASRModel() async {
-        AppLogger.log("[AppDelegate] Loading Qwen3-ASR model...")
+        AppLogger.log("[AppDelegate] Loading selected local ASR model...")
         await QwenModelState.shared.loadModel()
         if case .ready = QwenModelState.shared.status {
-            AppLogger.log("[AppDelegate] Qwen3-ASR model loaded successfully")
+            AppLogger.log("[AppDelegate] Local ASR model loaded: \(QwenModelState.shared.activeLease?.identity.engine ?? "local")")
         } else {
-            AppLogger.log("[AppDelegate] Qwen3-ASR model loading failed")
+            AppLogger.log("[AppDelegate] Local ASR model loading failed")
         }
     }
 }

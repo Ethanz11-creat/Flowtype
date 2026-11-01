@@ -20,7 +20,8 @@ enum LocalASRRuntimeFactory {
             try await provider.loadModel(modelId: compatibilityID, cacheDir: model.directory, offlineMode: true)
             try Task.checkCancellation()
             return LocalASRLease(id: UUID(), identity: LocalModelIdentity(id: model.id.uuidString,
-                displayName: model.name, engine: model.engine.rawValue, repoID: nil, directory: model.directory), provider: provider)
+                displayName: model.name, engine: model.engine.rawValue, repoID: nil, directory: model.directory), provider: provider,
+                minimumResidentBytes: current.minimumResidentBytes)
         case .whisperCoreML:
             let provider = try await WhisperASRProvider.load(model: model)
             return LocalASRLease(id: UUID(), identity: provider.identity, provider: provider,

@@ -4,6 +4,7 @@ enum ModelProvisionOrigin: Sendable { case automatic, manual, offlineImport }
 enum ModelProvisionTarget: Sendable, Equatable {
     case preset(ModelPreset)
     case offline(ResolvedModel)
+    case imported(ImportedASRModel)
 }
 struct ModelProvisionRequest: Sendable {
     let target: ModelProvisionTarget

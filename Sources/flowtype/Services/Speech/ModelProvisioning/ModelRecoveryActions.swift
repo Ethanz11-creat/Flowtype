@@ -8,16 +8,14 @@ struct ModelRecoveryActions {
 
     func importOfflineModel(at directory: URL) async throws {
         try await coordinator.importOfflineModel(at: directory)
-        var config = store.current
-        config.customLocalModelPath = directory.path
-        config.localModelPath = nil
-        config.selectedLocalModelID = nil
-        store.save(config)
     }
 
     func removeFolderOverride() {
         guard coordinator.operationID == nil else { return }
         var config = store.current
+        if let id = config.activeImportedASRModelID {
+            config = LocalModelLibrary.removing(id: id, from: config)
+        }
         config.customLocalModelPath = nil
         config.localModelPath = nil
         store.save(config)
@@ -25,8 +23,10 @@ struct ModelRecoveryActions {
     }
 
     func retry() async throws {
-        if case .offline(let resolved) = coordinator.target {
-            try await importOfflineModel(at: resolved.directory)
+        if coordinator.target == nil, let directory = coordinator.pendingImportDirectory {
+            try await coordinator.importOfflineModel(at: directory)
+        } else if case .imported(let model) = coordinator.target {
+            try await coordinator.useImportedModel(model)
         } else if let target = coordinator.target {
             await coordinator.perform(.init(target: target, source: store.current.downloadSource, origin: .manual))
         } else { await coordinator.retryConfiguredModel() }

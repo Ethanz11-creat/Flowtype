@@ -12,10 +12,12 @@ struct QwenModelStatusCard: View {
 
     private var targetPreset: ModelPreset? {
         if case .preset(let preset) = modelState.target { return preset }
+        if case .imported = modelState.target { return nil }
         if case .offline(let resolved) = modelState.target {
             return ModelPreset.allPresets.first { $0.repoId == resolved.modelId }
         }
-        guard configuredPath == nil else { return nil }
+        guard configuredPath == nil, store.current.activeImportedASRModelID == nil,
+              modelState.pendingImportDirectory == nil else { return nil }
         return ModelPreset.preset(forID: store.current.selectedLocalModelID)
             ?? (store.current.selectedLocalModelID == nil ? ModelPreset.recommendedModel(for: HardwareProfiler.currentTier()) : nil)
     }
@@ -24,7 +26,8 @@ struct QwenModelStatusCard: View {
         switch modelState.target {
         case .preset: return nil
         case .offline(let resolved): return resolved.directory.path
-        case nil: return configuredPath
+        case .imported(let model): return model.directory.path
+        case nil: return modelState.pendingImportDirectory?.path ?? configuredPath
         }
     }
 
@@ -57,7 +60,7 @@ struct QwenModelStatusCard: View {
                 Text("失败操作来源：\(source)").font(.system(size: 10)).foregroundColor(.secondary)
             }
             if let message = p.failureMessage {
-                Text(message).font(.system(size: 11)).foregroundColor(.orange)
+                Text(modelState.importFailureDetail ?? message).font(.system(size: 11)).foregroundColor(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 8) {
@@ -73,9 +76,7 @@ struct QwenModelStatusCard: View {
                 }
                 if p.actions.contains(.useSmallerModel) {
                     Button("改用 0.6B") {
-                        ModelRecoveryPresentation.selectSmallerModel(in: &store.current)
-                        Task { await modelState.perform(.init(target: .preset(.qwen306B),
-                            source: store.current.downloadSource, origin: .manual)) }
+                        Task { await modelState.selectPreset(.qwen306B) }
                     }.controlSize(.small)
                 }
             }

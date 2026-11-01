@@ -269,12 +269,33 @@ extension ModelProvisionSelfTests {
         values: FixtureValues = FixtureValues(),
         configuration: @escaping @MainActor () -> Configuration = { Configuration() },
         localModel: @escaping @Sendable (Configuration) -> ResolvedModel? = { _ in nil },
+        saveConfiguration: @escaping @MainActor (Configuration) -> Void = { _ in },
         disk: Int64 = .max
     ) -> QwenModelState {
-        QwenModelState(preflight: preflight, load: load, sleep: sleep, now: { values.now() },
+        // A/B fixtures predate the imported descriptor. Adapt only their synthetic I/O;
+        // coordinator ownership, persistence, retry and route code remain production code.
+        QwenModelState(preflight: preflight, load: { target, offline, progress in
+            if case .imported(let model) = target {
+                let preset = model.variant == "1.7B" ? ModelPreset.qwen317B : .qwen306B
+                return try await load(.offline(.init(directory: model.directory, modelId: preset.repoId)), offline, progress)
+            }
+            return try await load(target, offline, progress)
+        }, sleep: sleep, now: { values.now() },
                        configuration: configuration, localModel: localModel,
                        destination: { URL(fileURLWithPath: "/fixture/" + $0.id) },
-                       availableDisk: { _ in disk }, environment: .init(read: { values.read() }, write: { values.write($0) }))
+                       availableDisk: { _ in disk }, environment: .init(read: { values.read() }, write: { values.write($0) }),
+                       inspect: { directory in
+                           var config = Configuration(); config.customLocalModelPath = directory.path
+                           guard let resolved = localModel(config), resolved.directory == directory else {
+                               throw ModelProvisionError.incompleteLocal()
+                           }
+                           return ImportedASRModel(name: directory.lastPathComponent, directory: directory,
+                               engine: .qwenMLX, variant: resolved.modelId.contains("1.7B") ? "1.7B" : "0.6B", bits: 4,
+                               sizeBytes: 1024, fileFingerprint: "fixture")
+                       }, assessHardware: { model, old in
+                           .assess(model: model, physicalMemory: 32 * 1_073_741_824, availableMemory: nil,
+                                   activeModelBytes: old, isAppleSilicon: true)
+                       }, saveConfiguration: saveConfiguration)
     }
 
     @MainActor
@@ -724,7 +745,7 @@ extension ModelProvisionSelfTests {
             if config.customLocalModelPath == folderA.path { return modelA }
             if config.customLocalModelPath == folderB.path { return modelB }
             return nil
-        })
+        }, saveConfiguration: { store.save($0) })
         await coordinator.perform(.init(target: .offline(modelA), source: .official, origin: .offlineImport))
         let actions = ModelRecoveryActions(coordinator: coordinator, store: store)
         let failedImport = Task { try await actions.importOfflineModel(at: folderB) }
@@ -855,7 +876,7 @@ extension ModelProvisionSelfTests {
             return presetLease
         }, configuration: { store.current }, localModel: { config in
             (config.customLocalModelPath == folder.path || config.localModelPath == folder.path) ? resolved : nil
-        })
+        }, saveConfiguration: { store.save($0) })
         let actions = ModelRecoveryActions(coordinator: removal, store: store)
         try? await actions.importOfflineModel(at: folder)
         let importedLease = removal.activeLease

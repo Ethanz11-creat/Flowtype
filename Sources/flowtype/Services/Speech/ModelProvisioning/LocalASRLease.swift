@@ -14,13 +14,15 @@ struct LocalASRLease: Sendable, Equatable {
     let identity: LocalModelIdentity
     let provider: any ASRProvider
     let whisperMetadata: WhisperRuntimeMetadata?
+    let minimumResidentBytes: UInt64?
 
     init(id: UUID, identity: LocalModelIdentity, provider: any ASRProvider,
-         whisperMetadata: WhisperRuntimeMetadata? = nil) {
+         whisperMetadata: WhisperRuntimeMetadata? = nil, minimumResidentBytes: UInt64? = nil) {
         self.id = id
         self.identity = identity
         self.provider = provider
         self.whisperMetadata = whisperMetadata
+        self.minimumResidentBytes = minimumResidentBytes
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }

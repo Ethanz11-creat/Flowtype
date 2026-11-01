@@ -28,7 +28,9 @@ struct LocalModelPicker: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                Picker("", selection: $store.current.selectedLocalModelID) {
+                Picker("", selection: Binding(get: { store.current.selectedLocalModelID }, set: { id in
+                    Task { await modelState.selectPreset(ModelPreset.preset(forID: id), automatic: id == nil) }
+                })) {
                     Text("自动选择（推荐）").tag(String?.none)
                     ForEach(ModelPreset.allPresets) { preset in
                         let isRecommended = preset.recommendedTiers.contains(currentTier)
@@ -53,10 +55,6 @@ struct LocalModelPicker: View {
             }
             .padding(14)
             .glassCard(cornerRadius: 10)
-        }
-        .onChange(of: store.current.selectedLocalModelID) { _, _ in
-            guard store.current.customLocalModelPath == nil, store.current.localModelPath == nil else { return }
-            Task { await modelState.retryConfiguredModel() }
         }
     }
 

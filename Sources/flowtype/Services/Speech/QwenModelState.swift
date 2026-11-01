@@ -60,7 +60,7 @@ private final class ProvisionProgress: @unchecked Sendable {
 
 @MainActor
 final class QwenModelState: ObservableObject {
-    static let shared = QwenModelState()
+    static let shared = QwenModelState(saveConfiguration: { ConfigurationStore.shared.save($0) })
 
     @Published private(set) var status: QwenModelStatus = .notLoaded
     @Published private(set) var activeLease: LocalASRLease?
@@ -69,6 +69,9 @@ final class QwenModelState: ObservableObject {
     @Published private(set) var didAutoFallback = false
     @Published private(set) var target: ModelProvisionTarget?
     @Published private(set) var operationSource: DownloadSource?
+    @Published private(set) var hardwareAssessment: LocalModelHardwareAssessment?
+    @Published private(set) var importFailureDetail: String?
+    private(set) var pendingImportDirectory: URL?
 
     private let preflight: @Sendable (ModelPreset, DownloadSource) async throws -> Void
     private let load: @Sendable (ModelProvisionTarget, Bool, @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease
@@ -80,6 +83,9 @@ final class QwenModelState: ObservableObject {
     private let availableDisk: @Sendable (URL) -> Int64?
     private let environment: ModelProvisionEnvironment
     private let commit: @MainActor (LocalASRLease) -> Void
+    private let inspect: @Sendable (URL) throws -> ImportedASRModel
+    private let assessHardware: @Sendable (ImportedASRModel, UInt64?) -> LocalModelHardwareAssessment
+    private let saveConfiguration: @MainActor (Configuration) -> Void
     private var operation: Task<Void, Never>?
     private var attemptID: UUID?
     private var userCancelled = false
@@ -103,16 +109,23 @@ final class QwenModelState: ObservableObject {
             return (try? FileManager.default.attributesOfFileSystem(forPath: existing.path)[.systemFreeSize] as? NSNumber)?.int64Value
         },
         environment: ModelProvisionEnvironment = .process,
+        inspect: @escaping @Sendable (URL) throws -> ImportedASRModel = { try ASRModelInspector.inspect(directory: $0) },
+        assessHardware: @escaping @Sendable (ImportedASRModel, UInt64?) -> LocalModelHardwareAssessment = {
+            LocalModelHardwareAssessment.current(model: $0, activeModelBytes: $1)
+        },
+        saveConfiguration: @escaping @MainActor (Configuration) -> Void = { _ in },
         commit: @escaping @MainActor (LocalASRLease) -> Void = { _ in }
     ) {
         self.preflight = preflight; self.sleep = sleep; self.now = now
         self.configuration = configuration; self.localModel = localModel; self.destination = destination
         self.availableDisk = availableDisk; self.environment = environment; self.commit = commit
+        self.inspect = inspect; self.assessHardware = assessHardware; self.saveConfiguration = saveConfiguration
         self.load = load ?? { target, offline, progress in
             let directory: URL
             let repo: String
             let identity: LocalModelIdentity
             switch target {
+            case .imported(let model): return try await LocalASRRuntimeFactory.load(model)
             case .preset(let preset):
                 directory = destination(preset); repo = preset.repoId
                 identity = .init(id: preset.id, displayName: preset.name, engine: "qwen", repoID: repo, directory: directory)
@@ -139,6 +152,7 @@ final class QwenModelState: ObservableObject {
         self.init(preflight: { _, _ in }, load: { target, _, _ in
             let preset: ModelPreset
             switch target {
+            case .imported: throw ModelProvisionError.incompleteLocal()
             case .preset(let value): preset = value
             case .offline(let resolved):
                 guard let value = ModelPreset.allPresets.first(where: { $0.repoId == resolved.modelId }) else {
@@ -157,6 +171,9 @@ final class QwenModelState: ObservableObject {
         guard operationID == nil, !Task.isCancelled else { return }
         let id = UUID()
         operationID = id; failure = nil; didAutoFallback = false; userCancelled = false
+        hardwareAssessment = nil; importFailureDetail = nil
+        if case .imported(let model) = request.target { pendingImportDirectory = model.directory }
+        else { pendingImportDirectory = nil }
         target = request.target; operationSource = request.source
         status = .loading
         let task = Task { await run(request, id: id) }
@@ -192,6 +209,9 @@ final class QwenModelState: ObservableObject {
         target = nil
         operationSource = nil
         failure = nil
+        importFailureDetail = nil
+        hardwareAssessment = nil
+        pendingImportDirectory = nil
         didAutoFallback = false
         status = activeLease == nil ? .notLoaded : .ready
     }
@@ -201,14 +221,18 @@ final class QwenModelState: ObservableObject {
         let config = configuration()
         operationSource = config.downloadSource
         target = nil
-        let explicitPath = [config.customLocalModelPath, config.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
-        if let explicitPath {
-            let wanted = URL(fileURLWithPath: (explicitPath as NSString).expandingTildeInPath).resolvingSymlinksInPath()
-            guard let resolved = localModel(config), resolved.directory.resolvingSymlinksInPath() == wanted else {
+        if let activeID = config.activeImportedASRModelID {
+            guard let model = config.importedASRModels.first(where: { $0.id == activeID }) else {
                 publish(.incompleteLocal()); return
             }
-            // A verified explicit directory remains an import, including legacy selection IDs.
-            await perform(.init(target: .offline(resolved), source: config.downloadSource, origin: .offlineImport))
+            await perform(.init(target: .imported(model), source: config.downloadSource, origin: .offlineImport))
+            return
+        }
+        let explicitPath = [config.customLocalModelPath, config.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
+        if let explicitPath {
+            do { try await importOfflineModel(at: URL(fileURLWithPath: (explicitPath as NSString).expandingTildeInPath)) }
+            catch is CancellationError { }
+            catch { if failure == nil { publish(.incompleteLocal()) } }
             return
         }
 
@@ -235,26 +259,46 @@ final class QwenModelState: ObservableObject {
         await perform(.init(target: .preset(preset), source: config.downloadSource, origin: origin))
     }
 
-    /// All folder pickers share this strictly offline entry point. Callers persist paths only after success.
+    /// All folder pickers share this strictly offline entry point. Only the coordinator persists selection.
     func importOfflineModel(at directory: URL) async throws {
         guard operationID == nil else { throw ModelProvisionError.loadFailed() }
-        var config = configuration()
-        config.selectedLocalModelID = nil
-        config.customLocalModelPath = directory.path
-        config.localModelPath = nil
-        let wanted = directory.resolvingSymlinksInPath().standardizedFileURL
-        guard let resolved = localModel(config),
-              resolved.directory.resolvingSymlinksInPath().standardizedFileURL == wanted else {
-            throw ModelProvisionError.incompleteLocal()
+        let model: ImportedASRModel
+        do { model = try inspect(directory) }
+        catch {
+            pendingImportDirectory = directory
+            target = nil
+            operationSource = configuration().downloadSource
+            didAutoFallback = false
+            importFailureDetail = (error as? ASRModelInspectionError)?.detail
+            publish(.incompleteLocal())
+            throw error
         }
+        try await useImportedModel(model)
+    }
+
+    func useImportedModel(_ model: ImportedASRModel) async throws {
+        guard operationID == nil else { throw ModelProvisionError.loadFailed() }
         let previous = activeLease?.id
-        await perform(.init(target: .offline(resolved), source: config.downloadSource, origin: .offlineImport))
+        await perform(.init(target: .imported(model), source: configuration().downloadSource, origin: .offlineImport))
         try Task.checkCancellation()
         if let failure { throw failure }
-        guard let activeLease, activeLease.id != previous,
-              activeLease.identity.directory.resolvingSymlinksInPath().standardizedFileURL == wanted else {
-            throw CancellationError()
-        }
+        guard let activeLease, activeLease.id != previous else { throw CancellationError() }
+    }
+
+    /// Removing intent never invalidates an active lease or a recording's retained provider.
+    func removeImportedModel(id: UUID) {
+        guard operationID == nil else { return }
+        let config = configuration()
+        let removed = config.importedASRModels.first { $0.id == id }
+        saveConfiguration(LocalModelLibrary.removing(id: id, from: config))
+        if case .imported(let model) = target, model.id == id { resetConfiguredRecovery() }
+        else if let removed, pendingImportDirectory?.standardizedFileURL.resolvingSymlinksInPath()
+                    == removed.directory.standardizedFileURL.resolvingSymlinksInPath() { resetConfiguredRecovery() }
+    }
+
+    func selectPreset(_ preset: ModelPreset?, automatic: Bool = false) async {
+        await perform(.init(target: .preset(preset ?? ModelPreset.recommendedModel(for: HardwareProfiler.currentTier())),
+                            source: configuration().downloadSource, origin: automatic ? .automatic : .manual))
     }
 
     func handleDownloadCompleted(preset: ModelPreset) async {
@@ -280,6 +324,7 @@ final class QwenModelState: ObservableObject {
                 candidate = try await provision(.preset(.qwen306B), source: request.source, attempts: 1, id: id)
             }
             try checkOwnership(id)
+            commitSelection(candidate, request: request)
             activeLease = candidate; commit(candidate); failure = nil; status = .ready
         } catch is CancellationError {
             didAutoFallback = false
@@ -289,7 +334,10 @@ final class QwenModelState: ObservableObject {
                 didAutoFallback = false
                 status = activeLease == nil ? .notLoaded : .ready
             }
-            else { publish(error as? ModelProvisionError ?? .loadFailed()) }
+            else {
+                if let inspection = error as? ASRModelInspectionError { importFailureDetail = inspection.detail }
+                publish(error as? ModelProvisionError ?? .loadFailed())
+            }
         }
     }
 
@@ -300,6 +348,24 @@ final class QwenModelState: ObservableObject {
 
     private func provision(_ target: ModelProvisionTarget, source: DownloadSource, attempts: Int, id: UUID) async throws -> LocalASRLease {
         self.target = target
+        if case .imported(let staged) = target {
+            // Refresh stale records (including legacy nil resource bounds) while holding the
+            // same gate as preset work. The factory checks this fresh fingerprint again.
+            var current = try inspect(staged.directory)
+            current.id = staged.id
+            current.name = staged.name
+            current = LocalModelLibrary.canonicalizing(current, in: configuration())
+            let refreshed = ModelProvisionTarget.imported(current)
+            self.target = refreshed
+            let assessment = assessHardware(current, activeLease?.minimumResidentBytes)
+            hardwareAssessment = assessment
+            guard assessment.compatibility != .incompatible else {
+                importFailureDetail = assessment.explanation
+                throw ModelProvisionError.loadFailed()
+            }
+            try checkOwnership(id)
+            return try await attempt(refreshed, offline: true, id: id)
+        }
         if case .offline = target { return try await attempt(target, offline: true, id: id) }
         guard case .preset(let preset) = target else { throw ModelProvisionError.incompleteLocal() }
         var config = Configuration()
@@ -332,6 +398,30 @@ final class QwenModelState: ObservableObject {
             }
         }
         throw ModelProvisionError.loadFailed()
+    }
+
+    /// Synchronous main-actor transaction: read the latest config so unrelated edits made
+    /// while loading survive; no path, library, or active reference changes before success.
+    private func commitSelection(_ candidate: LocalASRLease, request: ModelProvisionRequest) {
+        var config = configuration()
+        if case .imported(var model) = target {
+            if let metadata = candidate.whisperMetadata { model.variant = metadata.variant }
+            config = LocalModelLibrary.upserting(model, in: config)
+            config.activeImportedASRModelID = model.id
+            config.selectedLocalModelID = nil
+            config.customLocalModelPath = model.engine == .qwenMLX ? model.directory.path : nil
+            config.localModelPath = nil
+        } else if case .preset(let preset) = target {
+            config.activeImportedASRModelID = nil
+            config.customLocalModelPath = nil
+            config.localModelPath = nil
+            config.selectedLocalModelID = request.origin == .automatic ? nil : preset.id
+        } else {
+            // .offline is retained for installed built-in preset bootstrap/download completion.
+            // Legacy custom paths always enter through inspected .imported instead.
+            return
+        }
+        saveConfiguration(config)
     }
 
     private func attempt(_ target: ModelProvisionTarget, offline: Bool, id: UUID) async throws -> LocalASRLease {

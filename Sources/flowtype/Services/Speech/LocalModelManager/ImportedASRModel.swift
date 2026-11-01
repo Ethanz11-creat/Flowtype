@@ -15,6 +15,9 @@ struct ImportedASRModel: Codable, Sendable, Equatable, Identifiable {
     var sizeBytes: Int64
     var tokenizerDirectory: URL?
     var fileFingerprint: String
+    /// Validated packed U32 tensor payload only. Conservative admission reservation,
+    /// not a measured OS residency requirement (paging/mmap may differ) or peak RAM.
+    var minimumResidentBytes: UInt64? = nil
 
     /// Only for speech-swift's constructor selection; never a remote download target.
     var qwenCompatibilityModelID: String? {

@@ -52,6 +52,7 @@ struct ModelRecoveryPresentation {
         config.selectedLocalModelID = ModelPreset.qwen306B.id
         config.customLocalModelPath = nil
         config.localModelPath = nil
+        config.activeImportedASRModelID = nil
     }
 
     private static func quote(_ value: String) -> String {

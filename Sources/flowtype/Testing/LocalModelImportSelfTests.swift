@@ -21,6 +21,8 @@ enum LocalModelImportSelfTests {
                 r.eq(model.engine, .qwenMLX, "import: metadata determines engine")
                 r.eq(model.variant, large ? "1.7B" : "0.6B", "import: tensor/config scale")
                 r.eq(model.bits, bits, "import: packing determines bit width")
+                r.check((model.minimumResidentBytes ?? 0) > 0 && model.minimumResidentBytes! < UInt64(model.sizeBytes),
+                        "import: admission reservation counts packed weights only, not directory size")
                 let renamed = root.appendingPathComponent("renamed-\(large)-\(bits)")
                 try FileManager.default.moveItem(at: dir, to: renamed)
                 let again = try ASRModelInspector.inspect(directory: renamed)
@@ -34,6 +36,8 @@ enum LocalModelImportSelfTests {
                 let convertedModel = try ASRModelInspector.inspect(directory:converted)
                 r.eq(convertedModel.variant,large ? "1.7B" : "0.6B","import: converted MLX config identifies scale")
                 r.eq(convertedModel.bits,bits,"import: converted minmax config identifies bits")
+                r.eq(convertedModel.minimumResidentBytes, model.minimumResidentBytes,
+                     "import: redundant float output head never inflates packed-weight reservation")
             }
             let dir = root.appendingPathComponent("invalid")
             func rejected(_ label: String, _ mutate: () throws -> Void) throws {
@@ -123,6 +127,11 @@ enum LocalModelImportSelfTests {
             library.customLocalModelPath = whisper.path
             library.localModelPath = whisper.path
             let updated = try ASRModelInspector.inspect(directory: whisper)
+            let alias = root.appendingPathComponent("whisper-alias")
+            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: whisper)
+            var aliased = updated; aliased.directory = alias
+            r.eq(LocalModelLibrary.canonicalizing(aliased, in: library).id, coreML.id,
+                 "import: symlink alias resolves durable UUID before runtime creation")
             library = LocalModelLibrary.upserting(updated, in: library)
             r.eq(library.importedASRModels.count, 1, "import: same canonical path deduplicates")
             r.eq(library.importedASRModels.first?.id, coreML.id, "import: rescan preserves library UUID")

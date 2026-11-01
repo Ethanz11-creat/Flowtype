@@ -156,9 +156,22 @@ enum ASRModelInspector {
         guard Set(manifest.tensors.keys) == required else { throw failure(.unsupportedFormat, "权重包含当前加载器不支持的额外张量。") }
         try validateQwenTokenizer(directory, files: files)
         try files.verify()
+        var minimumResidentBytes: UInt64 = 0
+        for tensor in manifest.tensors.values where tensor.dtype == "U32" {
+            var bytes: UInt64 = 4
+            for dimension in tensor.shape {
+                let next = bytes.multipliedReportingOverflow(by: UInt64(dimension))
+                guard !next.overflow else { throw failure(.invalidTensor, "张量内存尺寸溢出。") }
+                bytes = next.partialValue
+            }
+            let next = minimumResidentBytes.addingReportingOverflow(bytes)
+            guard !next.overflow else { throw failure(.invalidTensor, "张量内存总量溢出。") }
+            minimumResidentBytes = next.partialValue
+        }
         return ImportedASRModel(name: directory.lastPathComponent, directory: directory.resolvingSymlinksInPath(), engine: .qwenMLX,
                                 variant: large ? "1.7B" : "0.6B", bits: Int(bits), sizeBytes: manifest.sizeBytes,
-                                tokenizerDirectory: directory.resolvingSymlinksInPath(), fileFingerprint: files.fingerprint)
+                                tokenizerDirectory: directory.resolvingSymlinksInPath(), fileFingerprint: files.fingerprint,
+                                minimumResidentBytes: minimumResidentBytes)
     }
 
     private static func validateQwenTokenizer(_ directory: URL, files: LocalInspectionFiles) throws {
