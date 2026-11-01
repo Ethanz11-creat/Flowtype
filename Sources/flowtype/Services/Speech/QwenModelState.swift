@@ -181,24 +181,37 @@ final class QwenModelState: ObservableObject {
         if activeLease != nil { return }
         let config = configuration()
         let explicitPath = [config.customLocalModelPath, config.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
-        let resolved = localModel(config)
         if let explicitPath {
             let wanted = URL(fileURLWithPath: (explicitPath as NSString).expandingTildeInPath).resolvingSymlinksInPath()
-            guard let resolved, resolved.directory.resolvingSymlinksInPath() == wanted else {
+            guard let resolved = localModel(config), resolved.directory.resolvingSymlinksInPath() == wanted else {
                 publish(.incompleteLocal()); return
             }
-        }
-        if let resolved {
+            // A verified explicit directory remains an import, including legacy selection IDs.
             await perform(.init(target: .offline(resolved), source: config.downloadSource, origin: .offlineImport))
             return
         }
-        if config.selectedLocalModelID != nil, ModelPreset.preset(forID: config.selectedLocalModelID) == nil {
+
+        let selectedPreset = ModelPreset.preset(forID: config.selectedLocalModelID)
+        // The locator treats an unknown ID like automatic selection. Reject it before allowing
+        // an unrelated installed preset to satisfy an explicit user choice.
+        if config.selectedLocalModelID != nil, selectedPreset == nil {
             publish(.incompleteLocal()); return
         }
+        let origin: ModelProvisionOrigin = config.selectedLocalModelID == nil ? .automatic : .manual
+        if let resolved = localModel(config) {
+            guard let installedPreset = ModelPreset.allPresets.first(where: { $0.repoId == resolved.modelId }),
+                  selectedPreset == nil || selectedPreset?.id == installedPreset.id else {
+                publish(.incompleteLocal()); return
+            }
+            // Preserve preset identity and origin so a failed automatic local 1.7B can try
+            // 0.6B. Before onboarding, local loading is allowed but network fallback is not.
+            let target: ModelProvisionTarget = config.hasCompletedOnboarding ? .preset(installedPreset) : .offline(resolved)
+            await perform(.init(target: target, source: config.downloadSource, origin: origin))
+            return
+        }
         guard config.hasCompletedOnboarding else { return }
-        let preset = ModelPreset.preset(forID: config.selectedLocalModelID) ?? ModelPreset.recommendedModel(for: HardwareProfiler.currentTier())
-        await perform(.init(target: .preset(preset), source: config.downloadSource,
-                            origin: config.selectedLocalModelID == nil ? .automatic : .manual))
+        let preset = selectedPreset ?? ModelPreset.recommendedModel(for: HardwareProfiler.currentTier())
+        await perform(.init(target: .preset(preset), source: config.downloadSource, origin: origin))
     }
 
     func handleDownloadCompleted(preset: ModelPreset) async {

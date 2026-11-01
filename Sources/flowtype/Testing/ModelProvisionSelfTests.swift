@@ -206,12 +206,18 @@ extension ModelProvisionSelfTests {
     // These fixtures exercise retry policy and lease ownership, replacing only model/network I/O.
     private actor ProvisionProbe {
         var attempts: [String] = []
+        var loadedTargets: [ModelProvisionTarget] = []
+        var preflightPresets: [String] = []
         var delays: [Int] = []
         var preflights = 0
         func record(_ target: ModelProvisionTarget) {
+            loadedTargets.append(target)
             if case .preset(let preset) = target { attempts.append(preset.id) }
         }
-        func preflight() { preflights += 1 }
+        func preflight(_ preset: ModelPreset? = nil) {
+            preflights += 1
+            if let preset { preflightPresets.append(preset.id) }
+        }
         func delay(_ duration: Duration) async throws {
             let seconds = Int(duration.components.seconds)
             if seconds == 5 { try await Task.sleep(for: .seconds(3600)) }
@@ -401,6 +407,70 @@ extension ModelProvisionSelfTests {
         await unknown.loadModel(provider: QwenASRProvider())
         r.eq(unknown.failure, .incompleteLocal(), "unknown manual selection never becomes recommended preset")
         r.eq(await diskProbe.attempts, [], "unknown manual selection starts no download")
+
+        // An unknown ID must not be made valid by the locator finding some installed preset.
+        let installedPrimary = ResolvedModel(directory: URL(fileURLWithPath: "/fixture/installed-1.7b"),
+                                             modelId: ModelPreset.qwen317B.repoId)
+        let installedProbe = ProvisionProbe()
+        let unknownWithInstalled = fixture(load: { target, _, _ in
+            await installedProbe.record(target); return old
+        }, configuration: { unknownFixture }, localModel: { _ in installedPrimary })
+        await unknownWithInstalled.loadModel(provider: QwenASRProvider())
+        r.eq(unknownWithInstalled.failure, .incompleteLocal(), "unknown manual ID rejects unrelated installed preset")
+        r.eq(await installedProbe.loadedTargets, [], "unknown manual ID never loads unrelated installed model")
+        r.eq(unknownWithInstalled.activeLease, nil, "unknown manual ID cannot commit unrelated installed identity")
+
+        // A verified explicit path remains authoritative even when its legacy selection ID is unknown.
+        var explicitConfig = unknownFixture
+        explicitConfig.customLocalModelPath = installedPrimary.directory.path
+        let explicitFixture = explicitConfig
+        let validExplicit = fixture(load: { target, _, _ in
+            await installedProbe.record(target); return old
+        }, configuration: { explicitFixture }, localModel: { _ in installedPrimary })
+        await validExplicit.loadModel(provider: QwenASRProvider())
+        r.eq(validExplicit.activeLease?.id, old.id, "verified explicit path survives unknown legacy selection ID")
+        r.eq(validExplicit.failure, nil, "verified explicit path is not rejected as unknown preset")
+
+        var automaticConfig = Configuration()
+        automaticConfig.hasCompletedOnboarding = true
+        let automaticFixture = automaticConfig
+        let bootstrapProbe = ProvisionProbe()
+        let fallbackLease = lease("bootstrap-0.6b")
+        let bootstrap = fixture(preflight: { preset, _ in await bootstrapProbe.preflight(preset) }, load: { target, offline, _ in
+            await bootstrapProbe.record(target)
+            if case .offline = target { throw ModelProvisionError.loadFailed() }
+            guard !offline else { throw ModelProvisionError.incompleteLocal() }
+            return fallbackLease
+        }, configuration: { automaticFixture }, localModel: { config in
+            config.selectedLocalModelID == ModelPreset.qwen306B.id ? nil : installedPrimary
+        })
+        await bootstrap.loadModel(provider: QwenASRProvider())
+        r.eq(await bootstrapProbe.loadedTargets, [.offline(installedPrimary), .preset(.qwen306B)],
+             "automatic local primary load failure falls back once to 0.6B")
+        r.eq(await bootstrapProbe.preflightPresets, ["qwen3-0.6b-4bit"],
+             "automatic local primary bypasses preflight; only remote fallback preflights")
+        r.eq(bootstrap.activeLease?.id, fallbackLease.id, "bootstrap commits successful fallback lease")
+        r.check(bootstrap.didAutoFallback, "bootstrap retains automatic fallback eligibility")
+
+        let preOnboardingProbe = ProvisionProbe()
+        let preOnboarding = fixture(preflight: { preset, _ in await preOnboardingProbe.preflight(preset) }, load: { target, _, _ in
+            await preOnboardingProbe.record(target); throw ModelProvisionError.loadFailed()
+        }, configuration: { Configuration() }, localModel: { _ in installedPrimary })
+        await preOnboarding.loadModel(provider: QwenASRProvider())
+        r.eq(await preOnboardingProbe.loadedTargets, [.offline(installedPrimary)], "pre-onboarding local bootstrap stays offline-only")
+        r.eq(await preOnboardingProbe.preflights, 0, "pre-onboarding local failure cannot download fallback")
+        r.check(!preOnboarding.didAutoFallback, "pre-onboarding bootstrap preserves automatic-download gate")
+
+
+        let explicitFailureProbe = ProvisionProbe()
+        let explicitFailure = fixture(preflight: { preset, _ in await explicitFailureProbe.preflight(preset) }, load: { target, _, _ in
+            await explicitFailureProbe.record(target); throw ModelProvisionError.loadFailed()
+        }, configuration: { explicitFixture }, localModel: { _ in installedPrimary })
+        await explicitFailure.loadModel(provider: QwenASRProvider())
+        r.eq(await explicitFailureProbe.loadedTargets, [.offline(installedPrimary)], "explicit path bootstrap failure remains terminal")
+        r.eq(await explicitFailureProbe.preflights, 0, "explicit path failure never starts preflight")
+        r.check(!explicitFailure.didAutoFallback, "explicit path bootstrap never auto-falls back")
+
 
         let offlineFailureProbe = ProvisionProbe()
         let offlineFailure = fixture(preflight: { _, _ in await offlineFailureProbe.preflight() }, load: { target, _, _ in
