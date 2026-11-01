@@ -38,11 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         _ = ConfigurationStore.shared
         AppearanceController.apply(ConfigurationStore.shared.current.appearancePreference)
-        // Point HF at the chosen mirror BEFORE the first model load (the .app inherits no shell env).
-        let downloadSource = ConfigurationStore.shared.current.downloadSource
-        if let endpoint = downloadSource.endpoint(isChina: DownloadSource.systemIsLikelyChina()) {
-            setenv("HF_ENDPOINT", endpoint, 1)
-        }
+        // Model provisioning owns HF_ENDPOINT for the lifetime of each serialized operation.
         EnvMigration.migrateIfNeeded()
         // If a previous session crashed / was killed mid-recording, the system default
         // input device may still point at FlowType's configured mic. Restore it.

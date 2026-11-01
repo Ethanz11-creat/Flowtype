@@ -92,12 +92,23 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws {
         AppLogger.log("[QwenASR] Loading model: \(modelId) offline=\(offlineMode) cacheDir=\(cacheDir?.path ?? "default")")
-        let loaded = try await Qwen3ASRModel.fromPretrained(
-            modelId: modelId,
-            cacheDir: cacheDir,
-            offlineMode: offlineMode,
-            progressHandler: progressHandler
-        )
+        let loaded: Qwen3ASRModel
+        do {
+            loaded = try await Qwen3ASRModel.fromPretrained(
+                modelId: modelId,
+                cacheDir: cacheDir,
+                offlineMode: offlineMode,
+                progressHandler: progressHandler
+            )
+        } catch {
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            if let download = error as? DownloadError, case .failedToDownload = download {
+                throw ModelProvisionError.network()
+            }
+            if error is URLError { throw ModelProvisionError.network() }
+            throw ModelProvisionError.loadFailed()
+        }
+        try Task.checkCancellation()
         queue.sync {
             model = loaded
             loadedModelId = modelId
@@ -116,9 +127,6 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
     func loadPreset(_ preset: ModelPreset, progressHandler: ((Double, String) -> Void)? = nil) async throws {
         let alreadyLoaded = queue.sync { loadedModelId == preset.repoId && model != nil }
         if alreadyLoaded { return }
-        if isLoaded {
-            unloadModel()
-        }
         let dir = preset.localDirectory()
         let offline = ModelLocator.validateComplete(dir, minBytes: ModelLocator.minValidBytes(for: preset))
         try await loadModel(

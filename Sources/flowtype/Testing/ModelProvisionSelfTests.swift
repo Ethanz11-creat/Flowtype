@@ -200,3 +200,290 @@ enum ModelProvisionSelfTests {
         } catch { r.check(false, "preflight identity fixture failed: \(error)") }
     }
 }
+
+
+extension ModelProvisionSelfTests {
+    // These fixtures exercise retry policy and lease ownership, replacing only model/network I/O.
+    private actor ProvisionProbe {
+        var attempts: [String] = []
+        var delays: [Int] = []
+        var preflights = 0
+        func record(_ target: ModelProvisionTarget) {
+            if case .preset(let preset) = target { attempts.append(preset.id) }
+        }
+        func preflight() { preflights += 1 }
+        func delay(_ duration: Duration) async throws {
+            let seconds = Int(duration.components.seconds)
+            if seconds == 5 { try await Task.sleep(for: .seconds(3600)) }
+            else { delays.append(seconds) }
+        }
+    }
+
+    private final class FixtureValues: @unchecked Sendable {
+        private let lock = NSLock()
+        private var date = Date(timeIntervalSince1970: 100)
+        private var endpoint: String? = "original-endpoint"
+        private var writes: [String?] = []
+        func now() -> Date { lock.withLock { date } }
+        func advance() { lock.withLock { date = date.addingTimeInterval(31) } }
+        func read() -> String? { lock.withLock { endpoint } }
+        func write(_ value: String?) { lock.withLock { endpoint = value; writes.append(value) } }
+        func history() -> [String?] { lock.withLock { writes } }
+    }
+
+    private actor SuspendedLoader {
+        var calls = 0
+        var offlineValues: [Bool] = []
+        var callback: (@Sendable (Double) -> Void)?
+        var continuation: CheckedContinuation<LocalASRLease, Error>?
+        func load(_ offline: Bool, _ progress: @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease {
+            calls += 1
+            offlineValues.append(offline)
+            callback = progress
+            return try await withCheckedThrowingContinuation { continuation = $0 }
+        }
+        func complete(_ lease: LocalASRLease) { continuation?.resume(returning: lease); continuation = nil }
+        func fail(_ error: ModelProvisionError) { continuation?.resume(throwing: error); continuation = nil }
+        func progress(_ value: Double) { callback?(value) }
+    }
+
+    private static func lease(_ id: String) -> LocalASRLease {
+        .init(id: UUID(), identity: .init(id: id, displayName: id, engine: "qwen", repoID: id,
+                                        directory: URL(fileURLWithPath: "/fixture/" + id)), provider: QwenASRProvider())
+    }
+
+    @MainActor
+    private static func fixture(
+        preflight: @escaping @Sendable (ModelPreset, DownloadSource) async throws -> Void = { _, _ in },
+        load: @escaping @Sendable (ModelProvisionTarget, Bool, @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { duration in
+            if duration == .seconds(5) { try await Task.sleep(for: .seconds(3600)) }
+        },
+        values: FixtureValues = FixtureValues(),
+        configuration: @escaping @MainActor () -> Configuration = { Configuration() },
+        localModel: @escaping @Sendable (Configuration) -> ResolvedModel? = { _ in nil },
+        disk: Int64 = .max
+    ) -> QwenModelState {
+        QwenModelState(preflight: preflight, load: load, sleep: sleep, now: { values.now() },
+                       configuration: configuration, localModel: localModel,
+                       destination: { URL(fileURLWithPath: "/fixture/" + $0.id) },
+                       availableDisk: { _ in disk }, environment: .init(read: { values.read() }, write: { values.write($0) }))
+    }
+
+    @MainActor
+    private static func until(_ predicate: () async -> Bool) async {
+        for _ in 0..<10000 { if await predicate() { return }; await Task.yield() }
+    }
+
+    @MainActor
+    static func runCoordinator(_ r: SelfTest.Reporter) async {
+        let probe = ProvisionProbe()
+        let state = QwenModelState(
+            preflight: { _, _ in await probe.preflight() },
+            load: { target, _, _ in await probe.record(target); throw ModelProvisionError.network() },
+            sleep: { try await probe.delay($0) },
+            configuration: { Configuration() },
+            localModel: { _ in nil },
+            destination: { URL(fileURLWithPath: "/fixture/" + $0.id) },
+            availableDisk: { _ in Int64.max },
+            environment: .init(read: { nil }, write: { _ in })
+        )
+        await state.perform(.init(target: .preset(.qwen317B), source: .official, origin: .automatic))
+        r.eq(await probe.attempts, ["qwen3-1.7b-4bit", "qwen3-1.7b-4bit", "qwen3-1.7b-4bit", "qwen3-0.6b-4bit"], "bounded fallback")
+        r.eq(await probe.delays, [10, 20], "primary network backoff")
+        r.eq(state.failure, .network(), "fallback failure is terminal")
+        r.eq(state.operationID, nil, "terminal operation releases ownership")
+        await state.perform(.init(target: .preset(.qwen317B), source: .official, origin: .manual))
+        r.eq((await probe.attempts).filter { $0 == "qwen3-0.6b-4bit" }.count, 1, "manual choice preserved; terminal record permits retry")
+        r.check(!state.didAutoFallback, "manual retry resets fallback flag")
+
+        let rejected = ProvisionProbe()
+        let deterministic = fixture(preflight: { _, _ in await rejected.preflight(); throw ModelProvisionError.metadataInvalid() },
+                                    load: { target, _, _ in await rejected.record(target); return lease("unexpected") })
+        await deterministic.perform(.init(target: .preset(.qwen317B), source: .official, origin: .automatic))
+        r.eq(await rejected.preflights, 2, "deterministic primary once, fallback once")
+        r.eq(await rejected.attempts, [], "failed preflight never invokes bottom loader")
+        r.check(deterministic.didAutoFallback, "automatic deterministic primary may try smaller model")
+
+        let localProbe = ProvisionProbe()
+        let old = lease("old")
+        let local = ResolvedModel(directory: URL(fileURLWithPath: "/fixture/local"), modelId: "known-local")
+        let offline = fixture(preflight: { _, _ in await localProbe.preflight() }, load: { _, offline, _ in
+            if !offline { throw ModelProvisionError.network() }; return old
+        }, localModel: { _ in local })
+        await offline.perform(.init(target: .preset(.qwen317B), source: .official, origin: .automatic))
+        r.eq(await localProbe.preflights, 0, "complete local model skips preflight")
+        r.eq(offline.activeLease?.id, old.id, "offline model becomes active")
+
+        let suspended = SuspendedLoader()
+        let values = FixtureValues()
+        let ownership = fixture(load: { target, offline, progress in
+            if case .offline = target { return old }
+            return try await suspended.load(offline, progress)
+        }, values: values)
+        await ownership.perform(.init(target: .offline(local), source: .official, origin: .offlineImport))
+        let pending = Task { await ownership.perform(.init(target: .preset(.qwen317B), source: .mirror, origin: .automatic)) }
+        await until { await suspended.calls == 1 }
+        let operation = ownership.operationID
+        await ownership.perform(.init(target: .preset(.qwen306B), source: .official, origin: .manual))
+        r.eq(await suspended.calls, 1, "duplicate click cannot start concurrent bottom load")
+        ownership.cancel()
+        await ownership.perform(.init(target: .preset(.qwen306B), source: .official, origin: .manual))
+        r.eq(ownership.operationID, operation, "cancel retains ownership until bottom load exits")
+        r.eq(await suspended.calls, 1, "cancel draining blocks next operation")
+        r.eq(values.read(), "https://hf-mirror.com", "endpoint remains owned while cancelling")
+        await suspended.progress(0.9)
+        let stale = lease("stale")
+        await suspended.complete(stale)
+        await pending.value
+        r.eq(ownership.activeLease?.id, old.id, "cancelled stale completion cannot publish")
+        r.eq(ownership.failure, nil, "user cancellation is not a stall or failure")
+        r.check(!ownership.didAutoFallback, "cancel never degrades")
+        r.eq(values.read(), "original-endpoint", "endpoint restored after cancellation drain")
+        r.eq(ownership.operationID, nil, "drained cancellation releases ownership")
+        let retry = Task { await ownership.perform(.init(target: .preset(.qwen317B), source: .official, origin: .manual)) }
+        await until { await suspended.calls == 2 }
+        await suspended.fail(.loadFailed())
+        await retry.value
+        r.eq(ownership.activeLease?.id, old.id, "failed candidate retains usable model")
+        r.eq(ownership.failure, .loadFailed(), "failed replacement exposes typed error")
+        let terminal = ownership.status
+        await suspended.progress(0.6)
+        for _ in 0..<10 { await Task.yield() }
+        r.eq(ownership.status, terminal, "late progress cannot revive terminal operation")
+
+        let stallLoader = SuspendedLoader()
+        let stallValues = FixtureValues()
+        let stalled = fixture(load: { _, offline, callback in try await stallLoader.load(offline, callback) },
+                              sleep: { duration in
+                                  if duration == .seconds(5) { try await Task.sleep(for: .milliseconds(1)) }
+                              }, values: stallValues)
+        let stallTask = Task { await stalled.perform(.init(target: .preset(.qwen306B), source: .official, origin: .manual)) }
+        await until { await stallLoader.calls == 1 }
+        stallValues.advance()
+        await until { stalled.status == .stalled }
+        r.eq(stalled.status, .stalled, "thirty seconds without progress triggers watchdog")
+        r.check(stalled.operationID != nil, "watchdog also waits for bottom loader")
+        await stallLoader.complete(stale)
+        for count in 2...3 {
+            await until { await stallLoader.calls == count }
+            stallValues.advance()
+            await until { stalled.status == .stalled }
+            await stallLoader.complete(stale)
+        }
+        await stallTask.value
+        r.eq(stalled.activeLease, nil, "stalled candidate cannot commit even if bottom returns success")
+        r.eq(stalled.failure, .stalled(), "watchdog cancellation remains retryable stall, distinct from user cancellation")
+        r.eq(await stallLoader.calls, 3, "watchdog retries are bounded")
+
+        let diskProbe = ProvisionProbe()
+        let disk = fixture(preflight: { _, _ in await diskProbe.preflight() }, load: { target, _, _ in
+            await diskProbe.record(target); return stale
+        }, disk: 1)
+        await disk.perform(.init(target: .preset(.qwen317B), source: .official, origin: .manual))
+        r.eq(disk.failure, .insufficientDisk(), "insufficient disk typed failure")
+        r.eq(await diskProbe.preflights, 0, "insufficient disk starts no network")
+        r.eq(await diskProbe.attempts, [], "insufficient disk starts no loader")
+
+        var unresolvedConfig = Configuration()
+        unresolvedConfig.customLocalModelPath = "/fixture/unknown-custom"
+        unresolvedConfig.hasCompletedOnboarding = true
+        let fixedConfig = unresolvedConfig
+        let unresolved = fixture(load: { target, _, _ in await diskProbe.record(target); return stale }, configuration: { fixedConfig })
+        await unresolved.loadModel(provider: QwenASRProvider())
+        r.eq(unresolved.failure, .incompleteLocal(), "unresolved custom identity fails offline")
+        r.eq(await diskProbe.attempts, [], "unresolved custom path never silently downloads")
+        var unknownConfig = Configuration()
+        unknownConfig.selectedLocalModelID = "unknown-manual-model"
+        unknownConfig.hasCompletedOnboarding = true
+        let unknownFixture = unknownConfig
+        let unknown = fixture(load: { target, _, _ in await diskProbe.record(target); return stale }, configuration: { unknownFixture })
+        await unknown.loadModel(provider: QwenASRProvider())
+        r.eq(unknown.failure, .incompleteLocal(), "unknown manual selection never becomes recommended preset")
+        r.eq(await diskProbe.attempts, [], "unknown manual selection starts no download")
+
+        let offlineFailureProbe = ProvisionProbe()
+        let offlineFailure = fixture(preflight: { _, _ in await offlineFailureProbe.preflight() }, load: { target, _, _ in
+            await offlineFailureProbe.record(target); throw ModelProvisionError.loadFailed()
+        })
+        await offlineFailure.perform(.init(target: .offline(local), source: .official, origin: .offlineImport))
+        r.eq(offlineFailure.failure, .loadFailed(), "explicit offline failure ends directly")
+        r.check(!offlineFailure.didAutoFallback, "explicit offline failure never falls back")
+        r.eq(await offlineFailureProbe.preflights, 0, "explicit offline failure makes no network request")
+
+        let downloaderLoader = SuspendedLoader()
+        let downloaderState = fixture(load: { target, offline, progress in
+            if case .offline = target { return old }
+            return try await downloaderLoader.load(offline, progress)
+        })
+        await downloaderState.perform(.init(target: .offline(local), source: .official, origin: .offlineImport))
+        let downloader = ModelDownloader(coordinator: downloaderState, configuration: { Configuration() })
+        var completedDownloads = 0
+        let subscription = downloader.$currentDownload.sink { value in
+            if value?.status == .completed { completedDownloads += 1 }
+        }
+        downloader.startDownload(preset: .qwen317B)
+        await until { await downloaderLoader.calls == 1 }
+        downloader.cancelDownload()
+        await downloaderLoader.complete(stale)
+        await until { downloaderState.operationID == nil }
+        for _ in 0..<10 { await Task.yield() }
+        r.eq(completedDownloads, 0, "cancelled replacement cannot announce completed download for old lease")
+        r.eq(downloader.currentDownload?.status, nil, "cancelled downloader clears terminal display after draining")
+        downloader.startDownload(preset: .qwen317B)
+        await until { await downloaderLoader.calls == 2 }
+        await downloaderLoader.fail(.loadFailed())
+        await until { downloaderState.operationID == nil }
+        for _ in 0..<10 { await Task.yield() }
+        downloader.startDownload(preset: .qwen306B)
+        await until { await downloaderLoader.calls == 3 }
+        r.eq(await downloaderLoader.calls, 3, "failed downloader terminal record does not block retry")
+        await downloaderLoader.complete(stale)
+        await until { downloaderState.operationID == nil }
+        r.eq(downloader.currentDownload?.status, .completed, "successful downloader maps coordinator commit")
+        for _ in 0..<10 { await Task.yield() }
+        let unrelated = Task { await downloaderState.perform(.init(target: .preset(.qwen317B), source: .official, origin: .manual)) }
+        await until { await downloaderLoader.calls == 4 }
+        r.eq(downloader.currentDownload?.status, .completed, "terminal downloader record does not follow unrelated provisioning")
+        downloaderState.cancel()
+        await downloaderLoader.complete(stale)
+        await unrelated.value
+        subscription.cancel()
+
+
+        let serialA = SuspendedLoader()
+        let serialB = SuspendedLoader()
+        let sharedEnvironment = FixtureValues()
+        let a = fixture(load: { _, offline, callback in try await serialA.load(offline, callback) }, values: sharedEnvironment)
+        let b = fixture(load: { _, offline, callback in try await serialB.load(offline, callback) }, values: sharedEnvironment)
+        let first = Task { await a.perform(.init(target: .preset(.qwen306B), source: .mirror, origin: .manual)) }
+        await until { await serialA.calls == 1 }
+        let second = Task { await b.perform(.init(target: .preset(.qwen306B), source: .official, origin: .manual)) }
+        var compatibilityCalls = 0
+        let compatibility = QwenModelState(loadDownloadedPreset: { _ in
+            compatibilityCalls += 1
+            throw ModelProvisionError.loadFailed()
+        })
+        let compatibilityTask = Task { await compatibility.handleDownloadCompleted(preset: .qwen306B) }
+        for _ in 0..<100 { await Task.yield() }
+        r.eq(await serialB.calls, 0, "all coordinator instances serialize bottom work")
+        r.eq(compatibilityCalls, 0, "compatibility loader also respects global coordinator ownership")
+        r.eq(sharedEnvironment.read(), "https://hf-mirror.com", "queued operation cannot overwrite active endpoint")
+        second.cancel()
+        await serialA.complete(old)
+        await first.value
+        await second.value
+        await compatibilityTask.value
+        r.eq(compatibilityCalls, 1, "compatibility loader starts after preceding operation drains")
+        r.eq(compatibility.operationID, nil, "compatibility failure releases coordinator ownership")
+        r.eq(await serialB.calls, 0, "cancelled queued operation never enters bottom loader")
+        r.eq(b.failure, nil, "caller task cancellation remains cancellation")
+        let third = Task { await b.perform(.init(target: .preset(.qwen306B), source: .official, origin: .manual)) }
+        await until { await serialB.calls == 1 }
+        await serialB.complete(stale)
+        await third.value
+        r.eq(sharedEnvironment.read(), "original-endpoint", "serialized operations restore environment")
+        r.eq(sharedEnvironment.history(), ["https://hf-mirror.com", "original-endpoint", nil, "original-endpoint"], "endpoint scope never overlaps")
+
+    }
+}

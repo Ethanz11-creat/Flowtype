@@ -368,6 +368,7 @@ enum SelfTest {
         testReadinessDebounce(r)
         testPermissionWatchOwnership(r)
         testReadinessSnapshotBuilder(r)
+        await ModelProvisionSelfTests.runCoordinator(r)
         await testTerminalModelLoadPreflight(r)
         await testReadinessPreflight(r)
         testSessionExperience(r)   // readiness, cancellation, and stale session ownership
@@ -1790,10 +1791,14 @@ enum SelfTest {
     static func testTerminalModelLoadPreflight(_ r: Reporter) async {
         struct SyntheticLoadFailure: Error {}
         var attemptedPresets: [String] = []
+        var modelUnderTest: QwenModelState?
+        var hadOperationOwnership = false
         let model = QwenModelState(loadDownloadedPreset: { preset in
+            hadOperationOwnership = modelUnderTest?.operationID != nil
             attemptedPresets.append(preset.id)
             throw SyntheticLoadFailure()
         })
+        modelUnderTest = model
         var statuses: [QwenModelStatus] = []
         let subscription = model.$status.sink { statuses.append($0) }
         defer { subscription.cancel() }
@@ -1813,6 +1818,9 @@ enum SelfTest {
              "terminal model: startup permits pending provisioning")
         await model.handleDownloadCompleted(preset: .qwen306B)
         r.eq(attemptedPresets, ["qwen3-0.6b-4bit"], "terminal model: completed preset is loaded once without retry")
+        r.check(hadOperationOwnership, "terminal model: injected loader runs under coordinator ownership")
+        r.eq(model.operationID, nil, "terminal model: failed loader releases coordinator ownership")
+        r.eq(model.failure, .loadFailed(), "terminal model: injected failure follows typed coordinator path")
         r.eq(statuses.prefix(2).map { $0 }, [.notLoaded, .loading],
              "terminal model: actual producer publishes loading before attempting auto-load")
         if case .error(let reason, let retryable) = model.status {
@@ -1846,6 +1854,8 @@ enum SelfTest {
         let recovered = QwenModelState(loadDownloadedPreset: { _ in })
         await recovered.handleDownloadCompleted(preset: .qwen306B)
         r.eq(recovered.status, .ready, "terminal model: successful auto-load still publishes ready")
+        r.check(recovered.activeLease != nil, "terminal model: successful injected load commits a coordinator lease")
+        r.eq(recovered.operationID, nil, "terminal model: successful loader releases coordinator ownership")
     }
 
     @MainActor

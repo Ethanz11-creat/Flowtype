@@ -4,11 +4,16 @@ import Foundation
 final class ASRProviderRegistry: @unchecked Sendable {
     static let shared = ASRProviderRegistry()
 
-    let qwenLocalProvider: QwenASRProvider
+    private let localLock = NSLock()
+    private var localProvider: QwenASRProvider
+    var qwenLocalProvider: QwenASRProvider { localLock.withLock { localProvider } }
+
+    // Interim bridge until routing takes immutable LocalASRLease snapshots.
+    func adoptLocalProvider(_ provider: QwenASRProvider) { localLock.withLock { localProvider = provider } }
     let cloudProvider: CloudASRProvider
 
     private init() {
-        self.qwenLocalProvider = QwenASRProvider()
+        self.localProvider = QwenASRProvider()
         self.cloudProvider = CloudASRProvider()
     }
 
