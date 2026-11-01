@@ -42,11 +42,15 @@ struct CloudASRHealthIdentity: Sendable, Equatable {
     let endpoint: String
     let model: String
     let protocolKind: CloudASRProtocolKind
+    let vendorID: CloudASRVendorID
+    let fieldCapabilities: CloudASRFieldCapabilities
     init(provider: CloudASRProviderConfig) {
         providerID = provider.id
         endpoint = provider.baseURL
         model = provider.model
         protocolKind = provider.protocolKind
+        vendorID = provider.vendorID
+        fieldCapabilities = CloudASRVendor.capabilities(for: provider)
     }
 }
 

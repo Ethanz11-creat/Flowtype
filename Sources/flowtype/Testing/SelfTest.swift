@@ -319,6 +319,7 @@ enum SelfTest {
         testPrivacyConfig(r)       // storeTranscriptText: round-trip + legacy default true
         testASRConfig(r)           // ASR engine config: round-trip + legacy default
         CloudProviderSelfTests.runConfiguration(r)
+        await CloudProviderSelfTests.runTransport(r)
         testRealtimeASRContracts(r)
         testRealtimeAudioIngress(r)
         await testRealtimeIngressWakeups(r)

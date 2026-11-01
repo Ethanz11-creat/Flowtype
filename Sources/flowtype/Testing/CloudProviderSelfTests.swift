@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Pure configuration fixtures: no configuration store, credentials, or transport.
 enum CloudProviderSelfTests {
@@ -84,6 +85,203 @@ enum CloudProviderSelfTests {
         runEndpoints(r)
     }
 
+    /// Tests exercise the real provider; only HTTP I/O is replaced. Every host is synthetic.
+    static func runTransport(_ r: SelfTest.Reporter) async {
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [CloudTransportProtocol.self]
+        let session = URLSession(configuration: sessionConfig)
+        defer { session.invalidateAndCancel() }
+        let logs = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let client = CloudASRProvider(session: session, logger: { message in logs.withLock { $0.append(message) } })
+        let key = "arbitrary.synthetic.secret+987"
+        let context = ASRContext(phrases: ["private-context-987"], foreground: nil)
+        let samples: [Float] = [0, 1, -1, 0.5]
+        func profile(_ vendor: CloudASRVendorID) -> CloudASRProviderConfig {
+            var value = CloudASRVendor.makeProfile(vendor, isActive: true)
+            value.baseURL = "https://asr-transport.invalid/v1"
+            if vendor == .custom { value.model = "captured-model" }
+            return value
+        }
+        func request(_ profile: CloudASRProviderConfig, sendContext: Bool = true) -> ASRRequest {
+            ASRRequest(samples: samples, sampleRate: 16000, language: "zh", context: context, timeout: 2,
+                       cloudConfiguration: .init(provider: profile, apiKey: key, sendContext: sendContext))
+        }
+        for vendor in [CloudASRVendorID.siliconFlow, .openAI, .custom] {
+            CloudTransportProtocol.reset()
+            do {
+                let result = try await client.transcribe(request(profile(vendor)))
+                r.eq(result.text, "fixture transcript", "transport: JSON text is decoded")
+                let captured = CloudTransportProtocol.snapshot().requests.first!
+                let body = String(decoding: captured.httpBody!, as: UTF8.self)
+                r.eq(captured.value(forHTTPHeaderField: "Authorization"), "Bearer \(key)", "transport: Bearer credential")
+                r.eq(captured.httpMethod, "POST", "transport: multipart POST")
+                r.eq(captured.url?.absoluteString, "https://asr-transport.invalid/v1/audio/transcriptions", "transport: base endpoint")
+                r.check(body.contains("name=\"model\"\r\n\r\n\(profile(vendor).model)\r\n"), "transport: selected model")
+                for field in ["language", "prompt", "temperature"] {
+                    r.check(!body.contains("name=\"\(field)\""), "transport: \(vendor) excludes unsupported \(field)")
+                }
+                r.eq(body.contains("name=\"response_format\""), vendor == .openAI, "transport: JSON field only with capability")
+                let boundary = captured.value(forHTTPHeaderField: "Content-Type")!.components(separatedBy: "boundary=").last!
+                r.check(body.hasPrefix("--\(boundary)\r\n") && body.hasSuffix("--\(boundary)--\r\n"), "transport: multipart boundaries match header")
+                r.check(body.contains("name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav"), "transport: WAV file disposition")
+                let data = captured.httpBody!
+                if let wavStart = data.range(of: Data("RIFF".utf8))?.lowerBound {
+                    let wav = data.subdata(in: wavStart..<(wavStart + 52))
+                    r.eq(Array(wav[0..<12]), [82,73,70,70,44,0,0,0,87,65,86,69], "transport: WAV RIFF size and signature")
+                    r.eq(Array(wav[20..<36]), [1,0,1,0,128,62,0,0,0,125,0,0,2,0,16,0], "transport: WAV PCM16 mono 16kHz")
+                    r.eq(Array(wav[36..<52]), [100,97,116,97,8,0,0,0,0,0,255,127,1,128,255,63], "transport: exact WAV sample bytes preserved")
+                } else { r.check(false, "transport: WAV payload present") }
+            } catch { r.check(false, "transport: valid fixture transcribes") }
+        }
+        var custom = profile(.custom)
+        custom.customFieldCapabilities = .init(sendLanguage: true, sendPrompt: true, sendTemperature: true, sendResponseFormat: true)
+        for sendContext in [true, false] {
+            CloudTransportProtocol.reset()
+            _ = try? await client.transcribe(request(custom, sendContext: sendContext))
+            let body = String(decoding: CloudTransportProtocol.snapshot().requests.first!.httpBody!, as: UTF8.self)
+            r.eq(body.contains("private-context-987"), sendContext, "transport: global context opt-out dominates capability")
+            for field in ["language", "temperature", "response_format"] {
+                r.check(body.contains("name=\"\(field)\""), "transport: custom explicit \(field) capability")
+            }
+        }
+        let capturedRequest = request(custom)
+        let oldIdentity = CloudASRHealthIdentity(provider: custom)
+        var health = RouterHealthSnapshot()
+        health.synchronizeIdentity(oldIdentity)
+        let token = health.token
+        let oldRoute = ASRRouteSnapshot(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
+            localAvailable: false, cloudAvailable: true, cloudConfiguration: capturedRequest.cloudConfiguration,
+            healthGeneration: token.generation)
+        custom.customFieldCapabilities.sendPrompt = false
+        health.synchronizeIdentity(CloudASRHealthIdentity(provider: custom))
+        health.recordProbe(token: token, latencyMs: 12, now: Date())
+        r.check(health.probeLatencyMs == nil, "transport: capability edit invalidates stale probe")
+        r.check(health.generation != token.generation, "transport: capability edit advances health generation")
+        health.recordSuccess(route: oldRoute, latencyMs: 12, now: Date())
+        health.recordFailure(route: oldRoute)
+        r.eq(health.cloudLatencyEWMA, 0, "transport: stale capability response cannot update latency")
+        r.eq(health.cloudConsecutiveFailures, 0, "transport: stale capability failure cannot poison health")
+        var vendorOnly = custom
+        vendorOnly.customFieldCapabilities = .init()
+        let customIdentity = CloudASRHealthIdentity(provider: vendorOnly)
+        vendorOnly.vendorID = .siliconFlow
+        r.check(CloudASRHealthIdentity(provider: vendorOnly) != customIdentity, "transport: vendor identity belongs to health even with identical effective capabilities")
+        custom.vendorID = .siliconFlow
+        custom.baseURL = "https://changed.invalid/v2"
+        custom.model = "changed-model"
+        CloudTransportProtocol.reset()
+        _ = try? await client.transcribe(capturedRequest)
+        let snapshot = CloudTransportProtocol.snapshot().requests.first!
+        r.eq(snapshot.url?.host, "asr-transport.invalid", "transport: snapshot retains original endpoint")
+        r.eq(snapshot.value(forHTTPHeaderField: "Authorization"), "Bearer \(key)", "transport: snapshot retains original key")
+        r.check(String(decoding: snapshot.httpBody!, as: UTF8.self).contains("captured-model"), "transport: snapshot retains original model")
+        r.check(String(decoding: snapshot.httpBody!, as: UTF8.self).contains("private-context-987"), "transport: snapshot retains captured capabilities")
+
+        var fullURL = profile(.custom)
+        fullURL.baseURL += "/audio/transcriptions/"
+        CloudTransportProtocol.reset()
+        _ = try? await client.transcribe(request(fullURL))
+        r.eq(CloudTransportProtocol.snapshot().requests.first?.url?.absoluteString,
+             "https://asr-transport.invalid/v1/audio/transcriptions", "transport: full URL and base use same endpoint")
+        CloudTransportProtocol.reset()
+        do {
+            _ = try await client.transcribe(request(CloudASRVendor.makeProfile(.dashScope, isActive: true)))
+            r.check(false, "transport: WSS cannot use multipart")
+        } catch { r.eq(CloudTransportProtocol.snapshot().requests.count, 0, "transport: WSS sends no multipart") }
+
+        for body in ["<html>login</html>", "plain transcript", "{}", #"{"text":3}"#, "{bad", #"{"error":{"message":"private-context-987"}}"#] {
+            CloudTransportProtocol.reset(body: body)
+            do { _ = try await client.transcribe(request(profile(.custom))); r.check(false, "transport: unknown response rejected") }
+            catch { r.check(error is CloudASRError, "transport: malformed response classified safely") }
+        }
+        CloudTransportProtocol.reset(nonHTTP: true)
+        do { _ = try await client.transcribe(request(profile(.custom))); r.check(false, "transport: non-HTTP rejected") }
+        catch { r.check(error is CloudASRError, "transport: non-HTTP classified") }
+
+        for code in [400, 401, 403, 404, 429, 500, 503] {
+            CloudTransportProtocol.reset(status: code, body: #"{"message":""# + key + " private-context-987 https://secret.invalid/?token=" + key + #""}"#)
+            do { _ = try await client.transcribe(request(profile(.custom))); r.check(false, "transport: HTTP failure rejected") }
+            catch {
+                r.eq((error as? CloudASRError)?.statusCode, code, "transport: preserves HTTP status category")
+                let safe = error.localizedDescription
+                r.check(!safe.contains(key) && !safe.contains("private-context") && !safe.contains("secret.invalid"), "transport: error body never exposed")
+            }
+        }
+        for code in [NSURLErrorTimedOut, NSURLErrorCannotConnectToHost, NSURLErrorCancelled] {
+            CloudTransportProtocol.reset(error: NSError(domain: NSURLErrorDomain, code: code,
+                userInfo: [NSLocalizedDescriptionKey: "\(key) private-context-987 https://secret.invalid/?token=\(key)"]))
+            do { _ = try await client.transcribe(request(profile(.custom))); r.check(false, "transport: network failure rejected") }
+            catch {
+                if code == NSURLErrorCancelled { r.check(error is CancellationError, "transport: network cancellation stays cancellation") }
+                else if code == NSURLErrorTimedOut { r.eq(fallbackReason(for: error), "timeout", "transport: timeout classified") }
+                else {
+                    r.check(!error.localizedDescription.contains(key) && !error.localizedDescription.contains("private-context"), "transport: network detail never exposed")
+                }
+            }
+        }
+        CloudTransportProtocol.reset(redirect: URL(string: "https://redirect-target.invalid/stolen")!)
+        _ = try? await client.transcribe(request(profile(.custom)))
+        let followed = CloudTransportProtocol.snapshot().requests.filter { $0.url?.host == "redirect-target.invalid" }.count
+        r.eq(followed, 0, "transport: no credential/audio redirect")
+
+        CloudTransportProtocol.reset()
+        for vendor in [CloudASRVendorID.custom, .siliconFlow, .openAI, .dashScope] {
+            var value = profile(vendor)
+            if vendor == .dashScope { value.baseURL = "wss://asr-transport.invalid/realtime" }
+            if case .failure = client.validateConfiguration(provider: value, apiKey: key) {
+                r.check(false, "transport: valid local configuration accepted")
+            }
+            value.baseURL += "?token=\(key)"
+            if case .success = client.validateConfiguration(provider: value, apiKey: key) {
+                r.check(false, "transport: query credentials rejected locally")
+            }
+        }
+        r.eq(CloudTransportProtocol.snapshot().requests.count, 0, "transport: configuration validation performs zero I/O")
+        for invalid in ["", "   ", "\n"] {
+            if case .success = client.validateConfiguration(provider: profile(.custom), apiKey: invalid) {
+                r.check(false, "transport: blank credentials invalid")
+            }
+            var noModel = profile(.custom)
+            noModel.model = invalid
+            if case .success = client.validateConfiguration(provider: noModel, apiKey: key) {
+                r.check(false, "transport: blank model invalid")
+            }
+        }
+        CloudTransportProtocol.reset(error: NSError(domain: NSURLErrorDomain, code: NSURLErrorCancelled))
+        if case .failure(.cancelled) = await client.testConnection(provider: profile(.custom), apiKey: key) {
+            r.check(true, "transport: connection-test cancellation is explicit")
+        } else { r.check(false, "transport: connection-test cancellation stays cancelled") }
+        let cancelledRequest = request(profile(.custom))
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await client.transcribe(cancelledRequest)
+        }
+        CloudTransportProtocol.reset()
+        do { _ = try await cancelled.value; r.check(false, "transport: pre-cancelled request cannot succeed") }
+        catch { r.check(error is CancellationError, "transport: pre-cancelled request stays cancelled") }
+        r.eq(CloudTransportProtocol.snapshot().requests.count, 0, "transport: pre-cancelled task sends no audio")
+        CloudTransportProtocol.reset(delay: 0.1)
+        let inflightRequest = request(profile(.custom))
+        let inflight = Task { try await client.transcribe(inflightRequest) }
+        for _ in 0..<200 {
+            if !CloudTransportProtocol.snapshot().requests.isEmpty { break }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        r.eq(CloudTransportProtocol.snapshot().requests.count, 1, "transport: cancellation fixture reaches real transport")
+        inflight.cancel()
+        do { _ = try await inflight.value; r.check(false, "transport: cancelled request cannot deliver late transcript") }
+        catch { r.check(error is CancellationError, "transport: in-flight cancellation stays cancelled") }
+        let safeLogs = logs.withLock { $0.joined(separator: "\n") }
+        r.check(!safeLogs.contains(key) && !safeLogs.contains("private-context") && !safeLogs.contains("secret.invalid"),
+                "transport: logs exclude raw body, URL query, key and context")
+
+        CloudTransportProtocol.reset()
+        let testResult = await client.testConnection(provider: profile(.siliconFlow), apiKey: key)
+        if case .failure = testResult { r.check(false, "transport: synthetic connection succeeds") }
+        let testBody = String(decoding: CloudTransportProtocol.snapshot().requests.first!.httpBody!, as: UTF8.self)
+        r.check(!testBody.contains("name=\"response_format\"") && !testBody.contains("name=\"temperature\""), "transport: connection test uses vendor field contract")
+    }
+
     private static func runEndpoints(_ r: SelfTest.Reporter) {
         let validHTTP: [(String, String)] = [
             ("https://example.test/v1", "https://example.test/v1/audio/transcriptions"),
@@ -134,4 +332,64 @@ enum CloudProviderSelfTests {
             r.eq(try? CloudASREndpoint.validateRealtimeURL(valid).absoluteString, valid, "endpoint: valid WSS host/port retained")
         }
     }
+}
+
+private final class CloudTransportProtocol: URLProtocol, @unchecked Sendable {
+    struct Fixture {
+        var status = 200
+        var body = #"{"text":"fixture transcript"}"#
+        var nonHTTP = false
+        var error: NSError?
+        var redirect: URL?
+        var delay: TimeInterval = 0
+        var requests: [URLRequest] = []
+    }
+    static let state = OSAllocatedUnfairLock(initialState: Fixture())
+    static func reset(status: Int = 200, body: String = #"{"text":"fixture transcript"}"#,
+                      nonHTTP: Bool = false, error: NSError? = nil, redirect: URL? = nil, delay: TimeInterval = 0) {
+        state.withLock { $0 = Fixture(status: status, body: body, nonHTTP: nonHTTP, error: error, redirect: redirect, delay: delay) }
+    }
+    static func snapshot() -> Fixture { state.withLock { $0 } }
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    private let stopped = OSAllocatedUnfairLock(initialState: false)
+    override func startLoading() {
+        var captured = request
+        if captured.httpBody == nil, let stream = captured.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var bytes = Data()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                guard count > 0 else { break }
+                bytes.append(contentsOf: buffer.prefix(count))
+            }
+            captured.httpBody = bytes
+        }
+        let recorded = captured
+        let fixture = Self.state.withLock { value in value.requests.append(recorded); return value }
+        if let error = fixture.error { client?.urlProtocol(self, didFailWithError: error); return }
+        if let target = fixture.redirect, request.url?.host != target.host {
+            var redirected = request
+            redirected.url = target
+            let response = HTTPURLResponse(url: request.url!, statusCode: 307, httpVersion: "HTTP/1.1", headerFields: ["Location": target.absoluteString])!
+            client?.urlProtocol(self, wasRedirectedTo: redirected, redirectResponse: response)
+            return
+        }
+        if fixture.delay > 0 {
+            DispatchQueue.global().asyncAfter(deadline: .now() + fixture.delay) { [self] in
+                if !stopped.withLock({ $0 }) { complete(fixture) }
+            }
+        } else { complete(fixture) }
+    }
+    private func complete(_ fixture: Fixture) {
+        let response: URLResponse = fixture.nonHTTP
+            ? URLResponse(url: request.url!, mimeType: "application/json", expectedContentLength: fixture.body.utf8.count, textEncodingName: "utf-8")
+            : HTTPURLResponse(url: request.url!, statusCode: fixture.status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(fixture.body.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() { stopped.withLock { $0 = true } }
 }

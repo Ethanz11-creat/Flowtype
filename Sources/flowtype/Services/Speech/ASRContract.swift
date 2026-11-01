@@ -56,6 +56,16 @@ struct CloudASRRequestConfiguration: Sendable, Equatable {
     let provider: CloudASRProviderConfig
     let apiKey: String
     let sendContext: Bool
+    let vendorID: CloudASRVendorID
+    let fieldCapabilities: CloudASRFieldCapabilities
+
+    init(provider: CloudASRProviderConfig, apiKey: String, sendContext: Bool) {
+        self.provider = provider
+        self.apiKey = apiKey
+        self.sendContext = sendContext
+        vendorID = provider.vendorID
+        fieldCapabilities = CloudASRVendor.capabilities(for: provider)
+    }
 }
 
 /// 一次识别结果。
@@ -108,6 +118,7 @@ func fallbackReason(for error: Error) -> String {
        realtime == .startTimeout || realtime == .finalTimeout { return "timeout" }
     if let cloud = error as? CloudASRError {
         switch cloud {
+        case .cancelled: return "cancelled"
         case .timeout: return "timeout"
         case .networkError: return "network"
         case .noAPIKey, .noModel, .noActiveProvider: return "unavailable"
