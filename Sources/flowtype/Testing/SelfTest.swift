@@ -281,6 +281,17 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
+            await M3SpeechPreflightSelfTests.benchmark(r)
+            print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
+        if CommandLine.arguments.contains("--m3-silence-only") {
+            M3SpeechPreflightSelfTests.pure(r)
+            await M3SpeechPreflightSelfTests.background(r)
+            print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--m3-delivery-only") {
             M3DeliverySelfTests.policy(r)
             await M3DeliverySelfTests.runtime(r)
@@ -425,6 +436,8 @@ enum SelfTest {
         await M3DeliverySelfTests.runtime(r)
         await M3DeliverySelfTests.presentation(r)
         await testDeliveryModeStage(r)
+        M3SpeechPreflightSelfTests.pure(r)
+        await M3SpeechPreflightSelfTests.background(r)
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         await CloudProviderSelfTests.runConnectionOwnership(r)
