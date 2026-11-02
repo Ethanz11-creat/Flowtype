@@ -1,0 +1,58 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+[1/4] Write sources
+[3/6] Compiling FlowType M4RecoveryControllerSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:458:15: warning: 'c' mutated after capture by sendable closure
+445 |         for explicitCancel in [false, true] {
+446 |             let f = Fixture(configuration)
+447 |             var c: SessionController!
+    |                 `- note: variable defined here
+448 |             let capture = Stage(name: "Text", run: { _, context in
+449 |                 f.contexts.append(context); context.deliveryTarget = target
+    :
+451 |             })
+452 |             let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
+453 |                 mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
+    |                                                                                                  `- note: variable captured by sendable closure
+454 |                     try? KeyboardInjector.postIfActive(context: context) {}
+455 |                     if explicitCancel { c.cancel() }
+    |                                         `- note: capturing use
+456 |                     return .uncertain
+457 |                 }, copy: { _ in r.check(false, "M4 publication: no implicit copy") })
+458 |             c = f.controller([capture, injection])
+    |               `- warning: 'c' mutated after capture by sendable closure
+459 |             var fired = false
+460 |             var summaries: [LastDeliverySummary] = []
+[4/7] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[5/7] Compiling FlowType SelfTest.swift
+[5/8] Write Objects.LinkFileList
+[6/8] Linking FlowType
+[7/8] Applying FlowType
+Build of product 'FlowType' complete! (14.63s)
+  ✗ FAIL: M4 summary subscriber finish: once-only synchronous summary publication — got 2, want 1
+  ✗ FAIL: M4 summary subscriber finish: newer blocked card retained — got Optional(FlowType.RecoveryCard(id: F7B447CB-0AED-4CEC-9259-28BFF7ED01AD, sessionID: 1, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.deliveryUncertain, message: "已发送，但无法确认是否插入；可复制结果", actions: [FlowType.RecoveryAction.copyResult, FlowType.RecoveryAction.viewHistory, FlowType.RecoveryAction.dismiss]))), want Optional(FlowType.RecoveryCard(id: 2CE12B40-F373-4F5A-810B-CEAA515D92A2, sessionID: 2, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss])))
+  ✗ FAIL: M4 summary subscriber finish: newer message retained — got error("已发送，但无法确认是否插入；可复制结果"), want error("麦克风权限未开启")
+  ✗ FAIL: M4 summary subscriber finish: displayed card owns allowed effects — got [], want ["mic"]
+  ✗ FAIL: M4 summary subscriber finish: newer context retains refresh authority — got Optional(FlowType.FailureKind.deliveryUncertain), want Optional(FlowType.FailureKind.readiness(FlowType.ReadinessIssue.noEngine))
+  ✗ FAIL: M4 summary subscriber finish: refreshed card retains newer identity — got Optional(1), want Optional(2)
+  ✗ FAIL: M4 summary subscriber cancel: once-only synchronous summary publication — got 2, want 1
+  ✗ FAIL: M4 summary subscriber cancel: newer blocked card retained — got nil, want Optional(FlowType.RecoveryCard(id: 27C6E806-20E8-4CC1-A26C-F3C74CEF1185, sessionID: 2, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss])))
+  ✗ FAIL: M4 summary subscriber cancel: newer message retained — got idle, want error("麦克风权限未开启")
+  ✗ FAIL: M4 summary subscriber cancel: newer window retained — got Optional("hide"), want Optional("show")
+  ✗ FAIL: M4 summary subscriber cancel: displayed card owns allowed effects — got [], want ["mic"]
+  ✗ FAIL: M4 summary subscriber cancel: newer context retains refresh authority — got nil, want Optional(FlowType.FailureKind.readiness(FlowType.ReadinessIssue.noEngine))
+  ✗ FAIL: M4 summary subscriber cancel: refreshed card retains newer identity — got nil, want Optional(2)
+  ✗ FAIL: M4 card subscriber: public card matches newest private authority — got Optional(FlowType.RecoveryCard(id: DEDA96C2-E548-440B-9C24-EC0F51CA923C, sessionID: 1, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.readiness(FlowType.ReadinessIssue.noEngine), message: "没有可用的语音识别引擎", actions: [FlowType.RecoveryAction.openASRSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss]))), want Optional(FlowType.RecoveryCard(id: 2FCEF254-C058-43D1-9376-3098AD784229, sessionID: 2, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss])))
+  ✗ FAIL: M4 card subscriber: newest message survives outer setter — got error("没有可用的语音识别引擎"), want error("麦克风权限未开启")
+  ✗ FAIL: M4 card subscriber: displayed card can execute its allowed action — got [], want ["mic"]
+  ✗ FAIL: M4 card subscriber: current context owns recheck and clears coherently — got error("没有可用的语音识别引擎"), want idle
+=== FlowType --self-test ===
+=== M4 recovery self-test: 19695 passed, 17 failed ===

@@ -1,0 +1,726 @@
+# Review package: b92a8dd..61c691f
+
+## Commits
+61c691f fix: preserve stage failure causes for safe recovery
+
+## Files changed
+ .../flowtype/Core/Pipeline/Stages/ASRStage.swift   |  32 ++-
+ .../Core/Pipeline/Stages/InjectionStage.swift      |  11 +-
+ Sources/flowtype/Services/AudioRecorder.swift      |  16 +-
+ .../flowtype/Services/RecordingEngineStartup.swift |  13 ++
+ .../flowtype/Testing/M4StageFailureSelfTests.swift | 235 +++++++++++++++++++++
+ Sources/flowtype/Testing/SelfTest.swift            |  19 +-
+ 6 files changed, 298 insertions(+), 28 deletions(-)
+
+## Diff
+diff --git a/Sources/flowtype/Core/Pipeline/Stages/ASRStage.swift b/Sources/flowtype/Core/Pipeline/Stages/ASRStage.swift
+index 0ee3b34..9796256 100644
+--- a/Sources/flowtype/Core/Pipeline/Stages/ASRStage.swift
++++ b/Sources/flowtype/Core/Pipeline/Stages/ASRStage.swift
+@@ -1,37 +1,39 @@
+ import Foundation
+ 
+ /// One sequential winner; all attempts share the stop-to-delivery budget.
+ final class ASRStage: PipelineStage, @unchecked Sendable {
+     var name: String { "ASR" }
+     private let healthRecorder: @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void
+     private let providerForID: @Sendable (String) -> (any ASRProvider)?
+     private let realtimeFactory: RealtimeSessionFactory
+     private let routeFactory: @Sendable () async -> ASRRouteSnapshot
+     private let speechPreflight: @Sendable ([Float], Int) async throws -> SpeechPreflightDecision
++    private let phrases: @MainActor @Sendable () -> [String]
+ 
+     init(healthRecorder: @escaping @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void = { id, latency, route in
+         if let latency { ASRRouter.shared.recordSuccess(providerID: id, latencyMs: latency, route: route) }
+         else { ASRRouter.shared.recordFailure(providerID: id, route: route) }
+     }, providerForID: @escaping @Sendable (String) -> (any ASRProvider)? = {
+         ASRProviderRegistry.shared.provider(forID: $0)
+     }, realtimeFactory: @escaping RealtimeSessionFactory = liveRealtimeSessionFactory,
+          routeFactory: @escaping @Sendable () async -> ASRRouteSnapshot = {
+         await ASRRouter.shared.captureStartRoute()
+     }, speechPreflight: @escaping @Sendable ([Float], Int) async throws -> SpeechPreflightDecision = {
+         try await SpeechPreflight.evaluate(samples: $0, sampleRate: $1)
+-    }) {
++    }, phrases: @escaping @MainActor @Sendable () -> [String] = { DictionaryStore.shared.enabledPhrases }) {
+         self.healthRecorder = healthRecorder
+         self.providerForID = providerForID
+         self.realtimeFactory = realtimeFactory
+         self.routeFactory = routeFactory
+         self.speechPreflight = speechPreflight
++        self.phrases = phrases
+     }
+ 
+     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+         guard case .audio(let samples, let preview) = payload else {
+             return .suspend(ErrorRecoveryContext(failedStage: name, error: ASRStageError.invalidPayload,
+                                                  rawText: nil, retryable: false))
+         }
+         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+         let (budget, live) = await MainActor.run {
+             if context.completionBudget == nil { context.completionBudget = CompletionBudget() }
+@@ -42,60 +44,68 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
+                 live.0.ingress.cancel()
+                 live.1?.cancel()
+                 Task { await live.0.session.cancel() }
+             }
+         }
+         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+         let decision: SpeechPreflightDecision
+         do {
+             decision = try await speechPreflight(samples, 16000)
+         } catch {
+-            guard !(error is CancellationError), !Task.isCancelled, !context.isCancellationRequested else {
++            guard FailureClassifier.classify(error) != .cancelled, !Task.isCancelled, !context.isCancellationRequested else {
+                 return cancelled()
+             }
+             decision = .indeterminate(.detectorUnavailable)
+         }
+         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+         switch decision {
+         case .clearlySilent: return .notice("未检测到声音，请重试")
+         case .emptyCapture: return .notice("未录到音频，请重试")
+         case .indeterminate(.invalidSamples), .indeterminate(.unsupportedSampleRate):
+             return .suspend(ErrorRecoveryContext(failedStage: name, error: ASRStageError.invalidAudio,
+                                                  rawText: nil, retryable: false))
+         case .possiblySpeech, .indeterminate(.tooShort), .indeterminate(.detectorUnavailable): break
+         }
+         guard !budget.isExpired else {
+             return .suspend(ErrorRecoveryContext(failedStage: name,
+-                error: ASRStageError.transcriptionFailed(message: "识别超时，请重试"), rawText: nil, retryable: true))
++                error: ASRStageError.transcriptionFailed(message: "识别超时，请重试"), rawText: nil, retryable: true,
++                failureKind: .transientASR))
+         }
+         let savedRoute = await MainActor.run { context.captureRoute }
+         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+         let route: ASRRouteSnapshot
+         if let savedRoute { route = savedRoute } else { route = await routeFactory() }
+         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+         let (phrases, foreground) = await MainActor.run {
+             context.captureRoute = route
+             context.syncRealtimeFailure()
+-            return (DictionaryStore.shared.enabledPhrases, context.foregroundContextText)
++            return (self.phrases(), context.foregroundContextText)
+         }
+         let ids = route.candidateIDs
+         var firstFailure: Error?
++        var firstFailureKind: FailureKind?
+         var finalResult: ASRResult?
+         var finalProviderID: String?
+         var usedFallback = false
+ 
+         for id in ids where !samples.isEmpty {
+             guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+             let timeout = completionStageTimeout(remaining: budget.remainingSeconds,
+                                                   cloud: id == ASRProviderID.cloud,
+                                                   policy: route.policy, localAvailable: route.localAvailable)
+-            guard timeout > 0 else { firstFailure = AsyncDeadlineError.timedOut; break }
++            guard timeout > 0 else {
++                if firstFailure == nil {
++                    firstFailure = AsyncDeadlineError.timedOut
++                    firstFailureKind = .transientASR
++                }
++                break
++            }
+             await MainActor.run {
+                 if !context.isCancelled { context.statePublisher.send(.processing(provider: "识别中")) }
+             }
+             guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+             do {
+                 let request = ASRRequest(samples: samples, sampleRate: 16000, language: route.language,
+                                          context: ASRContext(phrases: phrases, foreground: foreground),
+                                          timeout: timeout, cloudConfiguration: route.cloudConfiguration)
+                 let result: ASRResult
+                 if id == ASRProviderID.cloud, route.isRealtime, let config = route.cloudConfiguration {
+@@ -129,24 +139,29 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
+                 guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+                 guard !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                     throw ASRStageError.transcriptionFailed(message: "未识别到完整文字，请重试")
+                 }
+                 finalResult = result
+                 finalProviderID = id
+                 let latencyMs = Int(budget.elapsedSeconds * 1000)
+                 await healthRecorder(id, route.isRealtime ? latencyMs : result.latencyMs, route)
+                 break
+             } catch {
+-                guard !(error is CancellationError), !Task.isCancelled, !context.isCancellationRequested else {
++                // Classify before the safe generic terminal error hides provider causes.
++                let kind: FailureKind = error is AsyncDeadlineError ? .transientASR : FailureClassifier.classify(error)
++                guard kind != .cancelled, !Task.isCancelled, !context.isCancellationRequested else {
+                     return cancelled()
+                 }
+-                if firstFailure == nil { firstFailure = error }
++                if firstFailure == nil {
++                    firstFailure = error
++                    firstFailureKind = kind
++                }
+                 usedFallback = true
+                 await healthRecorder(id, nil, route)
+                 AppLogger.log("[ASRStage#\(context.sessionID)] engine=\(id == ASRProviderID.local ? route.localLease?.identity.engine ?? "local" : "cloud") transport=\(route.isRealtime ? "realtime" : "batch") fallback=\(fallbackReason(for: error))")
+             }
+         }
+         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+         if let result = finalResult {
+             let ms = Int(budget.elapsedSeconds * 1000)
+             await MainActor.run {
+                 guard !context.isCancelled else { return }
+@@ -164,21 +179,22 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
+             await MainActor.run {
+                 context.usedFallback = true
+                 context.fallbackReason = "preview"
+             }
+             return .continue(.transcript(preview))
+         }
+         if samples.isEmpty, firstFailure == nil { return .complete }
+         return .suspend(ErrorRecoveryContext(failedStage: name,
+             error: (firstFailure as? RealtimeASRConfigurationError).map { $0 as Error } ?? ASRStageError.transcriptionFailed(message: budget.isExpired ? "识别超时，请重试" :
+                 ids.isEmpty ? "语音识别未就绪，请配置云端 API Key 或加载本地模型" : "语音识别失败，请重试"),
+-            rawText: nil, retryable: true))
++            rawText: nil, retryable: true,
++            failureKind: firstFailureKind ?? (ids.isEmpty ? .readiness(.noEngine) : budget.isExpired ? .transientASR : .internalFailure)))
+     }
+ 
+     private func cancelled() -> StageResult {
+         .suspend(ErrorRecoveryContext(failedStage: name, error: CancellationError(), rawText: nil, retryable: false))
+     }
+ }
+ 
+ /// A new handle for each saved recording attempt. Awaiting append waits for its
+ /// binary send to finish, bounding memory independently of recording duration.
+ func transcribeSavedRealtime(samples: [Float], handle: RealtimeASRSessionHandle) async throws -> ASRResult {
+diff --git a/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift b/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
+index ac949cb..5351196 100644
+--- a/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
++++ b/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
+@@ -121,31 +121,32 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
+                                     try self.checkActive(context)
+                                     guard permitted, fresh.signals.focus == .editableText,
+                                           decideDelivery(target: target, current: fresh) == .inject else {
+                                         throw InjectionError.targetNoLongerSafe
+                                     }
+                                 })
+                         }
+                     }
+                     return .suspend(ErrorRecoveryContext(failedStage: name,
+                         error: result == .unsafeSnapshot ? InjectionStageError.clipboardSnapshotIncomplete : .pasteNotDispatched,
+-                        rawText: text, retryable: false))
++                        rawText: text, retryable: false, failureKind: .deliveryBlocked, textKind: .result))
+                 }
+             }
+             return .complete
+         } catch {
+             // A cancelled duplicate invocation does not own the live attempt.
+             if !ownsAttempt, await context.deliveryAttempted { return .complete }
+             let outcome: DeliveryOutcome = context.deliveryEventStarted ? .uncertain : .cancelled
+             await complete(outcome, context: context, start: start)
+             if outcome == .uncertain { return .complete }
+-            return .suspend(ErrorRecoveryContext(failedStage: name, error: error, rawText: text, retryable: false))
++            return .suspend(ErrorRecoveryContext(failedStage: name, error: error, rawText: text, retryable: false,
++                failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+         }
+     }
+ 
+     private func typeText(_ text: String, context: SessionContext,
+                           preserveClipboardOnFailure: Bool, start: Date,
+                           validate: @escaping @Sendable () async throws -> Void = {}) async -> StageResult {
+         do {
+             try checkActive(context)
+             if let inject { try await inject(text, context) }
+             else { try await KeyboardInjector.insertText(text, context: context, validate: validate, events: typingEvents) }
+@@ -158,32 +159,34 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
+                 await complete(.uncertain, context: context, start: start)
+                 return .complete
+             }
+             do {
+                 try checkActive(context)
+                 if error is CancellationError { throw error }
+                 // The paste transaction protected this board. Failure before the
+                 // fallback's first pair must not replace it with recovery text.
+                 if preserveClipboardOnFailure {
+                     return .suspend(ErrorRecoveryContext(failedStage: name,
+-                        error: error, rawText: text, retryable: false))
++                        error: error, rawText: text, retryable: false,
++                    failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+                 }
+                 try await copyToClipboard(text, context: context)
+                 await MainActor.run {
+                     if !context.isCancelled { context.completionNotice = DeliveryCopy.forOutcome(.clipboard)?.message }
+                 }
+                 await complete(.clipboard, context: context, start: start)
+                 return .complete
+             } catch {
+                 await complete(.cancelled, context: context, start: start)
+                 return .suspend(ErrorRecoveryContext(failedStage: name,
+-                    error: error, rawText: text, retryable: false))
++                    error: error, rawText: text, retryable: false,
++                        failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+             }
+         }
+     }
+ 
+     private func complete(_ outcome: DeliveryOutcome, context: SessionContext, start: Date) async {
+         await MainActor.run {
+             let effective: DeliveryOutcome =
+                 (outcome == .typedDispatched || outcome == .pasteDispatched) && (context.isCancelled || Task.isCancelled)
+                 ? .uncertain : outcome
+             context.finishDelivery(effective)
+diff --git a/Sources/flowtype/Services/AudioRecorder.swift b/Sources/flowtype/Services/AudioRecorder.swift
+index c648f9a..7ffec89 100644
+--- a/Sources/flowtype/Services/AudioRecorder.swift
++++ b/Sources/flowtype/Services/AudioRecorder.swift
+@@ -289,33 +289,27 @@ final class AudioRecorder: @unchecked Sendable {
+                     }
+ 
+                     // Yield the frequency spectrum for the visualizer.
+                     let spectrum = self.spectrumAnalyzer.process(samplesArray)
+                     if self.isOwner(ownerID) {
+                         self.spectrumContinuation?.yield(spectrum)
+                     }
+                 }
+             }
+ 
+-            do {
+-                freshEngine.prepare()
++            RecordingEngineStartup.run(prepare: { freshEngine.prepare() }, start: {
+                 try freshEngine.start()
+                 AppLogger.log("[AudioRecorder] Engine prepared and started successfully")
+-            } catch {
+-                AppLogger.log("[AudioRecorder] Engine start FAILED: \(error)")
+-                let nsError = error as NSError
+-                if nsError.domain == "com.apple.coreaudio.avfaudio" {
+-                    AppLogger.log("[AudioRecorder] CoreAudio error detected, device may have been disconnected")
+-                    onRecordingFrozen?()
+-                }
+-                continuation.finish()
+-            }
++            }, onFailure: {
++                AppLogger.log("[AudioRecorder] Engine start failed")
++                onRecordingFrozen?()
++            }, finish: { continuation.finish() })
+         }
+ 
+         return RecordingOutput(spectrum: spectrumStream)
+     }
+ 
+     nonisolated func stopRecording() {
+         guard let ownerID = ownerLock.withLock({ $0 }) else { return }
+         stopRecording(ownerID: ownerID)
+     }
+ 
+diff --git a/Sources/flowtype/Services/RecordingEngineStartup.swift b/Sources/flowtype/Services/RecordingEngineStartup.swift
+new file mode 100644
+index 0000000..2d06fe2
+--- /dev/null
++++ b/Sources/flowtype/Services/RecordingEngineStartup.swift
+@@ -0,0 +1,13 @@
++/// Synchronous engine boundary: every startup failure signals interruption before
++/// ending the spectrum stream, so it cannot look like a successful empty capture.
++enum RecordingEngineStartup {
++    static func run(prepare: () -> Void, start: () throws -> Void,
++                    onFailure: () -> Void, finish: () -> Void) {
++        prepare()
++        do { try start() }
++        catch {
++            onFailure()
++            finish()
++        }
++    }
++}
+diff --git a/Sources/flowtype/Testing/M4StageFailureSelfTests.swift b/Sources/flowtype/Testing/M4StageFailureSelfTests.swift
+new file mode 100644
+index 0000000..36323c6
+--- /dev/null
++++ b/Sources/flowtype/Testing/M4StageFailureSelfTests.swift
+@@ -0,0 +1,235 @@
++import Foundation
++import os
++
++/// Real stages with synthetic PCM and in-process provider/system boundaries only.
++enum M4StageFailureSelfTests {
++    private final class Provider: ASRProvider, @unchecked Sendable {
++        let id: String
++        let failure: Error?
++        let delay: Duration
++        let requests = OSAllocatedUnfairLock<[ASRRequest]>(initialState: [])
++        var displayName: String { "synthetic" }
++        var isAvailable: Bool { true }
++        var capabilities: ASRCapabilities {
++            .init(supportsLanguageHint: true, supportsContextHint: true, requiresNetwork: false, location: .onDevice)
++        }
++        init(_ id: String, _ failure: Error? = nil, delay: Duration = .zero) {
++            self.id = id; self.failure = failure; self.delay = delay
++        }
++        func transcribe(_ request: ASRRequest) async throws -> ASRResult {
++            requests.withLock { $0.append(request) }
++            if delay > .zero { try await Task.sleep(for: delay) }
++            if let failure { throw failure }
++            return .init(text: "synthetic complete", providerID: id, latencyMs: 1)
++        }
++        var count: Int { requests.withLock { $0.count } }
++    }
++
++    private actor Realtime: RealtimeASRSession {
++        let failure: Error
++        init(_ failure: Error) { self.failure = failure }
++        func start() async throws {}
++        func append(samples: [Float]) async throws {}
++        func finish() async throws -> ASRResult { throw failure }
++        func cancel() async {}
++    }
++
++    private static func makeASR(
++        healthRecorder: @escaping @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void,
++        providerForID: @escaping @Sendable (String) -> (any ASRProvider)?,
++        realtimeFactory: @escaping RealtimeSessionFactory = { _ in fatalError("unexpected realtime factory") }
++    ) -> ASRStage {
++        ASRStage(healthRecorder: healthRecorder, providerForID: providerForID,
++                 realtimeFactory: realtimeFactory, phrases: { [] })
++    }
++
++    private static let samples: [Float] = [0.5, -0.25]
++    private static let credentials = CloudASRError.apiError(statusCode: 401, message: "synthetic private body")
++
++    private static func route(first: String? = ASRProviderID.cloud, local: Bool = false,
++                              cloud: Bool = true, realtime: Bool = false) -> ASRRouteSnapshot {
++        let configuration = realtime ? CloudASRRequestConfiguration(
++            provider: .defaultParaformer(isActive: true), apiKey: "synthetic", sendContext: false) : nil
++        return .init(policy: .auto, selectedProviderID: first, localAvailable: local,
++                     cloudAvailable: cloud, cloudConfiguration: configuration)
++    }
++
++    @MainActor private static func assertFailure(_ result: StageResult, _ expected: FailureKind,
++                                                 _ r: SelfTest.Reporter, _ label: String) {
++        guard case .suspend(let recovery) = result else {
++            r.check(false, "M4 stage \(label): terminal suspension"); return
++        }
++        r.eq(recovery.failureKind, expected, "M4 stage \(label): original typed cause")
++        let presentation = RecoveryPolicy.presentation(kind: recovery.failureKind, resources: .init(
++            stage: recovery.failedStage, hasAudio: true, textKind: recovery.textKind,
++            deliveryEventStarted: false, routingPolicy: .auto, hasHistory: false))
++        r.eq(presentation.actions.contains(.retry(stage: "ASR")), expected == .transientASR,
++             "M4 stage \(label): retry only transient original audio")
++        r.check(!presentation.message.contains("private body"), "M4 stage \(label): safe presentation")
++    }
++
++    @MainActor static func run(_ r: SelfTest.Reporter) async {
++        for realtime in [false, true] {
++            for (error, kind): (Error, FailureKind) in [(credentials, .configuration(.credentials)),
++                (URLError(.timedOut), .transientASR), (NSError(domain: "synthetic", code: 1), .internalFailure)] {
++                let provider = Provider(ASRProviderID.cloud, error)
++                let live = Realtime(error)
++                let context = SessionContext(sessionID: 940)
++                context.captureRoute = route(realtime: realtime)
++                let health = OSAllocatedUnfairLock<Int>(initialState: 0)
++                let stage = makeASR(healthRecorder: { _, _, _ in health.withLock { $0 += 1 } },
++                    providerForID: { _ in provider }, realtimeFactory: { _ in .init(session: live,
++                        ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities) })
++                assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: ""), context: context),
++                              kind, r, "\(realtime ? "realtime" : "batch") \(kind)")
++                r.eq(health.withLock { $0 }, 1, "M4 terminal failure records health exactly once")
++            }
++        }
++        for credentialsFirst in [true, false] {
++            let cloud = Provider(ASRProviderID.cloud, credentialsFirst ? credentials : URLError(.timedOut))
++            let local = Provider(ASRProviderID.local, credentialsFirst ? URLError(.timedOut) : credentials)
++            let context = SessionContext(sessionID: 941); context.captureRoute = route(local: true)
++            let stage = makeASR(healthRecorder: { _, _, _ in }, providerForID: { $0 == ASRProviderID.cloud ? cloud : local })
++            assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: ""), context: context),
++                          credentialsFirst ? .configuration(.credentials) : .transientASR, r, "mixed first cause")
++            r.eq(cloud.count + local.count, 2, "M4 mixed attempts each candidate once")
++        }
++        // A known first cause survives expiry before the next candidate begins.
++        let cloud = Provider(ASRProviderID.cloud, credentials), local = Provider(ASRProviderID.local)
++        let expired = SessionContext(sessionID: 942); expired.captureRoute = route(local: true)
++        expired.completionBudget = CompletionBudget(seconds: 1)
++        let budgetStage = makeASR(healthRecorder: { _, _, _ in
++            Thread.sleep(forTimeInterval: 1.02)
++        }, providerForID: { $0 == ASRProviderID.cloud ? cloud : local })
++        assertFailure(await budgetStage.execute(payload: .audio(samples: samples, previewText: "preview"), context: expired),
++                      .configuration(.credentials), r, "known credentials before budget expiry")
++        r.eq(local.count, 0, "M4 expired budget prevents later provider")
++
++        let fallbackContext = SessionContext(sessionID: 943); fallbackContext.captureRoute = route(local: true)
++        let fallbackStage = makeASR(healthRecorder: { _, _, _ in }, providerForID: { $0 == ASRProviderID.cloud ? cloud : local })
++        if case .continue(.transcript(let text)) = await fallbackStage.execute(payload: .audio(samples: samples, previewText: ""), context: fallbackContext) {
++            r.eq(text, "synthetic complete", "M4 successful fallback stays successful")
++            r.check(fallbackContext.usedFallback, "M4 successful fallback records route health context")
++        } else { r.check(false, "M4 successful fallback stays successful") }
++
++        for routeValue in [route(first: nil, cloud: false), route()] {
++            let context = SessionContext(sessionID: 944); context.captureRoute = routeValue
++            if !routeValue.candidateIDs.isEmpty { context.completionBudget = CompletionBudget(seconds: 0) }
++            let stage = makeASR(healthRecorder: { _, _, _ in r.check(false, "M4 empty/budget must not record health") },
++                                 providerForID: { _ in nil })
++            assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: ""), context: context),
++                routeValue.candidateIDs.isEmpty ? .readiness(.noEngine) : .transientASR, r, "no candidates or initial budget")
++        }
++        startup(r)
++        await deadline(r)
++        await cancellations(r)
++        await localAndPreview(r)
++        await boundaries(r)
++    }
++
++    @MainActor private static func startup(_ r: SelfTest.Reporter) {
++        for domain in ["com.apple.coreaudio.avfaudio", "synthetic.other.domain"] {
++            var events: [String] = []
++            var interrupted = false
++            var completedAsEmpty = false
++            RecordingEngineStartup.run(prepare: { events.append("prepare") }, start: {
++                events.append("start")
++                throw NSError(domain: domain, code: 1)
++            }, onFailure: {
++                interrupted = true
++                events.append("failure")
++            }, finish: {
++                // This is the narrow observable guarantee used by RecordingStage:
++                // spectrum completion sees frozen=true, including non-CoreAudio errors.
++                completedAsEmpty = !interrupted
++                events.append("finish")
++            })
++            r.eq(events, ["prepare", "start", "failure", "finish"], "M4 startup failure exact order/count")
++            r.check(!completedAsEmpty, "M4 startup failure cannot present a normal empty completion")
++            r.eq(FailureClassifier.classify(AudioRecorderError.engineStartFailed), .recording(.interrupted),
++                 "M4 existing frozen error retains interruption")
++        }
++        var events: [String] = []
++        RecordingEngineStartup.run(prepare: { events.append("prepare") }, start: { events.append("start") },
++            onFailure: { events.append("failure") }, finish: { events.append("finish") })
++        r.eq(events, ["prepare", "start"], "M4 successful startup leaves spectrum open")
++    }
++
++    @MainActor private static func deadline(_ r: SelfTest.Reporter) async {
++        let provider = Provider(ASRProviderID.cloud, delay: .seconds(2))
++        let context = SessionContext(sessionID: 951); context.captureRoute = route()
++        context.completionBudget = CompletionBudget(seconds: 0.2)
++        let stage = makeASR(healthRecorder: { _, _, _ in }, providerForID: { _ in provider })
++        assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: "preview"), context: context),
++                      .transientASR, r, "actual ASR deadline timeout")
++        r.eq(provider.count, 1, "M4 real deadline calls provider only once")
++    }
++
++    @MainActor private static func cancellations(_ r: SelfTest.Reporter) async {
++        let preflightProvider = Provider(ASRProviderID.cloud)
++        let preflightHealth = OSAllocatedUnfairLock<Int>(initialState: 0)
++        let preflightStage = ASRStage(healthRecorder: { _, _, _ in preflightHealth.withLock { $0 += 1 } },
++            providerForID: { _ in preflightProvider }, speechPreflight: { _, _ in
++                throw CloudASRError.networkError(SpeechProviderError.networkError(URLError(.cancelled)))
++            }, phrases: { [] })
++        let preflightContext = SessionContext(sessionID: 952); preflightContext.captureRoute = route(local: true)
++        assertFailure(await preflightStage.execute(payload: .audio(samples: samples, previewText: "preview"), context: preflightContext),
++                      .cancelled, r, "wrapped preflight cancellation")
++        r.eq(preflightProvider.count + preflightHealth.withLock { $0 }, 0, "M4 cancelled preflight no provider/health")
++        let errors: [Error] = [CancellationError(), CloudASRError.cancelled, URLError(.cancelled),
++            RealtimeAudioIngressError.cancelled, CloudASRError.networkError(SpeechProviderError.networkError(URLError(.cancelled)))]
++        for realtime in [false, true] {
++            for error in errors {
++                let cloud = Provider(ASRProviderID.cloud, error), local = Provider(ASRProviderID.local)
++                let health = OSAllocatedUnfairLock<Int>(initialState: 0), live = Realtime(error)
++                let context = SessionContext(sessionID: 945); context.captureRoute = route(local: true, realtime: realtime)
++                let stage = makeASR(healthRecorder: { _, _, _ in health.withLock { $0 += 1 } },
++                                     providerForID: { $0 == ASRProviderID.cloud ? cloud : local },
++                                     realtimeFactory: { _ in .init(session: live, ingress: RealtimeAudioIngress(),
++                                                                   capabilities: DashScopeRealtimeASR.capabilities) })
++                assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: "preview"), context: context),
++                              .cancelled, r, "typed cancellation")
++                r.eq(cloud.count, realtime ? 0 : 1, "M4 cancelled first provider invoked once")
++                r.eq(local.count + health.withLock { $0 }, 0, "M4 cancellation has no fallback or health failure")
++            }
++        }
++    }
++
++    @MainActor private static func localAndPreview(_ r: SelfTest.Reporter) async {
++        for (id, error, kind): (String, Error, FailureKind) in [
++            (ASRProviderID.local, OfflineWhisperError.invalidLocalDirectory, .configuration(.endpointOrModel)),
++            (ASRProviderID.local, OfflineWhisperError.incompatibleRuntime, .configuration(.endpointOrModel)),
++            ("apple-preview", SpeechProviderError.permissionDenied, .permission(.speechRecognition)),
++            ("apple-preview", SpeechProviderError.notAvailable, .readiness(.noEngine))] {
++            let provider = Provider(id, error), context = SessionContext(sessionID: 946)
++            context.captureRoute = route(first: id, cloud: false)
++            let stage = makeASR(healthRecorder: { _, _, _ in }, providerForID: { _ in provider })
++            assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: ""), context: context), kind, r, id)
++        }
++        let context = SessionContext(sessionID: 947); context.captureRoute = route()
++        let failed = Provider(ASRProviderID.cloud, credentials)
++        let stage = makeASR(healthRecorder: { _, _, _ in }, providerForID: { _ in failed })
++        if case .continue(.transcript(let preview)) = await stage.execute(payload: .audio(samples: samples, previewText: "optional preview"), context: context) {
++            r.eq(preview, "optional preview", "M4 optional preview promotion remains unchanged")
++        } else { r.check(false, "M4 optional preview promotion remains unchanged") }
++    }
++
++    @MainActor private static func boundaries(_ r: SelfTest.Reporter) async {
++        let health = OSAllocatedUnfairLock<Int>(initialState: 0), provider = Provider(ASRProviderID.cloud)
++        let stage = makeASR(healthRecorder: { _, _, _ in health.withLock { $0 += 1 } }, providerForID: { _ in provider })
++        assertFailure(await stage.execute(payload: .audio(samples: [0.5, .nan], previewText: "preview"), context: SessionContext(sessionID: 948)),
++                      .recording(.invalidAudio), r, "invalid PCM")
++        r.eq(provider.count + health.withLock { $0 }, 0, "M4 invalid PCM no provider/health/preview")
++        for invalidStage: any PipelineStage in [stage, InjectionStage(), PostProcessStage(), PolishStage()] {
++            if case .suspend(let recovery) = await invalidStage.execute(payload: .empty, context: SessionContext(sessionID: 949)) {
++                r.eq(recovery.failureKind, .internalFailure, "M4 invalid payload is internal")
++            } else { r.check(false, "M4 invalid payload suspends") }
++        }
++        let injection = InjectionStage(settle: { throw NSError(domain: "synthetic", code: 2) },
++            accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(secureInputActive: false, focus: .blindOrUnknown)) }, copy: { _ in })
++        if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
++            r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
++            r.eq(recovery.textKind, .result, "M4 delivery copy owns complete result")
++        } else { r.check(false, "M4 pre-event delivery failure suspends") }
++    }
++}
+diff --git a/Sources/flowtype/Testing/SelfTest.swift b/Sources/flowtype/Testing/SelfTest.swift
+index 4524076..cbdfde2 100644
+--- a/Sources/flowtype/Testing/SelfTest.swift
++++ b/Sources/flowtype/Testing/SelfTest.swift
+@@ -276,20 +276,21 @@ enum SelfTest {
+         r.eq(StatsEngine.denseHeatmap([], range: .d30, now: now, cal: cal).count, 30, "heatmap: 30d empty → 30 zero cells")
+         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
+     }
+ 
+     @MainActor
+     static func runAndExit() async -> Never {
+         let r = Reporter()
+         print("=== FlowType --self-test ===")
+         if CommandLine.arguments.contains("--m4-recovery-only") {
+             M4RecoveryPolicySelfTests.run(r)
++            await M4StageFailureSelfTests.run(r)
+             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+             exit(r.failed == 0 ? 0 : 1)
+         }
+         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
+             await M3SpeechPreflightSelfTests.benchmark(r)
+             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+             exit(r.failed == 0 ? 0 : 1)
+         }
+         if CommandLine.arguments.contains("--m3-silence-only") {
+             M3SpeechPreflightSelfTests.pure(r)
+@@ -451,20 +452,21 @@ enum SelfTest {
+         await M3DeliverySelfTests.presentation(r)
+         await M3FinalFixSelfTests.run(r)
+         await testDeliveryModeStage(r)
+         M3SpeechPreflightSelfTests.pure(r)
+         await M3SpeechPreflightSelfTests.background(r)
+         await M3SpeechPreflightSelfTests.integration(r)
+         await testDeliveryContract(r)
+         await testStageOwnership(r) // actual async wrapper, before/during cancellation
+         await CloudProviderSelfTests.runConnectionOwnership(r)
+         M4RecoveryPolicySelfTests.run(r)
++        await M4StageFailureSelfTests.run(r)
+         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
+         exit(r.failed == 0 ? 0 : 1)
+     }
+ 
+     private final class DeliveryLog: @unchecked Sendable {
+         private let lock = NSLock()
+         private var entries: [String] = []
+         func append(_ text: String) { lock.lock(); entries.append(text); lock.unlock() }
+         var value: [String] { lock.lock(); defer { lock.unlock() }; return entries }
+     }
+@@ -477,28 +479,35 @@ enum SelfTest {
+         }
+     }
+ 
+     private actor RetryLedger {
+         var polishRequests: [Bool] = []
+         var retryBudget: Double?
+         func recordBudget(_ value: Double?) { retryBudget = value }
+         func visit(_ polish: Bool) -> Bool { polishRequests.append(polish); return polishRequests.count == 1 }
+     }
+ 
++    private struct RecoveryAudioStarter: PipelineStage {
++        let name = "Recording"
++        func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
++            .continue(.audio(samples: [0.5, -0.25], previewText: ""))
++        }
++    }
++
+     private struct RetryASRStage: PipelineStage {
+         let name = "ASR"
+         let ledger: RetryLedger
+         func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+             let polish = await MainActor.run { context.usePolish }
+             if await ledger.visit(polish) {
+                 await MainActor.run { context.completionBudget = CompletionBudget(seconds: 0) }
+-                return .suspend(ErrorRecoveryContext(failedStage: name, error: LLMError.invalidResponse, rawText: nil, retryable: true))
++                return .suspend(ErrorRecoveryContext(failedStage: name, error: CloudASRError.timeout, rawText: nil, retryable: true, failureKind: .transientASR))
+             }
+             await ledger.recordBudget(await MainActor.run { context.completionBudget?.remainingSeconds })
+             return .complete
+         }
+     }
+ 
+     private struct ProcessedStarter: PipelineStage {
+         let name = "Processed starter"
+         func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+             await MainActor.run { context.usePolish = true }
+@@ -511,25 +520,25 @@ enum SelfTest {
+         for _ in 0..<100 {
+             if predicate(controller.sessionState) { return }
+             try? await Task.sleep(for: .milliseconds(10))
+         }
+     }
+ 
+     @MainActor
+     static func testSessionRecoveryDelivery(_ r: Reporter) async {
+         let ledger = RetryLedger()
+         let quietEffects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+-        let recovery = SessionController(pipeline: [RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
++        let recovery = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
+         recovery.startRecording()
+         await waitForSession(recovery) { if case .error = $0 { return true }; return false }
+         let immediateLedger = RetryLedger()
+-        let immediate = SessionController(pipeline: [RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
++        let immediate = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
+         immediate.startRecording()
+         await waitForSession(immediate) { if case .error = $0 { return true }; return false }
+         immediate.retryFailedStage()
+         await waitForSession(immediate) { $0 == .idle }
+         r.eq(await immediateLedger.polishRequests, [false, false], "recovery: immediate ASR retry preserves configured polish flag")
+         r.check((await immediateLedger.retryBudget ?? 0) > 19, "recovery: explicit retry renews expired completion budget")
+         immediate.cancel()
+         try? await Task.sleep(for: .seconds(5.2))
+         if case .error = recovery.sessionState { r.check(true, "recovery: actionable error persists beyond former five-second dismissal") }
+         else { r.check(false, "recovery: actionable error persists beyond former five-second dismissal") }
+@@ -1365,42 +1374,42 @@ enum SelfTest {
+         var initial = Configuration()
+         initial.asrRoutingPolicy = .localOnly
+         initial.maxRecordingDuration = 137
+         initial.enableAudioFeedback = false
+         defaults.set(try! JSONEncoder().encode(initial), forKey: "flowtype.config")
+         defaults.set(5, forKey: "flowtype.migrationVersion")
+         let store = ConfigurationStore(defaults: defaults)
+         defer { store.flushPendingSave() }
+         let readiness = ReadinessRecoveryProbe()
+         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+-        let session = SessionController(pipeline: [RetryASRStage(ledger: RetryLedger())], observers: [],
++        let session = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+                                         effects: effects, configurationStore: store, refreshReadiness: {
+             readiness.policies.append(store.current.asrRoutingPolicy)
+             return readiness.level
+         }, readinessLevel: { .ready })
+         defer { session.cancel() }
+         session.startRecording()
+         await waitForSession(session) { if case .error = $0 { return true }; return false }
+         let originalState = session.sessionState
+         let originalActions = session.errorActions
+         r.check(!originalActions.isEmpty, "readiness recovery: fixture enters actionable error")
+         session.recheckReadiness()
+         r.eq(session.sessionState, originalState, "readiness recovery: blocked recheck keeps the error card")
+         r.eq(session.errorActions, originalActions, "readiness recovery: blocked recheck preserves actions")
+         readiness.level = .degraded(.basicOnly)
+         session.recheckReadiness()
+         r.eq(session.sessionState, .idle, "readiness recovery: raw degraded readiness dismisses error immediately")
+         r.eq(session.errorActions, [], "readiness recovery: successful recheck clears recovery actions")
+         r.eq(readiness.policies, [.localOnly, .localOnly], "readiness recovery: each recheck refreshes without changing policy")
+ 
+         // Enter another real stage failure before repairing its routing policy.
+-        let reroute = SessionController(pipeline: [RetryASRStage(ledger: RetryLedger())], observers: [],
++        let reroute = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+                                         effects: effects, configurationStore: store, refreshReadiness: {
+             readiness.policies.append(store.current.asrRoutingPolicy)
+             return .blocked(.noEngine)
+         }, readinessLevel: { .ready })
+         defer { reroute.cancel() }
+         reroute.startRecording()
+         await waitForSession(reroute) { if case .error = $0 { return true }; return false }
+         reroute.useAutomaticRouting()
+         r.eq(reroute.sessionState, .idle, "readiness recovery: automatic routing dismisses error even if still blocked")
+         r.eq(reroute.errorActions, [], "readiness recovery: automatic routing clears old retry actions")

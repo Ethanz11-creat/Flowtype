@@ -1,0 +1,13 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'FlowType' complete! (4.48s)
+  ✗ FAIL: M3 retry: explicit Retry reruns real preflight — got 1, want 2
+  ✗ FAIL: M3 retry: fresh saved realtime handle — got 0, want 1
+  ✗ FAIL: M3 retry: new handle finalizes once — got 0, want 1
+  ✗ FAIL: M3 retry: saved payload preserved sample-for-sample — got [], want [0.5, -0.5]
+  ✗ FAIL: M3 retry: only successful retry writes history — got 0, want 1
+  ✗ FAIL: M3 retry: explicit retry retains fresh-budget rule
+  ✗ FAIL: M3 retry: explicit retry receives new twenty-second budget
+=== FlowType --self-test ===
+=== M3 silence self-test: 982 passed, 7 failed ===

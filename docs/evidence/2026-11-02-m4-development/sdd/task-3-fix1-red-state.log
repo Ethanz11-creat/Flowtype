@@ -1,0 +1,80 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+[1/4] Write sources
+[3/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/6] Compiling FlowType M4RecoveryControllerSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:459:15: warning: 'c' mutated after capture by sendable closure
+446 |         for explicitCancel in [false, true] {
+447 |             let f = Fixture(configuration)
+448 |             var c: SessionController!
+    |                 `- note: variable defined here
+449 |             let capture = Stage(name: "Text", run: { _, context in
+450 |                 f.contexts.append(context); context.deliveryTarget = target
+    :
+452 |             })
+453 |             let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
+454 |                 mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
+    |                                                                                                  `- note: variable captured by sendable closure
+455 |                     try? KeyboardInjector.postIfActive(context: context) {}
+456 |                     if explicitCancel { c.cancel() }
+    |                                         `- note: capturing use
+457 |                     return .uncertain
+458 |                 }, copy: { _ in r.check(false, "M4 publication: no implicit copy") })
+459 |             c = f.controller([capture, injection])
+    |               `- warning: 'c' mutated after capture by sendable closure
+460 |             var fired = false
+461 |             var summaries: [LastDeliverySummary] = []
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:553:19: warning: 'armed' mutated after capture by sendable closure
+532 |             c.startRecording()
+533 |             let original = c.recoveryCard!
+534 |             var armed = false, fired = false
+    |                 `- note: variable defined here
+535 |             var newerCard: RecoveryCard?
+536 |             let replace: @MainActor () -> Void = {
+    |                                                  `- note: variable captured by sendable closure
+537 |                 guard armed, !fired else { return }
+    |                       `- note: capturing use
+538 |                 fired = true
+539 |                 f.level = .blocked(.microphoneDenied)
+    :
+551 |                 }
+552 |             }
+553 |             armed = true
+    |                   `- warning: 'armed' mutated after capture by sendable closure
+554 |             f.level = .blocked(.noEngine)
+555 |             c.performRecoveryAction(.recheckReadiness, cardID: original.id)
+[5/7] Compiling FlowType SelfTest.swift
+[5/8] Write Objects.LinkFileList
+[6/8] Linking FlowType
+[7/8] Applying FlowType
+Build of product 'FlowType' complete! (15.67s)
+  ✗ FAIL: M4 summary subscriber finish: once-only synchronous summary publication — got 2, want 1
+  ✗ FAIL: M4 summary subscriber finish: newer blocked card retained — got Optional(FlowType.RecoveryCard(id: 3483F652-C3F8-4CF8-BFA5-5D4048402BA5, sessionID: 1, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.deliveryUncertain, message: "已发送，但无法确认是否插入；可复制结果", actions: [FlowType.RecoveryAction.copyResult, FlowType.RecoveryAction.viewHistory, FlowType.RecoveryAction.dismiss]))), want Optional(FlowType.RecoveryCard(id: 3E8DCC8D-0D86-4AB9-8CF1-1D2EAF6C9D0E, sessionID: 2, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss])))
+  ✗ FAIL: M4 summary subscriber finish: newer message retained — got error("已发送，但无法确认是否插入；可复制结果"), want error("麦克风权限未开启")
+  ✗ FAIL: M4 summary subscriber finish: displayed card owns allowed effects — got [], want ["mic"]
+  ✗ FAIL: M4 summary subscriber finish: newer context retains refresh authority — got Optional(FlowType.FailureKind.deliveryUncertain), want Optional(FlowType.FailureKind.readiness(FlowType.ReadinessIssue.noEngine))
+  ✗ FAIL: M4 summary subscriber finish: refreshed card retains newer identity — got Optional(1), want Optional(2)
+  ✗ FAIL: M4 summary subscriber cancel: once-only synchronous summary publication — got 2, want 1
+  ✗ FAIL: M4 summary subscriber cancel: newer blocked card retained — got nil, want Optional(FlowType.RecoveryCard(id: 79497333-A36B-4833-9AA4-D2A0DA35F38E, sessionID: 2, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss])))
+  ✗ FAIL: M4 summary subscriber cancel: newer message retained — got idle, want error("麦克风权限未开启")
+  ✗ FAIL: M4 summary subscriber cancel: newer window retained — got Optional("hide"), want Optional("show")
+  ✗ FAIL: M4 summary subscriber cancel: displayed card owns allowed effects — got [], want ["mic"]
+  ✗ FAIL: M4 summary subscriber cancel: newer context retains refresh authority — got nil, want Optional(FlowType.FailureKind.readiness(FlowType.ReadinessIssue.noEngine))
+  ✗ FAIL: M4 summary subscriber cancel: refreshed card retains newer identity — got nil, want Optional(2)
+  ✗ FAIL: M4 card subscriber: public card matches newest private authority — got Optional(FlowType.RecoveryCard(id: 7866BE6C-68A4-46BB-A6B5-8D122D780404, sessionID: 1, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.readiness(FlowType.ReadinessIssue.noEngine), message: "没有可用的语音识别引擎", actions: [FlowType.RecoveryAction.openASRSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss]))), want Optional(FlowType.RecoveryCard(id: 2888D5E5-4D4D-4B4E-B70B-4D098F4C6C9A, sessionID: 2, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss])))
+  ✗ FAIL: M4 card subscriber: newest message survives outer setter — got error("没有可用的语音识别引擎"), want error("麦克风权限未开启")
+  ✗ FAIL: M4 card subscriber: displayed card can execute its allowed action — got [], want ["mic"]
+  ✗ FAIL: M4 card subscriber: current context owns recheck and clears coherently — got error("没有可用的语音识别引擎"), want idle
+  ✗ FAIL: M4 state subscriber: canonical error retained — got error("没有可用的语音识别引擎"), want error("麦克风权限未开启")
+  ✗ FAIL: M4 objectWillChange subscriber: canonical error retained — got error("没有可用的语音识别引擎"), want error("麦克风权限未开启")
+=== FlowType --self-test ===
+=== M4 recovery self-test: 19707 passed, 19 failed ===

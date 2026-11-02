@@ -1,0 +1,639 @@
+# Review package: bb6d954..b92a8dd
+
+## Commits
+b92a8dd feat: classify failures and define safe recovery policy
+
+## Files changed
+ Sources/flowtype/Core/Pipeline/PipelineStage.swift |  14 +-
+ .../flowtype/Core/Recovery/FailureClassifier.swift | 111 ++++++++++
+ Sources/flowtype/Core/Recovery/FailureKind.swift   |  27 +++
+ .../flowtype/Core/Recovery/RecoveryPolicy.swift    | 131 ++++++++++++
+ .../Testing/M4RecoveryPolicySelfTests.swift        | 235 +++++++++++++++++++++
+ Sources/flowtype/Testing/SelfTest.swift            |   6 +
+ 6 files changed, 523 insertions(+), 1 deletion(-)
+
+## Diff
+diff --git a/Sources/flowtype/Core/Pipeline/PipelineStage.swift b/Sources/flowtype/Core/Pipeline/PipelineStage.swift
+index e2f2054..5b9e5bd 100644
+--- a/Sources/flowtype/Core/Pipeline/PipelineStage.swift
++++ b/Sources/flowtype/Core/Pipeline/PipelineStage.swift
+@@ -27,26 +27,38 @@ enum StageResult {
+     /// Degrade gently: no buttons, auto-dismissing notice. Used when a stage can't
+     /// proceed but the situation isn't an error (e.g. no provider available / no speech).
+     case notice(String)
+ 
+     /// Pipeline completed successfully.
+     case complete
+ }
+ 
+ // MARK: - ErrorRecoveryContext
+ 
+-/// Context for retryable error cards displayed to the user.
++/// Session-owned error and copyable text; presentation uses only safe categories.
+ struct ErrorRecoveryContext {
+     let failedStage: String
+     let error: Error
+     let rawText: String?
+     let retryable: Bool
++    let failureKind: FailureKind
++    let textKind: RecoveryTextKind
++
++    init(failedStage: String, error: Error, rawText: String?, retryable: Bool,
++         failureKind: FailureKind? = nil, textKind: RecoveryTextKind? = nil) {
++        self.failedStage = failedStage
++        self.error = error
++        self.rawText = rawText
++        self.retryable = retryable
++        self.failureKind = failureKind ?? FailureClassifier.classify(error)
++        self.textKind = textKind ?? (rawText == nil ? .none : .raw)
++    }
+ }
+ 
+ // MARK: - PipelineStage
+ 
+ /// Protocol defining a single stage in the pipeline.
+ ///
+ /// Stages are executed sequentially. Errors are communicated via `.suspend()`
+ /// rather than thrown, keeping the protocol simple and allowing the orchestrator
+ /// to present retryable error cards.
+ ///
+diff --git a/Sources/flowtype/Core/Recovery/FailureClassifier.swift b/Sources/flowtype/Core/Recovery/FailureClassifier.swift
+new file mode 100644
+index 0000000..c34a16c
+--- /dev/null
++++ b/Sources/flowtype/Core/Recovery/FailureClassifier.swift
+@@ -0,0 +1,111 @@
++import Foundation
++
++enum FailureClassifier {
++    static func classify(_ error: Error) -> FailureKind {
++        classify(error, wrapperDepth: 0)
++    }
++
++    private static func classify(_ error: Error, wrapperDepth: Int) -> FailureKind {
++        // Four known wrappers may be opened. Do not inspect arbitrary userInfo or
++        // follow unbounded chains; unknown and over-deep errors remain internal.
++        guard wrapperDepth <= 4 else { return .internalFailure }
++        if error is CancellationError { return .cancelled }
++
++        if let cloud = error as? CloudASRError {
++            switch cloud {
++            case .cancelled: return .cancelled
++            case .networkError(let underlying): return classify(underlying, wrapperDepth: wrapperDepth + 1)
++            case .noAPIKey: return .configuration(.credentials)
++            case .noModel, .noActiveProvider, .invalidURL, .unsupportedRealtimeTransport:
++                return .configuration(.endpointOrModel)
++            case .audioEncodingFailed: return .recording(.invalidAudio)
++            case .invalidResponse, .timeout: return .transientASR
++            case .apiError(let status, _):
++                switch status {
++                case 401, 403: return .configuration(.credentials)
++                case 400, 404: return .configuration(.endpointOrModel)
++                case 413: return .recording(.tooLarge)
++                case 408, 429, 500...599: return .transientASR
++                default: return .configuration(.requestRejected)
++                }
++            }
++        }
++        if let speech = error as? SpeechProviderError {
++            switch speech {
++            case .networkError(let underlying): return classify(underlying, wrapperDepth: wrapperDepth + 1)
++            case .notAvailable: return .readiness(.noEngine)
++            case .permissionDenied: return .permission(.speechRecognition)
++            case .transcriptionFailed: return .transientASR
++            }
++        }
++        let network = error as NSError
++        if network.domain == NSURLErrorDomain {
++            switch network.code {
++            case NSURLErrorCancelled: return .cancelled
++            case NSURLErrorBadURL, NSURLErrorUnsupportedURL, NSURLErrorSecureConnectionFailed,
++                 NSURLErrorServerCertificateHasBadDate, NSURLErrorServerCertificateUntrusted,
++                 NSURLErrorServerCertificateHasUnknownRoot, NSURLErrorServerCertificateNotYetValid,
++                 NSURLErrorClientCertificateRejected, NSURLErrorClientCertificateRequired,
++                 NSURLErrorAppTransportSecurityRequiresSecureConnection:
++                return .configuration(.endpointOrModel)
++            default: return .transientASR
++            }
++        }
++        if let configuration = error as? RealtimeASRConfigurationError {
++            return .configuration(configuration == .missingAPIKey ? .credentials : .endpointOrModel)
++        }
++        if let ingress = error as? RealtimeAudioIngressError {
++            return ingress == .cancelled ? .cancelled : .transientASR
++        }
++        if error is DashScopeRealtimeError || error is WebSocketTransportError {
++            return .transientASR
++        }
++        if let whisper = error as? OfflineWhisperError {
++            switch whisper {
++            case .unsupportedLanguage: return .configuration(.unsupportedLanguage)
++            case .invalidSampleRate: return .recording(.invalidAudio)
++            case .invalidLocalDirectory, .incompatibleGraph, .incompatibleTokenizer,
++                 .tokenizerUnavailable, .incompatibleRuntime:
++                return .configuration(.endpointOrModel)
++            }
++        }
++        // Model provisioning is repaired in settings, never by replaying audio.
++        if error is ModelProvisionError { return .configuration(.endpointOrModel) }
++        if error is PermissionError { return .permission(.microphone) }
++        if let recorder = error as? AudioRecorderError {
++            switch recorder {
++            case .permissionDenied: return .permission(.microphone)
++            case .engineStartFailed, .formatCreationFailed: return .recording(.interrupted)
++            }
++        }
++        if let stage = error as? ASRStageError {
++            switch stage {
++            case .invalidPayload: return .internalFailure
++            case .invalidAudio: return .recording(.invalidAudio)
++            case .transcriptionFailed: return .transientASR
++            }
++        }
++        if let stage = error as? PostProcessStageError {
++            switch stage {
++            case .invalidPayload: return .internalFailure
++            case .emptyResult: return .processing
++            }
++        }
++        if let stage = error as? PolishStageError {
++            switch stage {
++            case .invalidPayload: return .internalFailure
++            case .damagedLiterals: return .processing
++            }
++        }
++        if let stage = error as? InjectionStageError {
++            switch stage {
++            case .invalidPayload: return .internalFailure
++            case .clipboardSnapshotIncomplete, .pasteNotDispatched: return .deliveryBlocked
++            }
++        }
++        // Errors alone cannot prove whether an event was posted. The delivery
++        // owner must explicitly use deliveryUncertain after its event latch.
++        if error is InjectionError { return .deliveryBlocked }
++        return .internalFailure
++    }
++}
+diff --git a/Sources/flowtype/Core/Recovery/FailureKind.swift b/Sources/flowtype/Core/Recovery/FailureKind.swift
+new file mode 100644
+index 0000000..07d3e2e
+--- /dev/null
++++ b/Sources/flowtype/Core/Recovery/FailureKind.swift
+@@ -0,0 +1,27 @@
++import Foundation
++
++enum PermissionKind: Equatable, Sendable {
++    case accessibility, microphone, speechRecognition
++}
++
++enum ASRConfigurationIssue: Equatable, Sendable {
++    case credentials, endpointOrModel, unsupportedLanguage, requestRejected
++}
++
++enum RecordingFailure: Equatable, Sendable {
++    case interrupted, invalidAudio, tooLarge
++}
++
++/// Safe domain categories; associated values never contain provider text or secrets.
++enum FailureKind: Equatable, Sendable {
++    case permission(PermissionKind)
++    case readiness(ReadinessIssue)
++    case configuration(ASRConfigurationIssue)
++    case transientASR
++    case recording(RecordingFailure)
++    case processing
++    case deliveryBlocked
++    case deliveryUncertain
++    case internalFailure
++    case cancelled
++}
+diff --git a/Sources/flowtype/Core/Recovery/RecoveryPolicy.swift b/Sources/flowtype/Core/Recovery/RecoveryPolicy.swift
+new file mode 100644
+index 0000000..8a53bca
+--- /dev/null
++++ b/Sources/flowtype/Core/Recovery/RecoveryPolicy.swift
+@@ -0,0 +1,131 @@
++import Foundation
++
++enum RecoveryTextKind: Equatable, Sendable {
++    case none, raw, result
++}
++
++enum RecoveryAction: Equatable, Hashable, Sendable {
++    case retry(stage: String)
++    case copyRaw, copyResult, dismiss
++    case openAccessibilitySettings, openMicrophoneSettings, openSpeechRecognitionSettings
++    case openASRSettings, recheckReadiness, useAutomaticRouting
++    case rerecord, viewHistory
++
++    var displayName: String {
++        switch self {
++        case .retry(let stage):
++            switch stage {
++            case "ASR": return "重试识别"
++            case "Polish": return "重试润色"
++            case "Injection": return "重试输入"
++            default: return "重试处理"
++            }
++        case .copyRaw: return "复制原文"
++        case .copyResult: return "复制结果"
++        case .dismiss: return "忽略"
++        case .openAccessibilitySettings: return "打开辅助功能设置"
++        case .openMicrophoneSettings: return "打开麦克风设置"
++        case .openSpeechRecognitionSettings: return "打开语音识别设置"
++        case .openASRSettings: return "打开 ASR 设置"
++        case .recheckReadiness: return "重新检测"
++        case .useAutomaticRouting: return "改为自动路由"
++        case .rerecord: return "重新录音"
++        case .viewHistory: return "查看历史"
++        }
++    }
++}
++
++/// Availability only: audio and text stay with the owning session.
++struct RecoveryResources: Equatable, Sendable {
++    let stage: String
++    let hasAudio: Bool
++    let textKind: RecoveryTextKind
++    let deliveryEventStarted: Bool
++    let routingPolicy: ASRRoutingPolicy
++    let hasHistory: Bool
++}
++
++struct FailurePresentation: Equatable, Sendable {
++    let kind: FailureKind
++    let message: String
++    let actions: [RecoveryAction]
++}
++
++struct RecoveryCard: Equatable, Sendable {
++    let id: UUID
++    let sessionID: UInt64
++    let presentation: FailurePresentation
++}
++
++enum RecoveryPolicy {
++    static func presentation(kind: FailureKind, resources: RecoveryResources) -> FailurePresentation {
++        let message: String
++        var actions: [RecoveryAction]
++        switch kind {
++        case .permission(let permission):
++            switch permission {
++            case .accessibility:
++                message = "辅助功能权限未开启"
++                actions = [.openAccessibilitySettings]
++            case .microphone:
++                message = "麦克风权限未开启"
++                actions = [.openMicrophoneSettings]
++            case .speechRecognition:
++                message = "语音识别权限未开启"
++                actions = [.openSpeechRecognitionSettings]
++            }
++            actions += [.recheckReadiness, .dismiss]
++        case .readiness(let issue):
++            message = issue.reason
++            if issue == .noEngine {
++                actions = [.openASRSettings, resources.routingPolicy == .auto ? .recheckReadiness : .useAutomaticRouting, .dismiss]
++            } else {
++                actions = [.recheckReadiness, .dismiss]
++            }
++        case .configuration(let issue):
++            switch issue {
++            case .credentials: message = "ASR 密钥无效或未配置，请检查设置后重新录音"
++            case .endpointOrModel: message = "ASR 地址或模型配置不可用，请检查设置后重新录音"
++            case .unsupportedLanguage: message = "当前模型不支持所选语言，请调整设置后重新录音"
++            case .requestRejected: message = "识别请求被拒绝，请检查 ASR 设置后重新录音"
++            }
++            actions = [.openASRSettings, .rerecord, .dismiss]
++        case .transientASR:
++            message = "语音识别未完成，可重试原录音"
++            actions = []
++            if resources.stage == "ASR", resources.hasAudio, !resources.deliveryEventStarted {
++                actions.append(.retry(stage: "ASR"))
++            }
++            actions.append(.rerecord)
++            if resources.textKind == .raw { actions.append(.copyRaw) }
++            actions.append(.dismiss)
++        case .recording(let reason):
++            switch reason {
++            case .interrupted: message = "录音中断，请检查麦克风后重新录音"
++            case .invalidAudio: message = "录音数据异常，请重新录音"
++            case .tooLarge: message = "音频过长，请缩短后重新录音"
++            }
++            actions = [.rerecord, .dismiss]
++        case .processing, .internalFailure:
++            message = kind == .processing ? "文本处理未完成，请重新录音" : "处理未完成，请重新录音"
++            switch resources.textKind {
++            case .none: actions = []
++            case .raw: actions = [.copyRaw]
++            case .result: actions = [.copyResult]
++            }
++            actions += [.rerecord, .dismiss]
++        case .deliveryBlocked:
++            message = "未发送文本，可复制结果"
++            actions = resources.textKind == .result ? [.copyResult, .dismiss] : [.dismiss]
++        case .deliveryUncertain:
++            message = "已发送，但无法确认是否插入；可复制结果"
++            actions = resources.textKind == .result ? [.copyResult] : []
++            if resources.hasHistory { actions.append(.viewHistory) }
++            actions.append(.dismiss)
++        case .cancelled:
++            message = ""
++            actions = []
++        }
++        return FailurePresentation(kind: kind, message: message, actions: actions)
++    }
++}
+diff --git a/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift b/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift
+new file mode 100644
+index 0000000..f77aece
+--- /dev/null
++++ b/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift
+@@ -0,0 +1,235 @@
++import Foundation
++
++/// All inputs are synthetic; this suite never opens settings or touches providers.
++enum M4RecoveryPolicySelfTests {
++    @MainActor
++    static func run(_ r: SelfTest.Reporter) {
++        classification(r)
++        policy(r)
++        context(r)
++    }
++
++    private static func classification(_ r: SelfTest.Reporter) {
++        let hostile = "secret-provider-body https://invalid.example/?key=secret"
++        let cases: [(Error, FailureKind)] = [
++            (CancellationError(), .cancelled), (CloudASRError.cancelled, .cancelled),
++            (URLError(.cancelled), .cancelled), (RealtimeAudioIngressError.cancelled, .cancelled),
++            (CloudASRError.noAPIKey, .configuration(.credentials)),
++            (CloudASRError.noModel, .configuration(.endpointOrModel)),
++            (CloudASRError.noActiveProvider, .configuration(.endpointOrModel)),
++            (CloudASRError.invalidURL(hostile), .configuration(.endpointOrModel)),
++            (CloudASRError.unsupportedRealtimeTransport, .configuration(.endpointOrModel)),
++            (CloudASRError.audioEncodingFailed, .recording(.invalidAudio)),
++            (CloudASRError.invalidResponse, .transientASR), (CloudASRError.timeout, .transientASR),
++            (RealtimeASRConfigurationError.missingAPIKey, .configuration(.credentials)),
++            (RealtimeASRConfigurationError.missingModel, .configuration(.endpointOrModel)),
++            (RealtimeASRConfigurationError.invalidEndpoint, .configuration(.endpointOrModel)),
++            (RealtimeASRConfigurationError.unsupportedProtocol, .configuration(.endpointOrModel)),
++            (SpeechProviderError.notAvailable, .readiness(.noEngine)),
++            (SpeechProviderError.permissionDenied, .permission(.speechRecognition)),
++            (SpeechProviderError.transcriptionFailed(hostile), .transientASR),
++            (OfflineWhisperError.unsupportedLanguage, .configuration(.unsupportedLanguage)),
++            (OfflineWhisperError.invalidSampleRate, .recording(.invalidAudio)),
++            (OfflineWhisperError.invalidLocalDirectory, .configuration(.endpointOrModel)),
++            (OfflineWhisperError.incompatibleGraph, .configuration(.endpointOrModel)),
++            (OfflineWhisperError.incompatibleTokenizer, .configuration(.endpointOrModel)),
++            (OfflineWhisperError.tokenizerUnavailable, .configuration(.endpointOrModel)),
++            (OfflineWhisperError.incompatibleRuntime, .configuration(.endpointOrModel)),
++            (AudioRecorderError.permissionDenied, .permission(.microphone)),
++            (PermissionError.microphoneDenied, .permission(.microphone)),
++            (AudioRecorderError.engineStartFailed, .recording(.interrupted)),
++            (AudioRecorderError.formatCreationFailed, .recording(.interrupted)),
++            (ASRStageError.invalidPayload, .internalFailure),
++            (ASRStageError.invalidAudio, .recording(.invalidAudio)),
++            (ASRStageError.transcriptionFailed(message: hostile), .transientASR),
++            (PostProcessStageError.invalidPayload, .internalFailure),
++            (PostProcessStageError.emptyResult, .processing),
++            (PolishStageError.invalidPayload, .internalFailure),
++            (PolishStageError.damagedLiterals, .processing),
++            (InjectionStageError.invalidPayload, .internalFailure),
++            (InjectionStageError.clipboardSnapshotIncomplete, .deliveryBlocked),
++            (InjectionStageError.pasteNotDispatched, .deliveryBlocked),
++            (InjectionError.eventCreationFailed, .deliveryBlocked),
++            (InjectionError.eventSourceCreationFailed, .deliveryBlocked),
++            (InjectionError.textTooLong, .deliveryBlocked),
++            (InjectionError.injectionAlreadyInProgress, .deliveryBlocked),
++            (InjectionError.noEventsDispatched, .deliveryBlocked),
++            (InjectionError.targetNoLongerSafe, .deliveryBlocked),
++            (AsyncDeadlineError.timedOut, .internalFailure),
++            (DashScopeRealtimeError.startTimeout, .transientASR),
++            (DashScopeRealtimeError.finalTimeout, .transientASR),
++            (DashScopeRealtimeError.invalidEvent, .transientASR),
++            (DashScopeRealtimeError.transportClosed, .transientASR),
++            (DashScopeRealtimeError.notStarted, .transientASR),
++            (DashScopeRealtimeError.taskFailed(code: "401", message: hostile), .transientASR),
++            (RealtimeAudioIngressError.closed, .transientASR),
++            (RealtimeAudioIngressError.overflow, .transientASR),
++            (WebSocketTransportError.closed, .transientASR),
++            (WebSocketTransportError.invalidFrame, .transientASR),
++            (ModelProvisionError.metadataInvalid(), .configuration(.endpointOrModel)),
++            (ModelProvisionError.network(), .configuration(.endpointOrModel)),
++            (ModelProvisionError.stalled(), .configuration(.endpointOrModel)),
++            (ModelProvisionError.incompleteLocal(), .configuration(.endpointOrModel)),
++            (ModelProvisionError.loadFailed(), .configuration(.endpointOrModel)),
++            (ModelProvisionError.insufficientDisk(), .configuration(.endpointOrModel)),
++            (NSError(domain: "synthetic", code: 401, userInfo: [NSLocalizedDescriptionKey: hostile]), .internalFailure)
++        ]
++        for (index, pair) in cases.enumerated() {
++            let kind = FailureClassifier.classify(pair.0)
++            r.eq(kind, pair.1, "M4 classifier typed row \(index)")
++            let shown = RecoveryPolicy.presentation(kind: kind, resources: resources())
++            r.check(!shown.message.contains("secret") && !shown.message.contains("https://"), "M4 classifier safe message \(index)")
++            r.check(shown.actions.allSatisfy { !$0.displayName.contains("secret") }, "M4 classifier safe actions \(index)")
++        }
++        let statuses: [(Int, FailureKind)] = [
++            (301, .configuration(.requestRejected)), (400, .configuration(.endpointOrModel)),
++            (401, .configuration(.credentials)), (403, .configuration(.credentials)),
++            (404, .configuration(.endpointOrModel)), (408, .transientASR),
++            (413, .recording(.tooLarge)), (429, .transientASR),
++            (500, .transientASR), (599, .transientASR), (200, .configuration(.requestRejected)),
++            (600, .configuration(.requestRejected))
++        ]
++        for (status, expected) in statuses {
++            let kind = FailureClassifier.classify(CloudASRError.apiError(statusCode: status, message: hostile))
++            r.eq(kind, expected, "M4 HTTP \(status)")
++            r.check(!RecoveryPolicy.presentation(kind: kind, resources: resources()).message.contains("secret"), "M4 HTTP body never shown")
++        }
++        let configurationCodes: [URLError.Code] = [.badURL, .unsupportedURL, .secureConnectionFailed,
++            .serverCertificateHasBadDate, .serverCertificateUntrusted, .serverCertificateHasUnknownRoot,
++            .serverCertificateNotYetValid, .clientCertificateRejected, .clientCertificateRequired,
++            .appTransportSecurityRequiresSecureConnection]
++        for code in configurationCodes {
++            r.eq(FailureClassifier.classify(URLError(code)), .configuration(.endpointOrModel), "M4 URL configuration \(code.rawValue)")
++        }
++        for code: URLError.Code in [.notConnectedToInternet, .timedOut, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost] {
++            r.eq(FailureClassifier.classify(URLError(code)), .transientASR, "M4 URL transport \(code.rawValue)")
++        }
++        let wrapperLeaves: [(Error, FailureKind)] = [
++            (CancellationError(), .cancelled), (CloudASRError.cancelled, .cancelled),
++            (URLError(.cancelled), .cancelled), (RealtimeAudioIngressError.cancelled, .cancelled),
++            (URLError(.badURL), .configuration(.endpointOrModel)),
++            (CloudASRError.apiError(statusCode: 401, message: hostile), .configuration(.credentials)),
++            (NSError(domain: "synthetic", code: -999), .internalFailure)
++        ]
++        for (leafIndex, pair) in wrapperLeaves.enumerated() {
++            var nested = pair.0
++            for depth in 1...5 {
++                nested = depth.isMultiple(of: 2) ? SpeechProviderError.networkError(nested) : CloudASRError.networkError(nested)
++                r.eq(FailureClassifier.classify(nested), depth <= 4 ? pair.1 : .internalFailure, "M4 bounded wrapper leaf \(leafIndex) depth \(depth)")
++            }
++        }
++        r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
++             .configuration(.endpointOrModel), "M4 nested wrapper keeps URL configuration")
++        r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
++             .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
++        r.eq(FailureClassifier.classify(CloudASRError.networkError(NSError(domain: "synthetic", code: -999))),
++             .internalFailure, "M4 unknown wrapped error stays internal")
++    }
++
++    private static func resources(stage: String = "ASR", audio: Bool = true, text: RecoveryTextKind = .raw,
++                                  event: Bool = false, routing: ASRRoutingPolicy = .auto, history: Bool = true) -> RecoveryResources {
++        RecoveryResources(stage: stage, hasAudio: audio, textKind: text, deliveryEventStarted: event,
++                          routingPolicy: routing, hasHistory: history)
++    }
++
++    private static func policy(_ r: SelfTest.Reporter) {
++        let rows: [(FailureKind, String, [RecoveryAction])] = [
++            (.permission(.accessibility), "辅助功能权限未开启", [.openAccessibilitySettings, .recheckReadiness, .dismiss]),
++            (.permission(.microphone), "麦克风权限未开启", [.openMicrophoneSettings, .recheckReadiness, .dismiss]),
++            (.permission(.speechRecognition), "语音识别权限未开启", [.openSpeechRecognitionSettings, .recheckReadiness, .dismiss]),
++            (.readiness(.noEngine), "没有可用的语音识别引擎", [.openASRSettings, .recheckReadiness, .dismiss]),
++            (.readiness(.microphoneDenied), "麦克风权限未开启", [.recheckReadiness, .dismiss]),
++            (.readiness(.microphoneNotDetermined), "首次听写时会请求麦克风权限", [.recheckReadiness, .dismiss]),
++            (.readiness(.enginePreparing), "识别引擎正在准备", [.recheckReadiness, .dismiss]),
++            (.readiness(.basicOnly), "基础识别模式，准确率较低", [.recheckReadiness, .dismiss]),
++            (.readiness(.accessibilityMissing), "全局热键不可用；可从菜单开始，结果写入剪贴板", [.recheckReadiness, .dismiss]),
++            (.configuration(.credentials), "ASR 密钥无效或未配置，请检查设置后重新录音", [.openASRSettings, .rerecord, .dismiss]),
++            (.configuration(.endpointOrModel), "ASR 地址或模型配置不可用，请检查设置后重新录音", [.openASRSettings, .rerecord, .dismiss]),
++            (.configuration(.unsupportedLanguage), "当前模型不支持所选语言，请调整设置后重新录音", [.openASRSettings, .rerecord, .dismiss]),
++            (.configuration(.requestRejected), "识别请求被拒绝，请检查 ASR 设置后重新录音", [.openASRSettings, .rerecord, .dismiss]),
++            (.transientASR, "语音识别未完成，可重试原录音", [.retry(stage: "ASR"), .rerecord, .copyRaw, .dismiss]),
++            (.recording(.interrupted), "录音中断，请检查麦克风后重新录音", [.rerecord, .dismiss]),
++            (.recording(.invalidAudio), "录音数据异常，请重新录音", [.rerecord, .dismiss]),
++            (.recording(.tooLarge), "音频过长，请缩短后重新录音", [.rerecord, .dismiss]),
++            (.processing, "文本处理未完成，请重新录音", [.copyRaw, .rerecord, .dismiss]),
++            (.internalFailure, "处理未完成，请重新录音", [.copyRaw, .rerecord, .dismiss]),
++            (.deliveryBlocked, "未发送文本，可复制结果", [.dismiss]),
++            (.deliveryUncertain, "已发送，但无法确认是否插入；可复制结果", [.viewHistory, .dismiss]),
++            (.cancelled, "", [])
++        ]
++        for (kind, message, defaultActions) in rows {
++            let base = RecoveryPolicy.presentation(kind: kind, resources: resources())
++            r.eq(base, FailurePresentation(kind: kind, message: message, actions: defaultActions), "M4 exact presentation \(kind)")
++            for stage in ["ASR", "Injection"] {
++                for audio in [false, true] {
++                    for event in [false, true] {
++                        for text: RecoveryTextKind in [.none, .raw, .result] {
++                            for routing in ASRRoutingPolicy.allCases {
++                                for history in [false, true] {
++                                    let value = RecoveryPolicy.presentation(kind: kind, resources: resources(stage: stage, audio: audio, text: text, event: event, routing: routing, history: history))
++                                    r.eq(value.message, message, "M4 stable copy \(kind)")
++                                    r.eq(value.kind, kind, "M4 kind preserved")
++                                    r.check(value.actions.count <= 4, "M4 at most four actions")
++                                    r.eq(value.actions.contains(.retry(stage: "ASR")), kind == .transientASR && stage == "ASR" && audio && !event, "M4 retry eligibility")
++                                    r.check(!value.actions.contains(.retry(stage: "Injection")), "M4 never retry delivery")
++                                    var expected = defaultActions
++                                    switch kind {
++                                    case .readiness(.noEngine) where routing != .auto:
++                                        expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
++                                    case .transientASR:
++                                        expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
++                                        if text == .raw { expected.append(.copyRaw) }
++                                        expected.append(.dismiss)
++                                    case .processing, .internalFailure:
++                                        expected = text == .raw ? [.copyRaw] : text == .result ? [.copyResult] : []
++                                        expected += [.rerecord, .dismiss]
++                                    case .deliveryBlocked:
++                                        expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
++                                    case .deliveryUncertain:
++                                        expected = text == .result ? [.copyResult] : []
++                                        if history { expected.append(.viewHistory) }
++                                        expected.append(.dismiss)
++                                    default: break
++                                    }
++                                    r.eq(value.actions, expected, "M4 exact matrix action order \(kind)")
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++        }
++        let labels: [(RecoveryAction, String)] = [(.retry(stage: "ASR"), "重试识别"),
++            (.retry(stage: "Polish"), "重试润色"), (.retry(stage: "Injection"), "重试输入"),
++            (.retry(stage: "Other"), "重试处理"), (.copyRaw, "复制原文"), (.copyResult, "复制结果"),
++            (.dismiss, "忽略"), (.openAccessibilitySettings, "打开辅助功能设置"),
++            (.openMicrophoneSettings, "打开麦克风设置"), (.openASRSettings, "打开 ASR 设置"),
++            (.recheckReadiness, "重新检测"), (.useAutomaticRouting, "改为自动路由"),
++            (.openSpeechRecognitionSettings, "打开语音识别设置"), (.rerecord, "重新录音"), (.viewHistory, "查看历史")]
++        for (action, expected) in labels { r.eq(action.displayName, expected, "M4 action label") }
++        r.eq(Set(labels.map(\.0)).count, labels.count, "M4 actions Hashable")
++        let presentation = RecoveryPolicy.presentation(kind: .deliveryUncertain, resources: resources())
++        let id = UUID()
++        let card = RecoveryCard(id: id, sessionID: 42, presentation: presentation)
++        r.eq(card, RecoveryCard(id: id, sessionID: 42, presentation: presentation), "M4 card equality")
++        r.check(card != RecoveryCard(id: UUID(), sessionID: 42, presentation: presentation), "M4 card identity")
++        r.check(card != RecoveryCard(id: id, sessionID: 43, presentation: presentation), "M4 card session ownership")
++    }
++
++    private static func context(_ r: SelfTest.Reporter) {
++        let configuration = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: nil, retryable: true)
++        r.eq(configuration.failureKind, .configuration(.credentials), "M4 legacy retryable cannot override configuration")
++        r.eq(configuration.textKind, .none, "M4 nil text inference")
++        r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
++        r.check(configuration.error is CloudASRError && configuration.retryable, "M4 original error/retryable retained")
++        let transient = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: "synthetic", retryable: false, failureKind: .transientASR)
++        r.eq(transient.failureKind, .transientASR, "M4 explicit kind wins over legacy retryable and error")
++        r.eq(transient.textKind, .raw, "M4 nonnil text inference")
++        r.eq(transient.rawText, "synthetic", "M4 raw text retained only in context")
++        let result = ErrorRecoveryContext(failedStage: "Injection", error: InjectionStageError.invalidPayload, rawText: "synthetic", retryable: true, failureKind: .deliveryBlocked, textKind: .result)
++        r.eq(result.textKind, .result, "M4 explicit complete result kind")
++        let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
++        r.eq(unknown.failureKind, .internalFailure, "M4 unknown retryable cannot infer transient")
++        r.eq(unknown.textKind, .raw, "M4 text inference uses existence")
++    }
++}
+diff --git a/Sources/flowtype/Testing/SelfTest.swift b/Sources/flowtype/Testing/SelfTest.swift
+index 72f3eef..4524076 100644
+--- a/Sources/flowtype/Testing/SelfTest.swift
++++ b/Sources/flowtype/Testing/SelfTest.swift
+@@ -274,20 +274,25 @@ enum SelfTest {
+         r.eq(h7.last?.date, "2026-06-03", "heatmap: last cell is today")
+         r.eq(h7.filter { $0.chars > 0 }.count, 1, "heatmap: only the one data day is non-zero")
+         r.eq(StatsEngine.denseHeatmap([], range: .d30, now: now, cal: cal).count, 30, "heatmap: 30d empty → 30 zero cells")
+         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
+     }
+ 
+     @MainActor
+     static func runAndExit() async -> Never {
+         let r = Reporter()
+         print("=== FlowType --self-test ===")
++        if CommandLine.arguments.contains("--m4-recovery-only") {
++            M4RecoveryPolicySelfTests.run(r)
++            print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
++            exit(r.failed == 0 ? 0 : 1)
++        }
+         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
+             await M3SpeechPreflightSelfTests.benchmark(r)
+             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+             exit(r.failed == 0 ? 0 : 1)
+         }
+         if CommandLine.arguments.contains("--m3-silence-only") {
+             M3SpeechPreflightSelfTests.pure(r)
+             await M3SpeechPreflightSelfTests.background(r)
+             await M3SpeechPreflightSelfTests.integration(r)
+             print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+@@ -445,20 +450,21 @@ enum SelfTest {
+         await M3DeliverySelfTests.runtime(r)
+         await M3DeliverySelfTests.presentation(r)
+         await M3FinalFixSelfTests.run(r)
+         await testDeliveryModeStage(r)
+         M3SpeechPreflightSelfTests.pure(r)
+         await M3SpeechPreflightSelfTests.background(r)
+         await M3SpeechPreflightSelfTests.integration(r)
+         await testDeliveryContract(r)
+         await testStageOwnership(r) // actual async wrapper, before/during cancellation
+         await CloudProviderSelfTests.runConnectionOwnership(r)
++        M4RecoveryPolicySelfTests.run(r)
+         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
+         exit(r.failed == 0 ? 0 : 1)
+     }
+ 
+     private final class DeliveryLog: @unchecked Sendable {
+         private let lock = NSLock()
+         private var entries: [String] = []
+         func append(_ text: String) { lock.lock(); entries.append(text); lock.unlock() }
+         var value: [String] { lock.lock(); defer { lock.unlock() }; return entries }
+     }

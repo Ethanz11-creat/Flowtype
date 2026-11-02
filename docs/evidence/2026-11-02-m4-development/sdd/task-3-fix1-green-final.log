@@ -1,0 +1,60 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+[1/4] Write sources
+[3/6] Compiling FlowType M4RecoveryControllerSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:459:15: warning: 'c' mutated after capture by sendable closure
+446 |         for explicitCancel in [false, true] {
+447 |             let f = Fixture(configuration)
+448 |             var c: SessionController!
+    |                 `- note: variable defined here
+449 |             let capture = Stage(name: "Text", run: { _, context in
+450 |                 f.contexts.append(context); context.deliveryTarget = target
+    :
+452 |             })
+453 |             let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
+454 |                 mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
+    |                                                                                                  `- note: variable captured by sendable closure
+455 |                     try? KeyboardInjector.postIfActive(context: context) {}
+456 |                     if explicitCancel { c.cancel() }
+    |                                         `- note: capturing use
+457 |                     return .uncertain
+458 |                 }, copy: { _ in r.check(false, "M4 publication: no implicit copy") })
+459 |             c = f.controller([capture, injection])
+    |               `- warning: 'c' mutated after capture by sendable closure
+460 |             var fired = false
+461 |             var summaries: [LastDeliverySummary] = []
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:557:19: warning: 'armed' mutated after capture by sendable closure
+532 |             c.startRecording()
+533 |             let original = c.recoveryCard!
+534 |             var armed = false, fired = false
+    |                 `- note: variable defined here
+535 |             var newerCard: RecoveryCard?
+536 |             let replace: @MainActor () -> Void = {
+    |                                                  `- note: variable captured by sendable closure
+537 |                 guard armed, !fired else { return }
+    |                       `- note: capturing use
+538 |                 fired = true
+539 |                 f.level = .blocked(.microphoneDenied)
+    :
+555 |             let stateObservation = c.sessionStatePublisher.sink { observedStates.append($0) }
+556 |             let cardObservation = c.recoveryCardPublisher.sink { observedCards.append($0) }
+557 |             armed = true
+    |                   `- warning: 'armed' mutated after capture by sendable closure
+558 |             f.level = .blocked(.noEngine)
+559 |             c.performRecoveryAction(.recheckReadiness, cardID: original.id)
+[4/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/7] Write Objects.LinkFileList
+[5/7] Linking FlowType
+[6/7] Applying FlowType
+Build of product 'FlowType' complete! (11.98s)
+=== FlowType --self-test ===
+=== M4 recovery self-test: 19730 passed, 0 failed ===

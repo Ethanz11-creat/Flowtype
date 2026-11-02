@@ -1,0 +1,35 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/7] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/7] Compiling FlowType SelfTest.swift
+[5/7] Compiling FlowType M4RecoveryControllerSelfTests.swift
+[6/21] Compiling FlowType WholeM2FixSelfTests.swift
+[7/21] Compiling FlowType M4StageFailureSelfTests.swift
+[8/21] Compiling FlowType ModelProvisionSelfTests.swift
+[9/21] Compiling FlowType ImportedLifecycleSelfTests.swift
+[10/21] Compiling FlowType ImportedModelUISelfTests.swift
+[11/21] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[12/21] Compiling FlowType M4RecoveryPolicySelfTests.swift
+[13/21] Compiling FlowType LocalModelImportSelfTests.swift
+[14/21] Compiling FlowType M2ReviewFixSelfTests.swift
+[15/21] Compiling FlowType WhisperRuntimeSelfTests.swift
+[16/21] Compiling FlowType M3DeliverySelfTests.swift
+[17/21] Compiling FlowType M3FinalFixSelfTests.swift
+[18/21] Compiling FlowType FlowTypeApp.swift
+[19/21] Compiling FlowType CloudProviderSelfTests.swift
+[19/22] Write Objects.LinkFileList
+[20/22] Linking FlowType
+[21/22] Applying FlowType
+Build of product 'FlowType' complete! (19.29s)
+  ✗ FAIL: M4 stale refresh completion cannot replace newer card — got Optional(FlowType.RecoveryCard(id: 5B75B534-E31A-4EB6-B01D-2D641426C53E, sessionID: 9, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss]))), want Optional(FlowType.RecoveryCard(id: EF969038-A173-419E-8C56-76BA3B456AC1, sessionID: 9, presentation: FlowType.FailurePresentation(kind: FlowType.FailureKind.permission(FlowType.PermissionKind.microphone), message: "麦克风权限未开启", actions: [FlowType.RecoveryAction.openMicrophoneSettings, FlowType.RecoveryAction.recheckReadiness, FlowType.RecoveryAction.dismiss])))
+=== FlowType --self-test ===
+=== M4 recovery self-test: 19671 passed, 1 failed ===

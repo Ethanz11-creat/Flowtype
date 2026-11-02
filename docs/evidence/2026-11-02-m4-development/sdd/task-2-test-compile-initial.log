@@ -1,0 +1,93 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/8] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/8] Compiling FlowType M4StageFailureSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:43:78: error: missing argument for parameter 'sendContext' in call
+ 41 |                               cloud: Bool = true, realtime: Bool = false) -> ASRRouteSnapshot {
+ 42 |         let configuration = realtime ? CloudASRRequestConfiguration(
+ 43 |             provider: .defaultParaformer(isActive: true), apiKey: "synthetic") : nil
+    |                                                                              `- error: missing argument for parameter 'sendContext' in call
+ 44 |         return .init(policy: .auto, selectedProviderID: first, localAvailable: local,
+ 45 |                      cloudAvailable: cloud, cloudConfiguration: configuration)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRContract.swift:62:5: note: 'init(provider:apiKey:sendContext:)' declared here
+ 60 |     let fieldCapabilities: CloudASRFieldCapabilities
+ 61 | 
+ 62 |     init(provider: CloudASRProviderConfig, apiKey: String, sendContext: Bool) {
+    |     `- note: 'init(provider:apiKey:sendContext:)' declared here
+ 63 |         self.provider = provider
+ 64 |         self.apiKey = apiKey
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:166:115: error: extra argument 'pid' in call
+164 |         }
+165 |         let injection = InjectionStage(settle: { throw NSError(domain: "synthetic", code: 2) },
+166 |             accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(focus: .unknown, pid: nil)) }, copy: { _ in })
+    |                                                                                                                   `- error: extra argument 'pid' in call
+167 |         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+168 |             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:166:93: error: missing argument for parameter 'secureInputActive' in call
+164 |         }
+165 |         let injection = InjectionStage(settle: { throw NSError(domain: "synthetic", code: 2) },
+166 |             accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(focus: .unknown, pid: nil)) }, copy: { _ in })
+    |                                                                                             `- error: missing argument for parameter 'secureInputActive' in call
+167 |         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+168 |             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/InjectionDecision.swift:18:8: note: 'init(secureInputActive:focus:)' declared here
+16 | /// Observable signals gathered just before delivery. Plain data so `decideInjection`
+17 | /// stays a pure function (unit-testable without a live AX/system query).
+18 | struct FocusSignals: Equatable, Sendable {
+   |        `- note: 'init(secureInputActive:focus:)' declared here
+19 |     var secureInputActive: Bool   // IsSecureEventInputEnabled() OR an AXSecureTextField focus
+20 |     var focus: FocusKind
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:166:101: error: type 'FocusKind' has no member 'unknown'
+164 |         }
+165 |         let injection = InjectionStage(settle: { throw NSError(domain: "synthetic", code: 2) },
+166 |             accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(focus: .unknown, pid: nil)) }, copy: { _ in })
+    |                                                                                                     `- error: type 'FocusKind' has no member 'unknown'
+167 |         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+168 |             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:166:115: error: 'nil' requires a contextual type
+164 |         }
+165 |         let injection = InjectionStage(settle: { throw NSError(domain: "synthetic", code: 2) },
+166 |             accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(focus: .unknown, pid: nil)) }, copy: { _ in })
+    |                                                                                                                   `- error: 'nil' requires a contextual type
+167 |         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+168 |             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:167:76: error: cannot infer contextual base in reference to member 'polished'
+165 |         let injection = InjectionStage(settle: { throw NSError(domain: "synthetic", code: 2) },
+166 |             accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(focus: .unknown, pid: nil)) }, copy: { _ in })
+167 |         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+    |                                                                            `- error: cannot infer contextual base in reference to member 'polished'
+168 |             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+169 |             r.eq(recovery.textKind, .result, "M4 delivery copy owns complete result")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:168:41: error: type 'Equatable' has no member 'deliveryBlocked'
+166 |             accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(focus: .unknown, pid: nil)) }, copy: { _ in })
+167 |         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+168 |             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+    |                                         `- error: type 'Equatable' has no member 'deliveryBlocked'
+169 |             r.eq(recovery.textKind, .result, "M4 delivery copy owns complete result")
+170 |         } else { r.check(false, "M4 pre-event delivery failure suspends") }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:169:38: error: type 'Equatable' has no member 'result'
+167 |         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+168 |             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+169 |             r.eq(recovery.textKind, .result, "M4 delivery copy owns complete result")
+    |                                      `- error: type 'Equatable' has no member 'result'
+170 |         } else { r.check(false, "M4 pre-event delivery failure suspends") }
+171 |     }
+[5/8] Compiling FlowType SelfTest.swift

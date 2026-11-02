@@ -1,0 +1,126 @@
+# Review package: 61c691f..43cc155
+
+## Commits
+43cc155 fix: stop typed cancellation before clipboard fallback
+
+## Files changed
+ .../Core/Pipeline/Stages/InjectionStage.swift      |  6 ++---
+ .../flowtype/Testing/M4StageFailureSelfTests.swift | 31 ++++++++++++++++++++++
+ 2 files changed, 34 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift b/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
+index 5351196..b8b0407 100644
+--- a/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
++++ b/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
+@@ -154,39 +154,39 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
+             guard context.deliveryEventStarted else { throw InjectionError.noEventsDispatched }
+             await complete(.typedDispatched, context: context, start: start)
+             return .complete
+         } catch {
+             if context.deliveryEventStarted {
+                 await complete(.uncertain, context: context, start: start)
+                 return .complete
+             }
+             do {
+                 try checkActive(context)
+-                if error is CancellationError { throw error }
++                if FailureClassifier.classify(error) == .cancelled { throw error }
+                 // The paste transaction protected this board. Failure before the
+                 // fallback's first pair must not replace it with recovery text.
+                 if preserveClipboardOnFailure {
+                     return .suspend(ErrorRecoveryContext(failedStage: name,
+                         error: error, rawText: text, retryable: false,
+-                    failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
++                        failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+                 }
+                 try await copyToClipboard(text, context: context)
+                 await MainActor.run {
+                     if !context.isCancelled { context.completionNotice = DeliveryCopy.forOutcome(.clipboard)?.message }
+                 }
+                 await complete(.clipboard, context: context, start: start)
+                 return .complete
+             } catch {
+                 await complete(.cancelled, context: context, start: start)
+                 return .suspend(ErrorRecoveryContext(failedStage: name,
+                     error: error, rawText: text, retryable: false,
+-                        failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
++                    failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+             }
+         }
+     }
+ 
+     private func complete(_ outcome: DeliveryOutcome, context: SessionContext, start: Date) async {
+         await MainActor.run {
+             let effective: DeliveryOutcome =
+                 (outcome == .typedDispatched || outcome == .pasteDispatched) && (context.isCancelled || Task.isCancelled)
+                 ? .uncertain : outcome
+             context.finishDelivery(effective)
+diff --git a/Sources/flowtype/Testing/M4StageFailureSelfTests.swift b/Sources/flowtype/Testing/M4StageFailureSelfTests.swift
+index 36323c6..58fa3ca 100644
+--- a/Sources/flowtype/Testing/M4StageFailureSelfTests.swift
++++ b/Sources/flowtype/Testing/M4StageFailureSelfTests.swift
+@@ -118,20 +118,21 @@ enum M4StageFailureSelfTests {
+             let stage = makeASR(healthRecorder: { _, _, _ in r.check(false, "M4 empty/budget must not record health") },
+                                  providerForID: { _ in nil })
+             assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: ""), context: context),
+                 routeValue.candidateIDs.isEmpty ? .readiness(.noEngine) : .transientASR, r, "no candidates or initial budget")
+         }
+         startup(r)
+         await deadline(r)
+         await cancellations(r)
+         await localAndPreview(r)
+         await boundaries(r)
++        await typingCancellation(r)
+     }
+ 
+     @MainActor private static func startup(_ r: SelfTest.Reporter) {
+         for domain in ["com.apple.coreaudio.avfaudio", "synthetic.other.domain"] {
+             var events: [String] = []
+             var interrupted = false
+             var completedAsEmpty = false
+             RecordingEngineStartup.run(prepare: { events.append("prepare") }, start: {
+                 events.append("start")
+                 throw NSError(domain: domain, code: 1)
+@@ -225,11 +226,41 @@ enum M4StageFailureSelfTests {
+                 r.eq(recovery.failureKind, .internalFailure, "M4 invalid payload is internal")
+             } else { r.check(false, "M4 invalid payload suspends") }
+         }
+         let injection = InjectionStage(settle: { throw NSError(domain: "synthetic", code: 2) },
+             accessibilityTrusted: { true }, currentTarget: { .init(pid: nil, signals: .init(secureInputActive: false, focus: .blindOrUnknown)) }, copy: { _ in })
+         if case .suspend(let recovery) = await injection.execute(payload: .polished("complete result", raw: "raw"), context: SessionContext(sessionID: 950)) {
+             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
+             r.eq(recovery.textKind, .result, "M4 delivery copy owns complete result")
+         } else { r.check(false, "M4 pre-event delivery failure suspends") }
+     }
++
++    @MainActor private static func typingCancellation(_ r: SelfTest.Reporter) async {
++        let errors: [Error] = [CancellationError(), URLError(.cancelled),
++            CloudASRError.networkError(SpeechProviderError.networkError(URLError(.cancelled)))]
++        let target = DeliveryTargetSnapshot(pid: 42, focusIdentity: .init(testID: "synthetic-safe-field"),
++            signals: .init(secureInputActive: false, focus: .editableText))
++        for (index, error) in errors.enumerated() {
++            let context = SessionContext(sessionID: UInt64(960 + index))
++            context.deliveryTarget = target
++            let injections = OSAllocatedUnfairLock<Int>(initialState: 0)
++            var copies = 0
++            let stage = InjectionStage(settle: {}, accessibilityTrusted: { true },
++                currentTarget: { target }, inject: { _, _ in
++                    injections.withLock { $0 += 1 }
++                    throw error
++                }, mode: { .unicode }, bundleID: { _ in nil }, copy: { _ in copies += 1 })
++            let result = await stage.execute(payload: .polished("synthetic complete result", raw: "synthetic raw"), context: context)
++            r.eq(injections.withLock { $0 }, 1, "M4 typed cancel \(index): actual typing boundary called once")
++            r.eq(copies, 0, "M4 typed cancel \(index): no clipboard fallback")
++            r.check(!context.deliveryEventStarted && !context.deliveryEffectStarted,
++                    "M4 typed cancel \(index): no event or delivery effect")
++            r.eq(context.deliveryOutcome, .cancelled, "M4 typed cancel \(index): cancelled terminal outcome")
++            r.check(context.completionNotice == nil && !context.hasInjected,
++                    "M4 typed cancel \(index): no clipboard success completion")
++            if case .suspend(let recovery) = result {
++                r.eq(recovery.failureKind, .cancelled, "M4 typed cancel \(index): cancelled recovery kind")
++                r.eq(recovery.textKind, .result, "M4 typed cancel \(index): complete result ownership retained")
++            } else { r.check(false, "M4 typed cancel \(index): suspension instead of successful completion") }
++        }
++    }
+ }

@@ -121,3 +121,5 @@
 ## Whole-M4 closeout
 
 After task reviews, one independent whole-M4 review uses baseline68c72d4 and checks deferred findings, integration and all five focus cases. Consolidate any findings into one fix wave and one scoped rereview. Build fixed app with existing script without Python/dependency installation; record source tree, commit, binary SHA and honest signing limitations. Archive ledger/reports/tests/reviews to `docs/evidence/2026-11-02-m4-development/`; update `docs/evidence/2026-11-02-m4-validation.md` and remaining audit. True-device V1–V5, real cloud, GUI, acoustic calibration remain Pending unless actually executed. Preserve branch/worktree; no merge/push.
+
+执行记录：三个任务及任务修复/复审、一次全M4修复波次与限定复审均完成。最终源码5dc1693，顺序build/full23872/0；已固定app并保留已知完整签名限制。详见[验证清单](../../evidence/2026-11-02-m4-validation.md)。V1–V5/GUI/真实服务与模型验收仍Pending；源码门禁不替代这些任务。

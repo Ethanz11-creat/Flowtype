@@ -1,0 +1,28 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/7] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/7] Compiling FlowType M4StageFailureSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4StageFailureSelfTests.swift:43:78: error: missing argument for parameter 'sendContext' in call
+ 41 |                               cloud: Bool = true, realtime: Bool = false) -> ASRRouteSnapshot {
+ 42 |         let configuration = realtime ? CloudASRRequestConfiguration(
+ 43 |             provider: .defaultParaformer(isActive: true), apiKey: "synthetic") : nil
+    |                                                                              `- error: missing argument for parameter 'sendContext' in call
+ 44 |         return .init(policy: .auto, selectedProviderID: first, localAvailable: local,
+ 45 |                      cloudAvailable: cloud, cloudConfiguration: configuration)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRContract.swift:62:5: note: 'init(provider:apiKey:sendContext:)' declared here
+ 60 |     let fieldCapabilities: CloudASRFieldCapabilities
+ 61 | 
+ 62 |     init(provider: CloudASRProviderConfig, apiKey: String, sendContext: Bool) {
+    |     `- note: 'init(provider:apiKey:sendContext:)' declared here
+ 63 |         self.provider = provider
+ 64 |         self.apiKey = apiKey

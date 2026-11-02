@@ -1,0 +1,35 @@
+### Task 3: Current-card action ownership, terminal recovery and UI
+
+**Files:**
+- Create `Sources/flowtype/Core/Recovery/SessionRecoveryState.swift`, `RecoveryEffects.swift`.
+- Modify `Sources/flowtype/Core/PipelineOrchestrator.swift`, `Sources/flowtype/CapsuleView.swift`.
+- Modify `Sources/flowtype/App/StatusBarController.swift` two state subscriptions only, migrating from $sessionState to sessionStatePublisher for commit-before-notify semantics.
+- Create `Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift`; extend focused/full runner and update legitimate old controller expectations in SelfTest/M3 tests.
+
+**Interfaces:**
+- Consumes Tasks1/2. `SessionController.ErrorAction` becomes `typealias ErrorAction = RecoveryAction`; old methods source-compatible wrappers, same single action handler.
+- `SessionRecoveryState` stores optional current RecoveryCard and optional copyText (no Error/audio/lifecycle authority). Controller privately owns value; recoveryCard/errorActions/lastErrorRawText are computed reads from that one committed snapshot, with explicit `recoveryCardPublisher: AnyPublisher<RecoveryCard?, Never>` for View/tests subscribing updates. Commit coherent values/error state before notifying; do not use card @Published willSet, which can store an old card after a subscriber creates a newer session. Keep lastDeliverySummary subscription compatibility, claim notification before publishing and revalidate ownership after callback.
+- `sessionState` remains read-only canonical controller state with explicit `sessionStatePublisher: AnyPublisher<SessionState, Never>`; migrate exactly the two StatusBar subscriptions. Commit state/recovery snapshot before any notification, generation-check after synchronous publishers/objectWillChange and stop older continuations when a newer commit occurs. No second state machine; no spectrum/preparation rewrite absent a concrete need.
+- `@MainActor struct RecoveryEffects`: `openAccessibilitySettings`, `openMicrophoneSettings`, `openSpeechRecognitionSettings`, `openASRSettings`, `openHistory` each `@MainActor @Sendable () -> Void`, `copyText: @MainActor @Sendable (String) -> Void`. `.live` uses existing PermissionHelper/settings(.settings)/settings(.history)/pasteboard. Add `recoveryEffects: RecoveryEffects = .live` to controller init; injected tests never call globals.
+- `performRecoveryAction(_ action: RecoveryAction, cardID: UUID)` validates current error/card ID/sessionID/allowed action before any effect. All UI buttons capture current card ID, no direct singleton actions in View.
+- Stage retry verifies typed policy again plus actual currentContext/retained nonempty audio/actual ASR index/no event, never legacy retryable. Clear card before work. Original route/audio/lease, fresh handle/new20s budget. No retry injection or hidden polish opt-in.
+- Rerecord uses startRecording fresh identity; settings only opens. Recheck refreshes blocked card with new UUID/current reason/actions, ready or degraded idle. Automatic routing only changes policy and refreshes; still blocked stays new card. New session/clear invalidates all old buttons.
+- Normal uncertain finish saves history/summary once while owner, closes context and event gate then shows terminal-only card, retaining full final text for explicit copy; viewHistory if entered save path only. Explicit cancel unchanged idle with M3 uncertain saved once. No raw text in published card/log.
+- M3 clipboardChanged can conservatively finish uncertain BEFORE any actual event. Preserve outcome/history/no-resend, but choose presentation deliveryBlocked when deliveryEventStarted=false: "未发送文本，可复制结果" +copy/dismiss, never automatic clipboard overwrite. Only actual-event uncertain uses deliveryUncertain +history actions.
+- Error capsule380×156, two-column LazyVGrid/rows up to4 actions, two-line safe text; no transcript preview, current theme. Notices remain240×70.
+
+- [ ] **Step 1:** RED integration tests use real controller with synthetic stages and injected SessionEffects/RecoveryEffects/configuration/readiness; real ASR/InjectionStage for meaningful boundaries. Add suite to focused/full runner.
+  - Old card after new recording and after refreshed blocked card: iterate every old allowed action (retry/copy/settings/history/rerecord/recheck/route/dismiss across representative cards); counters, clipboard/config, session state/history/summary unaffected. Disallowed current action also no effect.
+  - transient retry preserves original PCM/route/lease/language; new realtime handle and20s budget; actual ASR stage only. Conflicting legacy retryable cannot unlock. No saved audio → no retry; configuration no retry even after settings change; rerecord new ID and fresh capture. No implicit requests on settings/recheck.
+  - noEngine constrained→auto still blocked mic updates message/actions; ready/degraded clears and remains idle, no AX degrade stays eligible menu path. Two permissions map correct settings and recheck.
+  - Startup/invalid audio failures stay error with rerecord, not temporary notice. Optional polish and silence original notices unchanged.
+  - Real uncertain typing/paste terminal: persistent card, complete explicit copy via fake board, history navigation only, no retry/double attempt/save/summary. Explicit cancel after actual event saves once then idle, late complete ignored; repeat cancel/dismiss do not save again.
+  - Real clipboard ownership change before event: keep uncertain outcome/history, zero events and automatic copies, persistent deliveryBlocked safe message (never "已发送"), no retry; explicit user copy alone may overwrite board.
+  - Privacy storeTranscriptText=false and failing/no-op storage: safe uncertain message does not claim stored transcript; no secret/URL/body in card; copy returns complete text only on click. Card has no raw preview. Error size and max4 action layout model.
+- [ ] **Step 2:** capture RED, implement pure recovery state/effects then controller-owned validation/transitions and card rendering. Keep lifecycle fields private; no new coordinator/parallel state machine. Clear subscriptions/tasks/gates consistently with M3.
+- [ ] **Step 3:** focused GREEN, sequential build/full self-test once stable, preserving all M3 coverage with updated deliberate uncertain-card expectations. Report counts and GUI Pending explicitly.
+- [ ] **Step 4:** self-review, scoped commit `feat: bind recovery cards to the current session` with TDD/full evidence.
+
+## Whole-M4 closeout
+
+After task reviews, one independent whole-M4 review uses baseline68c72d4 and checks deferred findings, integration and all five focus cases. Consolidate any findings into one fix wave and one scoped rereview. Build fixed app with existing script without Python/dependency installation; record source tree, commit, binary SHA and honest signing limitations. Archive ledger/reports/tests/reviews to `docs/evidence/2026-11-02-m4-development/`; update `docs/evidence/2026-11-02-m4-validation.md` and remaining audit. True-device V1–V5, real cloud, GUI, acoustic calibration remain Pending unless actually executed. Preserve branch/worktree; no merge/push.

@@ -1,0 +1,68 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/6] Compiling FlowType M4RecoveryControllerSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:187:60: error: missing argument for parameter 'cloudConfiguration' in call
+185 |             let p = Provider(credentials ? CloudASRError.apiError(statusCode: 401, message: "SECRET") : CloudASRError.timeout)
+186 |             let route = ASRRouteSnapshot(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
+187 |                 localAvailable: false, cloudAvailable: true, language: "en")
+    |                                                            `- error: missing argument for parameter 'cloudConfiguration' in call
+188 |             let capture = Stage(name: "Recording", run: { _, ctx in
+189 |                 f.captures += 1; f.contexts.append(ctx); ctx.captureRoute = route
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:8:8: note: 'init(policy:selectedProviderID:localAvailable:cloudAvailable:cloudConfiguration:language:healthGeneration:isHealthRecovery:localLease:)' declared here
+  6 | /// immutable for the lifetime of a session; stop/fallback never re-reserves a
+  7 | /// different half-open route from mutable settings.
+  8 | struct ASRRouteSnapshot: Sendable, Equatable {
+    |        `- note: 'init(policy:selectedProviderID:localAvailable:cloudAvailable:cloudConfiguration:language:healthGeneration:isHealthRecovery:localLease:)' declared here
+  9 |     let policy: ASRRoutingPolicy
+ 10 |     let selectedProviderID: String?
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:196:53: error: cannot infer contextual base in reference to member 'retry'
+194 |             c.startRecording(); await wait { c.recoveryCard != nil }
+195 |             let old = c.recoveryCard!
+196 |             r.eq(old.presentation.actions.contains(.retry(stage: "ASR")), !credentials, "M4 real ASR typed policy controls retry")
+    |                                                     `- error: cannot infer contextual base in reference to member 'retry'
+197 |             if credentials {
+198 |                 c.performRecoveryAction(.openASRSettings, cardID: old.id)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:198:42: error: cannot infer contextual base in reference to member 'openASRSettings'
+196 |             r.eq(old.presentation.actions.contains(.retry(stage: "ASR")), !credentials, "M4 real ASR typed policy controls retry")
+197 |             if credentials {
+198 |                 c.performRecoveryAction(.openASRSettings, cardID: old.id)
+    |                                          `- error: cannot infer contextual base in reference to member 'openASRSettings'
+199 |                 var cfg = configuration.current; cfg.asrRoutingPolicy = .auto; configuration.save(cfg)
+200 |                 c.performRecoveryAction(.retry(stage: "ASR"), cardID: old.id)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:200:42: error: cannot infer contextual base in reference to member 'retry'
+198 |                 c.performRecoveryAction(.openASRSettings, cardID: old.id)
+199 |                 var cfg = configuration.current; cfg.asrRoutingPolicy = .auto; configuration.save(cfg)
+200 |                 c.performRecoveryAction(.retry(stage: "ASR"), cardID: old.id)
+    |                                          `- error: cannot infer contextual base in reference to member 'retry'
+201 |                 r.eq(p.requests.withLock { $0.count }, 1, "M4 config repair cannot replay captured request")
+202 |                 r.eq(f.events, ["ASR"], "M4 config settings effect only")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:204:42: error: cannot infer contextual base in reference to member 'retry'
+202 |                 r.eq(f.events, ["ASR"], "M4 config settings effect only")
+203 |             } else {
+204 |                 c.performRecoveryAction(.retry(stage: "ASR"), cardID: old.id)
+    |                                          `- error: cannot infer contextual base in reference to member 'retry'
+205 |                 await wait { c.recoveryCard != nil }
+206 |                 r.eq(p.requests.withLock { $0.count }, 2, "M4 explicit retry runs actual ASR once")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:215:38: error: cannot infer contextual base in reference to member 'rerecord'
+213 |             }
+214 |             let current = c.recoveryCard!
+215 |             c.performRecoveryAction(.rerecord, cardID: current.id)
+    |                                      `- error: cannot infer contextual base in reference to member 'rerecord'
+216 |             await wait { f.contexts.count == 2 && c.recoveryCard != nil }
+217 |             r.check(f.contexts[0].sessionID != f.contexts[1].sessionID, "M4 rerecord creates fresh identity and capture")
+[4/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 

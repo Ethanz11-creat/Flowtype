@@ -1,0 +1,555 @@
+# Review package: 24f2e51..5dc1693
+
+## Commits
+5dc1693 fix: preserve session ownership after synchronous publication
+
+## Files changed
+ Sources/flowtype/Core/PipelineOrchestrator.swift   |  60 ++++++++----
+ .../Testing/M4RecoveryControllerSelfTests.swift    | 101 +++++++++++++++++++--
+ 2 files changed, 136 insertions(+), 25 deletions(-)
+
+## Diff
+diff --git a/Sources/flowtype/Core/PipelineOrchestrator.swift b/Sources/flowtype/Core/PipelineOrchestrator.swift
+index 1efcbf2..4cf88e3 100644
+--- a/Sources/flowtype/Core/PipelineOrchestrator.swift
++++ b/Sources/flowtype/Core/PipelineOrchestrator.swift
+@@ -205,29 +205,33 @@ final class SessionController: ObservableObject {
+         currentTask = nil
+         currentContext?.cancel()
+ 
+         activeSessionID = newID
+ 
+         // Create session context
+         let statePublisher = PassthroughSubject<SessionState, Never>()
+         let context = SessionContext(sessionID: newID, statePublisher: statePublisher)
+         currentContext = context
+ 
++        let generation = presentationGeneration
+         let readiness = readinessLevel()
++        guard ownsActiveContext(context), presentationGeneration == generation else { return }
+         if let issue = Self.readinessPreflight(readiness) {
+             presentReadinessBlocked(issue, context: context)
+             return
+         }
+         preparationNotice = Self.preparationSubtitle(for: readiness)
++        guard ownsActiveContext(context), presentationGeneration == generation else { return }
+ 
+         // Reset state
+         spectrum = []
++        guard ownsActiveContext(context), presentationGeneration == generation else { return }
+ 
+         // Subscribe to state publisher for intermediate updates from stages
+         stateCancellable = statePublisher
+             .filter { state in
+                 // Timer handles recording state; orchestrator handles injecting
+                 if case .recording = state { return false }
+                 if case .injecting = state { return false }
+                 return true
+             }
+             .sink { [weak self] state in
+@@ -239,40 +243,46 @@ final class SessionController: ObservableObject {
+                 self.transition(to: state, context: ctx)
+             }
+ 
+         readinessCancellable = context.readinessPublisher
+             .sink { [weak self] in
+                 guard let self,
+                       let ctx = self.currentContext,
+                       Self.shouldAcceptEvent(activeSessionID: self.activeSessionID,
+                                              eventSessionID: newID,
+                                              isCancelled: ctx.isCancelled),
+-                      ctx.isReady else { return }
++                      ctx.isReady, self.isPreparing else { return }
+                 ctx.recordingStartTime = Date()
++                let generation = self.presentationGeneration
+                 self.preparationNotice = nil
+-                self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx)
++                guard self.ownsActiveContext(ctx), self.presentationGeneration == generation else { return }
++                guard self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx),
++                      self.ownsActiveContext(ctx) else { return }
+                 self.startRecordingTimer(sessionID: newID, context: ctx)
+             }
+ 
+         // Subscribe to real-time spectrum publisher (avoids 1Hz timer polling)
+         spectrumCancellable = context.spectrumPublisher
+             .sink { [weak self] spec in
+                 guard let self,
+                       Self.shouldAcceptEvent(activeSessionID: self.activeSessionID,
+                                              eventSessionID: newID,
+                                              isCancelled: context.isCancelled) else { return }
+                 self.spectrum = spec
+             }
+         // 录音中不再向 UI 推送预览文字（预览仅作 ASR 失败时的内部兜底）。
+ 
+-        transition(to: Self.stateForAudioReadiness(isReady: false), context: context)
++        guard transition(to: Self.stateForAudioReadiness(isReady: false), context: context),
++              ownsActiveContext(context) else { return }
++        let preparingGeneration = presentationGeneration
+         effects.showWindow()
++        guard ownsActiveContext(context), presentationGeneration == preparingGeneration else { return }
+ 
+         executeStage(at: 0, payload: .empty, context: context)
+     }
+ 
+     func endRecording() {
+         OptionTapDetector.shared.cancelPendingTaps()
+         let withPolish = configurationStore.current.polishOnStop
+         AppLogger.log("[SessionController#\(activeSessionID)] endRecording called, withPolish=\(withPolish)")
+ 
+         if isPreparing {
+@@ -343,21 +353,22 @@ final class SessionController: ObservableObject {
+                   let index = suspendedStageIndex, let context = currentContext,
+                   context.sessionID == card.sessionID, !context.isCancelled,
+                   pipeline.indices.contains(index), pipeline[index] is ASRStage,
+                   case .audio(let samples, _) = payload, !samples.isEmpty,
+                   !context.deliveryEventStarted,
+                   recoveryPresentation(recovery, payload: payload, index: index, context: context).actions.contains(action)
+             else { return }
+             clearSuspension()
+             context.completionBudget = CompletionBudget(seconds: 20)
+             context.realtimeResult = nil
+-            transition(to: .processing(provider: "识别中"), context: context)
++            guard transition(to: .processing(provider: "识别中"), context: context),
++                  ownsActiveContext(context) else { return }
+             executeStage(at: index, payload: payload, context: context)
+         case .copyRaw, .copyResult:
+             if let text = recoveryState.copyText { recoveryEffects.copyText(text) }
+         case .openAccessibilitySettings: recoveryEffects.openAccessibilitySettings()
+         case .openMicrophoneSettings: recoveryEffects.openMicrophoneSettings()
+         case .openSpeechRecognitionSettings: recoveryEffects.openSpeechRecognitionSettings()
+         case .openASRSettings: recoveryEffects.openASRSettings()
+         case .viewHistory: recoveryEffects.openHistory()
+         case .rerecord: startRecording()
+         case .dismiss: resetToIdle()
+@@ -439,40 +450,43 @@ final class SessionController: ObservableObject {
+         return RecoveryPolicy.presentation(kind: recovery.failureKind, resources: RecoveryResources(
+             stage: recovery.failedStage, hasAudio: hasAudio,
+             textKind: recovery.rawText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? recovery.textKind : .none,
+             deliveryEventStarted: context.deliveryEventStarted,
+             routingPolicy: configurationStore.current.asrRoutingPolicy, hasHistory: false))
+     }
+ 
+     // MARK: - Orchestration
+ 
+     private func executeStage(at index: Int, payload: StagePayload, context: SessionContext) {
+-        guard activeSessionID == context.sessionID, !context.isCancelled else {
++        guard ownsActiveContext(context) else {
+             AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, aborting pipeline")
+             return
+         }
+         guard index < pipeline.count else {
+             return finish(context: context)
+         }
+ 
+         let stage = pipeline[index]
+ 
+         // Pre-stage state transitions
+         if stage is InjectionStage {
+-            transition(to: .injecting, context: context)
++            // A synchronous subscriber may install a different recording task or
++            // commit a newer presentation even within this same session.
++            guard transition(to: .injecting, context: context),
++                  ownsActiveContext(context) else { return }
+         }
+ 
+         let task = Task { [weak self] in
+             guard let self else { return }
+             let result = await stage.executeIfOwned(payload: payload, context: context)
+ 
+-            guard self.activeSessionID == context.sessionID, !context.isCancelled else {
++            guard self.ownsActiveContext(context) else {
+                 AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, ignoring stage result")
+                 return
+             }
+ 
+             switch result {
+             case .continue(let nextPayload):
+                 // Extract text for history tracking
+                 switch nextPayload {
+                 case .processed(_, let raw):
+                     context.rawTranscript = raw
+@@ -513,68 +527,70 @@ final class SessionController: ObservableObject {
+             case .complete:
+                 self.finish(context: context)
+             }
+         }
+ 
+         currentTask = task
+     }
+ 
+     /// All terminal delivery paths converge here; no optional-stage failure saves early.
+     private func finish(context: SessionContext) {
+-        guard activeSessionID == context.sessionID, !context.isCancelled else { return }
++        guard ownsActiveContext(context) else { return }
++        let generation = presentationGeneration
+         var enteredHistory = false
+         if context.hasInjected {
+             enteredHistory = saveHistory(context: context)
+             // Storage is an injected synchronous effect and may reenter cancel/start.
+             // Never close the newer context or install this session's terminal card.
+-            guard activeSessionID == context.sessionID, currentContext === context,
+-                  !context.isCancelled else { return }
++            guard ownsActiveContext(context), presentationGeneration == generation else { return }
+             recordLastDelivery(context: context)
+-            guard activeSessionID == context.sessionID, currentContext === context,
+-                  !context.isCancelled else { return }
++            guard ownsActiveContext(context), presentationGeneration == generation else { return }
+         }
+         if context.deliveryOutcome == .uncertain {
+             let presentation = RecoveryPolicy.presentation(
+                 kind: context.deliveryEventStarted ? .deliveryUncertain : .deliveryBlocked,
+                 resources: .init(stage: "Injection", hasAudio: false,
+                     textKind: context.finalText.isEmpty ? .none : .result,
+                     deliveryEventStarted: context.deliveryEventStarted,
+                     routingPolicy: configurationStore.current.asrRoutingPolicy, hasHistory: enteredHistory))
+             context.cancel()
+             currentContext = nil
+             currentTask = nil
+             stateCancellable?.cancel(); stateCancellable = nil
+             spectrumCancellable?.cancel(); spectrumCancellable = nil
+             readinessCancellable?.cancel(); readinessCancellable = nil
+             stopRecordingTimer()
+             spectrum = []
+-            guard activeSessionID == context.sessionID else { return }
++            guard activeSessionID == context.sessionID, presentationGeneration == generation else { return }
+             clearSuspension()
+             presentRecovery(presentation, copyText: context.finalText, context: context)
+             return
+         }
+         let state = context.hasInjected ? context.completionNotice.map(SessionState.notice) ?? .idle : .idle
+         transition(to: state, context: context)
+     }
+ 
+     // MARK: - State Transition
+ 
+-    private func transition(to newState: SessionState, context: SessionContext) {
++    /// Whether this exact presentation survived all synchronous effects and
++    /// subscribers. Callers with remaining lifecycle work must also own context.
++    @discardableResult
++    private func transition(to newState: SessionState, context: SessionContext) -> Bool {
+         let oldState = sessionState
+         stateValue = newState
+         presentationGeneration &+= 1
+         let generation = presentationGeneration
+         if newState.showPanel { effects.showWindow() }
+-        guard presentationGeneration == generation else { return }
++        guard presentationGeneration == generation else { return false }
+         for observer in observers {
+             observer.sessionDidTransition(from: oldState, to: newState, context: context)
+-            guard presentationGeneration == generation else { return }
++            guard presentationGeneration == generation else { return false }
+         }
+ 
+         // Hide the capsule when the session finishes normally (slides down). resetToIdle()
+         // covers the cancel/error paths; the normal .complete → .idle path needs this.
+         if case .idle = newState {
+             // A completed session is no longer allowed to publish readiness/state
+             // events. Invalidate ownership before any late callback can resurrect it.
+             context.cancel()
+             activeSessionID = 0
+             effects.hideWindow()
+@@ -593,22 +609,23 @@ final class SessionController: ObservableObject {
+                     self.resetToIdle()
+                 }
+             }
+         }
+ 
+         // Actionable recovery stays visible until retry, copy/dismiss, or a new session.
+         if case .error = newState {
+             errorDismissTask?.cancel()
+             errorDismissTask = nil
+         }
+-        guard presentationGeneration == generation else { return }
++        guard presentationGeneration == generation else { return false }
+         publishPresentation()
++        return presentationGeneration == generation
+     }
+ 
+     // MARK: - Error Actions
+ 
+     private func presentReadinessBlocked(_ issue: ReadinessIssue, context: SessionContext) {
+         AppLogger.log("[SessionController#\(context.sessionID)] Readiness preflight blocked reason=\(issue)")
+         errorDismissTask?.cancel()
+         errorDismissTask = nil
+         currentTask?.cancel()
+         currentTask = nil
+@@ -664,23 +681,24 @@ final class SessionController: ObservableObject {
+             Task { @MainActor [weak self] in
+                 guard let self,
+                       Self.shouldAcceptTimerTick(activeSessionID: self.activeSessionID,
+                                                  tickSessionID: sessionID,
+                                                  isCancelled: context.isCancelled,
+                                                  isRecording: self.isRecording),
+                       self.currentContext === context else { return }
+                 self.elapsedSeconds += 1
+                 self.stateValue = .recording(elapsedSeconds: self.elapsedSeconds)
+                 self.presentationGeneration &+= 1
++                let generation = self.presentationGeneration
+                 self.publishPresentation()
+-                guard self.activeSessionID == sessionID, self.currentContext === context,
+-                      !context.isCancelled else { return }
++                guard self.ownsActiveContext(context), self.presentationGeneration == generation,
++                      self.isRecording else { return }
+ 
+                 // Auto-stop at max duration
+                 if self.elapsedSeconds >= maxDuration {
+                     AppLogger.log("[SessionController] Recording reached max duration (\(maxDuration)s), auto-stopping")
+                     self.endRecording()
+                 }
+             }
+         }
+     }
+ 
+@@ -855,20 +873,24 @@ final class SessionController: ObservableObject {
+         guard presentationGeneration == generation else { return }
+         spectrum = []
+         guard presentationGeneration == generation else { return }
+         effects.hideWindow()
+         guard presentationGeneration == generation else { return }
+         publishPresentation()
+     }
+ 
+     // MARK: - Helpers
+ 
++    private func ownsActiveContext(_ context: SessionContext) -> Bool {
++        activeSessionID == context.sessionID && currentContext === context && !context.isCancelled
++    }
++
+     private func nextSessionID() -> UInt64 {
+         sessionID += 1
+         return sessionID
+     }
+ }
+ 
+ // MARK: - ErrorAction
+ 
+ extension SessionController {
+     nonisolated static let stateBeforeAudioReady: SessionState = .preparing
+diff --git a/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift b/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift
+index 9766403..31379b6 100644
+--- a/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift
++++ b/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift
+@@ -34,20 +34,21 @@ enum M4RecoveryControllerSelfTests {
+             controller.cancel()
+         }
+         await ownership(r, configuration)
+         await readiness(r, configuration)
+         await retries(r, configuration)
+         await terminal(r, configuration)
+         await capturedResources(r, configuration)
+         await historyReentrancy(r, configuration)
+         await publicationReentrancy(r, configuration)
+         statePublicationReentrancy(r, configuration)
++        await callerContinuationReentrancy(r, configuration)
+         r.eq(SessionState.error("safe").capsuleSize.width, 380, "M4 controller: recovery width")
+         r.eq(SessionState.error("safe").capsuleSize.height, 156, "M4 controller: recovery height")
+     }
+ 
+     @MainActor private static func wait(_ predicate: @MainActor () -> Bool) async {
+         for _ in 0..<200 {
+             if predicate() { return }
+             try? await Task.sleep(for: .milliseconds(10))
+         }
+     }
+@@ -59,20 +60,22 @@ extension M4RecoveryControllerSelfTests {
+         var contexts: [SessionContext] = []
+         var events: [String] = []
+         var copied: [String] = []
+         var histories: [UInt64] = []
+         var onHistory: (() -> Void)?
+         var windows: [String] = []
+         var level: ReadinessLevel = .ready
+         var refreshes = 0
+         var onRefresh: (() -> Void)?
+         var captures = 0
++        weak var ownedController: SessionController?
++        var armed = false
+         init(_ configuration: ConfigurationStore) { self.configuration = configuration }
+         var recovery: RecoveryEffects { .init(
+             openAccessibilitySettings: { self.events.append("AX") },
+             openMicrophoneSettings: { self.events.append("mic") },
+             openSpeechRecognitionSettings: { self.events.append("speech") },
+             openASRSettings: { self.events.append("ASR") },
+             openHistory: { self.events.append("history") },
+             copyText: { self.copied.append($0) }) }
+         func controller(_ stages: [any PipelineStage]) -> SessionController {
+             SessionController(pipeline: stages, observers: [], effects: .init(prepare: {},
+@@ -438,32 +441,32 @@ extension M4RecoveryControllerSelfTests {
+         }
+     }
+ }
+ 
+ extension M4RecoveryControllerSelfTests {
+     @MainActor private static func publicationReentrancy(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) async {
+         let target = DeliveryTargetSnapshot(pid: 42, focusIdentity: .init(testID: "publication"),
+             signals: .init(secureInputActive: false, focus: .editableText))
+         for explicitCancel in [false, true] {
+             let f = Fixture(configuration)
+-            var c: SessionController!
+             let capture = Stage(name: "Text", run: { _, context in
+                 f.contexts.append(context); context.deliveryTarget = target
+                 return .continue(.polished("complete result", raw: "raw"))
+             })
+             let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
+                 mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
+                     try? KeyboardInjector.postIfActive(context: context) {}
+-                    if explicitCancel { c.cancel() }
++                    if explicitCancel { f.ownedController?.cancel() }
+                     return .uncertain
+                 }, copy: { _ in r.check(false, "M4 publication: no implicit copy") })
+-            c = f.controller([capture, injection])
++            let c = f.controller([capture, injection])
++            f.ownedController = c
+             var fired = false
+             var summaries: [LastDeliverySummary] = []
+             var newerCard: RecoveryCard?
+             let subscription = c.$lastDeliverySummary.sink { summary in
+                 guard let summary else { return }
+                 summaries.append(summary)
+                 guard !fired else { return }
+                 fired = true
+                 f.level = .blocked(.microphoneDenied)
+                 c.cancel()
+@@ -524,53 +527,139 @@ extension M4RecoveryControllerSelfTests {
+ }
+ 
+ extension M4RecoveryControllerSelfTests {
+     @MainActor private static func statePublicationReentrancy(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) {
+         for channel in ["state", "objectWillChange"] {
+             let f = Fixture(configuration)
+             f.level = .blocked(.microphoneDenied)
+             let c = f.controller([f.capture(.complete)])
+             c.startRecording()
+             let original = c.recoveryCard!
+-            var armed = false, fired = false
++            var fired = false
+             var newerCard: RecoveryCard?
+             let replace: @MainActor () -> Void = {
+-                guard armed, !fired else { return }
++                guard f.armed, !fired else { return }
+                 fired = true
+                 f.level = .blocked(.microphoneDenied)
+                 c.startRecording()
+                 newerCard = c.recoveryCard
+             }
+             let subscription: AnyCancellable
+             if channel == "state" {
+                 subscription = c.sessionStatePublisher.sink { state in
+                     if state == .error("没有可用的语音识别引擎") { replace() }
+                 }
+             } else {
+                 subscription = c.objectWillChange.sink {
+                     if c.recoveryCard?.presentation.kind == .readiness(.noEngine) { replace() }
+                 }
+             }
+             var observedStates: [SessionState] = []
+             var observedCards: [RecoveryCard?] = []
+             let stateObservation = c.sessionStatePublisher.sink { observedStates.append($0) }
+             let cardObservation = c.recoveryCardPublisher.sink { observedCards.append($0) }
+-            armed = true
++            f.armed = true
+             f.level = .blocked(.noEngine)
+             c.performRecoveryAction(.recheckReadiness, cardID: original.id)
+             r.check(fired, "M4 \(channel) subscriber: synchronous error callback exercised")
+             r.eq(c.recoveryCard, newerCard, "M4 \(channel) subscriber: newest card retained")
+             r.eq(c.sessionState, .error("麦克风权限未开启"), "M4 \(channel) subscriber: canonical error retained")
+             r.eq(c.errorActions, newerCard?.presentation.actions ?? [], "M4 \(channel) subscriber: coherent actions")
+             r.eq(observedStates.last, c.sessionState, "M4 \(channel) subscriber: later state consumer never ends on superseded outer value")
+             r.eq(observedCards.last ?? nil, c.recoveryCard, "M4 \(channel) subscriber: later card consumer never ends on superseded outer value")
+             r.eq(f.windows.last, "show", "M4 \(channel) subscriber: window remains visible")
+             if let card = c.recoveryCard { c.performRecoveryAction(.openMicrophoneSettings, cardID: card.id) }
+             r.eq(f.events, ["mic"], "M4 \(channel) subscriber: current card owns settings action")
+             f.level = .ready
+             if let card = c.recoveryCard { c.performRecoveryAction(.recheckReadiness, cardID: card.id) }
+             r.eq(c.sessionState, .idle, "M4 \(channel) subscriber: current context owns refresh")
+             stateObservation.cancel(); cardObservation.cancel()
+             subscription.cancel(); c.cancel()
+         }
+     }
+ }
++
++extension M4RecoveryControllerSelfTests {
++    @MainActor private static func callerContinuationReentrancy(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) async {
++        let target = DeliveryTargetSnapshot(pid: 42, focusIdentity: .init(testID: "caller-continuation"),
++            signals: .init(secureInputActive: false, focus: .editableText))
++        for replacement in ["new-session", "same-session"] {
++            let f = Fixture(configuration)
++            let cancellations = OSAllocatedUnfairLock<Int>(initialState: 0)
++            let (recording, releaseRecording) = AsyncStream<Void>.makeStream()
++            defer { releaseRecording.finish() }
++            let capture = Stage(name: "Recording", run: { _, context in
++                f.contexts.append(context)
++                if f.contexts.count == 1 {
++                    context.deliveryTarget = target
++                    return .continue(.polished("complete result", raw: "raw"))
++                }
++                // The real controller must retain this task, as RecordingStage
++                // relies on its task cancellation handler to stop the recorder.
++                await withTaskCancellationHandler {
++                    context.markReady()
++                    var iterator = recording.makeAsyncIterator()
++                    _ = await iterator.next()
++                } onCancel: {
++                    cancellations.withLock { $0 += 1 }
++                }
++                return .complete
++            })
++            let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
++                mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
++                    try? KeyboardInjector.postIfActive(context: context) { f.events.append("event") }
++                    return .uncertain
++                }, copy: { f.copied.append($0) })
++            let c = f.controller([capture, injection])
++            var fired = false
++            let subscription = c.sessionStatePublisher.sink { state in
++                guard state == .injecting, !fired else { return }
++                fired = true
++                if replacement == "new-session" {
++                    c.cancel()
++                    c.startRecording()
++                } else {
++                    f.contexts.first?.statePublisher.send(.processing(provider: "replacement"))
++                }
++            }
++            c.startRecording()
++            await wait { fired && (replacement == "same-session" || c.isRecording) }
++            if replacement == "same-session" { await wait { !f.histories.isEmpty } }
++            for _ in 0..<10 { await Task.yield() }
++            r.check(fired, "M4 caller \(replacement): injecting subscriber replaced the continuation")
++            if replacement == "new-session" {
++                r.eq(f.contexts.count, 2, "M4 caller replacement: new recording stage actually started")
++                r.check(c.isRecording, "M4 caller replacement: new recording marked ready")
++                c.cancel()
++                await wait { cancellations.withLock { $0 } == 1 }
++                r.eq(cancellations.withLock { $0 }, 1, "M4 caller replacement: cancel reaches the actual new recording task exactly once")
++                c.cancel()
++                r.eq(cancellations.withLock { $0 }, 1, "M4 caller replacement: repeated cancel does not repeat recorder cleanup")
++            } else {
++                r.eq(c.sessionState, .processing(provider: "replacement"), "M4 caller same-session: newer presentation retains authority")
++            }
++            r.eq(f.events, [], "M4 caller \(replacement): obsolete injection posts no event")
++            r.eq(f.copied, [], "M4 caller \(replacement): obsolete injection copies no text")
++            r.eq(f.histories, [], "M4 caller \(replacement): obsolete injection saves no history")
++            subscription.cancel()
++            c.cancel()
++            releaseRecording.finish()
++        }
++
++        let f = Fixture(configuration)
++        let c = f.controller([f.capture(.complete)])
++        var fired = false
++        let subscription = c.sessionStatePublisher.sink { state in
++            guard state == .preparing, !fired else { return }
++            fired = true
++            c.cancel()
++        }
++        c.startRecording()
++        for _ in 0..<10 { await Task.yield() }
++        r.check(fired, "M4 preparing caller: synchronous cancellation exercised")
++        r.eq(c.sessionState, .idle, "M4 preparing caller: cancellation stays idle")
++        r.eq(f.windows.last, "hide", "M4 preparing caller: cancelled window is not reopened")
++        r.eq(f.captures, 0, "M4 preparing caller: cancelled preparation starts no stage")
++        subscription.cancel()
++        c.cancel()
++    }
++}

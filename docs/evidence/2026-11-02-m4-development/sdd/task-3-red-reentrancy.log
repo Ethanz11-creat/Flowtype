@@ -1,0 +1,101 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/9] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[4/9] Compiling FlowType M3DeliverySelfTests.swift
+[5/9] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[6/9] Compiling FlowType M4RecoveryControllerSelfTests.swift
+[7/9] Compiling FlowType SelfTest.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1404:76: error: cannot find 'RetryASRStage' in scope
+1402 |         let readiness = ReadinessRecoveryProbe()
+1403 |         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+1404 |         let session = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+     |                                                                            `- error: cannot find 'RetryASRStage' in scope
+1405 |                                         effects: effects, configurationStore: store, refreshReadiness: {
+1406 |             readiness.policies.append(store.current.asrRoutingPolicy)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1404:73: error: missing argument for parameter 'ledger' in call
+ 488 |     }
+ 489 | 
+ 490 |     private struct RecoveryAudioStarter: PipelineStage {
+     |                    `- note: 'init(ledger:)' declared here
+ 491 |         let name = "Recording"
+ 492 |         let ledger: RetryLedger
+     :
+1402 |         let readiness = ReadinessRecoveryProbe()
+1403 |         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+1404 |         let session = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+     |                                                                         `- error: missing argument for parameter 'ledger' in call
+1405 |                                         effects: effects, configurationStore: store, refreshReadiness: {
+1406 |             readiness.policies.append(store.current.asrRoutingPolicy)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1420:37: error: type 'Equatable' has no member 'idle'
+1418 |         readiness.level = .degraded(.basicOnly)
+1419 |         session.recheckReadiness()
+1420 |         r.eq(session.sessionState, .idle, "readiness recovery: raw degraded readiness dismisses error immediately")
+     |                                     `- error: type 'Equatable' has no member 'idle'
+1421 |         r.eq(session.errorActions, [], "readiness recovery: successful recheck clears recovery actions")
+1422 |         r.eq(readiness.policies, [.localOnly, .localOnly], "readiness recovery: each recheck refreshes without changing policy")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1421:11: error: type 'Any' cannot conform to 'Equatable' [#ProtocolTypeNonConformance]
+1419 |         session.recheckReadiness()
+1420 |         r.eq(session.sessionState, .idle, "readiness recovery: raw degraded readiness dismisses error immediately")
+1421 |         r.eq(session.errorActions, [], "readiness recovery: successful recheck clears recovery actions")
+     |           |- error: type 'Any' cannot conform to 'Equatable' [#ProtocolTypeNonConformance]
+     |           |- note: only concrete types such as structs, enums and classes can conform to protocols
+     |           `- note: requirement from conditional conformance of '[Any]' to 'Equatable'
+1422 |         r.eq(readiness.policies, [.localOnly, .localOnly], "readiness recovery: each recheck refreshes without changing policy")
+1423 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1425:76: error: cannot find 'RetryASRStage' in scope
+1423 | 
+1424 |         // Enter another real stage failure before repairing its routing policy.
+1425 |         let reroute = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+     |                                                                            `- error: cannot find 'RetryASRStage' in scope
+1426 |                                         effects: effects, configurationStore: store, refreshReadiness: {
+1427 |             readiness.policies.append(store.current.asrRoutingPolicy)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1425:73: error: missing argument for parameter 'ledger' in call
+ 488 |     }
+ 489 | 
+ 490 |     private struct RecoveryAudioStarter: PipelineStage {
+     |                    `- note: 'init(ledger:)' declared here
+ 491 |         let name = "Recording"
+ 492 |         let ledger: RetryLedger
+     :
+1423 | 
+1424 |         // Enter another real stage failure before repairing its routing policy.
+1425 |         let reroute = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+     |                                                                         `- error: missing argument for parameter 'ledger' in call
+1426 |                                         effects: effects, configurationStore: store, refreshReadiness: {
+1427 |             readiness.policies.append(store.current.asrRoutingPolicy)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1434:37: error: type 'Equatable' has no member 'idle'
+1432 |         await waitForSession(reroute) { if case .error = $0 { return true }; return false }
+1433 |         reroute.useAutomaticRouting()
+1434 |         r.eq(reroute.sessionState, .idle, "readiness recovery: automatic routing dismisses error even if still blocked")
+     |                                     `- error: type 'Equatable' has no member 'idle'
+1435 |         r.eq(reroute.errorActions, [], "readiness recovery: automatic routing clears old retry actions")
+1436 |         r.eq(store.current.asrRoutingPolicy, .auto, "readiness recovery: automatic routing updates current policy")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:1435:11: error: type 'Any' cannot conform to 'Equatable' [#ProtocolTypeNonConformance]
+1433 |         reroute.useAutomaticRouting()
+1434 |         r.eq(reroute.sessionState, .idle, "readiness recovery: automatic routing dismisses error even if still blocked")
+1435 |         r.eq(reroute.errorActions, [], "readiness recovery: automatic routing clears old retry actions")
+     |           |- error: type 'Any' cannot conform to 'Equatable' [#ProtocolTypeNonConformance]
+     |           |- note: only concrete types such as structs, enums and classes can conform to protocols
+     |           `- note: requirement from conditional conformance of '[Any]' to 'Equatable'
+1436 |         r.eq(store.current.asrRoutingPolicy, .auto, "readiness recovery: automatic routing updates current policy")
+1437 |         r.eq(readiness.policies.last, .auto, "readiness recovery: refresh observes the saved automatic policy")
+
+[#ProtocolTypeNonConformance]: <https://docs.swift.org/compiler/documentation/diagnostics/protocol-type-non-conformance>
+error: input file '/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift' was modified during the build
+error: input file '/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift' was modified during the build

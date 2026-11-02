@@ -1,0 +1,40 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/11] Compiling FlowType FailureKind.swift
+[4/11] Compiling FlowType FailureClassifier.swift
+[5/11] Compiling FlowType RecoveryPolicy.swift
+[6/11] Compiling FlowType M4RecoveryPolicySelfTests.swift
+[7/12] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[8/12] Compiling FlowType PipelineStage.swift
+[9/26] Compiling FlowType PipelineOrchestrator.swift
+[10/26] Compiling FlowType OnboardingPipeline.swift
+[11/26] Compiling FlowType CapsuleView.swift
+[12/26] Compiling FlowType ASRStage.swift
+[13/26] Compiling FlowType M3DeliverySelfTests.swift
+[14/26] Compiling FlowType M3FinalFixSelfTests.swift
+[15/28] Compiling FlowType AudioVisualizer.swift
+[16/28] Compiling FlowType WindowManager.swift
+[17/28] Compiling FlowType InjectionStage.swift
+[18/28] Compiling FlowType PolishStage.swift
+[19/28] Compiling FlowType OnboardingView.swift
+[20/28] Compiling FlowType ImportedLifecycleSelfTests.swift
+[21/28] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[22/28] Compiling FlowType ModelProvisionSelfTests.swift
+[23/28] Compiling FlowType PostProcessStage.swift
+[24/28] Compiling FlowType RecordingStage.swift
+[25/28] Compiling FlowType SelfTest.swift
+[25/28] Write Objects.LinkFileList
+[26/28] Linking FlowType
+[27/28] Applying FlowType
+Build of product 'FlowType' complete! (19.29s)
+=== FlowType --self-test ===
+=== M4 recovery self-test: 19297 passed, 0 failed ===

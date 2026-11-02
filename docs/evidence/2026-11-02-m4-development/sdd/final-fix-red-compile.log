@@ -1,0 +1,28 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+[1/4] Write sources
+[3/6] Compiling FlowType M4RecoveryControllerSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:610:29: error: type 'PasteTransactionResult' has no member 'pasteDispatched'
+608 |                 mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
+609 |                     try? KeyboardInjector.postIfActive(context: context) { f.events.append("event") }
+610 |                     return .pasteDispatched
+    |                             `- error: type 'PasteTransactionResult' has no member 'pasteDispatched'
+611 |                 }, copy: { f.copied.append($0) })
+612 |             let c = f.controller([capture, injection])
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift:637:39: error: type 'Equatable' has no member 'processing'
+635 |                 r.eq(cancellations.withLock { $0 }, 1, "M4 caller replacement: repeated cancel does not repeat recorder cleanup")
+636 |             } else {
+637 |                 r.eq(c.sessionState, .processing(provider: "replacement"), "M4 caller same-session: newer presentation retains authority")
+    |                                       `- error: type 'Equatable' has no member 'processing'
+638 |             }
+639 |             r.eq(f.events, [], "M4 caller \(replacement): obsolete injection posts no event")
+[4/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 

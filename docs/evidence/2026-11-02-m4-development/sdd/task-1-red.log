@@ -1,0 +1,639 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+error: emit-module command failed with exit code 1 (use -v to see invocation)
+[3/9] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:120:116: error: cannot find type 'RecoveryResources' in scope
+118 | 
+119 |     private static func resources(stage: String = "ASR", audio: Bool = true, text: RecoveryTextKind = .raw,
+120 |                                   event: Bool = false, routing: ASRRoutingPolicy = .auto, history: Bool = true) -> RecoveryResources {
+    |                                                                                                                    `- error: cannot find type 'RecoveryResources' in scope
+121 |         RecoveryResources(stage: stage, hasAudio: audio, textKind: text, deliveryEventStarted: event,
+122 |                           routingPolicy: routing, hasHistory: history)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:119:84: error: cannot find type 'RecoveryTextKind' in scope
+117 |     }
+118 | 
+119 |     private static func resources(stage: String = "ASR", audio: Bool = true, text: RecoveryTextKind = .raw,
+    |                                                                                    `- error: cannot find type 'RecoveryTextKind' in scope
+120 |                                   event: Bool = false, routing: ASRRoutingPolicy = .auto, history: Bool = true) -> RecoveryResources {
+121 |         RecoveryResources(stage: stage, hasAudio: audio, textKind: text, deliveryEventStarted: event,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/9] Compiling FlowType M3FinalFixSelfTests.swift
+[5/9] Compiling FlowType SelfTest.swift
+[6/9] Compiling FlowType M4RecoveryPolicySelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:120:116: error: cannot find type 'RecoveryResources' in scope
+118 | 
+119 |     private static func resources(stage: String = "ASR", audio: Bool = true, text: RecoveryTextKind = .raw,
+120 |                                   event: Bool = false, routing: ASRRoutingPolicy = .auto, history: Bool = true) -> RecoveryResources {
+    |                                                                                                                    `- error: cannot find type 'RecoveryResources' in scope
+121 |         RecoveryResources(stage: stage, hasAudio: audio, textKind: text, deliveryEventStarted: event,
+122 |                           routingPolicy: routing, hasHistory: history)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:119:84: error: cannot find type 'RecoveryTextKind' in scope
+117 |     }
+118 | 
+119 |     private static func resources(stage: String = "ASR", audio: Bool = true, text: RecoveryTextKind = .raw,
+    |                                                                                    `- error: cannot find type 'RecoveryTextKind' in scope
+120 |                                   event: Bool = false, routing: ASRRoutingPolicy = .auto, history: Bool = true) -> RecoveryResources {
+121 |         RecoveryResources(stage: stage, hasAudio: audio, textKind: text, deliveryEventStarted: event,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:14:29: error: cannot find type 'FailureKind' in scope
+ 12 |     private static func classification(_ r: SelfTest.Reporter) {
+ 13 |         let hostile = "secret-provider-body https://invalid.example/?key=secret"
+ 14 |         let cases: [(Error, FailureKind)] = [
+    |                             `- error: cannot find type 'FailureKind' in scope
+ 15 |             (CancellationError(), .cancelled), (CloudASRError.cancelled, .cancelled),
+ 16 |             (URLError(.cancelled), .cancelled), (RealtimeAudioIngressError.cancelled, .cancelled),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:78:24: error: cannot find 'FailureClassifier' in scope
+ 76 |         ]
+ 77 |         for (index, pair) in cases.enumerated() {
+ 78 |             let kind = FailureClassifier.classify(pair.0)
+    |                        `- error: cannot find 'FailureClassifier' in scope
+ 79 |             r.eq(kind, pair.1, "M4 classifier typed row \(index)")
+ 80 |             let shown = RecoveryPolicy.presentation(kind: kind, resources: resources())
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:80:25: error: cannot find 'RecoveryPolicy' in scope
+ 78 |             let kind = FailureClassifier.classify(pair.0)
+ 79 |             r.eq(kind, pair.1, "M4 classifier typed row \(index)")
+ 80 |             let shown = RecoveryPolicy.presentation(kind: kind, resources: resources())
+    |                         `- error: cannot find 'RecoveryPolicy' in scope
+ 81 |             r.check(!shown.message.contains("secret") && !shown.message.contains("https://"), "M4 classifier safe message \(index)")
+ 82 |             r.check(shown.actions.allSatisfy { !$0.displayName.contains("secret") }, "M4 classifier safe actions \(index)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:84:30: error: cannot find type 'FailureKind' in scope
+ 82 |             r.check(shown.actions.allSatisfy { !$0.displayName.contains("secret") }, "M4 classifier safe actions \(index)")
+ 83 |         }
+ 84 |         let statuses: [(Int, FailureKind)] = [
+    |                              `- error: cannot find type 'FailureKind' in scope
+ 85 |             (301, .configuration(.requestRejected)), (400, .configuration(.endpointOrModel)),
+ 86 |             (401, .configuration(.credentials)), (403, .configuration(.credentials)),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:93:24: error: cannot find 'FailureClassifier' in scope
+ 91 |         ]
+ 92 |         for (status, expected) in statuses {
+ 93 |             let kind = FailureClassifier.classify(CloudASRError.apiError(statusCode: status, message: hostile))
+    |                        `- error: cannot find 'FailureClassifier' in scope
+ 94 |             r.eq(kind, expected, "M4 HTTP \(status)")
+ 95 |             r.check(!RecoveryPolicy.presentation(kind: kind, resources: resources()).message.contains("secret"), "M4 HTTP body never shown")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:95:22: error: cannot find 'RecoveryPolicy' in scope
+ 93 |             let kind = FailureClassifier.classify(CloudASRError.apiError(statusCode: status, message: hostile))
+ 94 |             r.eq(kind, expected, "M4 HTTP \(status)")
+ 95 |             r.check(!RecoveryPolicy.presentation(kind: kind, resources: resources()).message.contains("secret"), "M4 HTTP body never shown")
+    |                      `- error: cannot find 'RecoveryPolicy' in scope
+ 96 |         }
+ 97 |         let configurationCodes: [URLError.Code] = [.badURL, .unsupportedURL, .secureConnectionFailed,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:101:18: error: cannot find 'FailureClassifier' in scope
+ 99 |             .serverCertificateNotYetValid, .clientCertificateRejected, .clientCertificateRequired]
+100 |         for code in configurationCodes {
+101 |             r.eq(FailureClassifier.classify(URLError(code)), .configuration(.endpointOrModel), "M4 URL configuration \(code.rawValue)")
+    |                  `- error: cannot find 'FailureClassifier' in scope
+102 |         }
+103 |         for code: URLError.Code in [.notConnectedToInternet, .timedOut, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost] {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:101:63: error: type 'Equatable' has no member 'configuration'
+ 99 |             .serverCertificateNotYetValid, .clientCertificateRejected, .clientCertificateRequired]
+100 |         for code in configurationCodes {
+101 |             r.eq(FailureClassifier.classify(URLError(code)), .configuration(.endpointOrModel), "M4 URL configuration \(code.rawValue)")
+    |                                                               `- error: type 'Equatable' has no member 'configuration'
+102 |         }
+103 |         for code: URLError.Code in [.notConnectedToInternet, .timedOut, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost] {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:101:78: error: cannot infer contextual base in reference to member 'endpointOrModel'
+ 99 |             .serverCertificateNotYetValid, .clientCertificateRejected, .clientCertificateRequired]
+100 |         for code in configurationCodes {
+101 |             r.eq(FailureClassifier.classify(URLError(code)), .configuration(.endpointOrModel), "M4 URL configuration \(code.rawValue)")
+    |                                                                              `- error: cannot infer contextual base in reference to member 'endpointOrModel'
+102 |         }
+103 |         for code: URLError.Code in [.notConnectedToInternet, .timedOut, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost] {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:104:18: error: cannot find 'FailureClassifier' in scope
+102 |         }
+103 |         for code: URLError.Code in [.notConnectedToInternet, .timedOut, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost] {
+104 |             r.eq(FailureClassifier.classify(URLError(code)), .transientASR, "M4 URL transport \(code.rawValue)")
+    |                  `- error: cannot find 'FailureClassifier' in scope
+105 |         }
+106 |         var nested: Error = CancellationError()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:104:63: error: type 'Equatable' has no member 'transientASR'
+102 |         }
+103 |         for code: URLError.Code in [.notConnectedToInternet, .timedOut, .cannotFindHost, .dnsLookupFailed, .networkConnectionLost] {
+104 |             r.eq(FailureClassifier.classify(URLError(code)), .transientASR, "M4 URL transport \(code.rawValue)")
+    |                                                               `- error: type 'Equatable' has no member 'transientASR'
+105 |         }
+106 |         var nested: Error = CancellationError()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:109:18: error: cannot find 'FailureClassifier' in scope
+107 |         for depth in 1...5 {
+108 |             nested = depth.isMultiple(of: 2) ? SpeechProviderError.networkError(nested) : CloudASRError.networkError(nested)
+109 |             r.eq(FailureClassifier.classify(nested), depth <= 4 ? .cancelled : .internalFailure, "M4 bounded cancellation wrapper \(depth)")
+    |                  `- error: cannot find 'FailureClassifier' in scope
+110 |         }
+111 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:109:68: error: type 'Equatable' has no member 'cancelled'
+107 |         for depth in 1...5 {
+108 |             nested = depth.isMultiple(of: 2) ? SpeechProviderError.networkError(nested) : CloudASRError.networkError(nested)
+109 |             r.eq(FailureClassifier.classify(nested), depth <= 4 ? .cancelled : .internalFailure, "M4 bounded cancellation wrapper \(depth)")
+    |                                                                    `- error: type 'Equatable' has no member 'cancelled'
+110 |         }
+111 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:109:81: error: type 'Equatable' has no member 'internalFailure'
+107 |         for depth in 1...5 {
+108 |             nested = depth.isMultiple(of: 2) ? SpeechProviderError.networkError(nested) : CloudASRError.networkError(nested)
+109 |             r.eq(FailureClassifier.classify(nested), depth <= 4 ? .cancelled : .internalFailure, "M4 bounded cancellation wrapper \(depth)")
+    |                                                                                 `- error: type 'Equatable' has no member 'internalFailure'
+110 |         }
+111 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:111:14: error: cannot find 'FailureClassifier' in scope
+109 |             r.eq(FailureClassifier.classify(nested), depth <= 4 ? .cancelled : .internalFailure, "M4 bounded cancellation wrapper \(depth)")
+110 |         }
+111 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
+    |              `- error: cannot find 'FailureClassifier' in scope
+112 |              .configuration(.endpointOrModel), "M4 nested wrapper keeps URL configuration")
+113 |         r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:112:15: error: type 'Equatable' has no member 'configuration'
+110 |         }
+111 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
+112 |              .configuration(.endpointOrModel), "M4 nested wrapper keeps URL configuration")
+    |               `- error: type 'Equatable' has no member 'configuration'
+113 |         r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
+114 |              .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:112:30: error: cannot infer contextual base in reference to member 'endpointOrModel'
+110 |         }
+111 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
+112 |              .configuration(.endpointOrModel), "M4 nested wrapper keeps URL configuration")
+    |                              `- error: cannot infer contextual base in reference to member 'endpointOrModel'
+113 |         r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
+114 |              .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:113:14: error: cannot find 'FailureClassifier' in scope
+111 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(SpeechProviderError.networkError(URLError(.badURL)))),
+112 |              .configuration(.endpointOrModel), "M4 nested wrapper keeps URL configuration")
+113 |         r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
+    |              `- error: cannot find 'FailureClassifier' in scope
+114 |              .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
+115 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(NSError(domain: "synthetic", code: -999))),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:114:15: error: type 'Equatable' has no member 'configuration'
+112 |              .configuration(.endpointOrModel), "M4 nested wrapper keeps URL configuration")
+113 |         r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
+114 |              .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
+    |               `- error: type 'Equatable' has no member 'configuration'
+115 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(NSError(domain: "synthetic", code: -999))),
+116 |              .internalFailure, "M4 unknown wrapped error stays internal")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:114:30: error: cannot infer contextual base in reference to member 'credentials'
+112 |              .configuration(.endpointOrModel), "M4 nested wrapper keeps URL configuration")
+113 |         r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
+114 |              .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
+    |                              `- error: cannot infer contextual base in reference to member 'credentials'
+115 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(NSError(domain: "synthetic", code: -999))),
+116 |              .internalFailure, "M4 unknown wrapped error stays internal")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:115:14: error: cannot find 'FailureClassifier' in scope
+113 |         r.eq(FailureClassifier.classify(SpeechProviderError.networkError(CloudASRError.apiError(statusCode: 401, message: hostile))),
+114 |              .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
+115 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(NSError(domain: "synthetic", code: -999))),
+    |              `- error: cannot find 'FailureClassifier' in scope
+116 |              .internalFailure, "M4 unknown wrapped error stays internal")
+117 |     }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:116:15: error: type 'Equatable' has no member 'internalFailure'
+114 |              .configuration(.credentials), "M4 nested wrapper keeps HTTP credentials")
+115 |         r.eq(FailureClassifier.classify(CloudASRError.networkError(NSError(domain: "synthetic", code: -999))),
+116 |              .internalFailure, "M4 unknown wrapped error stays internal")
+    |               `- error: type 'Equatable' has no member 'internalFailure'
+117 |     }
+118 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:126:21: error: cannot find type 'FailureKind' in scope
+124 | 
+125 |     private static func policy(_ r: SelfTest.Reporter) {
+126 |         let rows: [(FailureKind, String, [RecoveryAction])] = [
+    |                     `- error: cannot find type 'FailureKind' in scope
+127 |             (.permission(.accessibility), "辅助功能权限未开启", [.openAccessibilitySettings, .recheckReadiness, .dismiss]),
+128 |             (.permission(.microphone), "麦克风权限未开启", [.openMicrophoneSettings, .recheckReadiness, .dismiss]),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:126:43: error: cannot find type 'RecoveryAction' in scope
+124 | 
+125 |     private static func policy(_ r: SelfTest.Reporter) {
+126 |         let rows: [(FailureKind, String, [RecoveryAction])] = [
+    |                                           `- error: cannot find type 'RecoveryAction' in scope
+127 |             (.permission(.accessibility), "辅助功能权限未开启", [.openAccessibilitySettings, .recheckReadiness, .dismiss]),
+128 |             (.permission(.microphone), "麦克风权限未开启", [.openMicrophoneSettings, .recheckReadiness, .dismiss]),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:151:24: error: cannot find 'RecoveryPolicy' in scope
+149 |         ]
+150 |         for (kind, message, defaultActions) in rows {
+151 |             let base = RecoveryPolicy.presentation(kind: kind, resources: resources())
+    |                        `- error: cannot find 'RecoveryPolicy' in scope
+152 |             r.eq(base, FailurePresentation(kind: kind, message: message, actions: defaultActions), "M4 exact presentation \(kind)")
+153 |             for stage in ["ASR", "Injection"] {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:152:24: error: cannot find 'FailurePresentation' in scope
+150 |         for (kind, message, defaultActions) in rows {
+151 |             let base = RecoveryPolicy.presentation(kind: kind, resources: resources())
+152 |             r.eq(base, FailurePresentation(kind: kind, message: message, actions: defaultActions), "M4 exact presentation \(kind)")
+    |                        `- error: cannot find 'FailurePresentation' in scope
+153 |             for stage in ["ASR", "Injection"] {
+154 |                 for audio in [false, true] {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:156:35: error: cannot find type 'RecoveryTextKind' in scope
+154 |                 for audio in [false, true] {
+155 |                     for event in [false, true] {
+156 |                         for text: RecoveryTextKind in [.none, .raw, .result] {
+    |                                   `- error: cannot find type 'RecoveryTextKind' in scope
+157 |                             for routing in ASRRoutingPolicy.allCases {
+158 |                                 for history in [false, true] {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:159:49: error: cannot find 'RecoveryPolicy' in scope
+157 |                             for routing in ASRRoutingPolicy.allCases {
+158 |                                 for history in [false, true] {
+159 |                                     let value = RecoveryPolicy.presentation(kind: kind, resources: resources(stage: stage, audio: audio, text: text, event: event, routing: routing, history: history))
+    |                                                 `- error: cannot find 'RecoveryPolicy' in scope
+160 |                                     r.eq(value.message, message, "M4 stable copy \(kind)")
+161 |                                     r.eq(value.kind, kind, "M4 kind preserved")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:163:66: error: cannot infer contextual base in reference to member 'retry'
+161 |                                     r.eq(value.kind, kind, "M4 kind preserved")
+162 |                                     r.check(value.actions.count <= 4, "M4 at most four actions")
+163 |                                     r.eq(value.actions.contains(.retry(stage: "ASR")), kind == .transientASR && stage == "ASR" && audio && !event, "M4 retry eligibility")
+    |                                                                  `- error: cannot infer contextual base in reference to member 'retry'
+164 |                                     r.check(!value.actions.contains(.retry(stage: "Injection")), "M4 never retry delivery")
+165 |                                     var expected = defaultActions
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:164:70: error: cannot infer contextual base in reference to member 'retry'
+162 |                                     r.check(value.actions.count <= 4, "M4 at most four actions")
+163 |                                     r.eq(value.actions.contains(.retry(stage: "ASR")), kind == .transientASR && stage == "ASR" && audio && !event, "M4 retry eligibility")
+164 |                                     r.check(!value.actions.contains(.retry(stage: "Injection")), "M4 never retry delivery")
+    |                                                                      `- error: cannot infer contextual base in reference to member 'retry'
+165 |                                     var expected = defaultActions
+166 |                                     switch kind {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:168:54: error: reference to member 'openASRSettings' cannot be resolved without a contextual type
+166 |                                     switch kind {
+167 |                                     case .readiness(.noEngine) where routing != .auto:
+168 |                                         expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
+    |                                                      `- error: reference to member 'openASRSettings' cannot be resolved without a contextual type
+169 |                                     case .transientASR:
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:168:72: error: reference to member 'useAutomaticRouting' cannot be resolved without a contextual type
+166 |                                     switch kind {
+167 |                                     case .readiness(.noEngine) where routing != .auto:
+168 |                                         expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
+    |                                                                        `- error: reference to member 'useAutomaticRouting' cannot be resolved without a contextual type
+169 |                                     case .transientASR:
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:168:94: error: reference to member 'dismiss' cannot be resolved without a contextual type
+166 |                                     switch kind {
+167 |                                     case .readiness(.noEngine) where routing != .auto:
+168 |                                         expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
+    |                                                                                              `- error: reference to member 'dismiss' cannot be resolved without a contextual type
+169 |                                     case .transientASR:
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:170:90: error: type 'Any' has no member 'retry'
+168 |                                         expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
+169 |                                     case .transientASR:
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+    |                                                                                          `- error: type 'Any' has no member 'retry'
+171 |                                         if text == .raw { expected.append(.copyRaw) }
+172 |                                         expected.append(.dismiss)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:170:112: error: reference to member 'rerecord' cannot be resolved without a contextual type
+168 |                                         expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
+169 |                                     case .transientASR:
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+    |                                                                                                                `- error: reference to member 'rerecord' cannot be resolved without a contextual type
+171 |                                         if text == .raw { expected.append(.copyRaw) }
+172 |                                         expected.append(.dismiss)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:170:126: error: type 'Any' has no member 'rerecord'
+168 |                                         expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
+169 |                                     case .transientASR:
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+    |                                                                                                                              `- error: type 'Any' has no member 'rerecord'
+171 |                                         if text == .raw { expected.append(.copyRaw) }
+172 |                                         expected.append(.dismiss)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:171:76: error: cannot infer contextual base in reference to member 'copyRaw'
+169 |                                     case .transientASR:
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+171 |                                         if text == .raw { expected.append(.copyRaw) }
+    |                                                                            `- error: cannot infer contextual base in reference to member 'copyRaw'
+172 |                                         expected.append(.dismiss)
+173 |                                     case .processing, .internalFailure:
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:172:58: error: cannot infer contextual base in reference to member 'dismiss'
+170 |                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
+171 |                                         if text == .raw { expected.append(.copyRaw) }
+172 |                                         expected.append(.dismiss)
+    |                                                          `- error: cannot infer contextual base in reference to member 'dismiss'
+173 |                                     case .processing, .internalFailure:
+174 |                                         expected = text == .raw ? [.copyRaw] : text == .result ? [.copyResult] : []
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:174:69: error: reference to member 'copyRaw' cannot be resolved without a contextual type
+172 |                                         expected.append(.dismiss)
+173 |                                     case .processing, .internalFailure:
+174 |                                         expected = text == .raw ? [.copyRaw] : text == .result ? [.copyResult] : []
+    |                                                                     `- error: reference to member 'copyRaw' cannot be resolved without a contextual type
+175 |                                         expected += [.rerecord, .dismiss]
+176 |                                     case .deliveryBlocked:
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:174:100: error: type 'Any' has no member 'copyResult'
+172 |                                         expected.append(.dismiss)
+173 |                                     case .processing, .internalFailure:
+174 |                                         expected = text == .raw ? [.copyRaw] : text == .result ? [.copyResult] : []
+    |                                                                                                    `- error: type 'Any' has no member 'copyResult'
+175 |                                         expected += [.rerecord, .dismiss]
+176 |                                     case .deliveryBlocked:
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:175:55: error: reference to member 'rerecord' cannot be resolved without a contextual type
+173 |                                     case .processing, .internalFailure:
+174 |                                         expected = text == .raw ? [.copyRaw] : text == .result ? [.copyResult] : []
+175 |                                         expected += [.rerecord, .dismiss]
+    |                                                       `- error: reference to member 'rerecord' cannot be resolved without a contextual type
+176 |                                     case .deliveryBlocked:
+177 |                                         expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:175:66: error: reference to member 'dismiss' cannot be resolved without a contextual type
+173 |                                     case .processing, .internalFailure:
+174 |                                         expected = text == .raw ? [.copyRaw] : text == .result ? [.copyResult] : []
+175 |                                         expected += [.rerecord, .dismiss]
+    |                                                                  `- error: reference to member 'dismiss' cannot be resolved without a contextual type
+176 |                                     case .deliveryBlocked:
+177 |                                         expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:177:72: error: reference to member 'copyResult' cannot be resolved without a contextual type
+175 |                                         expected += [.rerecord, .dismiss]
+176 |                                     case .deliveryBlocked:
+177 |                                         expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
+    |                                                                        `- error: reference to member 'copyResult' cannot be resolved without a contextual type
+178 |                                     case .deliveryUncertain:
+179 |                                         expected = text == .result ? [.copyResult] : []
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:177:85: error: reference to member 'dismiss' cannot be resolved without a contextual type
+175 |                                         expected += [.rerecord, .dismiss]
+176 |                                     case .deliveryBlocked:
+177 |                                         expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
+    |                                                                                     `- error: reference to member 'dismiss' cannot be resolved without a contextual type
+178 |                                     case .deliveryUncertain:
+179 |                                         expected = text == .result ? [.copyResult] : []
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:177:98: error: type 'Any' has no member 'dismiss'
+175 |                                         expected += [.rerecord, .dismiss]
+176 |                                     case .deliveryBlocked:
+177 |                                         expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
+    |                                                                                                  `- error: type 'Any' has no member 'dismiss'
+178 |                                     case .deliveryUncertain:
+179 |                                         expected = text == .result ? [.copyResult] : []
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:179:72: error: reference to member 'copyResult' cannot be resolved without a contextual type
+177 |                                         expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
+178 |                                     case .deliveryUncertain:
+179 |                                         expected = text == .result ? [.copyResult] : []
+    |                                                                        `- error: reference to member 'copyResult' cannot be resolved without a contextual type
+180 |                                         if history { expected.append(.viewHistory) }
+181 |                                         expected.append(.dismiss)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:180:71: error: cannot infer contextual base in reference to member 'viewHistory'
+178 |                                     case .deliveryUncertain:
+179 |                                         expected = text == .result ? [.copyResult] : []
+180 |                                         if history { expected.append(.viewHistory) }
+    |                                                                       `- error: cannot infer contextual base in reference to member 'viewHistory'
+181 |                                         expected.append(.dismiss)
+182 |                                     default: break
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:181:58: error: cannot infer contextual base in reference to member 'dismiss'
+179 |                                         expected = text == .result ? [.copyResult] : []
+180 |                                         if history { expected.append(.viewHistory) }
+181 |                                         expected.append(.dismiss)
+    |                                                          `- error: cannot infer contextual base in reference to member 'dismiss'
+182 |                                     default: break
+183 |                                     }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:192:23: error: cannot find type 'RecoveryAction' in scope
+190 |             }
+191 |         }
+192 |         let labels: [(RecoveryAction, String)] = [(.retry(stage: "ASR"), "重试识别"),
+    |                       `- error: cannot find type 'RecoveryAction' in scope
+193 |             (.retry(stage: "Polish"), "重试润色"), (.retry(stage: "Injection"), "重试输入"),
+194 |             (.retry(stage: "Other"), "重试处理"), (.copyRaw, "复制原文"), (.copyResult, "复制结果"),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:200:29: error: cannot infer key path type from context; consider explicitly specifying a root type
+198 |             (.openSpeechRecognitionSettings, "打开语音识别设置"), (.rerecord, "重新录音"), (.viewHistory, "查看历史")]
+199 |         for (action, expected) in labels { r.eq(action.displayName, expected, "M4 action label") }
+200 |         r.eq(Set(labels.map(\.0)).count, labels.count, "M4 actions Hashable")
+    |                             `- error: cannot infer key path type from context; consider explicitly specifying a root type
+201 |         let presentation = RecoveryPolicy.presentation(kind: .deliveryUncertain, resources: resources())
+202 |         let id = UUID()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:201:28: error: cannot find 'RecoveryPolicy' in scope
+199 |         for (action, expected) in labels { r.eq(action.displayName, expected, "M4 action label") }
+200 |         r.eq(Set(labels.map(\.0)).count, labels.count, "M4 actions Hashable")
+201 |         let presentation = RecoveryPolicy.presentation(kind: .deliveryUncertain, resources: resources())
+    |                            `- error: cannot find 'RecoveryPolicy' in scope
+202 |         let id = UUID()
+203 |         let card = RecoveryCard(id: id, sessionID: 42, presentation: presentation)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:201:63: error: cannot infer contextual base in reference to member 'deliveryUncertain'
+199 |         for (action, expected) in labels { r.eq(action.displayName, expected, "M4 action label") }
+200 |         r.eq(Set(labels.map(\.0)).count, labels.count, "M4 actions Hashable")
+201 |         let presentation = RecoveryPolicy.presentation(kind: .deliveryUncertain, resources: resources())
+    |                                                               `- error: cannot infer contextual base in reference to member 'deliveryUncertain'
+202 |         let id = UUID()
+203 |         let card = RecoveryCard(id: id, sessionID: 42, presentation: presentation)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:203:20: error: cannot find 'RecoveryCard' in scope
+201 |         let presentation = RecoveryPolicy.presentation(kind: .deliveryUncertain, resources: resources())
+202 |         let id = UUID()
+203 |         let card = RecoveryCard(id: id, sessionID: 42, presentation: presentation)
+    |                    `- error: cannot find 'RecoveryCard' in scope
+204 |         r.eq(card, RecoveryCard(id: id, sessionID: 42, presentation: presentation), "M4 card equality")
+205 |         r.check(card != RecoveryCard(id: UUID(), sessionID: 42, presentation: presentation), "M4 card identity")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:204:20: error: cannot find 'RecoveryCard' in scope
+202 |         let id = UUID()
+203 |         let card = RecoveryCard(id: id, sessionID: 42, presentation: presentation)
+204 |         r.eq(card, RecoveryCard(id: id, sessionID: 42, presentation: presentation), "M4 card equality")
+    |                    `- error: cannot find 'RecoveryCard' in scope
+205 |         r.check(card != RecoveryCard(id: UUID(), sessionID: 42, presentation: presentation), "M4 card identity")
+206 |         r.check(card != RecoveryCard(id: id, sessionID: 43, presentation: presentation), "M4 card session ownership")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:205:25: error: cannot find 'RecoveryCard' in scope
+203 |         let card = RecoveryCard(id: id, sessionID: 42, presentation: presentation)
+204 |         r.eq(card, RecoveryCard(id: id, sessionID: 42, presentation: presentation), "M4 card equality")
+205 |         r.check(card != RecoveryCard(id: UUID(), sessionID: 42, presentation: presentation), "M4 card identity")
+    |                         `- error: cannot find 'RecoveryCard' in scope
+206 |         r.check(card != RecoveryCard(id: id, sessionID: 43, presentation: presentation), "M4 card session ownership")
+207 |     }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:206:25: error: cannot find 'RecoveryCard' in scope
+204 |         r.eq(card, RecoveryCard(id: id, sessionID: 42, presentation: presentation), "M4 card equality")
+205 |         r.check(card != RecoveryCard(id: UUID(), sessionID: 42, presentation: presentation), "M4 card identity")
+206 |         r.check(card != RecoveryCard(id: id, sessionID: 43, presentation: presentation), "M4 card session ownership")
+    |                         `- error: cannot find 'RecoveryCard' in scope
+207 |     }
+208 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:211:28: error: value of type 'ErrorRecoveryContext' has no member 'failureKind'
+209 |     private static func context(_ r: SelfTest.Reporter) {
+210 |         let configuration = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: nil, retryable: true)
+211 |         r.eq(configuration.failureKind, .configuration(.credentials), "M4 legacy retryable cannot override configuration")
+    |                            `- error: value of type 'ErrorRecoveryContext' has no member 'failureKind'
+212 |         r.eq(configuration.textKind, .none, "M4 nil text inference")
+213 |         r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:211:42: error: type 'Equatable' has no member 'configuration'
+209 |     private static func context(_ r: SelfTest.Reporter) {
+210 |         let configuration = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: nil, retryable: true)
+211 |         r.eq(configuration.failureKind, .configuration(.credentials), "M4 legacy retryable cannot override configuration")
+    |                                          `- error: type 'Equatable' has no member 'configuration'
+212 |         r.eq(configuration.textKind, .none, "M4 nil text inference")
+213 |         r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:211:57: error: cannot infer contextual base in reference to member 'credentials'
+209 |     private static func context(_ r: SelfTest.Reporter) {
+210 |         let configuration = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: nil, retryable: true)
+211 |         r.eq(configuration.failureKind, .configuration(.credentials), "M4 legacy retryable cannot override configuration")
+    |                                                         `- error: cannot infer contextual base in reference to member 'credentials'
+212 |         r.eq(configuration.textKind, .none, "M4 nil text inference")
+213 |         r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:212:28: error: value of type 'ErrorRecoveryContext' has no member 'textKind'
+210 |         let configuration = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: nil, retryable: true)
+211 |         r.eq(configuration.failureKind, .configuration(.credentials), "M4 legacy retryable cannot override configuration")
+212 |         r.eq(configuration.textKind, .none, "M4 nil text inference")
+    |                            `- error: value of type 'ErrorRecoveryContext' has no member 'textKind'
+213 |         r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
+214 |         r.check(configuration.error is CloudASRError && configuration.retryable, "M4 original error/retryable retained")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:212:39: error: type 'Equatable' has no member 'none'
+210 |         let configuration = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: nil, retryable: true)
+211 |         r.eq(configuration.failureKind, .configuration(.credentials), "M4 legacy retryable cannot override configuration")
+212 |         r.eq(configuration.textKind, .none, "M4 nil text inference")
+    |                                       `- error: type 'Equatable' has no member 'none'
+213 |         r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
+214 |         r.check(configuration.error is CloudASRError && configuration.retryable, "M4 original error/retryable retained")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:215:151: error: extra argument 'failureKind' in call
+213 |         r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
+214 |         r.check(configuration.error is CloudASRError && configuration.retryable, "M4 original error/retryable retained")
+215 |         let transient = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: "synthetic", retryable: false, failureKind: .transientASR)
+    |                                                                                                                                                       `- error: extra argument 'failureKind' in call
+216 |         r.eq(transient.failureKind, .transientASR, "M4 explicit kind wins over legacy retryable and error")
+217 |         r.eq(transient.textKind, .raw, "M4 nonnil text inference")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:215:151: error: cannot infer contextual base in reference to member 'transientASR'
+213 |         r.eq(configuration.failedStage, "ASR", "M4 legacy stage retained")
+214 |         r.check(configuration.error is CloudASRError && configuration.retryable, "M4 original error/retryable retained")
+215 |         let transient = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: "synthetic", retryable: false, failureKind: .transientASR)
+    |                                                                                                                                                       `- error: cannot infer contextual base in reference to member 'transientASR'
+216 |         r.eq(transient.failureKind, .transientASR, "M4 explicit kind wins over legacy retryable and error")
+217 |         r.eq(transient.textKind, .raw, "M4 nonnil text inference")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:216:38: error: type 'Equatable' has no member 'transientASR'
+214 |         r.check(configuration.error is CloudASRError && configuration.retryable, "M4 original error/retryable retained")
+215 |         let transient = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: "synthetic", retryable: false, failureKind: .transientASR)
+216 |         r.eq(transient.failureKind, .transientASR, "M4 explicit kind wins over legacy retryable and error")
+    |                                      `- error: type 'Equatable' has no member 'transientASR'
+217 |         r.eq(transient.textKind, .raw, "M4 nonnil text inference")
+218 |         r.eq(transient.rawText, "synthetic", "M4 raw text retained only in context")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:217:35: error: type 'Equatable' has no member 'raw'
+215 |         let transient = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey, rawText: "synthetic", retryable: false, failureKind: .transientASR)
+216 |         r.eq(transient.failureKind, .transientASR, "M4 explicit kind wins over legacy retryable and error")
+217 |         r.eq(transient.textKind, .raw, "M4 nonnil text inference")
+    |                                   `- error: type 'Equatable' has no member 'raw'
+218 |         r.eq(transient.rawText, "synthetic", "M4 raw text retained only in context")
+219 |         let result = ErrorRecoveryContext(failedStage: "Injection", error: InjectionStageError.invalidPayload, rawText: "synthetic", retryable: true, failureKind: .deliveryBlocked, textKind: .result)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:219:42: error: extra arguments at positions #5, #6 in call
+217 |         r.eq(transient.textKind, .raw, "M4 nonnil text inference")
+218 |         r.eq(transient.rawText, "synthetic", "M4 raw text retained only in context")
+219 |         let result = ErrorRecoveryContext(failedStage: "Injection", error: InjectionStageError.invalidPayload, rawText: "synthetic", retryable: true, failureKind: .deliveryBlocked, textKind: .result)
+    |                                          `- error: extra arguments at positions #5, #6 in call
+220 |         r.eq(result.textKind, .result, "M4 explicit complete result kind")
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Core/Pipeline/PipelineStage.swift:38:8: note: 'init(failedStage:error:rawText:retryable:)' declared here
+36 | 
+37 | /// Context for retryable error cards displayed to the user.
+38 | struct ErrorRecoveryContext {
+   |        `- note: 'init(failedStage:error:rawText:retryable:)' declared here
+39 |     let failedStage: String
+40 |     let error: Error
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:219:165: error: cannot infer contextual base in reference to member 'deliveryBlocked'
+217 |         r.eq(transient.textKind, .raw, "M4 nonnil text inference")
+218 |         r.eq(transient.rawText, "synthetic", "M4 raw text retained only in context")
+219 |         let result = ErrorRecoveryContext(failedStage: "Injection", error: InjectionStageError.invalidPayload, rawText: "synthetic", retryable: true, failureKind: .deliveryBlocked, textKind: .result)
+    |                                                                                                                                                                     `- error: cannot infer contextual base in reference to member 'deliveryBlocked'
+220 |         r.eq(result.textKind, .result, "M4 explicit complete result kind")
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:219:193: error: cannot infer contextual base in reference to member 'result'
+217 |         r.eq(transient.textKind, .raw, "M4 nonnil text inference")
+218 |         r.eq(transient.rawText, "synthetic", "M4 raw text retained only in context")
+219 |         let result = ErrorRecoveryContext(failedStage: "Injection", error: InjectionStageError.invalidPayload, rawText: "synthetic", retryable: true, failureKind: .deliveryBlocked, textKind: .result)
+    |                                                                                                                                                                                                 `- error: cannot infer contextual base in reference to member 'result'
+220 |         r.eq(result.textKind, .result, "M4 explicit complete result kind")
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:220:32: error: type 'Equatable' has no member 'result'
+218 |         r.eq(transient.rawText, "synthetic", "M4 raw text retained only in context")
+219 |         let result = ErrorRecoveryContext(failedStage: "Injection", error: InjectionStageError.invalidPayload, rawText: "synthetic", retryable: true, failureKind: .deliveryBlocked, textKind: .result)
+220 |         r.eq(result.textKind, .result, "M4 explicit complete result kind")
+    |                                `- error: type 'Equatable' has no member 'result'
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+222 |         r.eq(unknown.failureKind, .internalFailure, "M4 unknown retryable cannot infer transient")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:222:22: error: value of type 'ErrorRecoveryContext' has no member 'failureKind'
+220 |         r.eq(result.textKind, .result, "M4 explicit complete result kind")
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+222 |         r.eq(unknown.failureKind, .internalFailure, "M4 unknown retryable cannot infer transient")
+    |                      `- error: value of type 'ErrorRecoveryContext' has no member 'failureKind'
+223 |         r.eq(unknown.textKind, .raw, "M4 text inference uses existence")
+224 |     }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:222:36: error: type 'Equatable' has no member 'internalFailure'
+220 |         r.eq(result.textKind, .result, "M4 explicit complete result kind")
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+222 |         r.eq(unknown.failureKind, .internalFailure, "M4 unknown retryable cannot infer transient")
+    |                                    `- error: type 'Equatable' has no member 'internalFailure'
+223 |         r.eq(unknown.textKind, .raw, "M4 text inference uses existence")
+224 |     }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:223:22: error: value of type 'ErrorRecoveryContext' has no member 'textKind'
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+222 |         r.eq(unknown.failureKind, .internalFailure, "M4 unknown retryable cannot infer transient")
+223 |         r.eq(unknown.textKind, .raw, "M4 text inference uses existence")
+    |                      `- error: value of type 'ErrorRecoveryContext' has no member 'textKind'
+224 |     }
+225 | }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M4RecoveryPolicySelfTests.swift:223:33: error: type 'Equatable' has no member 'raw'
+221 |         let unknown = ErrorRecoveryContext(failedStage: "ASR", error: NSError(domain: "synthetic", code: 1), rawText: "", retryable: true)
+222 |         r.eq(unknown.failureKind, .internalFailure, "M4 unknown retryable cannot infer transient")
+223 |         r.eq(unknown.textKind, .raw, "M4 text inference uses existence")
+    |                                 `- error: type 'Equatable' has no member 'raw'
+224 |     }
+225 | }
