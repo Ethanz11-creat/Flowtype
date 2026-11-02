@@ -1,0 +1,98 @@
+Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift:16:            let result = try await provider.transcribe(ASRRequest(samples: [Float](repeating: 0, count: 16_000 * 61), sampleRate: 16000, language: "zh", context: ASRContext(phrases: ["热词"], foreground: nil), timeout: 60))
+Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift:217:                _ = try await provider.transcribe(ASRRequest(samples: [0], sampleRate: 44100, language: nil, context: nil, timeout: 1))
+Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift:351:        ASRRequest(samples: [0], sampleRate: 16000, language: nil, context: nil, timeout: 5)
+Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift:368:    func transcribe(samples: [Float], language: String?, prompt: String?) async throws -> [String] {
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:6:            r.eq(try SpeechPreflight.analyze(samples: Array(repeating: 0, count: 80000)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:8:            r.eq(try SpeechPreflight.analyze(samples: []), .emptyCapture, "no captured audio")
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:9:            r.eq(try SpeechPreflight.analyze(samples: Array(repeating: 0, count: 800)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:11:            r.eq(try SpeechPreflight.analyze(samples: Array(repeating: 0, count: 1600), sampleRate: 48000),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:13:            r.eq(try SpeechPreflight.analyze(samples: Array(repeating: 0, count: 1599)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:15:            r.eq(try SpeechPreflight.analyze(samples: Array(repeating: 0, count: 1600)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:17:            r.eq(try SpeechPreflight.analyze(samples: [], sampleRate: 0),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:20:                r.eq(try SpeechPreflight.analyze(samples: Array(repeating: 0, count: 1600), sampleRate: rate),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:28:                r.eq(try SpeechPreflight.analyze(samples: Array(repeating: level, count: 1600)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:39:                    r.eq(try SpeechPreflight.analyze(samples: samples), expected,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:47:                r.eq(try SpeechPreflight.analyze(samples: samples), .possiblySpeech,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:50:                r.eq(try SpeechPreflight.analyze(samples: samples), .possiblySpeech,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:54:            r.eq(try SpeechPreflight.analyze(samples: sine), .clearlySilent,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:56:            r.eq(try SpeechPreflight.analyze(samples: sine.map { $0 * 4 }), .possiblySpeech,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:60:            r.eq(try SpeechPreflight.analyze(samples: delayed), .possiblySpeech,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:64:            r.eq(try SpeechPreflight.analyze(samples: mixed), .possiblySpeech,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:70:                r.eq(try SpeechPreflight.analyze(samples: mixedFrame + Array(repeating: 0, count: 1280)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:73:            r.eq(try SpeechPreflight.analyze(samples: [0.5]), .indeterminate(.tooShort),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:79:                    r.eq(try SpeechPreflight.analyze(samples: samples), .indeterminate(.invalidSamples),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:82:                    r.eq(try SpeechPreflight.analyze(samples: samples), .indeterminate(.invalidSamples),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:85:                r.eq(try SpeechPreflight.analyze(samples: [invalid]), .indeterminate(.invalidSamples),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:88:            r.eq(try SpeechPreflight.analyze(samples: [1, -1] + Array(repeating: 0, count: 1598)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:113:        func analyze(_ samples: [Float], _ rate: Int, cooperative: Bool, throwsError: Bool) throws -> SpeechPreflightDecision {
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:135:            r.eq(try await SpeechPreflight.evaluate(samples: Array(repeating: 0, count: 1600)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:137:            r.eq(try await SpeechPreflight.evaluate(samples: [0.5] + Array(repeating: 0, count: 1599)),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:139:            r.eq(try await SpeechPreflight.evaluate(samples: [0.5] + Array(repeating: 0, count: 1600) + [.nan]),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:149:                    return .success(try await SpeechPreflight.evaluate(samples: [0.25, -0.5], sampleRate: 12345,
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:188:        let realScan = Task { try await SpeechPreflight.evaluate(samples: longPCM) }
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:196:        let cancelledBeforeStart = Task { try await SpeechPreflight.evaluate(samples: []) }
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:212:            let analyzed = try SpeechPreflight.analyze(samples: samples)
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:216:            let evaluated = try await SpeechPreflight.evaluate(samples: samples)
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:222:        let task = Task { try await SpeechPreflight.evaluate(samples: samples) }
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:318:            for samples: [Float] in [Array(repeating: 0, count: 80000), []] {
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:327:                let result = await stage.execute(payload: .audio(samples: samples, previewText: "Apple preview hallucination"), context: context)
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:335:                let capture = Capture { ctx in ctx.captureRoute = saved; return .audio(samples: samples, previewText: "Apple preview hallucination") }
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:351:                _ = await stage.execute(payload: .audio(samples: samples, previewText: "preview"), context: direct)
+Sources/flowtype/Testing/ImportedLifecycleSelfTests.swift:110:        _ = await stage.execute(payload: .audio(samples: [0, 0, 0], previewText: ""), context: first)
+Sources/flowtype/Testing/ImportedLifecycleSelfTests.swift:113:        _ = await stage.execute(payload: .audio(samples: [0, 0], previewText: ""), context: next)
+Sources/flowtype/Testing/ImportedLifecycleSelfTests.swift:141:        _ = await stage.execute(payload: .audio(samples: [0], previewText: ""), context: retained)
+Sources/flowtype/Testing/CloudProviderSelfTests.swift:141:        _ = try? await client.transcribe(ASRRequest(samples: [0], sampleRate: 16000, language: nil, context: nil,
+Sources/flowtype/Testing/CloudProviderSelfTests.swift:299:        let samples: [Float] = [0, 1, -1, 0.5]
+Sources/flowtype/Testing/CloudProviderSelfTests.swift:307:            ASRRequest(samples: samples, sampleRate: 16000, language: "zh", context: context, timeout: 2,
+Sources/flowtype/Testing/CloudProviderSelfTests.swift:581:            var buffer = [UInt8](repeating: 0, count: 4096)
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:98:    func transcribe(samples: [Float], language: String?, prompt: String?) async throws -> [String] { ["retained"] }
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:173:                    let output = try await captured.provider.transcribe(ASRRequest(samples: [0], sampleRate: 16000, language: nil, context: nil, timeout: 1))
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:700:        let samples: [Float] = (0..<3207).map { Float($0) / 4000 }
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:703:        _ = await stage.execute(payload: .audio(samples: samples, previewText: ""), context: first)
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:708:        _ = await stage.execute(payload: .audio(samples: samples, previewText: ""), context: next)
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:807:    var samples: [Float] = []
+Sources/flowtype/Testing/SelfTest.swift:200:                       hourHistogram: hist ?? Array(repeating: 0, count: 24))
+Sources/flowtype/Testing/SelfTest.swift:230:        var h = Array(repeating: 0, count: 24); h[21] = 5; h[9] = 2
+Sources/flowtype/Testing/SelfTest.swift:248:                                hourHistogram: Array(repeating: 0, count: 24))
+Sources/flowtype/Testing/SelfTest.swift:255:                                  hourHistogram: Array(repeating: 0, count: 24))
+Sources/flowtype/Testing/SelfTest.swift:266:                       hourHistogram: hist ?? Array(repeating: 0, count: 24))
+Sources/flowtype/Testing/SelfTest.swift:2288:        var mags = [Float](repeating: 0, count: 512)   // fftSize 1024 -> 512 magnitudes
+Sources/flowtype/Testing/SelfTest.swift:2333:        let silence = [Float](repeating: 0, count: 1024)
+Sources/flowtype/Testing/SelfTest.swift:2681:        let samples: [Float] = [-1, -0.5, 0, 0.5, 1, .nan, .infinity, -.infinity, -2, 2]
+Sources/flowtype/Testing/SelfTest.swift:2684:        r.eq(encodePCM16LE(Array(repeating: 0, count: 1600)).count, 3200, "realtime: 100ms PCM chunk is 3200 bytes")
+Sources/flowtype/Testing/SelfTest.swift:2805:        func append(samples: [Float]) async throws { chunks.append(samples) }
+Sources/flowtype/Testing/SelfTest.swift:2881:            _ = await rejectedStage.execute(payload: .audio(samples: [0.25, -0.5], previewText: ""), context: rejected)
+Sources/flowtype/Testing/SelfTest.swift:2903:        let failed = await stage.execute(payload: .audio(samples: completeSamples, previewText: ""), context: context)
+Sources/flowtype/Testing/SelfTest.swift:2917:        _ = await stage.execute(payload: .audio(samples: completeSamples, previewText: "preview partial"), context: winner)
+Sources/flowtype/Testing/SelfTest.swift:2930:        _ = await savedStage.execute(payload: .audio(samples: manySamples, previewText: ""), context: retry)
+Sources/flowtype/Testing/SelfTest.swift:2942:        let expired = await slowStage.execute(payload: .audio(samples: completeSamples, previewText: "partial"), context: bounded)
+Sources/flowtype/Testing/SelfTest.swift:2958:        let task = Task { await cancelStage.execute(payload: .audio(samples: completeSamples, previewText: "partial"), context: cancelContext) }
+Sources/flowtype/Testing/SelfTest.swift:2973:        try? overflowAdapter.ingress.enqueue(samples: manySamples)
+Sources/flowtype/Testing/SelfTest.swift:2974:        _ = await stage.execute(payload: .audio(samples: manySamples, previewText: ""), context: overflowContext)
+Sources/flowtype/Testing/SelfTest.swift:2985:        _ = await fiveSecondStage.execute(payload: .audio(samples: completeSamples, previewText: ""), context: cloudBudget)
+Sources/flowtype/Testing/SelfTest.swift:3014:        let request = ASRRequest(samples: completeSamples, sampleRate: 16000, language: nil, context: nil,
+Sources/flowtype/Testing/SelfTest.swift:3030:            let batchResult = try await batch.transcribe(ASRRequest(samples: completeSamples, sampleRate: 16000, language: "en",
+Sources/flowtype/Testing/SelfTest.swift:3040:        _ = try? await batch.transcribe(ASRRequest(samples: completeSamples, sampleRate: 16000, language: nil,
+Sources/flowtype/Testing/SelfTest.swift:3062:        let savedTask = Task { try await transcribeSavedRealtime(samples: manySamples, handle: savedHandle) }
+Sources/flowtype/Testing/SelfTest.swift:3090:        try! ingress.enqueue(samples: [1, 2])
+Sources/flowtype/Testing/SelfTest.swift:3091:        try! ingress.enqueue(samples: [3, 4])
+Sources/flowtype/Testing/SelfTest.swift:3104:        do { try ingress.enqueue(samples: [5]); r.check(false, "ingress: sealed enqueue rejected") }
+Sources/flowtype/Testing/SelfTest.swift:3112:        try! overflow.enqueue(samples: [1, 2])
+Sources/flowtype/Testing/SelfTest.swift:3114:        do { try overflow.enqueue(samples: [3]); r.check(false, "ingress: in-flight overflow rejected") }
+Sources/flowtype/Testing/SelfTest.swift:3120:        try! cancelled.enqueue(samples: [1])
+Sources/flowtype/Testing/SelfTest.swift:3123:        do { try cancelled.enqueue(samples: [2]); r.check(false, "ingress: late capture after cancel rejected") }
+Sources/flowtype/Testing/SelfTest.swift:3135:                try! ingress.enqueue(samples: [1])
+Sources/flowtype/Testing/SelfTest.swift:3136:                try! ingress.enqueue(samples: [2])
+Sources/flowtype/Testing/SelfTest.swift:3138:                else { try? ingress.enqueue(samples: [3]) }
+Sources/flowtype/Testing/SelfTest.swift:3160:        DispatchQueue.concurrentPerform(iterations: 100) { _ in try! ingress.enqueue(samples: [0]) }
+Sources/flowtype/Testing/SelfTest.swift:3260:            try adapter.ingress.enqueue(samples: [-1, 0])
+Sources/flowtype/Testing/SelfTest.swift:3261:            try adapter.ingress.enqueue(samples: [1])
+Sources/flowtype/Testing/SelfTest.swift:3307:                try adapter.ingress.enqueue(samples: [-0.5, 0.5])
+Sources/flowtype/Testing/SelfTest.swift:3345:            try await adapter.append(samples: [0.5])
+Sources/flowtype/Testing/SelfTest.swift:3379:                        try? adapter.ingress.enqueue(samples: [0, 0, 0])
+Sources/flowtype/Testing/SelfTest.swift:3392:                    try await adapter.append(samples: [0, 0, 0])
+Sources/flowtype/Testing/SelfTest.swift:3395:                        try adapter.ingress.enqueue(samples: [0])
+Sources/flowtype/Testing/SelfTest.swift:3397:                        if mode == "sync-overflow-drain" { try? adapter.ingress.enqueue(samples: [0, 0]) }
+Sources/flowtype/Testing/SelfTest.swift:3441:                    try await adapter.append(samples: [0, 1])
+Sources/flowtype/Testing/SelfTest.swift:3453:                    try await adapter.append(samples: [-1, 0])
+Sources/flowtype/Testing/SelfTest.swift:3787:        r.eq(fallbackReason(for: CloudASRError.audioEncodingFailed), "error", "fallback: audioEncodingFailed")

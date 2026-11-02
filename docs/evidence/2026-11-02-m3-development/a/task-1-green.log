@@ -1,0 +1,113 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/9] Compiling FlowType M3DeliverySelfTests.swift
+[4/9] Compiling FlowType DeliveryPolicy.swift
+[5/9] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[6/9] Compiling FlowType KeyboardInjector.swift
+[7/58] Compiling FlowType FlowTypeApp.swift
+[8/58] Compiling FlowType StatusBarController.swift
+[9/58] Compiling FlowType CapsuleView.swift
+[10/58] Compiling FlowType Configuration.swift
+[11/58] Compiling FlowType ConfigurationStore.swift
+[12/58] Compiling FlowType EnvMigration.swift
+[13/58] Compiling FlowType AudioFeedbackObserver.swift
+[14/59] Compiling FlowType CloudASRProviderList.swift
+[15/59] Compiling FlowType ImportedASRModelActions.swift
+[16/59] Compiling FlowType ImportedASRModelList.swift
+[17/59] Compiling FlowType LocalModelPicker.swift
+[18/59] Compiling FlowType OnboardingView.swift
+[19/59] Compiling FlowType QwenModelStatusCard.swift
+[20/59] Compiling FlowType SessionContext.swift
+[21/59] Compiling FlowType SettingsPage+ASR.swift
+[22/59] Compiling FlowType SettingsPage+Appearance.swift
+[23/59] Compiling FlowType SettingsPage+LLM.swift
+[24/59] Compiling FlowType SettingsPage+Privacy.swift
+[25/59] Compiling FlowType SettingsPage+ProviderActions.swift
+[26/59] Compiling FlowType SettingsPage+Recording.swift
+[27/59] Compiling FlowType StylePack.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:196:32: warning: result of call to 'withLock' is unused [#no-usage]
+194 |                 self.stateLock.withLock { $0.finalResult = transcript }
+195 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+196 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+197 | 
+198 |                 if result.isFinal {
+[28/59] Compiling FlowType LLMService.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:196:32: warning: result of call to 'withLock' is unused [#no-usage]
+194 |                 self.stateLock.withLock { $0.finalResult = transcript }
+195 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+196 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+197 | 
+198 |                 if result.isFinal {
+[29/59] Compiling FlowType ASRRouter.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:196:32: warning: result of call to 'withLock' is unused [#no-usage]
+194 |                 self.stateLock.withLock { $0.finalResult = transcript }
+195 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+196 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+197 | 
+198 |                 if result.isFinal {
+[30/59] Compiling FlowType AppleSpeechProvider.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:196:32: warning: result of call to 'withLock' is unused [#no-usage]
+194 |                 self.stateLock.withLock { $0.finalResult = transcript }
+195 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+196 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+197 | 
+198 |                 if result.isFinal {
+[31/59] Compiling FlowType CloudASRProvider.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:196:32: warning: result of call to 'withLock' is unused [#no-usage]
+194 |                 self.stateLock.withLock { $0.finalResult = transcript }
+195 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+196 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+197 | 
+198 |                 if result.isFinal {
+[32/59] Compiling FlowType LocalModelLibrary.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:196:32: warning: result of call to 'withLock' is unused [#no-usage]
+194 |                 self.stateLock.withLock { $0.finalResult = transcript }
+195 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+196 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+197 | 
+198 |                 if result.isFinal {
+[33/59] Compiling FlowType SettingsPage+Trigger.swift
+[34/59] Compiling FlowType SettingsView.swift
+[35/59] Compiling FlowType CloudProviderSelfTests.swift
+[36/59] Compiling FlowType ImportedLifecycleSelfTests.swift
+[37/59] Compiling FlowType ImportedModelUISelfTests.swift
+[38/59] Compiling FlowType LocalModelImportSelfTests.swift
+[39/59] Compiling FlowType ModelDownloader.swift
+[40/59] Compiling FlowType ModelLocator.swift
+[41/59] Compiling FlowType ModelRecoveryActions.swift
+[42/59] Compiling FlowType ModelRecoveryPresentation.swift
+[43/59] Compiling FlowType QwenModelState.swift
+[44/59] Compiling FlowType ASRModelStatusCard.swift
+[45/59] Compiling FlowType PipelineRegistry.swift
+[46/59] Compiling FlowType InjectionStage.swift
+[47/59] Compiling FlowType PolishStage.swift
+[48/59] Compiling FlowType RecordingStage.swift
+[49/59] Compiling FlowType PipelineOrchestrator.swift
+[50/59] Compiling FlowType ReadinessMonitor.swift
+[51/59] Compiling FlowType M2ReviewFixSelfTests.swift
+[52/59] Compiling FlowType ModelProvisionSelfTests.swift
+[53/59] Compiling FlowType SelfTest.swift
+[54/59] Compiling FlowType WholeM2FixSelfTests.swift
+[55/59] Compiling FlowType SoundFeedback.swift
+[56/59] Compiling FlowType WindowManager.swift
+[56/59] Write Objects.LinkFileList
+[57/59] Linking FlowType
+[58/59] Applying FlowType
+Build of product 'FlowType' complete! (37.46s)
+=== FlowType --self-test ===
+=== M3 delivery self-test: 133 passed, 0 failed ===

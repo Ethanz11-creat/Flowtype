@@ -1,0 +1,11 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'FlowType' complete! (4.71s)
+=== FlowType --self-test ===
+M3 benchmark: synthetic zero PCM, 28800000 Float32 samples, 16000 Hz, 30 minutes
+M3 benchmark: logical CPUs=8, physicalMemory=17179869184 bytes
+M3 benchmark: production analyze elapsed=4.535130541 seconds decision=clearlySilent
+M3 benchmark: production evaluate elapsed=4.530749708 seconds decision=clearlySilent
+M3 benchmark: cancellation requested after=0.003298541 seconds; request-to-worker-exit=8.0167e-05 seconds; result=CancellationError()
+=== M3 silence benchmark: 3 passed, 0 failed ===

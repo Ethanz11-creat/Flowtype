@@ -1,0 +1,71 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/6] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[4/7] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[5/7] Compiling FlowType SelfTest.swift
+[5/8] Write Objects.LinkFileList
+[6/8] Linking FlowType
+[7/8] Applying FlowType
+Build of product 'FlowType' complete! (20.31s)
+  ✗ FAIL: M3 ASR localOnly/80000: real ASR must stop with notice
+  ✗ FAIL: M3 ASR localOnly/80000: no batch recognition — got 1, want 0
+  ✗ FAIL: M3 ASR localOnly/80000: no health writes — got 1, want 0
+  ✗ FAIL: M3 ASR localOnly/80000: no accepted transcript or preview — got synthetic hallucination, want 
+  ✗ FAIL: M3 ASR localOnly/80000: controller notice — got notice("已复制，按 ⌘V 粘贴"), want notice("未检测到声音，请重试")
+  ✗ FAIL: M3 ASR localOnly/80000: no PostProcess/Polish/Injection — got ["PostProcess", "Polish", "Injection"], want []
+  ✗ FAIL: M3 ASR localOnly/80000: no keyboard or clipboard mutation — got 1, want 0
+  ✗ FAIL: M3 ASR localOnly/80000: no transcription history — got 1, want 0
+  ✗ FAIL: M3 ASR localOnly/80000: no new delivery summary — got Optional(FlowType.LastDeliverySummary(sessionID: 1, outcome: FlowType.DeliveryOutcome.clipboard, targetAppName: nil, targetBundleID: nil)), want nil
+  ✗ FAIL: M3 ASR localOnly/80000: silence without saved route cannot construct route — got 1, want 0
+  ✗ FAIL: M3 ASR localOnly/0: real ASR must stop with notice
+  ✗ FAIL: M3 ASR localOnly/0: controller notice — got notice("已复制，按 ⌘V 粘贴"), want notice("未录到音频，请重试")
+  ✗ FAIL: M3 ASR localOnly/0: no PostProcess/Polish/Injection — got ["PostProcess", "Polish", "Injection"], want []
+  ✗ FAIL: M3 ASR localOnly/0: no keyboard or clipboard mutation — got 1, want 0
+  ✗ FAIL: M3 ASR localOnly/0: no transcription history — got 1, want 0
+  ✗ FAIL: M3 ASR localOnly/0: no new delivery summary — got Optional(FlowType.LastDeliverySummary(sessionID: 1, outcome: FlowType.DeliveryOutcome.clipboard, targetAppName: nil, targetBundleID: nil)), want nil
+  ✗ FAIL: M3 ASR localOnly/0: silence without saved route cannot construct route — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/80000: real ASR must stop with notice
+  ✗ FAIL: M3 ASR cloudOnly/80000: no batch recognition — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/80000: no health writes — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/80000: no accepted transcript or preview — got synthetic hallucination, want 
+  ✗ FAIL: M3 ASR cloudOnly/80000: controller notice — got notice("已复制，按 ⌘V 粘贴"), want notice("未检测到声音，请重试")
+  ✗ FAIL: M3 ASR cloudOnly/80000: no PostProcess/Polish/Injection — got ["PostProcess", "Polish", "Injection"], want []
+  ✗ FAIL: M3 ASR cloudOnly/80000: no keyboard or clipboard mutation — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/80000: no transcription history — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/80000: no new delivery summary — got Optional(FlowType.LastDeliverySummary(sessionID: 1, outcome: FlowType.DeliveryOutcome.clipboard, targetAppName: nil, targetBundleID: nil)), want nil
+  ✗ FAIL: M3 ASR cloudOnly/80000: silence without saved route cannot construct route — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/0: real ASR must stop with notice
+  ✗ FAIL: M3 ASR cloudOnly/0: controller notice — got notice("已复制，按 ⌘V 粘贴"), want notice("未录到音频，请重试")
+  ✗ FAIL: M3 ASR cloudOnly/0: no PostProcess/Polish/Injection — got ["PostProcess", "Polish", "Injection"], want []
+  ✗ FAIL: M3 ASR cloudOnly/0: no keyboard or clipboard mutation — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/0: no transcription history — got 1, want 0
+  ✗ FAIL: M3 ASR cloudOnly/0: no new delivery summary — got Optional(FlowType.LastDeliverySummary(sessionID: 1, outcome: FlowType.DeliveryOutcome.clipboard, targetAppName: nil, targetBundleID: nil)), want nil
+  ✗ FAIL: M3 ASR cloudOnly/0: silence without saved route cannot construct route — got 1, want 0
+  ✗ FAIL: M3 ASR auto/80000: real ASR must stop with notice
+  ✗ FAIL: M3 ASR auto/80000: no batch recognition — got 1, want 0
+  ✗ FAIL: M3 ASR auto/80000: no health writes — got 1, want 0
+  ✗ FAIL: M3 ASR auto/80000: no accepted transcript or preview — got synthetic hallucination, want 
+  ✗ FAIL: M3 ASR auto/80000: controller notice — got notice("已复制，按 ⌘V 粘贴"), want notice("未检测到声音，请重试")
+  ✗ FAIL: M3 ASR auto/80000: no PostProcess/Polish/Injection — got ["PostProcess", "Polish", "Injection"], want []
+  ✗ FAIL: M3 ASR auto/80000: no keyboard or clipboard mutation — got 1, want 0
+  ✗ FAIL: M3 ASR auto/80000: no transcription history — got 1, want 0
+  ✗ FAIL: M3 ASR auto/80000: no new delivery summary — got Optional(FlowType.LastDeliverySummary(sessionID: 1, outcome: FlowType.DeliveryOutcome.clipboard, targetAppName: nil, targetBundleID: nil)), want nil
+  ✗ FAIL: M3 ASR auto/80000: silence without saved route cannot construct route — got 1, want 0
+  ✗ FAIL: M3 ASR auto/0: real ASR must stop with notice
+  ✗ FAIL: M3 ASR auto/0: controller notice — got notice("已复制，按 ⌘V 粘贴"), want notice("未录到音频，请重试")
+  ✗ FAIL: M3 ASR auto/0: no PostProcess/Polish/Injection — got ["PostProcess", "Polish", "Injection"], want []
+  ✗ FAIL: M3 ASR auto/0: no keyboard or clipboard mutation — got 1, want 0
+  ✗ FAIL: M3 ASR auto/0: no transcription history — got 1, want 0
+  ✗ FAIL: M3 ASR auto/0: no new delivery summary — got Optional(FlowType.LastDeliverySummary(sessionID: 1, outcome: FlowType.DeliveryOutcome.clipboard, targetAppName: nil, targetBundleID: nil)), want nil
+  ✗ FAIL: M3 ASR auto/0: silence without saved route cannot construct route — got 1, want 0
+=== FlowType --self-test ===
+=== M3 silence self-test: 756 passed, 51 failed ===

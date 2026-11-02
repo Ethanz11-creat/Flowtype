@@ -1,0 +1,23 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/6] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[4/7] Write Objects.LinkFileList
+[5/7] Linking FlowType
+[6/7] Applying FlowType
+Build of product 'FlowType' complete! (14.92s)
+  ✗ FAIL: M3 invalid controller: concrete data error displayed — got notice("录音数据异常，请重新录音"), want error("录音数据异常，请重新录音")
+  ✗ FAIL: M3 invalid controller: no Retry or copy-preview action — got [], want [FlowType.SessionController.ErrorAction.dismiss]
+  ✗ FAIL: M3 invalid controller: concrete data error displayed — got notice("录音数据异常，请重新录音"), want error("录音数据异常，请重新录音")
+  ✗ FAIL: M3 invalid controller: no Retry or copy-preview action — got [], want [FlowType.SessionController.ErrorAction.dismiss]
+=== FlowType --self-test ===
+=== M3 silence self-test: 983 passed, 4 failed ===

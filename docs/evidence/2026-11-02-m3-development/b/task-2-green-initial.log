@@ -1,0 +1,24 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/6] Compiling FlowType ASRStage.swift
+[5/11] Compiling FlowType ImportedLifecycleSelfTests.swift
+[6/11] Compiling FlowType SelfTest.swift
+[7/11] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[8/11] Compiling FlowType ModelProvisionSelfTests.swift
+[9/11] Compiling FlowType PipelineRegistry.swift
+[9/12] Write Objects.LinkFileList
+[10/12] Linking FlowType
+[11/12] Applying FlowType
+Build of product 'FlowType' complete! (23.75s)
+=== FlowType --self-test ===
+=== M3 silence self-test: 807 passed, 0 failed ===

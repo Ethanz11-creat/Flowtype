@@ -1,0 +1,98 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/7] Compiling FlowType M3FinalFixSelfTests.swift
+[4/8] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[5/8] Compiling FlowType SelfTest.swift
+[5/8] Write Objects.LinkFileList
+[6/8] Linking FlowType
+[7/8] Applying FlowType
+Build of product 'FlowType' complete! (16.36s)
+  ✗ FAIL: M3 final F1 pid/first: no pair after rejection — got 5, want 0
+  ✗ FAIL: M3 final F1 pid/first: rejection before first pair suspends
+  ✗ FAIL: M3 final F1 pid/chunk: no pair after rejection — got 5, want 1
+  ✗ FAIL: M3 final F1 pid/chunk: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 pid/before-newline: no pair after rejection — got 3, want 1
+  ✗ FAIL: M3 final F1 pid/before-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 pid/after-newline: no pair after rejection — got 2, want 1
+  ✗ FAIL: M3 final F1 pid/after-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 identity/first: no pair after rejection — got 5, want 0
+  ✗ FAIL: M3 final F1 identity/first: rejection before first pair suspends
+  ✗ FAIL: M3 final F1 identity/chunk: no pair after rejection — got 5, want 1
+  ✗ FAIL: M3 final F1 identity/chunk: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 identity/before-newline: no pair after rejection — got 3, want 1
+  ✗ FAIL: M3 final F1 identity/before-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 identity/after-newline: no pair after rejection — got 2, want 1
+  ✗ FAIL: M3 final F1 identity/after-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 secure/first: no pair after rejection — got 5, want 0
+  ✗ FAIL: M3 final F1 secure/first: rejection before first pair suspends
+  ✗ FAIL: M3 final F1 secure/chunk: no pair after rejection — got 5, want 1
+  ✗ FAIL: M3 final F1 secure/chunk: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 secure/before-newline: no pair after rejection — got 3, want 1
+  ✗ FAIL: M3 final F1 secure/before-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 secure/after-newline: no pair after rejection — got 2, want 1
+  ✗ FAIL: M3 final F1 secure/after-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 permission/first: no pair after rejection — got 5, want 0
+  ✗ FAIL: M3 final F1 permission/first: rejection before first pair suspends
+  ✗ FAIL: M3 final F1 permission/chunk: no pair after rejection — got 5, want 1
+  ✗ FAIL: M3 final F1 permission/chunk: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 permission/before-newline: no pair after rejection — got 3, want 1
+  ✗ FAIL: M3 final F1 permission/before-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 permission/after-newline: no pair after rejection — got 2, want 1
+  ✗ FAIL: M3 final F1 permission/after-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 blind/first: no pair after rejection — got 5, want 0
+  ✗ FAIL: M3 final F1 blind/first: rejection before first pair suspends
+  ✗ FAIL: M3 final F1 blind/chunk: no pair after rejection — got 5, want 1
+  ✗ FAIL: M3 final F1 blind/chunk: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 blind/before-newline: no pair after rejection — got 3, want 1
+  ✗ FAIL: M3 final F1 blind/before-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 blind/after-newline: no pair after rejection — got 2, want 1
+  ✗ FAIL: M3 final F1 blind/after-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 nontext/first: no pair after rejection — got 5, want 0
+  ✗ FAIL: M3 final F1 nontext/first: rejection before first pair suspends
+  ✗ FAIL: M3 final F1 nontext/chunk: no pair after rejection — got 5, want 1
+  ✗ FAIL: M3 final F1 nontext/chunk: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 nontext/before-newline: no pair after rejection — got 3, want 1
+  ✗ FAIL: M3 final F1 nontext/before-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F1 nontext/after-newline: no pair after rejection — got 2, want 1
+  ✗ FAIL: M3 final F1 nontext/after-newline: partial delivery uncertain — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 paste: cancellation materializes uncertain synchronously — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 paste: history saved while still owner — got 0, want 1
+  ✗ FAIL: M3 final F2 paste: saved outcome uncertain — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 paste: full recovery text saved — got nil, want Optional("字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字\n尾部")
+  ✗ FAIL: M3 final F2 paste: summary owns cancelled session — got nil, want Optional(1)
+  ✗ FAIL: M3 final F2 paste: immediate uncertain summary — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 paste-user-copy: cancellation materializes uncertain synchronously — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 paste-user-copy: history saved while still owner — got 0, want 1
+  ✗ FAIL: M3 final F2 paste-user-copy: saved outcome uncertain — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 paste-user-copy: full recovery text saved — got nil, want Optional("字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字\n尾部")
+  ✗ FAIL: M3 final F2 paste-user-copy: summary owns cancelled session — got nil, want Optional(1)
+  ✗ FAIL: M3 final F2 paste-user-copy: immediate uncertain summary — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 typing: cancellation materializes uncertain synchronously — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 typing: history saved while still owner — got 0, want 1
+  ✗ FAIL: M3 final F2 typing: saved outcome uncertain — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 typing: full recovery text saved — got nil, want Optional("字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字\n尾部")
+  ✗ FAIL: M3 final F2 typing: summary owns cancelled session — got nil, want Optional(1)
+  ✗ FAIL: M3 final F2 typing: immediate uncertain summary — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 pending-paste: cancellation materializes uncertain synchronously — got Optional(FlowType.DeliveryOutcome.pasteDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 pending-paste: history saved while still owner — got 0, want 1
+  ✗ FAIL: M3 final F2 pending-paste: saved outcome uncertain — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 pending-paste: full recovery text saved — got nil, want Optional("字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字\n尾部")
+  ✗ FAIL: M3 final F2 pending-paste: summary owns cancelled session — got nil, want Optional(1)
+  ✗ FAIL: M3 final F2 pending-paste: immediate uncertain summary — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 pending-typing: cancellation materializes uncertain synchronously — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 pending-typing: history saved while still owner — got 0, want 1
+  ✗ FAIL: M3 final F2 pending-typing: saved outcome uncertain — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: M3 final F2 pending-typing: full recovery text saved — got nil, want Optional("字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字\n尾部")
+  ✗ FAIL: M3 final F2 pending-typing: summary owns cancelled session — got nil, want Optional(1)
+  ✗ FAIL: M3 final F2 pending-typing: immediate uncertain summary — got nil, want Optional(FlowType.DeliveryOutcome.uncertain)
+=== FlowType --self-test ===
+=== M3 delivery self-test: 527 passed, 78 failed ===

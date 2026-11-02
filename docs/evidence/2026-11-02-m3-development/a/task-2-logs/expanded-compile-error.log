@@ -1,0 +1,26 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/6] Compiling FlowType M3DeliverySelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:370:44: error: instance method 'wait' is unavailable from asynchronous contexts; Await a Task handle instead
+368 |             let task = Task { await h.execute(stage) }
+369 |             let cancellation = Task.detached {
+370 |                 let reachedWrite = reached.wait(timeout: .now() + 5) == .success
+    |                                            `- error: instance method 'wait' is unavailable from asynchronous contexts; Await a Task handle instead
+371 |                 task.cancel()
+372 |                 cancelled.signal()
+
+Dispatch.DispatchSemaphore.wait:2:13: note: 'wait(timeout:)' declared here
+1 | class DispatchSemaphore {
+2 | public func wait(timeout: DispatchTime) -> DispatchTimeoutResult}
+  |             `- note: 'wait(timeout:)' declared here
+3 | 
+[4/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 

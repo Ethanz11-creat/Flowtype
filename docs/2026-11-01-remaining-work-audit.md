@@ -16,17 +16,17 @@ readiness=ready / AX=granted / mic=granted。没有把这次认可扩展成所�
 M2-A 下载恢复已完成阶段修复与审查（eb840f8，1619/0）；M2-B 云端厂商接入已完成阶段修复与审查（6fc1973，2034/0）。
 M2-C 已实现 Qwen3-ASR MLX / WhisperKit Core ML 检测、严格离线运行库、统一生命周期和模型库 UI；C3 检查点 63db2e9 为 2263/0。
 C4 检查点后全 M2 审查发现三项 Important（普通重试意图、Whisper图合同、Qwen完整词表）；同一修复波次及掩码类型收紧已完成，限定范围复审确认三项 Important 和两项相关 Minor 关闭。此前源码门禁为 3a34a51、2430/0。2026-11-02 追加独立审查又确认两项 P2（Whisper 源包缺少编译衔接、Qwen 复检阻塞主线程），已在 e69d688 修复；最终顺序构建与自测 2507/0，新的独立限定复审确认两项关闭、无新增 Critical／Important。[最新证据](evidence/2026-11-02-m2-review-fixes/README.md)取代旧检查点，不能从源码通过推导真机验收通过。
-真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3–M5 范围保持不变，尚待各自实施与验收。
+真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3 源码已完成（见下），M4–M5 尚待实施；真实验收分列保留。
 [已批准设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)及[决策归档](evidence/2026-11-01-m2-rulings.md)是当前依据。
-下表 M2 行更新为当前状态；M3–M5 保留原核对结果，不代表本轮重新验收。
+下表 M2/M3 行更新为当前源码状态；M4–M5 保留原核对结果，不代表本轮重新验收。
 
-M3 规划更新（2026-11-02）：已核对恢复的 Typeless 音量检测代码，并补齐 [M3 设计](superpowers/specs/2026-11-02-m3-delivery-and-silence-design.md)、[M3-A 自动交付计划](superpowers/plans/2026-11-02-m3-a-automatic-delivery.md)与[M3-B 静音预检计划](superpowers/plans/2026-11-02-m3-b-silence-preflight.md)。状态为待审阅、尚未实施；不重做 10 月已实现的目标/剪贴板/历史基础。静音第一版采用无额外模型的保守声音存在检查，候选阈值必须真机校准。[M3 验证清单](evidence/2026-11-02-m3-validation.md)均为 Pending，与 V1–V5 主线衔接。
+M3 更新（2026-11-02）：已按 [M3 设计](superpowers/specs/2026-11-02-m3-delivery-and-silence-design.md)、[M3-A](superpowers/plans/2026-11-02-m3-a-automatic-delivery.md) → [M3-B](superpowers/plans/2026-11-02-m3-b-silence-preflight.md) 完成五项子智能体开发及任务审查。全 M3 审查的两项 Important（回退分块后目标复检、发键后取消的 uncertain 保存）已在 `f7554ee` 修复，限定复审全部关闭，无新增阻塞；顺序构建与完整自测 **4124/0**。静音是无模型的保守声音存在检查，候选阈值仍需真机校准。源码与固定产物状态见 [M3 验证清单](evidence/2026-11-02-m3-validation.md)，真实验收与 V1–V5 继续保留 Pending。
 
 | 项目 | 现状与剩余工作 | 代码证据 / 边界 |
 | --- | --- | --- |
 | **M2 模型修复 / 云端接入 / 本地导入** | 源码修复与限定复审通过（e69d688，2507/0）；共享预检/恢复、厂商合同及配置检查、多个本地模型的静态预览/切换/重新定位/移除均已接入。源包原生编译与后台复检已补齐；真实加载/听写及 GUI 验收 Pending。 | `QwenModelState` 单一事务协调器；`ImportedASRModelActions` 只管理预览；`ImportedASRModelList` 通过 UUID 操作。静态检查不保存选择，运行成功才提交。旧基线的三次不透明重试、写死 0.6B 卡片与单路径选择已被替换。 |
-| **M3 自动交付** | 新 `.automatic` 模式、迁移、纯交付策略、粘贴优先及确定未发出时的兼容回退；跨应用验收。 | `DeliveryMode` 仍只有 unicode / pasteInSupportedApps，配置默认与缺省解码仍是 unicode，粘贴只有六个候选应用。现有目标身份核验、剪贴板事务、不确定结果不重发已做，应复用。 |
-| **M3 无语音预检** | 停止后、ASR 前判断无语音；静音不给幻觉文本或历史记录。 | `ASRStage` 对非空音频直接尝试识别；波形静音阈值与 `AudioFormatConverter.trimSilence` 不能替代该产品路径。`SpeechVAD` import 也不证明已接入停止后预检。 |
+| **M3 自动交付** | 源码完成、全 M3 修复复审通过；跨五应用、剪贴板及取消真机验收 Pending。 | 默认 automatic，显式旧值保留；真实事件 latch 与临时写板分离，严格安全回退逐键对复检；取消按事件同步保存 uncertain，最近交付摘要只含元数据。 |
+| **M3 无语音预检** | 源码完成、审查通过；静音/轻声/短词/噪声与设备校准 Pending。 | 完整原始 PCM 可取消后台扫描，ASR 直接/重试入口均经过；静音/空音频不 finalize、预览兜底、后处理、交付或历史。实时录音中可能已有上传，不能声称零请求/计费。 |
 | **M4 统一失败分级** | 用统一 FailureKind / RecoveryAction 覆盖权限、未就绪、临时 ASR、交付不确定、取消；统一动作与文案。 | M1 已做权限结构化与 readiness 修复动作，但 `ErrorRecoveryContext` 仍主要是 failedStage/error/rawText/retryable，`buildErrorActions` 仍按错误类型与 retryable 分支。属于部分基础已具备，尚未完成整体分类。 |
 | **M5 发布护栏** | 进程级 smoke、BuildInfo、版本/SHA 展示、自测日志隔离、CI / 本地 verify 门禁、冷启动与连续稳定性证据。 | 入口只有 self-test 分支；构建脚本仍固定版本 1.0.0 / build 1；AppLogger 共用 diagnostic.log；无 `.github/workflows`、verify.sh 或 smoke 入口。曾发生系统重开旧安装版本，这使构建身份尤其有价值。 |
 
@@ -86,11 +86,10 @@ V1 云端弱网/断网、V2 跨应用落字、V3 剪贴板保护、V4 取消、V
 
 ## 6. 建议执行顺序
 
-1. **M2**：先把已定位的模型下载问题从“手工解决”变成产品内可恢复，先修真实 preset 卡片与错误观测。
-2. **M3**：自动交付与无语音预检；配合五类核心应用验证，优先解决“落对地方、不重复、不幻觉”。
+1. **M2**：源码修复已通过，继续实际完整模型推理、厂商接入及模型管理 GUI 验收。
+2. **M3**：源码已通过；用固定最终产物做自动交付五应用、剪贴板、取消与静音/轻声校准。
 3. **M4**：用前两项实际产生的失败类型统一恢复模型。
 4. **主线 V**：按上述 V1–V5 执行真实环境验收，与对应功能开发交叉进行。
 5. **M5**：固化 smoke / 构建身份 / 日志隔离 / 门禁，收口稳定性矩阵。构建身份可因旧版本混用问题提前做一个独立小任务。
 
-本次只做任务核对与文档整理，没有运行构建/测试、改变产品行为、权限、配置、
-模型、远端或 Typeless 数据。既有 1327/0 是此前源码验证记录，不是本次新跑的结果。
+最初 11 月 1 日核对轮只做任务核对与文档整理，1327/0 属于当时旧证据。之后的 M2/M3 源码、构建与测试更新已在上文和各自证据中分列；未修改真实权限、配置、用户模型、远端或 Typeless 数据。

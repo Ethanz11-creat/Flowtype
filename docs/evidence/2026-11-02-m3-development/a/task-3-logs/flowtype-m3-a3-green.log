@@ -1,0 +1,33 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/11] Compiling FlowType LastDeliveryMenuController.swift
+[4/11] Compiling FlowType StatusBarController.swift
+[5/11] Compiling FlowType PipelineOrchestrator.swift
+[6/16] Compiling FlowType LastDeliverySummary.swift
+[7/16] Compiling FlowType M3DeliverySelfTests.swift
+[8/18] Compiling FlowType OnboardingWindowController.swift
+[9/18] Compiling FlowType ImportedLifecycleSelfTests.swift
+[10/20] Compiling FlowType OnboardingView.swift
+[11/21] Compiling FlowType AudioVisualizer.swift
+[12/21] Compiling FlowType WindowManager.swift
+[13/21] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[14/21] Compiling FlowType ModelProvisionSelfTests.swift
+[15/21] Compiling FlowType OnboardingPipeline.swift
+[16/21] Compiling FlowType SelfTest.swift
+[17/21] Compiling FlowType CapsuleView.swift
+[18/21] Compiling FlowType FlowTypeApp.swift
+[18/21] Write Objects.LinkFileList
+[19/21] Linking FlowType
+[20/21] Applying FlowType
+Build of product 'FlowType' complete! (19.86s)
+=== FlowType --self-test ===
+=== M3 delivery self-test: 381 passed, 0 failed ===

@@ -103,3 +103,5 @@ capture may already have uploaded audio; zero upload/zero cost is not claimed.
 All V1–V5, five-application delivery, continuous 20-round stability and actual
 quiet/short/delayed-speech versus silence/noise cases remain **Pending** until the
 controller fixes final reviewed source/bundle identity and executes those cases.
+
+M3 最终源码更新：`f7554ee`，顺序 build/full 4124/0；全 M3 的分块回退和发键后取消两项 Important 已修复、限定复审关闭。最终 app 已构建；资源深度签名仍有既有 unsigned mlx.metallib 限制。[归档与产物身份](2026-11-02-m3-development/README.md)。本轮没有桌面工具/实际服务/物理设备验收，所有对应主线 V 项保持 Pending，不以合成回归关闭。

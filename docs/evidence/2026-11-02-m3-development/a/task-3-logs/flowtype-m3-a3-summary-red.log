@@ -1,0 +1,277 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+error: emit-module command failed with exit code 1 (use -v to see invocation)
+[3/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:509:25: error: cannot find type 'LastDeliverySummary' in scope
+507 |         var contexts: [SessionContext] = []
+508 |         var saved: [UInt64] = []
+509 |         var summaries: [LastDeliverySummary] = []
+    |                         `- error: cannot find type 'LastDeliverySummary' in scope
+510 |         let configuration: ConfigurationStore
+511 |         lazy var session = SessionController(pipeline: [PresentationStage { [weak self] context in
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/6] Compiling FlowType M3DeliverySelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:509:25: error: cannot find type 'LastDeliverySummary' in scope
+507 |         var contexts: [SessionContext] = []
+508 |         var saved: [UInt64] = []
+509 |         var summaries: [LastDeliverySummary] = []
+    |                         `- error: cannot find type 'LastDeliverySummary' in scope
+510 |         let configuration: ConfigurationStore
+511 |         lazy var session = SessionController(pipeline: [PresentationStage { [weak self] context in
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:8:14: error: cannot find 'lastDeliveryMenuTitle' in scope
+  6 |         r.eq(DeliveryCopy.uncertainDispatch.message,
+  7 |              "已发送，但无法确认是否插入；可从历史复制", "M3 presentation: uncertain copy states the confirmation limit")
+  8 |         r.eq(lastDeliveryMenuTitle(nil), "最近一次交付：暂无", "M3 presentation: empty summary title")
+    |              `- error: cannot find 'lastDeliveryMenuTitle' in scope
+  9 |         for (outcome, expected): (DeliveryOutcome, String) in [
+ 10 |             (.typedDispatched, "已发送键入（Synthetic Editor）"),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:8:36: error: 'nil' requires a contextual type
+  6 |         r.eq(DeliveryCopy.uncertainDispatch.message,
+  7 |              "已发送，但无法确认是否插入；可从历史复制", "M3 presentation: uncertain copy states the confirmation limit")
+  8 |         r.eq(lastDeliveryMenuTitle(nil), "最近一次交付：暂无", "M3 presentation: empty summary title")
+    |                                    `- error: 'nil' requires a contextual type
+  9 |         for (outcome, expected): (DeliveryOutcome, String) in [
+ 10 |             (.typedDispatched, "已发送键入（Synthetic Editor）"),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:15:27: error: cannot find 'LastDeliverySummary' in scope
+ 13 |             (.uncertain, "发送不确定（Synthetic Editor）")
+ 14 |         ] {
+ 15 |             let summary = LastDeliverySummary(sessionID: 42, outcome: outcome,
+    |                           `- error: cannot find 'LastDeliverySummary' in scope
+ 16 |                 targetAppName: "Synthetic Editor", targetBundleID: "test.synthetic.editor")
+ 17 |             r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：" + expected, "M3 presentation: honest \(outcome) verb and target")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:17:18: error: cannot find 'lastDeliveryMenuTitle' in scope
+ 15 |             let summary = LastDeliverySummary(sessionID: 42, outcome: outcome,
+ 16 |                 targetAppName: "Synthetic Editor", targetBundleID: "test.synthetic.editor")
+ 17 |             r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：" + expected, "M3 presentation: honest \(outcome) verb and target")
+    |                  `- error: cannot find 'lastDeliveryMenuTitle' in scope
+ 18 |             r.check(!lastDeliveryMenuTitle(summary).contains("输入成功"), "M3 presentation: no insertion confirmation")
+ 19 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:18:22: error: cannot find 'lastDeliveryMenuTitle' in scope
+ 16 |                 targetAppName: "Synthetic Editor", targetBundleID: "test.synthetic.editor")
+ 17 |             r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：" + expected, "M3 presentation: honest \(outcome) verb and target")
+ 18 |             r.check(!lastDeliveryMenuTitle(summary).contains("输入成功"), "M3 presentation: no insertion confirmation")
+    |                      `- error: cannot find 'lastDeliveryMenuTitle' in scope
+ 19 |         }
+ 20 |         for name: String? in [nil, "", "  \n"] {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:21:27: error: cannot find 'LastDeliverySummary' in scope
+ 19 |         }
+ 20 |         for name: String? in [nil, "", "  \n"] {
+ 21 |             let summary = LastDeliverySummary(sessionID: 43, outcome: .clipboard,
+    |                           `- error: cannot find 'LastDeliverySummary' in scope
+ 22 |                 targetAppName: name, targetBundleID: "test.synthetic.bundle")
+ 23 |             r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：已复制（原目标：未知应用）",
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:21:72: error: cannot infer contextual base in reference to member 'clipboard'
+ 19 |         }
+ 20 |         for name: String? in [nil, "", "  \n"] {
+ 21 |             let summary = LastDeliverySummary(sessionID: 43, outcome: .clipboard,
+    |                                                                        `- error: cannot infer contextual base in reference to member 'clipboard'
+ 22 |                 targetAppName: name, targetBundleID: "test.synthetic.bundle")
+ 23 |             r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：已复制（原目标：未知应用）",
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:23:18: error: cannot find 'lastDeliveryMenuTitle' in scope
+ 21 |             let summary = LastDeliverySummary(sessionID: 43, outcome: .clipboard,
+ 22 |                 targetAppName: name, targetBundleID: "test.synthetic.bundle")
+ 23 |             r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：已复制（原目标：未知应用）",
+    |                  `- error: cannot find 'lastDeliveryMenuTitle' in scope
+ 24 |                  "M3 presentation: unknown display name never substitutes bundle or transcript")
+ 25 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:547:20: error: cannot find 'LastDeliveryMenuController' in scope
+545 |         let fixture = PresentationFixture(configuration: ConfigurationStore(defaults: defaults))
+546 |         let session = fixture.session
+547 |         let menu = LastDeliveryMenuController(session: session)
+    |                    `- error: cannot find 'LastDeliveryMenuController' in scope
+548 |         let subscription = session.$lastDeliverySummary.sink { summary in
+549 |             if let summary { fixture.summaries.append(summary) }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:548:36: error: value of type 'SessionController' has no member '$lastDeliverySummary'
+546 |         let session = fixture.session
+547 |         let menu = LastDeliveryMenuController(session: session)
+548 |         let subscription = session.$lastDeliverySummary.sink { summary in
+    |                                    `- error: value of type 'SessionController' has no member '$lastDeliverySummary'
+549 |             if let summary { fixture.summaries.append(summary) }
+550 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:566:26: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+564 |             r.eq(fixture.saved.count, count + 1, "M3 presentation: \(outcome) saves history once")
+565 |             r.eq(fixture.summaries.count, count + 1, "M3 presentation: \(outcome) publishes summary once")
+566 |             r.eq(session.lastDeliverySummary?.outcome, outcome, "M3 presentation: terminal outcome retained")
+    |                          `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+567 |             r.eq(session.lastDeliverySummary?.sessionID, fixture.contexts.last?.sessionID, "M3 presentation: terminal owns summary ID")
+568 |             r.eq(session.lastDeliverySummary?.targetAppName, nil, "M3 presentation: absent stop app stays absent")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:567:26: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+565 |             r.eq(fixture.summaries.count, count + 1, "M3 presentation: \(outcome) publishes summary once")
+566 |             r.eq(session.lastDeliverySummary?.outcome, outcome, "M3 presentation: terminal outcome retained")
+567 |             r.eq(session.lastDeliverySummary?.sessionID, fixture.contexts.last?.sessionID, "M3 presentation: terminal owns summary ID")
+    |                          `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+568 |             r.eq(session.lastDeliverySummary?.targetAppName, nil, "M3 presentation: absent stop app stays absent")
+569 |             r.eq(session.lastDeliverySummary?.targetBundleID, nil, "M3 presentation: absent bundle stays absent")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:568:26: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+566 |             r.eq(session.lastDeliverySummary?.outcome, outcome, "M3 presentation: terminal outcome retained")
+567 |             r.eq(session.lastDeliverySummary?.sessionID, fixture.contexts.last?.sessionID, "M3 presentation: terminal owns summary ID")
+568 |             r.eq(session.lastDeliverySummary?.targetAppName, nil, "M3 presentation: absent stop app stays absent")
+    |                          `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+569 |             r.eq(session.lastDeliverySummary?.targetBundleID, nil, "M3 presentation: absent bundle stays absent")
+570 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: emitted value refreshes synchronously")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:569:26: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+567 |             r.eq(session.lastDeliverySummary?.sessionID, fixture.contexts.last?.sessionID, "M3 presentation: terminal owns summary ID")
+568 |             r.eq(session.lastDeliverySummary?.targetAppName, nil, "M3 presentation: absent stop app stays absent")
+569 |             r.eq(session.lastDeliverySummary?.targetBundleID, nil, "M3 presentation: absent bundle stays absent")
+    |                          `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+570 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: emitted value refreshes synchronously")
+571 |             r.check(!menu.item.title.contains("synthetic private"), "M3 menu: no transcript or final text")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:570:35: error: cannot find 'lastDeliveryMenuTitle' in scope
+568 |             r.eq(session.lastDeliverySummary?.targetAppName, nil, "M3 presentation: absent stop app stays absent")
+569 |             r.eq(session.lastDeliverySummary?.targetBundleID, nil, "M3 presentation: absent bundle stays absent")
+570 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: emitted value refreshes synchronously")
+    |                                   `- error: cannot find 'lastDeliveryMenuTitle' in scope
+571 |             r.check(!menu.item.title.contains("synthetic private"), "M3 menu: no transcript or final text")
+572 |             menu.refresh(for: nil)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:570:65: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+568 |             r.eq(session.lastDeliverySummary?.targetAppName, nil, "M3 presentation: absent stop app stays absent")
+569 |             r.eq(session.lastDeliverySummary?.targetBundleID, nil, "M3 presentation: absent bundle stays absent")
+570 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: emitted value refreshes synchronously")
+    |                                                                 `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+571 |             r.check(!menu.item.title.contains("synthetic private"), "M3 menu: no transcript or final text")
+572 |             menu.refresh(for: nil)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:572:31: error: 'nil' requires a contextual type
+570 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: emitted value refreshes synchronously")
+571 |             r.check(!menu.item.title.contains("synthetic private"), "M3 menu: no transcript or final text")
+572 |             menu.refresh(for: nil)
+    |                               `- error: 'nil' requires a contextual type
+573 |             menu.refresh(for: session.lastDeliverySummary)
+574 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: reopening refresh uses current summary")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:573:39: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+571 |             r.check(!menu.item.title.contains("synthetic private"), "M3 menu: no transcript or final text")
+572 |             menu.refresh(for: nil)
+573 |             menu.refresh(for: session.lastDeliverySummary)
+    |                                       `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+574 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: reopening refresh uses current summary")
+575 |             session.cancel()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:574:35: error: cannot find 'lastDeliveryMenuTitle' in scope
+572 |             menu.refresh(for: nil)
+573 |             menu.refresh(for: session.lastDeliverySummary)
+574 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: reopening refresh uses current summary")
+    |                                   `- error: cannot find 'lastDeliveryMenuTitle' in scope
+575 |             session.cancel()
+576 |             r.eq(fixture.saved.count, count + 1, "M3 presentation: cancellation after finish cannot duplicate history")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:574:65: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+572 |             menu.refresh(for: nil)
+573 |             menu.refresh(for: session.lastDeliverySummary)
+574 |             r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: reopening refresh uses current summary")
+    |                                                                 `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+575 |             session.cancel()
+576 |             r.eq(fixture.saved.count, count + 1, "M3 presentation: cancellation after finish cannot duplicate history")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:579:32: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+577 |             r.eq(fixture.summaries.count, count + 1, "M3 presentation: cancellation after finish cannot duplicate summary")
+578 |         }
+579 |         let previous = session.lastDeliverySummary
+    |                                `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+580 |         let previousCount = fixture.saved.count
+581 |         fixture.action = { _ in .notice("未检测到声音，请重试") }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:584:22: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+582 |         session.startRecording()
+583 |         await awaitPresentation { if case .notice = session.sessionState { return true }; return false }
+584 |         r.eq(session.lastDeliverySummary, previous, "M3 presentation: silence notice retains previous summary")
+    |                      `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+585 |         r.eq(fixture.saved.count, previousCount, "M3 presentation: silence notice saves no history")
+586 |         session.cancel()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:600:22: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+598 |         await entered.wait()
+599 |         session.cancel()
+600 |         r.eq(session.lastDeliverySummary, previous, "M3 presentation: pre-event cancel retains previous summary")
+    |                      `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+601 |         r.eq(fixture.saved.count, previousCount, "M3 presentation: pre-event cancel saves no history")
+602 |         fixture.action = { context in fixture.deliver(.clipboard, context: context); return .complete }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:605:29: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+603 |         session.startRecording()
+604 |         await awaitPresentation { fixture.saved.count == previousCount + 1 && session.sessionState == .idle }
+605 |         let newer = session.lastDeliverySummary
+    |                             `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+606 |         release.signal()
+607 |         await returned.wait()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:609:22: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+607 |         await returned.wait()
+608 |         await Task.yield()
+609 |         r.eq(session.lastDeliverySummary, newer, "M3 presentation: late old terminal cannot overwrite newer summary")
+    |                      `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+610 |         r.eq(fixture.saved.count, previousCount + 1, "M3 presentation: late old terminal cannot save history")
+611 |         r.eq(fixture.summaries.count, previousCount + 1, "M3 presentation: late old terminal cannot publish summary")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:626:22: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+624 |         let uncertainID = fixture.contexts.last?.sessionID
+625 |         session.cancel()
+626 |         r.eq(session.lastDeliverySummary?.outcome, .uncertain, "M3 presentation: owned uncertain cancellation remains recoverable")
+    |                      `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+627 |         r.eq(session.lastDeliverySummary?.sessionID, uncertainID, "M3 presentation: uncertain cancel records its own session")
+628 |         r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: uncertain cancellation saves once")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:627:22: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+625 |         session.cancel()
+626 |         r.eq(session.lastDeliverySummary?.outcome, .uncertain, "M3 presentation: owned uncertain cancellation remains recoverable")
+627 |         r.eq(session.lastDeliverySummary?.sessionID, uncertainID, "M3 presentation: uncertain cancel records its own session")
+    |                      `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+628 |         r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: uncertain cancellation saves once")
+629 |         r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: uncertain cancellation publishes once")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:630:31: error: cannot find 'lastDeliveryMenuTitle' in scope
+628 |         r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: uncertain cancellation saves once")
+629 |         r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: uncertain cancellation publishes once")
+630 |         r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: cancellation publishes emitted value immediately")
+    |                               `- error: cannot find 'lastDeliveryMenuTitle' in scope
+631 |         session.cancel()
+632 |         uncertainRelease.signal()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:630:61: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+628 |         r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: uncertain cancellation saves once")
+629 |         r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: uncertain cancellation publishes once")
+630 |         r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: cancellation publishes emitted value immediately")
+    |                                                             `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+631 |         session.cancel()
+632 |         uncertainRelease.signal()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:640:38: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+638 |         // A temporary clipboard effect is not a terminal delivery or a text event.
+639 |         let prepared = Signal(), preparedRelease = Signal(), preparedReturned = Signal()
+640 |         let beforePrepared = session.lastDeliverySummary
+    |                                      `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+641 |         fixture.action = { context in
+642 |             _ = context.beginDeliveryAttempt()
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:656:22: error: value of type 'SessionController' has no member 'lastDeliverySummary'
+654 |         await preparedReturned.wait()
+655 |         await Task.yield()
+656 |         r.eq(session.lastDeliverySummary, beforePrepared, "M3 presentation: cancelled clipboard preparation retains summary")
+    |                      `- error: value of type 'SessionController' has no member 'lastDeliverySummary'
+657 |         r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: cancelled clipboard preparation saves no history")
+658 |         r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: cancelled clipboard preparation publishes nothing")

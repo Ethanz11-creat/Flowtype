@@ -1,0 +1,6 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+Build of product 'FlowType' complete! (7.76s)
+=== FlowType --self-test ===
+=== self-test: 2888 passed, 0 failed ===

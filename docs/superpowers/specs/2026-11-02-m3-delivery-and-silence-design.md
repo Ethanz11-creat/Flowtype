@@ -1,6 +1,6 @@
 # M3 自动交付与静音预检设计
 
-日期：2026-11-02。状态：方案与计划待审阅，尚未实施。
+日期：2026-11-02。状态：M3-A → M3-B 子智能体源码开发、全 M3 修复及限定复审通过（`f7554ee`，完整 4124/0）；最终 app 已构建，资源签名既有限制及真机 Pending 分别见验证记录。
 核对基线：`b64d538`（产品源码 `e69d688`，已有自测 2507/0；本轮没有重跑）。
 
 ## 1. 意图、来源与范围
@@ -73,13 +73,13 @@ Owner 要求先核对 M3 是否有计划，弄清开发方式后补齐实施计�
 
 回退键入在首键前失败 → 保留原剪贴板，挂起为含完整文本的复制/关闭恢复卡片；不能落入通用 copy 分支破坏刚保护的图片/文件/不可读取表示。回退首键后失败或取消 → uncertain，停止后续派发，不再复制或重试。取消前无文本事件、临时板已恢复 → cancelled，不能因临时写板标记就误报已发送。原 `.unicode` 首效应前失败的显式复制恢复继续保留。
 
-模式在尝试开始时取一次快照；回退不因设置页并发变化而切换策略。目标和权限在回退前取新快照。剪贴板默认 settle 保持 150ms；没有真实慢消费证据不改为 250ms，更不复制 Typeless 的 500ms 包装等待作为插入确认。
+模式在尝试开始时取一次快照；回退不因设置页并发变化而切换策略。目标和权限在回退前取新快照。最终审查 F1 补齐：自动键入回退在每个真实 chunk/newline 平衡键对前复检目标、权限、安全和明确可编辑性，等待后再检查取消；首键前拒绝保留全文恢复，首键后拒绝 uncertain。剪贴板默认 settle 保持 150ms；没有真实慢消费证据不改为 250ms，更不复制 Typeless 的 500ms 包装等待作为插入确认。
 
 ### 4.3 结果与界面
 
 沿用 DeliveryOutcome 与现有数据库/JSON 可选字段，不新建数据库迁移。uncertain 文案改为「已发送，但无法确认是否插入；可从历史复制」。保留原有 polish 降级提示组合，正常派发不新增弹窗。
 
-增加内存 `LastDeliverySummary`：sessionID、outcome、停止时目标的展示名/bundle ID，无文本、音频或上下文。SessionController 仅从仍拥有生命周期的终态更新；未派发的取消/静音不清除上次结果，旧 session 晚到不能覆盖新结果。菜单显示「最近一次交付」，区分“已发送粘贴/键入”“已复制（原目标…）”“发送不确定”；不能写“已输入成功”。可注入 session 的 LastDeliveryMenuController 负责菜单项与同步订阅，菜单打开时再读最新值；测试不需要启动 StatusBarController.shared 或真实应用。
+增加内存 `LastDeliverySummary`：sessionID、outcome、停止时目标的展示名/bundle ID，无文本、音频或上下文。SessionController 仅从仍拥有生命周期的终态更新；未派发的取消/静音不清除上次结果，旧 session 晚到不能覆盖新结果。最终审查 F2 补齐：取消仍持有当前会话时，在同一事件 gate 关闭发键后，按实际 event 证据同步将 nil/尚未保存的派发终态转为 uncertain，再保存一次历史/摘要并失效所有权；只写临时板不能产生 uncertain，晚到 stage 不获发布权。菜单显示「最近一次交付」，区分“已发送粘贴/键入”“已复制（原目标…）”“发送不确定”；不能写“已输入成功”。可注入 session 的 LastDeliveryMenuController 负责菜单项与同步订阅，菜单打开时再读最新值；测试不需要启动 StatusBarController.shared 或真实应用。
 
 ## 5. M3-B：静音预检设计
 
@@ -121,7 +121,7 @@ Owner 要求先核对 M3 是否有计划，弄清开发方式后补齐实施计�
 | B 接线 | 真实 ASRStage/controller + synthetic capture；静音无 batch/finalize/preview/polish/delivery/history/health；live 取消；原实时/路由测试不误用零 samples 作为有声fixture |
 | 真机 | 五应用中文/英文/多行；安全/无 AX；多表示与并发剪贴板；轻声与静音校准；V1–V5、连续 20 轮与设备恢复 |
 
-本轮只写文档，不把旧自测数当新验证，不启动/重启 GUI，不跑真实服务。M4 统一 FailureKind、M5 smoke/BuildInfo/CI，以及 AX 插入确认、原生 helper 逆向、新热键/自动断句和专用 VAD 均不在 M3 产品实现范围。执行计划：
+本文件源自规划轮；实施与验证进度以 [M3 验证记录](../../evidence/2026-11-02-m3-validation.md)为准，不把旧自测数当新验证。M4 统一 FailureKind、M5 smoke/BuildInfo/CI，以及 AX 插入确认、原生 helper 逆向、新热键/自动断句和专用 VAD 均不在 M3 产品实现范围。执行计划：
 
 1. [M3-A 自动交付](../plans/2026-11-02-m3-a-automatic-delivery.md)
 2. [M3-B 静音预检](../plans/2026-11-02-m3-b-silence-preflight.md)

@@ -1,0 +1,42 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/10] Compiling FlowType PipelineOrchestrator.swift
+[4/10] Compiling FlowType InjectionStage.swift
+[5/10] Compiling FlowType M3FinalFixSelfTests.swift
+[6/10] Compiling FlowType KeyboardInjector.swift
+[7/10] Compiling FlowType SessionContext.swift
+[8/10] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[9/21] Compiling FlowType OnboardingPipeline.swift
+[10/23] Compiling FlowType PostProcessStage.swift
+[11/23] Compiling FlowType RecordingStage.swift
+[12/25] Compiling FlowType OnboardingView.swift
+[13/25] Compiling FlowType OnboardingWindowController.swift
+[14/27] Compiling FlowType ImportedLifecycleSelfTests.swift
+[15/27] Compiling FlowType ModelProvisionSelfTests.swift
+[16/28] Compiling FlowType AudioVisualizer.swift
+[17/29] Compiling FlowType WindowManager.swift
+[18/29] Compiling FlowType M3DeliverySelfTests.swift
+[19/29] Compiling FlowType ASRStage.swift
+[20/29] Compiling FlowType PolishStage.swift
+[21/29] Compiling FlowType CapsuleView.swift
+[22/29] Compiling FlowType AudioFeedbackObserver.swift
+[23/29] Compiling FlowType PipelineRegistry.swift
+[24/29] Compiling FlowType SessionObserver.swift
+[25/29] Compiling FlowType PipelineStage.swift
+[26/29] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[27/29] Compiling FlowType SelfTest.swift
+[27/30] Write Objects.LinkFileList
+[28/30] Linking FlowType
+[29/30] Applying FlowType
+Build of product 'FlowType' complete! (24.43s)
+=== FlowType --self-test ===
+=== M3 delivery self-test: 611 passed, 0 failed ===

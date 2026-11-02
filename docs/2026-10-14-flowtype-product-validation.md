@@ -213,3 +213,5 @@ See the [M3 evidence](evidence/2026-11-02-m3-validation.md) for source evidence 
 limits. Actual microphone silence/quiet-word/noise calibration, the app matrix,
 continuous 20 rounds and V1–V5 remain **Pending**. No synthetic waveform proves
 human-speech accuracy, real target insertion, or zero prior realtime upload/cost.
+
+M3 最终源码更新：`f7554ee`，完整自测4124/0、全 M3 修复限定复审通过；automatic 分块回退逐键对复检，真实发键后取消同步保存 uncertain。最终 app 已构建，但严格整体签名仍受既有 unsigned mlx.metallib 限制；[证据与产物身份](evidence/2026-11-02-m3-development/README.md)。全部实际应用/剪贴板/声音校准与 V1–V5 未覆盖项仍 Pending。

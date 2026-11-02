@@ -1,0 +1,261 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/8] Compiling FlowType SelfTest.swift
+[4/8] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[5/8] Compiling FlowType M3DeliverySelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:7:39: error: type 'DeliveryMode' has no member 'automatic'
+ 5 |         let editable = FocusSignals(secureInputActive: false, focus: .editableText)
+ 6 |         let blind = FocusSignals(secureInputActive: false, focus: .blindOrUnknown)
+ 7 |         let modes: [DeliveryMode] = [.automatic, .unicode, .pasteInSupportedApps]
+   |                                       `- error: type 'DeliveryMode' has no member 'automatic'
+ 8 |         let candidates = ["com.apple.TextEdit", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92",
+ 9 |                           "com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"]
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:14:22: error: cannot find 'resolveDeliveryMethod' in scope
+12 |         for mode in modes {
+13 |             for focus in [FocusKind.editableText, .blindOrUnknown, .nonTextControl] {
+14 |                 r.eq(resolveDeliveryMethod(mode: mode,
+   |                      `- error: cannot find 'resolveDeliveryMethod' in scope
+15 |                     signals: .init(secureInputActive: true, focus: focus),
+16 |                     accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:15:31: error: cannot infer contextual base in reference to member 'init'
+13 |             for focus in [FocusKind.editableText, .blindOrUnknown, .nonTextControl] {
+14 |                 r.eq(resolveDeliveryMethod(mode: mode,
+15 |                     signals: .init(secureInputActive: true, focus: focus),
+   |                               `- error: cannot infer contextual base in reference to member 'init'
+16 |                     accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+17 |                     "M3 policy: secure input blocks \(mode)/\(focus)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:16:76: error: type 'Equatable' has no member 'clipboard'
+14 |                 r.eq(resolveDeliveryMethod(mode: mode,
+15 |                     signals: .init(secureInputActive: true, focus: focus),
+16 |                     accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+   |                                                                            `- error: type 'Equatable' has no member 'clipboard'
+17 |                     "M3 policy: secure input blocks \(mode)/\(focus)")
+18 |                 r.eq(resolveDeliveryMethod(mode: mode,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:18:22: error: cannot find 'resolveDeliveryMethod' in scope
+16 |                     accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+17 |                     "M3 policy: secure input blocks \(mode)/\(focus)")
+18 |                 r.eq(resolveDeliveryMethod(mode: mode,
+   |                      `- error: cannot find 'resolveDeliveryMethod' in scope
+19 |                     signals: .init(secureInputActive: false, focus: focus),
+20 |                     accessibilityTrusted: false, bundleID: candidates[0]), .clipboard,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:19:31: error: cannot infer contextual base in reference to member 'init'
+17 |                     "M3 policy: secure input blocks \(mode)/\(focus)")
+18 |                 r.eq(resolveDeliveryMethod(mode: mode,
+19 |                     signals: .init(secureInputActive: false, focus: focus),
+   |                               `- error: cannot infer contextual base in reference to member 'init'
+20 |                     accessibilityTrusted: false, bundleID: candidates[0]), .clipboard,
+21 |                     "M3 policy: no AX permission blocks \(mode)/\(focus)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:20:77: error: type 'Equatable' has no member 'clipboard'
+18 |                 r.eq(resolveDeliveryMethod(mode: mode,
+19 |                     signals: .init(secureInputActive: false, focus: focus),
+20 |                     accessibilityTrusted: false, bundleID: candidates[0]), .clipboard,
+   |                                                                             `- error: type 'Equatable' has no member 'clipboard'
+21 |                     "M3 policy: no AX permission blocks \(mode)/\(focus)")
+22 |             }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:23:18: error: cannot find 'resolveDeliveryMethod' in scope
+21 |                     "M3 policy: no AX permission blocks \(mode)/\(focus)")
+22 |             }
+23 |             r.eq(resolveDeliveryMethod(mode: mode,
+   |                  `- error: cannot find 'resolveDeliveryMethod' in scope
+24 |                 signals: .init(secureInputActive: false, focus: .nonTextControl),
+25 |                 accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:24:27: error: cannot infer contextual base in reference to member 'init'
+22 |             }
+23 |             r.eq(resolveDeliveryMethod(mode: mode,
+24 |                 signals: .init(secureInputActive: false, focus: .nonTextControl),
+   |                           `- error: cannot infer contextual base in reference to member 'init'
+25 |                 accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+26 |                 "M3 policy: non-text focus blocks \(mode)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:24:66: error: cannot infer contextual base in reference to member 'nonTextControl'
+22 |             }
+23 |             r.eq(resolveDeliveryMethod(mode: mode,
+24 |                 signals: .init(secureInputActive: false, focus: .nonTextControl),
+   |                                                                  `- error: cannot infer contextual base in reference to member 'nonTextControl'
+25 |                 accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+26 |                 "M3 policy: non-text focus blocks \(mode)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:25:72: error: type 'Equatable' has no member 'clipboard'
+23 |             r.eq(resolveDeliveryMethod(mode: mode,
+24 |                 signals: .init(secureInputActive: false, focus: .nonTextControl),
+25 |                 accessibilityTrusted: true, bundleID: candidates[0]), .clipboard,
+   |                                                                        `- error: type 'Equatable' has no member 'clipboard'
+26 |                 "M3 policy: non-text focus blocks \(mode)")
+27 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:31:22: error: cannot find 'resolveDeliveryMethod' in scope
+29 |         for signals in [editable, blind] {
+30 |             for bundleID in candidates.map(Optional.some) + ["test.unknown", "com.apple.Terminal", nil] {
+31 |                 r.eq(resolveDeliveryMethod(mode: .automatic, signals: signals,
+   |                      `- error: cannot find 'resolveDeliveryMethod' in scope
+32 |                     accessibilityTrusted: true, bundleID: bundleID), .paste,
+33 |                     "M3 policy: automatic permits initial paste for same-target editable/blind apps \(bundleID ?? "nil")")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:31:51: error: cannot infer contextual base in reference to member 'automatic'
+29 |         for signals in [editable, blind] {
+30 |             for bundleID in candidates.map(Optional.some) + ["test.unknown", "com.apple.Terminal", nil] {
+31 |                 r.eq(resolveDeliveryMethod(mode: .automatic, signals: signals,
+   |                                                   `- error: cannot infer contextual base in reference to member 'automatic'
+32 |                     accessibilityTrusted: true, bundleID: bundleID), .paste,
+33 |                     "M3 policy: automatic permits initial paste for same-target editable/blind apps \(bundleID ?? "nil")")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:32:71: error: type 'Equatable' has no member 'paste'
+30 |             for bundleID in candidates.map(Optional.some) + ["test.unknown", "com.apple.Terminal", nil] {
+31 |                 r.eq(resolveDeliveryMethod(mode: .automatic, signals: signals,
+32 |                     accessibilityTrusted: true, bundleID: bundleID), .paste,
+   |                                                                       `- error: type 'Equatable' has no member 'paste'
+33 |                     "M3 policy: automatic permits initial paste for same-target editable/blind apps \(bundleID ?? "nil")")
+34 |                 r.check(DeliveryMode.automatic.usesPaste(bundleID: bundleID),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:34:38: error: type 'DeliveryMode' has no member 'automatic'
+32 |                     accessibilityTrusted: true, bundleID: bundleID), .paste,
+33 |                     "M3 policy: automatic permits initial paste for same-target editable/blind apps \(bundleID ?? "nil")")
+34 |                 r.check(DeliveryMode.automatic.usesPaste(bundleID: bundleID),
+   |                                      `- error: type 'DeliveryMode' has no member 'automatic'
+35 |                     "M3 policy: automatic has no bundle directory restriction")
+36 |                 r.eq(resolveDeliveryMethod(mode: .unicode, signals: signals,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:36:22: error: cannot find 'resolveDeliveryMethod' in scope
+34 |                 r.check(DeliveryMode.automatic.usesPaste(bundleID: bundleID),
+35 |                     "M3 policy: automatic has no bundle directory restriction")
+36 |                 r.eq(resolveDeliveryMethod(mode: .unicode, signals: signals,
+   |                      `- error: cannot find 'resolveDeliveryMethod' in scope
+37 |                     accessibilityTrusted: true, bundleID: bundleID), .type,
+38 |                     "M3 policy: Unicode uses typing for \(bundleID ?? "nil")")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:36:51: error: cannot infer contextual base in reference to member 'unicode'
+34 |                 r.check(DeliveryMode.automatic.usesPaste(bundleID: bundleID),
+35 |                     "M3 policy: automatic has no bundle directory restriction")
+36 |                 r.eq(resolveDeliveryMethod(mode: .unicode, signals: signals,
+   |                                                   `- error: cannot infer contextual base in reference to member 'unicode'
+37 |                     accessibilityTrusted: true, bundleID: bundleID), .type,
+38 |                     "M3 policy: Unicode uses typing for \(bundleID ?? "nil")")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:37:71: error: type 'Equatable' has no member 'type'
+35 |                     "M3 policy: automatic has no bundle directory restriction")
+36 |                 r.eq(resolveDeliveryMethod(mode: .unicode, signals: signals,
+37 |                     accessibilityTrusted: true, bundleID: bundleID), .type,
+   |                                                                       `- error: type 'Equatable' has no member 'type'
+38 |                     "M3 policy: Unicode uses typing for \(bundleID ?? "nil")")
+39 |             }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:41:22: error: cannot find 'resolveDeliveryMethod' in scope
+39 |             }
+40 |             for bundleID in candidates {
+41 |                 r.eq(resolveDeliveryMethod(mode: .pasteInSupportedApps, signals: signals,
+   |                      `- error: cannot find 'resolveDeliveryMethod' in scope
+42 |                     accessibilityTrusted: true, bundleID: bundleID), .paste,
+43 |                     "M3 policy: legacy candidate pastes \(bundleID)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:41:51: error: cannot infer contextual base in reference to member 'pasteInSupportedApps'
+39 |             }
+40 |             for bundleID in candidates {
+41 |                 r.eq(resolveDeliveryMethod(mode: .pasteInSupportedApps, signals: signals,
+   |                                                   `- error: cannot infer contextual base in reference to member 'pasteInSupportedApps'
+42 |                     accessibilityTrusted: true, bundleID: bundleID), .paste,
+43 |                     "M3 policy: legacy candidate pastes \(bundleID)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:42:71: error: type 'Equatable' has no member 'paste'
+40 |             for bundleID in candidates {
+41 |                 r.eq(resolveDeliveryMethod(mode: .pasteInSupportedApps, signals: signals,
+42 |                     accessibilityTrusted: true, bundleID: bundleID), .paste,
+   |                                                                       `- error: type 'Equatable' has no member 'paste'
+43 |                     "M3 policy: legacy candidate pastes \(bundleID)")
+44 |             }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:46:22: error: cannot find 'resolveDeliveryMethod' in scope
+44 |             }
+45 |             for bundleID: String? in ["com.apple.Terminal", "test.unknown", nil] {
+46 |                 r.eq(resolveDeliveryMethod(mode: .pasteInSupportedApps, signals: signals,
+   |                      `- error: cannot find 'resolveDeliveryMethod' in scope
+47 |                     accessibilityTrusted: true, bundleID: bundleID), .type,
+48 |                     "M3 policy: legacy non-candidate types \(bundleID ?? "nil")")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:46:51: error: cannot infer contextual base in reference to member 'pasteInSupportedApps'
+44 |             }
+45 |             for bundleID: String? in ["com.apple.Terminal", "test.unknown", nil] {
+46 |                 r.eq(resolveDeliveryMethod(mode: .pasteInSupportedApps, signals: signals,
+   |                                                   `- error: cannot infer contextual base in reference to member 'pasteInSupportedApps'
+47 |                     accessibilityTrusted: true, bundleID: bundleID), .type,
+48 |                     "M3 policy: legacy non-candidate types \(bundleID ?? "nil")")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:47:71: error: type 'Equatable' has no member 'type'
+45 |             for bundleID: String? in ["com.apple.Terminal", "test.unknown", nil] {
+46 |                 r.eq(resolveDeliveryMethod(mode: .pasteInSupportedApps, signals: signals,
+47 |                     accessibilityTrusted: true, bundleID: bundleID), .type,
+   |                                                                       `- error: type 'Equatable' has no member 'type'
+48 |                     "M3 policy: legacy non-candidate types \(bundleID ?? "nil")")
+49 |             }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:59:22: error: cannot find 'canFallbackToTyping' in scope
+57 |         for (result, permitsFallback) in results {
+58 |             for eventDispatched in [false, true] {
+59 |                 r.eq(canFallbackToTyping(mode: .automatic, pasteResult: result,
+   |                      `- error: cannot find 'canFallbackToTyping' in scope
+60 |                     eventDispatched: eventDispatched, target: target, current: target,
+61 |                     accessibilityTrusted: true), eventDispatched ? false : permitsFallback,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:59:49: error: cannot infer contextual base in reference to member 'automatic'
+57 |         for (result, permitsFallback) in results {
+58 |             for eventDispatched in [false, true] {
+59 |                 r.eq(canFallbackToTyping(mode: .automatic, pasteResult: result,
+   |                                                 `- error: cannot infer contextual base in reference to member 'automatic'
+60 |                     eventDispatched: eventDispatched, target: target, current: target,
+61 |                     accessibilityTrusted: true), eventDispatched ? false : permitsFallback,
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:81:26: error: cannot find 'canFallbackToTyping' in scope
+79 |         for result: PasteTransactionResult in [.notDispatched, .unsafeSnapshot] {
+80 |             for (name, before, current, trusted) in invalidTargets {
+81 |                 r.check(!canFallbackToTyping(mode: .automatic, pasteResult: result,
+   |                          `- error: cannot find 'canFallbackToTyping' in scope
+82 |                     eventDispatched: false, target: before, current: current, accessibilityTrusted: trusted),
+83 |                     "M3 fallback: \(name) denies \(result)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:81:53: error: cannot infer contextual base in reference to member 'automatic'
+79 |         for result: PasteTransactionResult in [.notDispatched, .unsafeSnapshot] {
+80 |             for (name, before, current, trusted) in invalidTargets {
+81 |                 r.check(!canFallbackToTyping(mode: .automatic, pasteResult: result,
+   |                                                     `- error: cannot infer contextual base in reference to member 'automatic'
+82 |                     eventDispatched: false, target: before, current: current, accessibilityTrusted: trusted),
+83 |                     "M3 fallback: \(name) denies \(result)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:86:26: error: cannot find 'canFallbackToTyping' in scope
+84 |             }
+85 |             for mode: DeliveryMode in [.unicode, .pasteInSupportedApps] {
+86 |                 r.check(!canFallbackToTyping(mode: mode, pasteResult: result,
+   |                          `- error: cannot find 'canFallbackToTyping' in scope
+87 |                     eventDispatched: false, target: target, current: target, accessibilityTrusted: true),
+88 |                     "M3 fallback: explicit legacy mode \(mode) denies \(result)")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:91:21: error: cannot find 'canFallbackToTyping' in scope
+89 |             }
+90 |             let blindTarget = DeliveryTargetSnapshot(pid: 42, signals: blind)
+91 |             r.check(canFallbackToTyping(mode: .automatic, pasteResult: result,
+   |                     `- error: cannot find 'canFallbackToTyping' in scope
+92 |                 eventDispatched: false, target: blindTarget, current: target, accessibilityTrusted: true),
+93 |                 "M3 fallback: refreshed editable focus permits fallback after blind stop snapshot")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M3DeliverySelfTests.swift:91:48: error: cannot infer contextual base in reference to member 'automatic'
+89 |             }
+90 |             let blindTarget = DeliveryTargetSnapshot(pid: 42, signals: blind)
+91 |             r.check(canFallbackToTyping(mode: .automatic, pasteResult: result,
+   |                                                `- error: cannot infer contextual base in reference to member 'automatic'
+92 |                 eventDispatched: false, target: blindTarget, current: target, accessibilityTrusted: true),
+93 |                 "M3 fallback: refreshed editable focus permits fallback after blind stop snapshot")

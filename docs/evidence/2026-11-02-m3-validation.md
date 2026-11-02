@@ -1,6 +1,6 @@
 # M3 验证清单 — 2026-11-02
 
-状态：**Owner 已确认子智能体执行，M3-A 开发中**。执行基线 `8d5d6bd`，此前产品为 M2 源码 `e69d688`。既有 2507/0 是 M2 结果；本文件只在取得新证据后更新对应状态，真实验收保持 Pending。
+状态：**M3-A/B 五项任务实现及任务审查通过；全 M3 的 F1/F2 已修复并通过限定复审，最终源码关口通过**。执行基线 `8d5d6bd`，最终源码 `f7554ee`；真实验收保持 Pending。
 
 依据：[共同设计](../superpowers/specs/2026-11-02-m3-delivery-and-silence-design.md)、[M3-A 计划](../superpowers/plans/2026-11-02-m3-a-automatic-delivery.md)、[M3-B 计划](../superpowers/plans/2026-11-02-m3-b-silence-preflight.md)。执行负责人为开发控制器；Owner 执行需物理热键、复制、拔麦与本机认证的操作。
 
@@ -9,11 +9,11 @@
 | ID | 覆盖 | 状态 |
 | --- | --- | --- |
 | S-A1 | 三模式策略、安全/权限/目标身份、回退纯判定 | Pass（源码）：`c9f91a1`，focused 133/0，完整 2640/0；独立任务审查通过 |
-| S-A2 | 默认/旧值迁移、真实 ClipboardTransaction+InjectionStage、部分写板恢复、受保护板键入失败 | Pending |
-| S-A3 | 事件前后取消、并发复制、目标复检、duplicate attempt、一次历史/摘要和菜单 | Pass（自动化，待阶段独立审查）：Task3（父 `7700f36`），focused 381/0，顺序 build/full 2888/0；不代表真机通过 |
-| S-B1 | 原始 PCM 全帧/尾帧、候选阈值、短音频/无效样本、后台响应/取消 | Pending |
-| S-B2 | 真实 ASR/controller 的静音早退；preview、health、预算、live 收尾与重试/旧回调 | Pending |
-| S-F | 稳定源码顺序 build/full self-test、独立全 M3 审查及修复复审 | Pending |
+| S-A2 | 默认/旧值迁移、真实 ClipboardTransaction+InjectionStage、部分写板恢复、受保护板键入失败 | Pass（源码）：`7700f36`，focused 305/0，顺序 build/full 2812/0；独立任务审查通过 |
+| S-A3 | 事件前后取消、并发复制、目标复检、duplicate attempt、一次历史/摘要和菜单 | Pass（源码）：`7c6c130`，focused 381/0，顺序 build/full 2888/0；独立 Task3 及全 A 阶段源码审查通过，不代表真机通过 |
+| S-B1 | 原始 PCM 全帧/尾帧、候选阈值、短音频/无效样本、后台响应/取消 | Pass（源码）：`d9111f1`，focused 741/0，顺序 build/full 3629/0；独立任务审查通过 |
+| S-B2 | 真实 ASR/controller 的静音早退；preview、health、预算、live 收尾与重试/旧回调 | Pass（源码）：`7ce5d21`，完整生产回归 3875/0，相关回归 292/0；其后仅加强测试屏障，focused 989/0 和 build 通过；独立任务审查通过 |
+| S-F | 稳定源码顺序 build/full self-test、独立全 M3 审查及修复复审 | Pass（源码）：`f7554ee`，修复 RED 527/78 → focused 628/0，顺序 build/full **4124/0**；F1/F2 限定复审全部关闭，无新增 Critical/Important |
 
 ### M3-A Task3 阶段证据
 
@@ -93,3 +93,9 @@ short words, head/tail/delayed speech, keyboard/fan/wind noise, five application
 Float32 energy thresholds remain uncalibrated candidate values. An already-started
 realtime session may have uploaded audio or incurred charges during recording;
 this integration prevents stop-time finalize and delivery, not prior upload.
+
+## 最终全 M3 关口与产物
+
+最终源码 `f7554ee`，Sources/flowtype tree `f2d097da0b9b296aca9d37fd8f15382155c19b67`。全 M3 初审发现的 F1（分块回退跨等待缺复检）和 F2（实际事件后取消漏 uncertain 保存）已集中修复，真实循环/控制器/事务回归 RED527/78 → focused628/0，顺序 build/full **4124/0**。独立限定复审两项均 ADDRESSED、无新增阻塞；[报告和全部证据](2026-11-02-m3-development/README.md)已归档，包含[裁定与代价](2026-11-02-m3-development/rulings.md)。此前“待独立审查”的描述仅属当时检查点，以本段为最终源码状态。
+
+最终 `build/FlowType.app` Release 构建 exit0（99.05s）；主代码校验（忽略资源）exit0，严格整体/深度校验仍因既有 unsigned mlx.metallib exit1，不属于完整签名通过。arm64/ad-hoc/com.flowtype.app；二进制 SHA256 `09a458ad6f9492c297eb5a85145407b71d539b4112a66b09349c2cc8d11d824d`，详细[身份/签名/警告原文](2026-11-02-m3-development/bundle-verification.md)。未运行 GUI，不把旧 M2 进程当作 M3 验收。当前没有桌面控制工具，所有真机矩阵继续 Pending，模型/云服务/物理设备未做实际验收。

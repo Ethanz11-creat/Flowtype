@@ -1,0 +1,50 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/7] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/7] Compiling FlowType M3DeliverySelfTests.swift
+[5/7] Compiling FlowType SelfTest.swift
+[5/8] Write Objects.LinkFileList
+[6/8] Linking FlowType
+[7/8] Applying FlowType
+Build of product 'FlowType' complete! (19.55s)
+  ✗ FAIL: M3 runtime: new default — got unicode, want automatic
+  ✗ FAIL: M3 runtime: missing/unknown mode migrates — got Optional(FlowType.DeliveryMode.unicode), want Optional(FlowType.DeliveryMode.automatic)
+  ✗ FAIL: M3 runtime: missing/unknown mode migrates — got Optional(FlowType.DeliveryMode.unicode), want Optional(FlowType.DeliveryMode.automatic)
+  ✗ FAIL: M3 runtime: unsafe permits exactly one owned typed fallback — got ["type"], want ["paste-preparation", "type"]
+  ✗ FAIL: M3 runtime: real transaction reports unsafe — got nil, want Optional(FlowType.PasteTransactionResult.unsafeSnapshot)
+  ✗ FAIL: M3 runtime: preparation permits exactly one owned typed fallback — got ["type"], want ["paste-preparation", "type"]
+  ✗ FAIL: M3 runtime: real transaction reports preparation — got nil, want Optional(FlowType.PasteTransactionResult.notDispatched)
+  ✗ FAIL: M3 runtime: partial-write permits exactly one owned typed fallback — got ["type"], want ["paste-preparation", "type"]
+  ✗ FAIL: M3 runtime: real transaction reports partial-write — got nil, want Optional(FlowType.PasteTransactionResult.notDispatched)
+  ✗ FAIL: M3 runtime: failed write restores once; other failures never write — got 0, want 2
+  ✗ FAIL: M3 runtime: unsafe typing preparation failure must suspend for explicit recovery
+  ✗ FAIL: M3 runtime: pre-key failure emits zero key pairs — got [], want ["paste-preparation"]
+  ✗ FAIL: M3 runtime: pre-key failure keeps protected board — got [["public.utf8-plain-text": 32 bytes]], want [["public.rtf": 16 bytes, "public.png": 4 bytes], ["public.file-url": 25 bytes]]
+  ✗ FAIL: M3 runtime: pre-key failure does not copy — got 1, want 0
+  ✗ FAIL: M3 runtime: pre-key failure is recoverable, not uncertain — got Optional(FlowType.DeliveryOutcome.clipboard), want nil
+  ✗ FAIL: M3 runtime: partial-write typing preparation failure must suspend for explicit recovery
+  ✗ FAIL: M3 runtime: pre-key failure emits zero key pairs — got [], want ["paste-preparation"]
+  ✗ FAIL: M3 runtime: pre-key failure keeps protected board — got [["public.utf8-plain-text": 7 bytes]], want [["public.rtf": 16 bytes, "public.png": 4 bytes], ["public.file-url": 25 bytes]]
+  ✗ FAIL: M3 runtime: pre-key failure does not copy — got 1, want 2
+  ✗ FAIL: M3 runtime: pre-key failure is recoverable, not uncertain — got Optional(FlowType.DeliveryOutcome.clipboard), want nil
+  ✗ FAIL: M3 runtime: changed pid must suspend for explicit recovery
+  ✗ FAIL: M3 runtime: refreshed pid denies fallback — got 1, want 0
+  ✗ FAIL: M3 runtime: changed focus must suspend for explicit recovery
+  ✗ FAIL: M3 runtime: refreshed focus denies fallback — got 1, want 0
+  ✗ FAIL: M3 runtime: changed secure must suspend for explicit recovery
+  ✗ FAIL: M3 runtime: refreshed secure denies fallback — got 1, want 0
+  ✗ FAIL: M3 runtime: changed permission must suspend for explicit recovery
+  ✗ FAIL: M3 runtime: refreshed permission denies fallback — got 1, want 0
+  ✗ FAIL: M3 runtime: changed blind must suspend for explicit recovery
+  ✗ FAIL: M3 runtime: refreshed blind denies fallback — got 1, want 0
+=== FlowType --self-test ===
+=== M3 delivery self-test: 171 passed, 30 failed ===
