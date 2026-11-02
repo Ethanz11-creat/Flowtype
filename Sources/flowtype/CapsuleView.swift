@@ -124,34 +124,23 @@ struct CapsuleView: View {
             Text(statusSubtitle)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(statusColor.opacity(0.7))
-                .lineLimit(1)
+                .lineLimit(session.recoveryCard == nil ? 1 : 2)
                 .truncationMode(.head)
         }
-        if case .error = session.sessionState, !session.errorActions.isEmpty {
-            HStack(spacing: 8) {
-                ForEach(session.errorActions, id: \.self) { action in
+        if case .error = session.sessionState, let card = session.recoveryCard {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                ForEach(card.presentation.actions, id: \.self) { action in
                     Button(action.displayName) {
-                        switch action {
-                        case .retry: session.retryFailedStage()
-                        case .copyRaw, .copyResult: session.copyRawText()
-                        case .dismiss: session.dismissError()
-                        case .openAccessibilitySettings:
-                            PermissionHelper.openAccessibilitySettings()
-                            ReadinessMonitor.shared.startPermissionWatchIfNeeded()
-                        case .openMicrophoneSettings:
-                            PermissionHelper.openMicrophoneSettings()
-                        case .openASRSettings:
-                            StatusBarController.shared.openSettings(tab: .settings)
-                        case .recheckReadiness: session.recheckReadiness()
-                        case .useAutomaticRouting: session.useAutomaticRouting()
-                        }
+                        session.performRecoveryAction(action, cardID: card.id)
                     }
                     .buttonStyle(.borderless)
                     .font(.system(size: 11, weight: .medium))
                 }
             }
+            .padding(.top, 5)
         }
     }
+
 
     private var statusColor: Color {
         session.sessionState.statusColor

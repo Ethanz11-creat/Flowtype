@@ -391,7 +391,9 @@ extension M3SpeechPreflightSelfTests {
         func append(samples: [Float]) async throws { chunks.append(samples) }
         func finish() async throws -> ASRResult {
             finishes += 1
-            if fail { throw ProbeError.synthetic }
+            // The retry fixture models a typed transient service failure. Unknown
+            // probe errors intentionally cannot authorize original-audio retry.
+            if fail { throw CloudASRError.timeout }
             return ASRResult(text: "live temporary text", providerID: ASRProviderID.cloud, latencyMs: 1)
         }
         func cancel() async { cancels += 1 }
@@ -614,8 +616,8 @@ extension M3SpeechPreflightSelfTests {
                 controller.sessionState == .notice("录音数据异常，请重新录音") ||
                     controller.sessionState == .error("录音数据异常，请重新录音")
             }
-            r.eq(controller.sessionState, .notice("录音数据异常，请重新录音"), "M3 invalid controller: non-retryable data error uses existing notice presentation")
-            r.eq(controller.errorActions, [], "M3 invalid controller: no Retry or copy-preview action")
+            r.eq(controller.sessionState, .error("录音数据异常，请重新录音"), "M3 invalid controller: malformed audio remains actionable for rerecord")
+            r.eq(controller.errorActions, [.rerecord, .dismiss], "M3 invalid controller: rerecord only, no Retry or copy-preview action")
             r.eq(provider.ledger.snapshot.requests.count, beforeInvalid, "M3 invalid controller: no provider")
             r.eq(ledger.snapshot.health, healthBeforeInvalid, "M3 invalid controller: no health penalty")
             r.eq(ledger.snapshot.history, 1, "M3 invalid controller: no history")
@@ -660,7 +662,7 @@ extension M3SpeechPreflightSelfTests {
                 ledger.update { $0.preflights += 1 }
                 await MainActor.run { if let budget = plan.contexts.last?.completionBudget { plan.budgets.append(budget) } }
                 return try await SpeechPreflight.evaluate(samples: samples, sampleRate: rate)
-            })
+            }, phrases: { [] })
         let capture = Capture { ctx in
             plan.contexts.append(ctx)
             ctx.completionBudget = CompletionBudget(seconds: 1)
@@ -675,6 +677,7 @@ extension M3SpeechPreflightSelfTests {
         await waitFor { if case .error = controller.sessionState { return true }; return false }
         r.eq(ledger.snapshot.preflights, 1, "M3 retry: first real ASR attempt preflight")
         r.check(plan.contexts.first?.realtimeHandle == nil, "M3 retry: failed live handle consumed")
+        r.eq(controller.recoveryCard?.presentation.kind, .transientASR, "M3 retry: typed transient failure authorizes retained audio")
         controller.retryFailedStage()
         await waitFor { ledger.snapshot.history == 1 }
         r.eq(ledger.snapshot.preflights, 2, "M3 retry: explicit Retry reruns real preflight")

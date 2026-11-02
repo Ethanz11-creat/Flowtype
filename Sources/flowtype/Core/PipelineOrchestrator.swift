@@ -73,6 +73,8 @@ final class SessionController: ObservableObject {
 
     private let pipeline: [PipelineStage]
     private let observers: [SessionObserver]
+    private let recoveryEffects: RecoveryEffects
+    private var recoveryState = SessionRecoveryState()
     private let effects: SessionEffects
     private let configurationStore: ConfigurationStore
     private let refreshReadiness: @MainActor () -> ReadinessLevel
@@ -83,6 +85,7 @@ final class SessionController: ObservableObject {
     @Published private(set) var sessionState: SessionState = .idle
     @Published private(set) var spectrum: [Float] = []
     @Published private(set) var lastErrorRawText: String?
+    @Published private(set) var recoveryCard: RecoveryCard?
     @Published private(set) var errorActions: [ErrorAction] = []
     @Published private(set) var preparationNotice: String?
     @Published private(set) var lastDeliverySummary: LastDeliverySummary?
@@ -138,6 +141,7 @@ final class SessionController: ObservableObject {
         pipeline: [PipelineStage] = PipelineRegistry.defaultPipeline(),
         observers: [SessionObserver] = PipelineRegistry.defaultObservers(),
         effects: SessionEffects = .live,
+        recoveryEffects: RecoveryEffects = .live,
         configurationStore: ConfigurationStore = .shared,
         refreshReadiness: @escaping @MainActor () -> ReadinessLevel = {
             ReadinessMonitor.shared.refresh()
@@ -151,6 +155,7 @@ final class SessionController: ObservableObject {
         self.pipeline = pipeline
         self.observers = observers
 
+        self.recoveryEffects = recoveryEffects
         self.effects = effects
         self.configurationStore = configurationStore
         self.refreshReadiness = refreshReadiness
@@ -249,7 +254,7 @@ final class SessionController: ObservableObject {
 
     func endRecording() {
         OptionTapDetector.shared.cancelPendingTaps()
-        let withPolish = ConfigurationStore.shared.current.polishOnStop
+        let withPolish = configurationStore.current.polishOnStop
         AppLogger.log("[SessionController#\(activeSessionID)] endRecording called, withPolish=\(withPolish)")
 
         if isPreparing {
@@ -288,6 +293,7 @@ final class SessionController: ObservableObject {
 
     func cancel() {
         AppLogger.log("[SessionController#\(activeSessionID)] cancel called, state=\(sessionState)")
+        let cancelledSessionID = activeSessionID
         let cancelledContext = currentContext
         cancelledContext?.cancel(recordPendingDelivery: cancelledContext?.sessionID == activeSessionID)
         // A paste/key event can already have escaped when cancellation arrives.
@@ -295,6 +301,7 @@ final class SessionController: ObservableObject {
         // suppressing all stale UI/state publication below.
         if let cancelledContext, cancelledContext.deliveryOutcome == .uncertain {
             saveHistory(context: cancelledContext)
+            guard activeSessionID == cancelledSessionID, currentContext === cancelledContext else { return }
             recordLastDelivery(context: cancelledContext)
         }
         // Invalidate ownership before cancellation can resume a stage on another executor.
@@ -306,50 +313,81 @@ final class SessionController: ObservableObject {
         AppLogger.log("[SessionController] Cancelled — session reset to idle")
     }
 
+    /// Every action, including compatibility wrappers, enters this ownership gate.
+    func performRecoveryAction(_ action: RecoveryAction, cardID: UUID) {
+        guard case .error = sessionState, let card = recoveryState.card,
+              card.id == cardID, card.sessionID == activeSessionID,
+              card.presentation.actions.contains(action) else { return }
+        switch action {
+        case .retry:
+            guard let recovery = suspendedContext, let payload = suspendedPayload,
+                  let index = suspendedStageIndex, let context = currentContext,
+                  context.sessionID == card.sessionID, !context.isCancelled,
+                  pipeline.indices.contains(index), pipeline[index] is ASRStage,
+                  case .audio(let samples, _) = payload, !samples.isEmpty,
+                  !context.deliveryEventStarted,
+                  recoveryPresentation(recovery, payload: payload, index: index, context: context).actions.contains(action)
+            else { return }
+            clearSuspension()
+            context.completionBudget = CompletionBudget(seconds: 20)
+            context.realtimeResult = nil
+            transition(to: .processing(provider: "识别中"), context: context)
+            executeStage(at: index, payload: payload, context: context)
+        case .copyRaw, .copyResult:
+            if let text = recoveryState.copyText { recoveryEffects.copyText(text) }
+        case .openAccessibilitySettings: recoveryEffects.openAccessibilitySettings()
+        case .openMicrophoneSettings: recoveryEffects.openMicrophoneSettings()
+        case .openSpeechRecognitionSettings: recoveryEffects.openSpeechRecognitionSettings()
+        case .openASRSettings: recoveryEffects.openASRSettings()
+        case .viewHistory: recoveryEffects.openHistory()
+        case .rerecord: startRecording()
+        case .dismiss: resetToIdle()
+        case .recheckReadiness: refreshRecoveryReadiness(cardID: cardID)
+        case .useAutomaticRouting:
+            var config = configurationStore.current
+            config.asrRoutingPolicy = .auto
+            configurationStore.save(config)
+            refreshRecoveryReadiness(cardID: cardID)
+        }
+    }
+
+    private func performCurrentAction(_ action: RecoveryAction) {
+        guard let card = recoveryState.card else { return }
+        performRecoveryAction(action, cardID: card.id)
+    }
+
     func retryFailedStage() {
-        guard case .error = sessionState else {
-            AppLogger.log("[SessionController] retryFailedStage: not in error state")
-            return
-        }
-        guard suspendedContext != nil else {
-            AppLogger.log("[SessionController] retryFailedStage: no recovery context")
-            return
-        }
-        guard suspendedContext?.retryable == true else {
-            AppLogger.log("[SessionController] retryFailedStage: recovery is copy/dismiss only")
-            return
-        }
-        guard let payload = suspendedPayload else {
-            AppLogger.log("[SessionController] retryFailedStage: no suspended payload")
-            return
-        }
-        guard let stageIndex = suspendedStageIndex else {
-            AppLogger.log("[SessionController] retryFailedStage: no suspended stage index")
-            return
-        }
-        guard let context = currentContext else {
-            AppLogger.log("[SessionController] retryFailedStage: no current context")
-            return
-        }
+        guard let action = recoveryState.card?.presentation.actions.first(where: {
+            if case .retry = $0 { return true }; return false
+        }) else { return }
+        performCurrentAction(action)
+    }
+    func dismissError() { performCurrentAction(.dismiss) }
+    func recheckReadiness() { performCurrentAction(.recheckReadiness) }
+    func useAutomaticRouting() { performCurrentAction(.useAutomaticRouting) }
+    func copyRawText() {
+        performCurrentAction(recoveryState.card?.presentation.actions.contains(.copyResult) == true ? .copyResult : .copyRaw)
+    }
 
-        AppLogger.log("[SessionController#\(activeSessionID)] Retrying failed stage...")
-
-        errorDismissTask?.cancel()
-        errorDismissTask = nil
-
+    private func refreshRecoveryReadiness(cardID: UUID) {
+        guard let card = recoveryState.card, card.id == cardID,
+              let context = currentContext, context.sessionID == activeSessionID else { return }
+        let level = refreshReadiness()
+        // Injected effects and readiness publishers may synchronously start another
+        // session. A completed recheck still belongs to its original card.
+        guard recoveryState.card?.id == cardID, activeSessionID == card.sessionID,
+              currentContext === context, !context.isCancelled else { return }
+        guard let issue = Self.readinessPreflight(level) else {
+            resetToIdle()
+            return
+        }
         clearSuspension()
-
-        context.completionBudget = CompletionBudget(seconds: 20)
-        context.realtimeResult = nil
-        // Retry the suspended stage with the original session policy.
-        // A failed ASR attempt must not opt the user into polish.
-        let retryState: SessionState = pipeline[stageIndex].name == PolishStage.stageName
-            ? .polishing(preview: "") : .processing(provider: "识别中")
-        transition(to: retryState, context: context)
-        executeStage(at: stageIndex, payload: payload, context: context)
+        presentReadinessBlocked(issue, context: context)
     }
 
     private func clearSuspension() {
+        recoveryState = SessionRecoveryState()
+        recoveryCard = nil
         lastErrorRawText = nil
         errorActions = []
         suspendedContext = nil
@@ -357,34 +395,25 @@ final class SessionController: ObservableObject {
         suspendedStageIndex = nil
     }
 
-    func dismissError() {
-        guard case .error = sessionState else { return }
-        errorDismissTask?.cancel()
-        errorDismissTask = nil
-        clearSuspension()
-        resetToIdle()
+    private func presentRecovery(_ presentation: FailurePresentation, copyText: String?, context: SessionContext) {
+        let card = RecoveryCard(id: UUID(), sessionID: context.sessionID, presentation: presentation)
+        recoveryState = SessionRecoveryState(card: card, copyText: copyText)
+        lastErrorRawText = copyText
+        errorActions = presentation.actions
+        recoveryCard = card
+        transition(to: .error(presentation.message), context: context)
     }
 
-    func recheckReadiness() {
-        guard !refreshReadiness().isBlocked else {
-            AppLogger.log("[SessionController] Readiness recheck remains blocked")
-            return
-        }
-        dismissError()
-    }
-
-    func useAutomaticRouting() {
-        var config = configurationStore.current
-        config.asrRoutingPolicy = .auto
-        configurationStore.save(config)
-        _ = refreshReadiness()
-        dismissError()
-    }
-
-    func copyRawText() {
-        guard let rawText = suspendedContext?.rawText else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(rawText, forType: .string)
+    private func recoveryPresentation(_ recovery: ErrorRecoveryContext, payload: StagePayload,
+                                      index: Int, context: SessionContext) -> FailurePresentation {
+        let hasAudio: Bool
+        if case .audio(let samples, _) = payload { hasAudio = !samples.isEmpty && pipeline[index] is ASRStage }
+        else { hasAudio = false }
+        return RecoveryPolicy.presentation(kind: recovery.failureKind, resources: RecoveryResources(
+            stage: recovery.failedStage, hasAudio: hasAudio,
+            textKind: recovery.rawText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? recovery.textKind : .none,
+            deliveryEventStarted: context.deliveryEventStarted,
+            routingPolicy: configurationStore.current.asrRoutingPolicy, hasHistory: false))
     }
 
     // MARK: - Orchestration
@@ -438,20 +467,14 @@ final class SessionController: ObservableObject {
                 }
 
             case .suspend(let recovery):
-                if recovery.error is CancellationError {
+                if recovery.failureKind == .cancelled {
                     self.resetToIdle()
                 } else {
-                    let actions = Self.buildErrorActions(from: recovery)
-                    if actions.isEmpty {
-                        self.transition(to: .notice(recovery.error.localizedDescription), context: context)
-                    } else {
-                        self.suspendedContext = recovery
-                        self.suspendedPayload = payload
-                        self.suspendedStageIndex = index
-                        self.lastErrorRawText = recovery.rawText
-                        self.errorActions = actions
-                        self.transition(to: .error(recovery.error.localizedDescription), context: context)
-                    }
+                    self.suspendedContext = recovery
+                    self.suspendedPayload = payload
+                    self.suspendedStageIndex = index
+                    self.presentRecovery(self.recoveryPresentation(recovery, payload: payload, index: index, context: context),
+                                         copyText: recovery.rawText, context: context)
                 }
 
             case .notice(let message):
@@ -471,9 +494,33 @@ final class SessionController: ObservableObject {
     /// All terminal delivery paths converge here; no optional-stage failure saves early.
     private func finish(context: SessionContext) {
         guard activeSessionID == context.sessionID, !context.isCancelled else { return }
+        var enteredHistory = false
         if context.hasInjected {
-            saveHistory(context: context)
+            enteredHistory = saveHistory(context: context)
+            // Storage is an injected synchronous effect and may reenter cancel/start.
+            // Never close the newer context or install this session's terminal card.
+            guard activeSessionID == context.sessionID, currentContext === context,
+                  !context.isCancelled else { return }
             recordLastDelivery(context: context)
+        }
+        if context.deliveryOutcome == .uncertain {
+            let presentation = RecoveryPolicy.presentation(
+                kind: context.deliveryEventStarted ? .deliveryUncertain : .deliveryBlocked,
+                resources: .init(stage: "Injection", hasAudio: false,
+                    textKind: context.finalText.isEmpty ? .none : .result,
+                    deliveryEventStarted: context.deliveryEventStarted,
+                    routingPolicy: configurationStore.current.asrRoutingPolicy, hasHistory: enteredHistory))
+            context.cancel()
+            currentContext = nil
+            currentTask = nil
+            stateCancellable?.cancel(); stateCancellable = nil
+            spectrumCancellable?.cancel(); spectrumCancellable = nil
+            readinessCancellable?.cancel(); readinessCancellable = nil
+            stopRecordingTimer()
+            spectrum = []
+            clearSuspension()
+            presentRecovery(presentation, copyText: context.finalText, context: context)
+            return
         }
         let state = context.hasInjected ? context.completionNotice.map(SessionState.notice) ?? .idle : .idle
         transition(to: state, context: context)
@@ -527,9 +574,10 @@ final class SessionController: ObservableObject {
         errorDismissTask = nil
         currentTask?.cancel()
         currentTask = nil
-        lastErrorRawText = nil
-        errorActions = Self.readinessActions(for: issue, policy: configurationStore.current.asrRoutingPolicy)
-        transition(to: .error(issue.reason), context: context)
+        clearSuspension()
+        presentRecovery(RecoveryPolicy.presentation(kind: Self.readinessFailure(issue), resources: .init(
+            stage: "Recording", hasAudio: false, textKind: .none, deliveryEventStarted: false,
+            routingPolicy: configurationStore.current.asrRoutingPolicy, hasHistory: false)), copyText: nil, context: context)
     }
 
     nonisolated static func readinessPreflight(_ level: ReadinessLevel) -> ReadinessIssue? {
@@ -549,46 +597,31 @@ final class SessionController: ObservableObject {
 
     nonisolated static func readinessActions(for issue: ReadinessIssue,
                                              policy: ASRRoutingPolicy) -> [ErrorAction] {
+        RecoveryPolicy.presentation(kind: readinessFailure(issue), resources: .init(stage: "Recording",
+            hasAudio: false, textKind: .none, deliveryEventStarted: false, routingPolicy: policy, hasHistory: false)).actions
+    }
+
+    private nonisolated static func readinessFailure(_ issue: ReadinessIssue) -> FailureKind {
         switch issue {
-        case .microphoneDenied:
-            return [.openMicrophoneSettings, .recheckReadiness, .dismiss]
-        case .noEngine:
-            return [.openASRSettings, policy == .auto ? .recheckReadiness : .useAutomaticRouting, .dismiss]
-        case .accessibilityMissing:
-            return [.openAccessibilitySettings, .recheckReadiness, .dismiss]
-        default:
-            return [.recheckReadiness, .dismiss]
+        case .microphoneDenied: return .permission(.microphone)
+        case .accessibilityMissing: return .permission(.accessibility)
+        default: return .readiness(issue)
         }
     }
 
+    /// Compatibility projection has no retained audio or actual stage authority.
     nonisolated static func buildErrorActions(from recovery: ErrorRecoveryContext) -> [ErrorAction] {
-        guard !(recovery.error is CancellationError) else { return [] }
-        if recovery.error is PermissionError {
-            return [.openMicrophoneSettings, .recheckReadiness, .dismiss]
-        }
-        let hasText = recovery.rawText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        guard recovery.retryable || hasText else { return [] }
-        var actions: [ErrorAction] = []
-        if recovery.retryable { actions.append(.retry(stage: recovery.failedStage)) }
-        if hasText {
-            // Delivery failures carry the final polished result. Keep their
-            // recovery action explicit so the capsule never offers a hidden
-            // retry after a paste transaction refused to dispatch.
-            if recovery.error is InjectionStageError {
-                actions.append(.copyResult)
-            } else {
-                actions.append(.copyRaw)
-            }
-        }
-        actions.append(.dismiss)
-        return actions
+        RecoveryPolicy.presentation(kind: recovery.failureKind, resources: .init(stage: recovery.failedStage,
+            hasAudio: false,
+            textKind: recovery.rawText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? recovery.textKind : .none,
+            deliveryEventStarted: false, routingPolicy: .auto, hasHistory: false)).actions
     }
 
     // MARK: - Timer
 
     private func startRecordingTimer(sessionID: UInt64, context: SessionContext) {
         elapsedSeconds = 0
-        let maxDuration = ConfigurationStore.shared.current.maxRecordingDuration
+        let maxDuration = configurationStore.current.maxRecordingDuration
         recordingTimer.schedule(withTimeInterval: 1.0, repeats: true) { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self,
@@ -654,9 +687,10 @@ final class SessionController: ObservableObject {
         return (recoveryRaw, recoveryRaw)
     }
 
-    private func saveHistory(context: SessionContext) {
-        guard context.claimHistorySave() else { return }
-        if let saveHistory = effects.saveHistory { saveHistory(context); return }
+    @discardableResult
+    private func saveHistory(context: SessionContext) -> Bool {
+        guard context.claimHistorySave() else { return false }
+        if let saveHistory = effects.saveHistory { saveHistory(context); return true }
         let durationMs: UInt64?
         if let recStart = context.recordingStartTime {
             durationMs = UInt64(Date().timeIntervalSince(recStart) * 1000)
@@ -687,7 +721,7 @@ final class SessionController: ObservableObject {
         if let stopAt = context.stopRecordingAt, context.injectMs != nil {
             session.stopToInjectMs = Int(Date().timeIntervalSince(stopAt) * 1000)
         }
-        HistoryStore.shared.append(session, storeText: ConfigurationStore.shared.current.storeTranscriptText)
+        HistoryStore.shared.append(session, storeText: configurationStore.current.storeTranscriptText)
 
         // Auto-detect corrections for dictionary
         if context.rawTranscript != context.finalText {
@@ -700,6 +734,7 @@ final class SessionController: ObservableObject {
         DictionaryStore.shared.incrementHits(ids: hitIds)
 
         AppLogger.log("[SessionController] History saved, dict hits: \(hitIds.count)")
+        return true
     }
 
     private func detectAndAddCorrections(raw: String, final: String) {
@@ -765,12 +800,8 @@ final class SessionController: ObservableObject {
         spectrumCancellable = nil
         readinessCancellable?.cancel()
         readinessCancellable = nil
-        lastErrorRawText = nil
-        errorActions = []
+        clearSuspension()
         preparationNotice = nil
-        suspendedContext = nil
-        suspendedPayload = nil
-        suspendedStageIndex = nil
         currentTask?.cancel()
         currentTask = nil
         errorDismissTask?.cancel()
@@ -814,37 +845,7 @@ extension SessionController {
                           isCancelled: isCancelled) && isRecording
     }
 
-    enum ErrorAction: Equatable, Hashable {
-        case retry(stage: String)
-        case copyRaw
-        case copyResult
-        case dismiss
-        case openAccessibilitySettings
-        case openMicrophoneSettings
-        case openASRSettings
-        case recheckReadiness
-        case useAutomaticRouting
-
-        var displayName: String {
-            switch self {
-            case .retry(let stage):
-                switch stage {
-                case "ASR": return "重试识别"
-                case PolishStage.stageName: return "重试润色"
-                case "Injection": return "重试输入"
-                default: return "重试处理"
-                }
-            case .copyRaw: return "复制原文"
-            case .copyResult: return "复制结果"
-            case .dismiss: return "忽略"
-            case .openAccessibilitySettings: return "打开辅助功能设置"
-            case .openMicrophoneSettings: return "打开麦克风设置"
-            case .openASRSettings: return "打开 ASR 设置"
-            case .recheckReadiness: return "重新检测"
-            case .useAutomaticRouting: return "改为自动路由"
-            }
-        }
-    }
+    typealias ErrorAction = RecoveryAction
 }
 
 // MARK: - SessionState UI Properties
@@ -852,7 +853,7 @@ extension SessionController {
 extension SessionState {
 
     var capsuleSize: NSSize {
-        if case .error = self { return NSSize(width: 320, height: 94) }
+        if case .error = self { return NSSize(width: 380, height: 156) }
         return NSSize(width: 240, height: 70)
     }
 

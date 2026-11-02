@@ -560,7 +560,7 @@ extension M3DeliverySelfTests {
                 return .complete
             }
             session.startRecording()
-            await awaitPresentation { fixture.saved.count > count && session.sessionState == .idle }
+            await awaitPresentation { fixture.saved.count > count && (session.sessionState == .idle || session.recoveryCard != nil) }
             r.eq(fixture.saved.count, count + 1, "M3 presentation: \(outcome) saves history once")
             r.eq(fixture.summaries.count, count + 1, "M3 presentation: \(outcome) publishes summary once")
             r.eq(session.lastDeliverySummary?.outcome, outcome, "M3 presentation: terminal outcome retained")

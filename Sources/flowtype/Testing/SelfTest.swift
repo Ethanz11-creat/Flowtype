@@ -284,6 +284,7 @@ enum SelfTest {
         if CommandLine.arguments.contains("--m4-recovery-only") {
             M4RecoveryPolicySelfTests.run(r)
             await M4StageFailureSelfTests.run(r)
+            await M4RecoveryControllerSelfTests.run(r)
             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
             exit(r.failed == 0 ? 0 : 1)
         }
@@ -460,6 +461,7 @@ enum SelfTest {
         await CloudProviderSelfTests.runConnectionOwnership(r)
         M4RecoveryPolicySelfTests.run(r)
         await M4StageFailureSelfTests.run(r)
+        await M4RecoveryControllerSelfTests.run(r)
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -479,32 +481,50 @@ enum SelfTest {
         }
     }
 
-    private actor RetryLedger {
+    @MainActor private final class RetryLedger {
         var polishRequests: [Bool] = []
         var retryBudget: Double?
-        func recordBudget(_ value: Double?) { retryBudget = value }
-        func visit(_ polish: Bool) -> Bool { polishRequests.append(polish); return polishRequests.count == 1 }
+        var context: SessionContext?
     }
 
     private struct RecoveryAudioStarter: PipelineStage {
         let name = "Recording"
+        let ledger: RetryLedger
         func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
-            .continue(.audio(samples: [0.5, -0.25], previewText: ""))
+            await MainActor.run {
+                ledger.context = context
+                context.captureRoute = .init(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
+                    localAvailable: false, cloudAvailable: true, cloudConfiguration: nil)
+            }
+            return .continue(.audio(samples: [0.5, -0.25], previewText: ""))
         }
     }
 
-    private struct RetryASRStage: PipelineStage {
-        let name = "ASR"
+    private struct RetryProvider: ASRProvider {
         let ledger: RetryLedger
-        func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
-            let polish = await MainActor.run { context.usePolish }
-            if await ledger.visit(polish) {
-                await MainActor.run { context.completionBudget = CompletionBudget(seconds: 0) }
-                return .suspend(ErrorRecoveryContext(failedStage: name, error: CloudASRError.timeout, rawText: nil, retryable: true, failureKind: .transientASR))
+        var id: String { ASRProviderID.cloud }
+        var displayName: String { "synthetic" }
+        var isAvailable: Bool { true }
+        var capabilities: ASRCapabilities { .init(supportsLanguageHint: false, supportsContextHint: false,
+                                                   requiresNetwork: false, location: .onDevice) }
+        func transcribe(_ request: ASRRequest) async throws -> ASRResult {
+            let first = await MainActor.run {
+                ledger.polishRequests.append(ledger.context?.usePolish ?? true)
+                if ledger.polishRequests.count == 1 {
+                    ledger.context?.completionBudget = CompletionBudget(seconds: 0)
+                    return true
+                }
+                ledger.retryBudget = ledger.context?.completionBudget?.remainingSeconds
+                return false
             }
-            await ledger.recordBudget(await MainActor.run { context.completionBudget?.remainingSeconds })
-            return .complete
+            if first { throw CloudASRError.timeout }
+            return .init(text: "synthetic complete", providerID: id, latencyMs: 1)
         }
+    }
+
+    private static func retryASR(ledger: RetryLedger) -> ASRStage {
+        let provider = RetryProvider(ledger: ledger)
+        return ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider }, phrases: { [] })
     }
 
     private struct ProcessedStarter: PipelineStage {
@@ -525,26 +545,32 @@ enum SelfTest {
 
     @MainActor
     static func testSessionRecoveryDelivery(_ r: Reporter) async {
+        let suite = "FlowTypeM4LegacyRetry.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let configuration = ConfigurationStore(defaults: defaults)
+        let recoveryEffects = RecoveryEffects(openAccessibilitySettings: {}, openMicrophoneSettings: {},
+            openSpeechRecognitionSettings: {}, openASRSettings: {}, openHistory: {}, copyText: { _ in })
         let ledger = RetryLedger()
         let quietEffects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
-        let recovery = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
+        let recovery = SessionController(pipeline: [RecoveryAudioStarter(ledger: ledger), retryASR(ledger: ledger)], observers: [], effects: quietEffects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
         recovery.startRecording()
         await waitForSession(recovery) { if case .error = $0 { return true }; return false }
         let immediateLedger = RetryLedger()
-        let immediate = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
+        let immediate = SessionController(pipeline: [RecoveryAudioStarter(ledger: immediateLedger), retryASR(ledger: immediateLedger)], observers: [], effects: quietEffects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
         immediate.startRecording()
         await waitForSession(immediate) { if case .error = $0 { return true }; return false }
         immediate.retryFailedStage()
         await waitForSession(immediate) { $0 == .idle }
-        r.eq(await immediateLedger.polishRequests, [false, false], "recovery: immediate ASR retry preserves configured polish flag")
-        r.check((await immediateLedger.retryBudget ?? 0) > 19, "recovery: explicit retry renews expired completion budget")
+        r.eq(immediateLedger.polishRequests, [false, false], "recovery: immediate ASR retry preserves configured polish flag")
+        r.check((immediateLedger.retryBudget ?? 0) > 19, "recovery: explicit retry renews expired completion budget")
         immediate.cancel()
         try? await Task.sleep(for: .seconds(5.2))
         if case .error = recovery.sessionState { r.check(true, "recovery: actionable error persists beyond former five-second dismissal") }
         else { r.check(false, "recovery: actionable error persists beyond former five-second dismissal") }
         recovery.retryFailedStage()
         await waitForSession(recovery) { $0 == .idle }
-        r.eq(await ledger.polishRequests, [false, false], "recovery: retry reruns ASR without forcing polish preference")
+        r.eq(ledger.polishRequests, [false, false], "recovery: retry reruns ASR without forcing polish preference")
         recovery.cancel()
 
         var configured = Configuration()
@@ -558,7 +584,7 @@ enum SelfTest {
         let delivery = InjectionStage(settle: {}, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
                                      copy: { text in log.events.append("delivered:\(text)") })
         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in log.events.append("history") })
-        let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects, readinessLevel: { .ready })
+        let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
         session.startRecording()
         await waitForSession(session) { if case .notice = $0 { return true }; return $0 == .idle }
         r.eq(log.events, ["delivered:你好，世界。", "history", "notice"], "session: complete processed delivery precedes single history save and gentle notice")
@@ -595,15 +621,15 @@ enum SelfTest {
         r.eq(DeliveryCopy.literalPreservationFallback.message,
              "技术内容已保留 · 已使用识别结果", "delivery copy: literal fallback is explicit")
         let asr = ErrorRecoveryContext(failedStage: "ASR", error: LLMError.invalidResponse, rawText: nil, retryable: true)
-        r.eq(SessionController.buildErrorActions(from: asr).map(\.displayName), ["重试识别", "忽略"], "recovery: ASR retry label describes failed stage")
+        r.eq(SessionController.buildErrorActions(from: asr).map(\.displayName), ["重新录音", "忽略"], "recovery: legacy ASR name alone cannot authorize retry")
         let processed = ErrorRecoveryContext(failedStage: "PostProcess", error: LLMError.invalidResponse, rawText: "完整文本", retryable: true)
-        r.eq(SessionController.buildErrorActions(from: processed).map(\.displayName), ["重试处理", "复制原文", "忽略"], "recovery: non-polish retry label and copy available text")
+        r.eq(SessionController.buildErrorActions(from: processed).map(\.displayName), ["复制原文", "重新录音", "忽略"], "recovery: processing offers copy and fresh recording")
         let empty = ErrorRecoveryContext(failedStage: "ASR", error: LLMError.invalidResponse, rawText: "", retryable: false)
-        r.eq(SessionController.buildErrorActions(from: empty).map(\.displayName), [], "recovery: nonactionable error exposes no action buttons")
+        r.eq(SessionController.buildErrorActions(from: empty).map(\.displayName), ["重新录音", "忽略"], "recovery: internal failure offers fresh recording")
         let cancellation = ErrorRecoveryContext(failedStage: "ASR", error: CancellationError(), rawText: "stale", retryable: true)
         r.eq(SessionController.buildErrorActions(from: cancellation).map(\.displayName), [], "recovery: cancellation exposes no stale retry or copy")
         for error in [InjectionStageError.clipboardSnapshotIncomplete, .pasteNotDispatched] {
-            let delivery = ErrorRecoveryContext(failedStage: "Injection", error: error, rawText: "完整最终结果", retryable: false)
+            let delivery = ErrorRecoveryContext(failedStage: "Injection", error: error, rawText: "完整最终结果", retryable: false, textKind: .result)
             r.eq(SessionController.buildErrorActions(from: delivery).map(\.displayName), ["复制结果", "忽略"],
                  "delivery copy: unsafe paste offers final result copy and no repeat")
         }
@@ -1381,38 +1407,38 @@ enum SelfTest {
         defer { store.flushPendingSave() }
         let readiness = ReadinessRecoveryProbe()
         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
-        let session = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+        let session = SessionController(pipeline: [], observers: [],
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return readiness.level
-        }, readinessLevel: { .ready })
+        }, readinessLevel: { .blocked(.microphoneDenied) })
         defer { session.cancel() }
         session.startRecording()
         await waitForSession(session) { if case .error = $0 { return true }; return false }
-        let originalState = session.sessionState
+        readiness.level = .blocked(.microphoneDenied)
         let originalActions = session.errorActions
         r.check(!originalActions.isEmpty, "readiness recovery: fixture enters actionable error")
         session.recheckReadiness()
-        r.eq(session.sessionState, originalState, "readiness recovery: blocked recheck keeps the error card")
-        r.eq(session.errorActions, originalActions, "readiness recovery: blocked recheck preserves actions")
+        r.eq(session.sessionState, .error("麦克风权限未开启"), "readiness recovery: blocked recheck refreshes current reason")
+        r.eq(session.errorActions, [.openMicrophoneSettings, .recheckReadiness, .dismiss], "readiness recovery: blocked recheck refreshes current actions")
         readiness.level = .degraded(.basicOnly)
         session.recheckReadiness()
         r.eq(session.sessionState, .idle, "readiness recovery: raw degraded readiness dismisses error immediately")
         r.eq(session.errorActions, [], "readiness recovery: successful recheck clears recovery actions")
         r.eq(readiness.policies, [.localOnly, .localOnly], "readiness recovery: each recheck refreshes without changing policy")
 
-        // Enter another real stage failure before repairing its routing policy.
-        let reroute = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
+        // Enter a no-engine readiness block before repairing its routing policy.
+        let reroute = SessionController(pipeline: [], observers: [],
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return .blocked(.noEngine)
-        }, readinessLevel: { .ready })
+        }, readinessLevel: { .blocked(.noEngine) })
         defer { reroute.cancel() }
         reroute.startRecording()
         await waitForSession(reroute) { if case .error = $0 { return true }; return false }
         reroute.useAutomaticRouting()
-        r.eq(reroute.sessionState, .idle, "readiness recovery: automatic routing dismisses error even if still blocked")
-        r.eq(reroute.errorActions, [], "readiness recovery: automatic routing clears old retry actions")
+        r.eq(reroute.sessionState, .error("没有可用的语音识别引擎"), "readiness recovery: automatic routing keeps refreshed blocked card")
+        r.eq(reroute.errorActions, [.openASRSettings, .recheckReadiness, .dismiss], "readiness recovery: automatic routing refreshes actions")
         r.eq(store.current.asrRoutingPolicy, .auto, "readiness recovery: automatic routing updates current policy")
         r.eq(readiness.policies.last, .auto, "readiness recovery: refresh observes the saved automatic policy")
         // Exercise the real debounce: a mere assignment to current never writes the defaults.
