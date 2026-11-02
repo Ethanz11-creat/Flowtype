@@ -212,15 +212,19 @@ final class SessionController: ObservableObject {
         let context = SessionContext(sessionID: newID, statePublisher: statePublisher)
         currentContext = context
 
+        let generation = presentationGeneration
         let readiness = readinessLevel()
+        guard ownsActiveContext(context), presentationGeneration == generation else { return }
         if let issue = Self.readinessPreflight(readiness) {
             presentReadinessBlocked(issue, context: context)
             return
         }
         preparationNotice = Self.preparationSubtitle(for: readiness)
+        guard ownsActiveContext(context), presentationGeneration == generation else { return }
 
         // Reset state
         spectrum = []
+        guard ownsActiveContext(context), presentationGeneration == generation else { return }
 
         // Subscribe to state publisher for intermediate updates from stages
         stateCancellable = statePublisher
@@ -246,10 +250,13 @@ final class SessionController: ObservableObject {
                       Self.shouldAcceptEvent(activeSessionID: self.activeSessionID,
                                              eventSessionID: newID,
                                              isCancelled: ctx.isCancelled),
-                      ctx.isReady else { return }
+                      ctx.isReady, self.isPreparing else { return }
                 ctx.recordingStartTime = Date()
+                let generation = self.presentationGeneration
                 self.preparationNotice = nil
-                self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx)
+                guard self.ownsActiveContext(ctx), self.presentationGeneration == generation else { return }
+                guard self.transition(to: Self.stateForAudioReadiness(isReady: true), context: ctx),
+                      self.ownsActiveContext(ctx) else { return }
                 self.startRecordingTimer(sessionID: newID, context: ctx)
             }
 
@@ -264,8 +271,11 @@ final class SessionController: ObservableObject {
             }
         // 录音中不再向 UI 推送预览文字（预览仅作 ASR 失败时的内部兜底）。
 
-        transition(to: Self.stateForAudioReadiness(isReady: false), context: context)
+        guard transition(to: Self.stateForAudioReadiness(isReady: false), context: context),
+              ownsActiveContext(context) else { return }
+        let preparingGeneration = presentationGeneration
         effects.showWindow()
+        guard ownsActiveContext(context), presentationGeneration == preparingGeneration else { return }
 
         executeStage(at: 0, payload: .empty, context: context)
     }
@@ -350,7 +360,8 @@ final class SessionController: ObservableObject {
             clearSuspension()
             context.completionBudget = CompletionBudget(seconds: 20)
             context.realtimeResult = nil
-            transition(to: .processing(provider: "识别中"), context: context)
+            guard transition(to: .processing(provider: "识别中"), context: context),
+                  ownsActiveContext(context) else { return }
             executeStage(at: index, payload: payload, context: context)
         case .copyRaw, .copyResult:
             if let text = recoveryState.copyText { recoveryEffects.copyText(text) }
@@ -446,7 +457,7 @@ final class SessionController: ObservableObject {
     // MARK: - Orchestration
 
     private func executeStage(at index: Int, payload: StagePayload, context: SessionContext) {
-        guard activeSessionID == context.sessionID, !context.isCancelled else {
+        guard ownsActiveContext(context) else {
             AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, aborting pipeline")
             return
         }
@@ -458,14 +469,17 @@ final class SessionController: ObservableObject {
 
         // Pre-stage state transitions
         if stage is InjectionStage {
-            transition(to: .injecting, context: context)
+            // A synchronous subscriber may install a different recording task or
+            // commit a newer presentation even within this same session.
+            guard transition(to: .injecting, context: context),
+                  ownsActiveContext(context) else { return }
         }
 
         let task = Task { [weak self] in
             guard let self else { return }
             let result = await stage.executeIfOwned(payload: payload, context: context)
 
-            guard self.activeSessionID == context.sessionID, !context.isCancelled else {
+            guard self.ownsActiveContext(context) else {
                 AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, ignoring stage result")
                 return
             }
@@ -520,17 +534,16 @@ final class SessionController: ObservableObject {
 
     /// All terminal delivery paths converge here; no optional-stage failure saves early.
     private func finish(context: SessionContext) {
-        guard activeSessionID == context.sessionID, !context.isCancelled else { return }
+        guard ownsActiveContext(context) else { return }
+        let generation = presentationGeneration
         var enteredHistory = false
         if context.hasInjected {
             enteredHistory = saveHistory(context: context)
             // Storage is an injected synchronous effect and may reenter cancel/start.
             // Never close the newer context or install this session's terminal card.
-            guard activeSessionID == context.sessionID, currentContext === context,
-                  !context.isCancelled else { return }
+            guard ownsActiveContext(context), presentationGeneration == generation else { return }
             recordLastDelivery(context: context)
-            guard activeSessionID == context.sessionID, currentContext === context,
-                  !context.isCancelled else { return }
+            guard ownsActiveContext(context), presentationGeneration == generation else { return }
         }
         if context.deliveryOutcome == .uncertain {
             let presentation = RecoveryPolicy.presentation(
@@ -547,7 +560,7 @@ final class SessionController: ObservableObject {
             readinessCancellable?.cancel(); readinessCancellable = nil
             stopRecordingTimer()
             spectrum = []
-            guard activeSessionID == context.sessionID else { return }
+            guard activeSessionID == context.sessionID, presentationGeneration == generation else { return }
             clearSuspension()
             presentRecovery(presentation, copyText: context.finalText, context: context)
             return
@@ -558,16 +571,19 @@ final class SessionController: ObservableObject {
 
     // MARK: - State Transition
 
-    private func transition(to newState: SessionState, context: SessionContext) {
+    /// Whether this exact presentation survived all synchronous effects and
+    /// subscribers. Callers with remaining lifecycle work must also own context.
+    @discardableResult
+    private func transition(to newState: SessionState, context: SessionContext) -> Bool {
         let oldState = sessionState
         stateValue = newState
         presentationGeneration &+= 1
         let generation = presentationGeneration
         if newState.showPanel { effects.showWindow() }
-        guard presentationGeneration == generation else { return }
+        guard presentationGeneration == generation else { return false }
         for observer in observers {
             observer.sessionDidTransition(from: oldState, to: newState, context: context)
-            guard presentationGeneration == generation else { return }
+            guard presentationGeneration == generation else { return false }
         }
 
         // Hide the capsule when the session finishes normally (slides down). resetToIdle()
@@ -600,8 +616,9 @@ final class SessionController: ObservableObject {
             errorDismissTask?.cancel()
             errorDismissTask = nil
         }
-        guard presentationGeneration == generation else { return }
+        guard presentationGeneration == generation else { return false }
         publishPresentation()
+        return presentationGeneration == generation
     }
 
     // MARK: - Error Actions
@@ -671,9 +688,10 @@ final class SessionController: ObservableObject {
                 self.elapsedSeconds += 1
                 self.stateValue = .recording(elapsedSeconds: self.elapsedSeconds)
                 self.presentationGeneration &+= 1
+                let generation = self.presentationGeneration
                 self.publishPresentation()
-                guard self.activeSessionID == sessionID, self.currentContext === context,
-                      !context.isCancelled else { return }
+                guard self.ownsActiveContext(context), self.presentationGeneration == generation,
+                      self.isRecording else { return }
 
                 // Auto-stop at max duration
                 if self.elapsedSeconds >= maxDuration {
@@ -861,6 +879,10 @@ final class SessionController: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    private func ownsActiveContext(_ context: SessionContext) -> Bool {
+        activeSessionID == context.sessionID && currentContext === context && !context.isCancelled
+    }
 
     private func nextSessionID() -> UInt64 {
         sessionID += 1

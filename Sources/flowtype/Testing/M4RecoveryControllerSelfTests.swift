@@ -41,6 +41,7 @@ enum M4RecoveryControllerSelfTests {
         await historyReentrancy(r, configuration)
         await publicationReentrancy(r, configuration)
         statePublicationReentrancy(r, configuration)
+        await callerContinuationReentrancy(r, configuration)
         r.eq(SessionState.error("safe").capsuleSize.width, 380, "M4 controller: recovery width")
         r.eq(SessionState.error("safe").capsuleSize.height, 156, "M4 controller: recovery height")
     }
@@ -66,6 +67,8 @@ extension M4RecoveryControllerSelfTests {
         var refreshes = 0
         var onRefresh: (() -> Void)?
         var captures = 0
+        weak var ownedController: SessionController?
+        var armed = false
         init(_ configuration: ConfigurationStore) { self.configuration = configuration }
         var recovery: RecoveryEffects { .init(
             openAccessibilitySettings: { self.events.append("AX") },
@@ -445,7 +448,6 @@ extension M4RecoveryControllerSelfTests {
             signals: .init(secureInputActive: false, focus: .editableText))
         for explicitCancel in [false, true] {
             let f = Fixture(configuration)
-            var c: SessionController!
             let capture = Stage(name: "Text", run: { _, context in
                 f.contexts.append(context); context.deliveryTarget = target
                 return .continue(.polished("complete result", raw: "raw"))
@@ -453,10 +455,11 @@ extension M4RecoveryControllerSelfTests {
             let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
                 mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
                     try? KeyboardInjector.postIfActive(context: context) {}
-                    if explicitCancel { c.cancel() }
+                    if explicitCancel { f.ownedController?.cancel() }
                     return .uncertain
                 }, copy: { _ in r.check(false, "M4 publication: no implicit copy") })
-            c = f.controller([capture, injection])
+            let c = f.controller([capture, injection])
+            f.ownedController = c
             var fired = false
             var summaries: [LastDeliverySummary] = []
             var newerCard: RecoveryCard?
@@ -531,10 +534,10 @@ extension M4RecoveryControllerSelfTests {
             let c = f.controller([f.capture(.complete)])
             c.startRecording()
             let original = c.recoveryCard!
-            var armed = false, fired = false
+            var fired = false
             var newerCard: RecoveryCard?
             let replace: @MainActor () -> Void = {
-                guard armed, !fired else { return }
+                guard f.armed, !fired else { return }
                 fired = true
                 f.level = .blocked(.microphoneDenied)
                 c.startRecording()
@@ -554,7 +557,7 @@ extension M4RecoveryControllerSelfTests {
             var observedCards: [RecoveryCard?] = []
             let stateObservation = c.sessionStatePublisher.sink { observedStates.append($0) }
             let cardObservation = c.recoveryCardPublisher.sink { observedCards.append($0) }
-            armed = true
+            f.armed = true
             f.level = .blocked(.noEngine)
             c.performRecoveryAction(.recheckReadiness, cardID: original.id)
             r.check(fired, "M4 \(channel) subscriber: synchronous error callback exercised")
@@ -572,5 +575,91 @@ extension M4RecoveryControllerSelfTests {
             stateObservation.cancel(); cardObservation.cancel()
             subscription.cancel(); c.cancel()
         }
+    }
+}
+
+extension M4RecoveryControllerSelfTests {
+    @MainActor private static func callerContinuationReentrancy(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) async {
+        let target = DeliveryTargetSnapshot(pid: 42, focusIdentity: .init(testID: "caller-continuation"),
+            signals: .init(secureInputActive: false, focus: .editableText))
+        for replacement in ["new-session", "same-session"] {
+            let f = Fixture(configuration)
+            let cancellations = OSAllocatedUnfairLock<Int>(initialState: 0)
+            let (recording, releaseRecording) = AsyncStream<Void>.makeStream()
+            defer { releaseRecording.finish() }
+            let capture = Stage(name: "Recording", run: { _, context in
+                f.contexts.append(context)
+                if f.contexts.count == 1 {
+                    context.deliveryTarget = target
+                    return .continue(.polished("complete result", raw: "raw"))
+                }
+                // The real controller must retain this task, as RecordingStage
+                // relies on its task cancellation handler to stop the recorder.
+                await withTaskCancellationHandler {
+                    context.markReady()
+                    var iterator = recording.makeAsyncIterator()
+                    _ = await iterator.next()
+                } onCancel: {
+                    cancellations.withLock { $0 += 1 }
+                }
+                return .complete
+            })
+            let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
+                mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
+                    try? KeyboardInjector.postIfActive(context: context) { f.events.append("event") }
+                    return .uncertain
+                }, copy: { f.copied.append($0) })
+            let c = f.controller([capture, injection])
+            var fired = false
+            let subscription = c.sessionStatePublisher.sink { state in
+                guard state == .injecting, !fired else { return }
+                fired = true
+                if replacement == "new-session" {
+                    c.cancel()
+                    c.startRecording()
+                } else {
+                    f.contexts.first?.statePublisher.send(.processing(provider: "replacement"))
+                }
+            }
+            c.startRecording()
+            await wait { fired && (replacement == "same-session" || c.isRecording) }
+            if replacement == "same-session" { await wait { !f.histories.isEmpty } }
+            for _ in 0..<10 { await Task.yield() }
+            r.check(fired, "M4 caller \(replacement): injecting subscriber replaced the continuation")
+            if replacement == "new-session" {
+                r.eq(f.contexts.count, 2, "M4 caller replacement: new recording stage actually started")
+                r.check(c.isRecording, "M4 caller replacement: new recording marked ready")
+                c.cancel()
+                await wait { cancellations.withLock { $0 } == 1 }
+                r.eq(cancellations.withLock { $0 }, 1, "M4 caller replacement: cancel reaches the actual new recording task exactly once")
+                c.cancel()
+                r.eq(cancellations.withLock { $0 }, 1, "M4 caller replacement: repeated cancel does not repeat recorder cleanup")
+            } else {
+                r.eq(c.sessionState, .processing(provider: "replacement"), "M4 caller same-session: newer presentation retains authority")
+            }
+            r.eq(f.events, [], "M4 caller \(replacement): obsolete injection posts no event")
+            r.eq(f.copied, [], "M4 caller \(replacement): obsolete injection copies no text")
+            r.eq(f.histories, [], "M4 caller \(replacement): obsolete injection saves no history")
+            subscription.cancel()
+            c.cancel()
+            releaseRecording.finish()
+        }
+
+        let f = Fixture(configuration)
+        let c = f.controller([f.capture(.complete)])
+        var fired = false
+        let subscription = c.sessionStatePublisher.sink { state in
+            guard state == .preparing, !fired else { return }
+            fired = true
+            c.cancel()
+        }
+        c.startRecording()
+        for _ in 0..<10 { await Task.yield() }
+        r.check(fired, "M4 preparing caller: synchronous cancellation exercised")
+        r.eq(c.sessionState, .idle, "M4 preparing caller: cancellation stays idle")
+        r.eq(f.windows.last, "hide", "M4 preparing caller: cancelled window is not reopened")
+        r.eq(f.captures, 0, "M4 preparing caller: cancelled preparation starts no stage")
+        subscription.cancel()
+        c.cancel()
     }
 }
