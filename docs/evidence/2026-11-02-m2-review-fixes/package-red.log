@@ -1,0 +1,27 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/9] Compiling FlowType M2ReviewFixSelfTests.swift
+[4/9] Compiling FlowType WhisperModelPreparation.swift
+[5/9] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[6/9] Compiling FlowType SelfTest.swift
+[6/9] Write Objects.LinkFileList
+[7/9] Linking FlowType
+[8/9] Applying FlowType
+Build of product 'FlowType' complete! (21.44s)
+  ✗ FAIL: package preparation supplies compiled MelSpectrogram — got mlmodel, want mlmodelc
+  ✗ FAIL: pinned runtime resolves existing compiled MelSpectrogram
+  ✗ FAIL: pinned runtime resolves existing compiled AudioEncoder
+  ✗ FAIL: pinned runtime resolves existing compiled TextDecoderContextPrefill
+  ✗ FAIL: mixed source package runtime owns a separate directory
+  ✗ FAIL: last preparation owner releases generated runtime files
+=== FlowType --self-test ===
+=== M2 package self-test: 6 passed, 6 failed ===

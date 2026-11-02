@@ -1,0 +1,3 @@
+Exact product inspector compiled with swiftc -O -parse-as-library. Synthetic qwenFixture helpers extracted unchanged from LocalModelImportSelfTests.swift; sparse payload, no MLX/Core ML linked.
+inspection-seconds=1.424239993095398 engine=qwenMLX bytes=708236553
+inspection-seconds=1.4524860382080078 engine=qwenMLX bytes=708236553

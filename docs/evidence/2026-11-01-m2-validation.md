@@ -1,6 +1,6 @@
 # M2 validation evidence — 2026-11-01 / closeout 2026-11-02
 
-以下 A3 / B3 记录为历史检查点，其计数不代表最终 M2。当前状态、C4 历史检查点与全 M2 修复证据见文末；最终全范围源码门禁已通过（3a34a51，2430/0）；真实环境验收仍 Pending。
+以下 A3 / B3 记录为历史检查点，其计数不代表最终 M2。此前源码门禁为 3a34a51、2430/0；2026-11-02 的追加独立审查确认两项 P2（源包编译衔接、主线程复检阻塞），现已在 e69d688 修复并经独立限定复审关闭，最新构建与自测 2507/0。[追加审查与修复证据](2026-11-02-m2-review-fixes/README.md)记录最新状态；真实环境验收仍 Pending。
 
 ## Historical M2-A Task 3 source identity
 
@@ -126,9 +126,9 @@ Test-only RED build passed in **29.27s**, then focused RED **274 passed / 2 fail
 Qwen inspector sources are unchanged, so the exact-product actual static PASS above was not redundantly rerun. No actual full graph/inference/GUI acceptance was added. `5be1b4f` release bundle is intermediate, built before these edits; the controller will rebuild after the stable correction commit. Same-reviewer incremental disposition, actual full models, GUI, services/devices and mandatory V1–V5 remain Pending.
 
 
-## Final source gate and application bundle — 2026-11-02
+## Historical source gate and application bundle — 2026-11-02 / 3a34a51
 
-**Source gate PASS:** final product commit **3a34a518073fc69afa06557bb745e2adc22641c9**, Sources/flowtype tree **ba7ed7b7edb109c3424309bf85599f455b50ffdc**. Fresh whole-M2 review covered 878725c → 73d5e74; the final worker fixed all three Important and two bounded Minor findings. The same independent scoped reviewer verified 73d5e74 → 5be1b4f and the narrow update-mask continuation 5be1b4f → 3a34a51, then returned **Spec PASS / Quality PASS**, no open Critical/Important. Earlier Pending/Needs-fixes entries above are historical checkpoints, not the current code-review status.
+**Historical source gate PASS:** product commit **3a34a518073fc69afa06557bb745e2adc22641c9**, Sources/flowtype tree **ba7ed7b7edb109c3424309bf85599f455b50ffdc**. Fresh whole-M2 review covered 878725c → 73d5e74; the final worker fixed all three Important and two bounded Minor findings. The same independent scoped reviewer verified 73d5e74 → 5be1b4f and the narrow update-mask continuation 5be1b4f → 3a34a51, then returned **Spec PASS / Quality PASS**, no open Critical/Important. This checkpoint is superseded by the additional review and fixes linked at the top of this document.
 
 Final changed-source commands ran sequentially: `swift build` **exit 0, 30.35s**, followed by `swift run FlowType --self-test` **exit 0, 2430 passed / 0 failed**. The inherited AppLogger warning remains; the new forced dictionary-cast warning was fixed. Product/test sources did not change after this run; subsequent closeout changes are documentation/evidence only, so the suite was not repeated on unchanged code.
 
@@ -139,3 +139,11 @@ Durable [review, logs and build identity archive](2026-11-01-m2-artifacts/README
 **Actual acceptance remains mandatory Pending:** full Qwen/Whisper loading and inference (including .mlpackage), per-variant hardware/memory/accuracy, new GUI/current running binary, real cloud service acceptance and V1–V5. Existing Qwen static and public Whisper tokenizer-only PASS are narrower evidence. Current pinned WhisperKit 0.18 runtime rejects Intel's FloatType/cache ABI mismatch and Float16-declared update-mask exports; these are explicit current adapter limits. No existing models, caches, credentials or private audio/transcripts were changed or used as fixtures.
 
 Nonblocking follow-ups remain the native URLSession redirect-delegate callback fixture and credential-only router-health revision/reset (bounded 60-second recovery); neither is an open Critical/Important. Branch/worktree are preserved; no push or merge.
+
+## Current additional independent-review fixes — 2026-11-02 / e69d688
+
+The later independent review of `878725c..9fa57bf` superseded the historical PASS above with two P2 findings: accepted Whisper source packages lacked native compilation/preparation, and full Qwen inspection synchronously blocked MainActor. Both are fixed in `e69d6889e5211ffb1a35572eda8030609a313e30`; source tree `5b583ab9f2d72318e167a5ef81f35619e06e3b66`. Fresh independent scoped re-review verified both **ADDRESSED**, with no new Critical/Important in the fix diff.
+
+Final sequential build exit **0** (20.68s), full self-test exit **0**, **2507 passed / 0 failed**. The real native tiny-model smoke additionally passed whole-package compilation, compiled loading and CPU prediction for conventional/alternate Manifest roots; it does not prove full Whisper inference. After review, stable-source application build completed exit **0** (release compile 87.83s). No source/test changes followed the final suite; closeout changes are documentation only.
+
+The [current evidence archive](2026-11-02-m2-review-fixes/README.md) contains original review, worker report, independent re-review, RED/GREEN logs, native smoke source, source/bundle identities and release warning comparison. The new arm64 ad-hoc `build/FlowType.app` executable SHA256 is **66d06e20ae0b646831b1f2815f2459e11e29e3627852b2b67f76873723b4d083**. No GUI launch, actual full-model/service/device acceptance or V1–V5 result was added; these remain mandatory **Pending**. Existing release warnings match the preceding archived build. Branch/worktree preserved, no push or merge.

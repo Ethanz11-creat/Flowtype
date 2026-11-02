@@ -1,0 +1,17 @@
+.superpowers/sdd/2026-11-02-m2-review-fixes/native-smoke.swift:15:30: warning: 'init(trainingData:targetColumn:featureColumns:parameters:)' was deprecated in macOS 13.0: Use DataFrame instead of MLDataTable when initializing. [#DeprecatedDeclaration]
+13 |         let data = try MLDataTable(dictionary: ["x": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+14 |                                               "y": [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0]])
+15 |         let regression = try MLLinearRegressor(trainingData: data, targetColumn: "y",
+   |                              `- warning: 'init(trainingData:targetColumn:featureColumns:parameters:)' was deprecated in macOS 13.0: Use DataFrame instead of MLDataTable when initializing. [#DeprecatedDeclaration]
+16 |                                                parameters: .init(validationData: nil, l2Penalty: 0))
+17 |         let source = root.appendingPathComponent("regression.mlmodel")
+
+.superpowers/sdd/2026-11-02-m2-review-fixes/native-smoke.swift:16:61: warning: 'init(validationData:maxIterations:l1Penalty:l2Penalty:stepSize:convergenceThreshold:featureRescaling:)' was deprecated in macOS 11.0: Use the validation property instead. [#DeprecatedDeclaration]
+14 |                                               "y": [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0]])
+15 |         let regression = try MLLinearRegressor(trainingData: data, targetColumn: "y",
+16 |                                                parameters: .init(validationData: nil, l2Penalty: 0))
+   |                                                             `- warning: 'init(validationData:maxIterations:l1Penalty:l2Penalty:stepSize:convergenceThreshold:featureRescaling:)' was deprecated in macOS 11.0: Use the validation property instead. [#DeprecatedDeclaration]
+17 |         let source = root.appendingPathComponent("regression.mlmodel")
+18 |         try regression.write(to: source)
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>

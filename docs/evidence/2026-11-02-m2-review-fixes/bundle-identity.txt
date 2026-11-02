@@ -1,0 +1,43 @@
+Built source commit: e69d6889e5211ffb1a35572eda8030609a313e30
+Sources/flowtype tree: 5b583ab9f2d72318e167a5ef81f35619e06e3b66
+Build command: bash scripts/build-app.sh
+Exit: 0
+GUI launch/inference: NOT performed; Pending
+
+$ shasum -a 256 /Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/MacOS/FlowType
+66d06e20ae0b646831b1f2815f2459e11e29e3627852b2b67f76873723b4d083  /Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/MacOS/FlowType
+Exit: 0
+
+$ file /Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/MacOS/FlowType
+/Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/MacOS/FlowType: Mach-O 64-bit executable arm64
+Exit: 0
+
+$ codesign -dv --verbose=4 /Users/yiheng/pycode/flowtype-local/build/FlowType.app
+Executable=/Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/MacOS/FlowType
+Identifier=com.flowtype.app
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20400 size=376809 flags=0x2(adhoc) hashes=11769+3 location=embedded
+VersionPlatform=1
+VersionMin=983040
+VersionSDK=1704192
+Hash type=sha256 size=32
+CandidateCDHash sha256=f02988e9689c24c6af1a92bd50d6dc1b9689526f
+CandidateCDHashFull sha256=f02988e9689c24c6af1a92bd50d6dc1b9689526fb9d0115d97c970996a883194
+Hash choices=sha256
+CMSDigest=f02988e9689c24c6af1a92bd50d6dc1b9689526fb9d0115d97c970996a883194
+CMSDigestType=2
+Executable Segment base=0
+Executable Segment limit=23445504
+Executable Segment flags=0x1
+Page size=4096
+CDHash=f02988e9689c24c6af1a92bd50d6dc1b9689526f
+Signature=adhoc
+Info.plist entries=14
+TeamIdentifier=not set
+Sealed Resources version=2 rules=13 files=6
+Internal requirements count=0 size=12
+Exit: 0
+
+$ /usr/libexec/PlistBuddy -c Print :CFBundleIdentifier /Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/Info.plist
+com.flowtype.app
+Exit: 0

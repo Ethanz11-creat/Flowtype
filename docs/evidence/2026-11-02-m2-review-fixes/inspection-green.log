@@ -1,0 +1,41 @@
+[0/1] Planning build
+Building for debugging...
+[0/5] Write sources
+[1/5] Write swift-version--1AB21518FC5DEDBE.txt
+[3/13] Compiling FlowType ModelProvisionRequest.swift
+[4/13] Compiling FlowType ImportedLifecycleSelfTests.swift
+[5/13] Compiling FlowType QwenModelStatusCard.swift
+[6/13] Compiling FlowType LocalASRRuntimeFactory.swift
+[7/13] Compiling FlowType WholeM2FixSelfTests.swift
+[8/13] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[9/13] Compiling FlowType QwenModelState.swift
+[10/13] Compiling FlowType LocalModelInspection.swift
+[11/29] Compiling FlowType ModelDownloader.swift
+[12/29] Compiling FlowType ModelRecoveryActions.swift
+[13/29] Compiling FlowType ASRModelStatusCard.swift
+[14/29] Compiling FlowType ImportedASRModelList.swift
+[15/29] Compiling FlowType LocalModelPicker.swift
+[16/29] Compiling FlowType OnboardingView.swift
+[17/29] Compiling FlowType OnboardingWindowController.swift
+[18/29] Compiling FlowType SettingsPage+ASR.swift
+[19/29] Compiling FlowType ImportedModelUISelfTests.swift
+[20/29] Compiling FlowType M2ReviewFixSelfTests.swift
+[21/29] Compiling FlowType FlowTypeApp.swift
+[22/29] Compiling FlowType PipelineOrchestrator.swift
+[23/29] Compiling FlowType ReadinessMonitor.swift
+[24/29] Compiling FlowType ASRRouter.swift
+[25/29] Compiling FlowType ModelProvisionSelfTests.swift
+[26/29] Compiling FlowType SelfTest.swift
+[26/29] Write Objects.LinkFileList
+[27/29] Linking FlowType
+[28/29] Applying FlowType
+Build of product 'FlowType' complete! (20.12s)
+=== FlowType --self-test ===
+=== M2 inspection self-test: 35 passed, 0 failed ===

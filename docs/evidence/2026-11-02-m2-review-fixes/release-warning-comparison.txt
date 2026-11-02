@@ -1,0 +1,13 @@
+Same primary release warning locations/messages as archived prior bundle: True
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:130:90: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:84:97: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:100: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:17: warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:152:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:261:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:262:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:196:32: warning: result of call to 'withLock' is unused [#no-usage]
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/DownloadSource.swift:67:32: warning: 'regionCode' was deprecated in macOS 13: renamed to 'region.identifier' [#DeprecatedDeclaration]
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Settings/ProviderEditSheet.swift:29:9: warning: variable 'baseURL' was never mutated; consider changing to 'let' constant
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it

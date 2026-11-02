@@ -1,0 +1,5 @@
+PASS native whole-package compile + compiled load + CPU prediction: MelSpectrogram, root conventional
+PASS native whole-package compile + compiled load + CPU prediction: AudioEncoder, root alternate
+PASS native whole-package compile + compiled load + CPU prediction: TextDecoder, root alternate
+PASS native whole-package compile + compiled load + CPU prediction: TextDecoderContextPrefill, root alternate
+PASS generated resources removed, source preserved. Tiny regression only; NOT Whisper inference.

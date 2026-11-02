@@ -1,0 +1,24 @@
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--1AB21518FC5DEDBE.txt
+[1/4] Write sources
+[3/8] Compiling FlowType SelfTest.swift
+[4/8] Compiling FlowType WhisperModelPreparation.swift
+[5/8] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[6/8] Compiling FlowType OfflineWhisperKit.swift
+[7/11] Compiling FlowType M2ReviewFixSelfTests.swift
+[8/11] Compiling FlowType WhisperASRProvider.swift
+[9/11] Compiling FlowType WhisperRuntimeSelfTests.swift
+[9/12] Write Objects.LinkFileList
+[10/12] Linking FlowType
+[11/12] Applying FlowType
+Build of product 'FlowType' complete! (23.30s)
+=== FlowType --self-test ===
+=== M2 package self-test: 34 passed, 0 failed ===

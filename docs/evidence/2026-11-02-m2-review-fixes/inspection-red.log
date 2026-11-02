@@ -1,0 +1,26 @@
+[0/1] Planning build
+Building for debugging...
+[0/4] Write sources
+[1/4] Write swift-version--1AB21518FC5DEDBE.txt
+[3/6] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[4/6] Compiling FlowType M2ReviewFixSelfTests.swift
+[5/7] Compiling FlowType SelfTest.swift
+[5/8] Write Objects.LinkFileList
+[6/8] Linking FlowType
+[7/8] Applying FlowType
+Build of product 'FlowType' complete! (17.30s)
+  ✗ FAIL: selection: main actor heartbeat runs while synchronous inspection is blocked
+  ✗ FAIL: selection: cancelled inspection never starts runtime or competing operation — got 2, want 1
+  ✗ FAIL: startup: main actor heartbeat runs while synchronous inspection is blocked
+  ✗ FAIL: startup: cancelled inspection never starts runtime or competing operation — got 1, want 0
+  ✗ FAIL: legacy: main actor heartbeat runs while synchronous inspection is blocked
+  ✗ FAIL: retry: main actor heartbeat runs while synchronous inspection is blocked
+=== FlowType --self-test ===
+=== M2 inspection self-test: 29 passed, 6 failed ===
