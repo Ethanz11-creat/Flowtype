@@ -58,6 +58,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
     private var sessionCancellable: AnyCancellable?
     private var readinessCancellable: AnyCancellable?
     private var dictationMenuController: DictationMenuController?
+    private var lastDeliveryMenuController: LastDeliveryMenuController?
     private var originalStatusImage: NSImage?
 
     private override init() {
@@ -164,6 +165,9 @@ class StatusBarController: NSObject, NSMenuDelegate {
         let dictation = DictationMenuController(session: SessionController.shared)
         dictationMenuController = dictation
         menu.addItem(dictation.item)
+        let lastDelivery = LastDeliveryMenuController(session: SessionController.shared)
+        lastDeliveryMenuController = lastDelivery
+        menu.addItem(lastDelivery.item)
         updateMenuItems()
         menu.addItem(NSMenuItem.separator())
 
@@ -246,6 +250,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
         }
         let state = SessionController.shared.sessionState
         dictationMenuController?.refresh(for: state)
+        lastDeliveryMenuController?.refresh(for: SessionController.shared.lastDeliverySummary)
     }
 
     @objc private func repairReadiness() {

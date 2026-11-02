@@ -1,6 +1,6 @@
 # M3 验证清单 — 2026-11-02
 
-状态：**计划阶段，未执行**。当前产品仍为 M2 源码 `e69d688`，文档检查点 `b64d538`。既有 2507/0 是 M2 结果，本文件没有新增构建/测试/GUI/云端/音频结果。
+状态：**Owner 已确认子智能体执行，M3-A 开发中**。执行基线 `8d5d6bd`，此前产品为 M2 源码 `e69d688`。既有 2507/0 是 M2 结果；本文件只在取得新证据后更新对应状态，真实验收保持 Pending。
 
 依据：[共同设计](../superpowers/specs/2026-11-02-m3-delivery-and-silence-design.md)、[M3-A 计划](../superpowers/plans/2026-11-02-m3-a-automatic-delivery.md)、[M3-B 计划](../superpowers/plans/2026-11-02-m3-b-silence-preflight.md)。执行负责人为开发控制器；Owner 执行需物理热键、复制、拔麦与本机认证的操作。
 
@@ -8,12 +8,25 @@
 
 | ID | 覆盖 | 状态 |
 | --- | --- | --- |
-| S-A1 | 三模式策略、安全/权限/目标身份、回退纯判定 | Pending |
+| S-A1 | 三模式策略、安全/权限/目标身份、回退纯判定 | Pass（源码）：`c9f91a1`，focused 133/0，完整 2640/0；独立任务审查通过 |
 | S-A2 | 默认/旧值迁移、真实 ClipboardTransaction+InjectionStage、部分写板恢复、受保护板键入失败 | Pending |
-| S-A3 | 事件前后取消、并发复制、目标复检、duplicate attempt、一次历史/摘要和菜单 | Pending |
+| S-A3 | 事件前后取消、并发复制、目标复检、duplicate attempt、一次历史/摘要和菜单 | Pass（自动化，待阶段独立审查）：Task3（父 `7700f36`），focused 381/0，顺序 build/full 2888/0；不代表真机通过 |
 | S-B1 | 原始 PCM 全帧/尾帧、候选阈值、短音频/无效样本、后台响应/取消 | Pending |
 | S-B2 | 真实 ASR/controller 的静音早退；preview、health、预算、live 收尾与重试/旧回调 | Pending |
 | S-F | 稳定源码顺序 build/full self-test、独立全 M3 审查及修复复审 | Pending |
+
+### M3-A Task3 阶段证据
+
+Task3 在已批准运行时 `7700f36` 上添加内存 `LastDeliverySummary`、诚实的四种终态动词和可注入的禁用菜单项。摘要只含 sessionID/outcome/停止目标展示名/bundle ID，不含转写、音频或上下文；uncertain 文案固定为「已发送，但无法确认是否插入；可从历史复制」。正常 finish 与既有已终态 uncertain 取消保存路径共用当前所有权校验；静音 notice、无事件取消、旧会话屏障释放不清空或污染新摘要。同步菜单订阅使用 emitted value，打开菜单时再次刷新。
+
+自动化命令及结果：
+
+- RED：`swift run FlowType --self-test --m3-delivery-only`，exit 1，305 passed / 1 failed（旧 uncertain 文案）；随后先写摘要/菜单契约测试，缺失接口产生预期编译 RED。
+- GREEN：同 focused 命令，exit 0，381 passed / 0 failed；包含真实 controller + 隔离 SessionEffects 保存 seam 的 once-only、取消与晚到结果测试，以及独立注入菜单的即时/重开刷新。
+- 稳定源码顺序执行 `swift build` 后 `swift run FlowType --self-test`：均 exit 0，完整 2888 passed / 0 failed；未运行 `swift test`。focused 编译只见既有 AppLogger.swift:27 警告；最终增量 build/full 日志无警告，本轮未出现 AppleSpeechProvider 警告。
+- 新增摘要/菜单没有转写日志；成功日志未出现测试专用的 synthetic transcript/final 标记。历史持久化/隐私模式、polish 降级组合与剪贴板事务未改动。
+
+本阶段只做源码/合成测试；控制器负责独立 A/全 M3 审查，并按裁定在 B 后稳定最终源码构建 app、固定二进制身份及执行真机矩阵。未运行中间 app 构建或 GUI，不把 150ms 恢复窗口、实际插入或 V1–V5 记为 Pass。所有下表真机 Pending 保持不变。
 
 ## 真实验收（全部必做）
 

@@ -1,6 +1,31 @@
 import Foundation
+import Combine
 
 enum M3DeliverySelfTests {
+    @MainActor static func presentation(_ r: SelfTest.Reporter) async {
+        r.eq(DeliveryCopy.uncertainDispatch.message,
+             "已发送，但无法确认是否插入；可从历史复制", "M3 presentation: uncertain copy states the confirmation limit")
+        r.eq(lastDeliveryMenuTitle(nil), "最近一次交付：暂无", "M3 presentation: empty summary title")
+        for (outcome, expected): (DeliveryOutcome, String) in [
+            (.typedDispatched, "已发送键入（Synthetic Editor）"),
+            (.pasteDispatched, "已发送粘贴（Synthetic Editor）"),
+            (.clipboard, "已复制（原目标：Synthetic Editor）"),
+            (.uncertain, "发送不确定（Synthetic Editor）")
+        ] {
+            let summary = LastDeliverySummary(sessionID: 42, outcome: outcome,
+                targetAppName: "Synthetic Editor", targetBundleID: "test.synthetic.editor")
+            r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：" + expected, "M3 presentation: honest \(outcome) verb and target")
+            r.check(!lastDeliveryMenuTitle(summary).contains("输入成功"), "M3 presentation: no insertion confirmation")
+        }
+        for name: String? in [nil, "", "  \n"] {
+            let summary = LastDeliverySummary(sessionID: 43, outcome: .clipboard,
+                targetAppName: name, targetBundleID: "test.synthetic.bundle")
+            r.eq(lastDeliveryMenuTitle(summary), "最近一次交付：已复制（原目标：未知应用）",
+                 "M3 presentation: unknown display name never substitutes bundle or transcript")
+        }
+        await presentationLifecycle(r)
+    }
+
     static func policy(_ r: SelfTest.Reporter) {
         let editable = FocusSignals(secureInputActive: false, focus: .editableText)
         let blind = FocusSignals(secureInputActive: false, focus: .blindOrUnknown)
@@ -467,5 +492,169 @@ extension M3DeliverySelfTests {
         task.cancel()
         cancelled.signal()
         return reachedWrite
+    }
+}
+
+extension M3DeliverySelfTests {
+    private struct PresentationStage: PipelineStage {
+        let name = "SyntheticPresentation"
+        let run: @MainActor @Sendable (SessionContext) async -> StageResult
+        func execute(payload: StagePayload, context: SessionContext) async -> StageResult { await run(context) }
+    }
+
+    @MainActor private final class PresentationFixture {
+        var action: @MainActor @Sendable (SessionContext) async -> StageResult = { _ in .complete }
+        var contexts: [SessionContext] = []
+        var saved: [UInt64] = []
+        var summaries: [LastDeliverySummary] = []
+        let configuration: ConfigurationStore
+        lazy var session = SessionController(pipeline: [PresentationStage { [weak self] context in
+            guard let self else { return .complete }
+            contexts.append(context)
+            return await action(context)
+        }], observers: [], effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
+            saveHistory: { [weak self] context in self?.saved.append(context.sessionID) }),
+            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+
+        init(configuration: ConfigurationStore) { self.configuration = configuration }
+
+        func deliver(_ outcome: DeliveryOutcome, context: SessionContext) {
+            context.rawTranscript = "synthetic private transcript"
+            context.finalText = "synthetic private final text"
+            _ = context.beginDeliveryAttempt()
+            if outcome == .clipboard { _ = context.performDeliveryEffect {} }
+            else if outcome.isTerminalDelivery { _ = context.performDeliveryEvent {} }
+            context.finishDelivery(outcome)
+        }
+    }
+
+    @MainActor private static func awaitPresentation(_ predicate: @MainActor () -> Bool) async {
+        for _ in 0..<200 {
+            if predicate() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @MainActor static func presentationLifecycle(_ r: SelfTest.Reporter) async {
+        let suite = "FlowTypeM3Presentation.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            r.check(false, "M3 presentation: isolated defaults available")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let fixture = PresentationFixture(configuration: ConfigurationStore(defaults: defaults))
+        let session = fixture.session
+        let menu = LastDeliveryMenuController(session: session)
+        let subscription = session.$lastDeliverySummary.sink { summary in
+            if let summary { fixture.summaries.append(summary) }
+        }
+        defer { subscription.cancel(); session.cancel() }
+        r.eq(menu.item.title, "最近一次交付：暂无", "M3 menu: injected controller starts empty")
+        r.check(!menu.item.isEnabled && menu.item.action == nil, "M3 menu: informational item has no command")
+
+        // Each real terminal result publishes once and shares the existing history seam.
+        for outcome: DeliveryOutcome in [.typedDispatched, .pasteDispatched, .clipboard, .uncertain] {
+            let count = fixture.saved.count
+            fixture.action = { context in
+                fixture.deliver(outcome, context: context)
+                return .complete
+            }
+            session.startRecording()
+            await awaitPresentation { fixture.saved.count > count && session.sessionState == .idle }
+            r.eq(fixture.saved.count, count + 1, "M3 presentation: \(outcome) saves history once")
+            r.eq(fixture.summaries.count, count + 1, "M3 presentation: \(outcome) publishes summary once")
+            r.eq(session.lastDeliverySummary?.outcome, outcome, "M3 presentation: terminal outcome retained")
+            r.eq(session.lastDeliverySummary?.sessionID, fixture.contexts.last?.sessionID, "M3 presentation: terminal owns summary ID")
+            r.eq(session.lastDeliverySummary?.targetAppName, nil, "M3 presentation: absent stop app stays absent")
+            r.eq(session.lastDeliverySummary?.targetBundleID, nil, "M3 presentation: absent bundle stays absent")
+            r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: emitted value refreshes synchronously")
+            r.check(!menu.item.title.contains("synthetic private"), "M3 menu: no transcript or final text")
+            menu.refresh(for: nil)
+            menu.refresh(for: session.lastDeliverySummary)
+            r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: reopening refresh uses current summary")
+            session.cancel()
+            r.eq(fixture.saved.count, count + 1, "M3 presentation: cancellation after finish cannot duplicate history")
+            r.eq(fixture.summaries.count, count + 1, "M3 presentation: cancellation after finish cannot duplicate summary")
+        }
+        let previous = session.lastDeliverySummary
+        let previousCount = fixture.saved.count
+        fixture.action = { _ in .notice("未检测到声音，请重试") }
+        session.startRecording()
+        await awaitPresentation { if case .notice = session.sessionState { return true }; return false }
+        r.eq(session.lastDeliverySummary, previous, "M3 presentation: silence notice retains previous summary")
+        r.eq(fixture.saved.count, previousCount, "M3 presentation: silence notice saves no history")
+        session.cancel()
+
+        // A blocked old stage is released only after the newer session finishes.
+        let entered = Signal(), release = Signal(), returned = Signal()
+        fixture.action = { context in
+            entered.signal()
+            await release.wait()
+            fixture.deliver(.pasteDispatched, context: context)
+            returned.signal()
+            return .complete
+        }
+        session.startRecording()
+        await entered.wait()
+        session.cancel()
+        r.eq(session.lastDeliverySummary, previous, "M3 presentation: pre-event cancel retains previous summary")
+        r.eq(fixture.saved.count, previousCount, "M3 presentation: pre-event cancel saves no history")
+        fixture.action = { context in fixture.deliver(.clipboard, context: context); return .complete }
+        session.startRecording()
+        await awaitPresentation { fixture.saved.count == previousCount + 1 && session.sessionState == .idle }
+        let newer = session.lastDeliverySummary
+        release.signal()
+        await returned.wait()
+        await Task.yield()
+        r.eq(session.lastDeliverySummary, newer, "M3 presentation: late old terminal cannot overwrite newer summary")
+        r.eq(fixture.saved.count, previousCount + 1, "M3 presentation: late old terminal cannot save history")
+        r.eq(fixture.summaries.count, previousCount + 1, "M3 presentation: late old terminal cannot publish summary")
+
+        // The existing uncertain-cancel save path must publish before ownership is invalidated.
+        let uncertainEntered = Signal(), uncertainRelease = Signal(), uncertainReturned = Signal()
+        fixture.action = { context in
+            fixture.deliver(.uncertain, context: context)
+            uncertainEntered.signal()
+            await uncertainRelease.wait()
+            uncertainReturned.signal()
+            return .complete
+        }
+        session.startRecording()
+        await uncertainEntered.wait()
+        let uncertainID = fixture.contexts.last?.sessionID
+        session.cancel()
+        r.eq(session.lastDeliverySummary?.outcome, .uncertain, "M3 presentation: owned uncertain cancellation remains recoverable")
+        r.eq(session.lastDeliverySummary?.sessionID, uncertainID, "M3 presentation: uncertain cancel records its own session")
+        r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: uncertain cancellation saves once")
+        r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: uncertain cancellation publishes once")
+        r.eq(menu.item.title, lastDeliveryMenuTitle(session.lastDeliverySummary), "M3 menu: cancellation publishes emitted value immediately")
+        session.cancel()
+        uncertainRelease.signal()
+        await uncertainReturned.wait()
+        await Task.yield()
+        r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: late uncertain completion never saves twice")
+        r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: late uncertain completion never publishes twice")
+
+        // A temporary clipboard effect is not a terminal delivery or a text event.
+        let prepared = Signal(), preparedRelease = Signal(), preparedReturned = Signal()
+        let beforePrepared = session.lastDeliverySummary
+        fixture.action = { context in
+            _ = context.beginDeliveryAttempt()
+            _ = context.performDeliveryEffect {}
+            prepared.signal()
+            await preparedRelease.wait()
+            context.finishDelivery(.cancelled)
+            preparedReturned.signal()
+            return .complete
+        }
+        session.startRecording()
+        await prepared.wait()
+        session.cancel()
+        preparedRelease.signal()
+        await preparedReturned.wait()
+        await Task.yield()
+        r.eq(session.lastDeliverySummary, beforePrepared, "M3 presentation: cancelled clipboard preparation retains summary")
+        r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: cancelled clipboard preparation saves no history")
+        r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: cancelled clipboard preparation publishes nothing")
     }
 }

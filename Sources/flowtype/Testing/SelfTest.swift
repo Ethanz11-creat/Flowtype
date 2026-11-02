@@ -284,6 +284,7 @@ enum SelfTest {
         if CommandLine.arguments.contains("--m3-delivery-only") {
             M3DeliverySelfTests.policy(r)
             await M3DeliverySelfTests.runtime(r)
+            await M3DeliverySelfTests.presentation(r)
             print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
             exit(r.failed == 0 ? 0 : 1)
         }
@@ -422,6 +423,7 @@ enum SelfTest {
         testDeliveryPersistence(r)
         M3DeliverySelfTests.policy(r)
         await M3DeliverySelfTests.runtime(r)
+        await M3DeliverySelfTests.presentation(r)
         await testDeliveryModeStage(r)
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
@@ -542,7 +544,7 @@ enum SelfTest {
         r.eq(DeliveryCopy.forOutcome(.clipboard)?.message,
              "已复制，按 ⌘V 粘贴", "delivery copy: clipboard fallback explains manual paste")
         r.eq(DeliveryCopy.forOutcome(.uncertain)?.message,
-             "已发送 · 可从历史复制", "delivery copy: uncertain dispatch never promises insertion")
+             "已发送，但无法确认是否插入；可从历史复制", "delivery copy: uncertain dispatch never promises insertion")
         r.eq(DeliveryCopy.clipboardOwnershipChanged.message,
              "剪贴板已变化 · 可从历史复制", "delivery copy: ownership loss points to history")
         r.eq(DeliveryCopy.forOutcome(.typedDispatched), nil,

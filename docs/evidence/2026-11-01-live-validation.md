@@ -77,3 +77,15 @@ M2-C 的 Qwen 0.6B/1.7B × 4/8-bit 与 Whisper 各图规模、量化和硬件分
 ## M2 source closeout — 2026-11-02
 
 M2 product source **3a34a51** passed independent whole-M2 source review and scoped fixes; sequential build/full self-test is **2430/0**. Final development bundle was rebuilt with the identity in [M2 evidence](2026-11-01-m2-validation.md). Exact-path CUA activation still returns `cgWindowNotFound`; current-binary GUI and real delivery cannot be observed. This source gate does not change any V1–V5 Pending cell above. Full model and service/device variants retain their prerequisites and Owner physical-action requirements. Selected evidence is retained in the [durable archive](2026-11-01-m2-artifacts/README.md).
+
+## M3-A Task3 source stage — 2026-11-02
+
+Task3 adds honest delivery wording and an injected recent-delivery menu, with
+synthetic controller/session-effect tests for once-only history/summary, open-menu
+updates, quiet cancellation and stale results. Current stage evidence is in the
+[M3 record](2026-11-02-m3-validation.md). Automatic mode is the new default;
+explicit Unicode/legacy selections remain preserved. This stage operated no GUI,
+real pasteboard, permissions, microphone, model, service or user configuration.
+The controller defers app packaging and real-app execution until stable final
+M3 source after B. All V1–V5 Pending cells remain unchanged; source tests cannot
+confirm insertion or consumption within the unchanged 150ms restore window.

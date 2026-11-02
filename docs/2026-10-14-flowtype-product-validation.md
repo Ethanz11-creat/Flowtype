@@ -162,19 +162,22 @@ copy was actionable.
 
 ### Manual app and delivery matrix
 
-The paste-mode list identifies candidate adaptations. It is not evidence that a
-particular release accepts paste or supports AX readback. Keep the default
-Unicode mode for all apps unless the experimental setting is explicitly enabled.
+M3-A source now defaults new/missing/unknown settings to Automatic. Explicit
+Unicode and the legacy candidate-app mode remain available and retain saved
+values. Exercise Automatic first, then those explicit modes. The legacy list
+identifies candidate adaptations, not evidence that a release accepts paste or
+supports AX readback. Real app acceptance remains Pending.
 
 | App/control | Bundle ID | Mode to exercise | Cases | Acceptance observation | Status |
 | --- | --- | --- | --- | --- | --- |
-| TextEdit plain text | `com.apple.TextEdit` | Unicode, then experimental paste | A1–A4, multiline, emoji, user copies during cleanup | One delivery attempt; user clipboard is restored only while still owned; concurrent copy is never overwritten. | Pending |
-| VS Code editor | `com.microsoft.VSCode` | Unicode, then experimental paste | A1–A4, command/flag/path literals | Focus/PID recheck protects the editor; uncertain paste says it can be copied from history and does not repeat. | Pending |
-| Cursor editor | `com.todesktop.230313mzl4w4u92` | Unicode, then experimental paste | A1–A4, multiline code | Same as VS Code; record the actual focused editor and whether insertion can be read back. | Pending |
-| Chrome text control | `com.google.Chrome` | Unicode, then experimental paste | URL, CJK/English, focus switch | Switching tabs/controls before delivery routes to explicit clipboard recovery; no old target activation. | Pending |
-| Safari text control | `com.apple.Safari` | Unicode, then experimental paste | URL, emoji, user concurrent copy | Record whether paste is accepted and keep an uncertain outcome when it cannot be verified. | Pending |
-| Edge text control | `com.microsoft.edgemac` | Unicode, then experimental paste | URL, path, focus switch | Same target/focus checks and no automatic repeat after an ambiguous event. | Pending |
-| Unknown app / non-text or secure control | tester bundle ID | Unicode only | Focus change, secure field, button, AX unavailable | Complete result is copied with the matching recovery message; it is never blindly typed into a non-editable target. | Pending |
+| TextEdit plain text | `com.apple.TextEdit` | Automatic, explicit Unicode / legacy | A1–A4, multiline, emoji, user copies during cleanup | One delivery attempt; user clipboard is restored only while still owned; concurrent copy is never overwritten. | Pending |
+| VS Code editor | `com.microsoft.VSCode` | Automatic, explicit Unicode / legacy | A1–A4, command/flag/path literals | Focus/PID recheck protects the editor; uncertain paste says it can be copied from history and does not repeat. | Pending |
+| Cursor editor | `com.todesktop.230313mzl4w4u92` | Automatic, explicit Unicode / legacy | A1–A4, multiline code | Same as VS Code; record the actual focused editor and whether insertion can be read back. | Pending |
+| Chrome text control | `com.google.Chrome` | Automatic, explicit Unicode / legacy | URL, CJK/English, focus switch | Switching tabs/controls before delivery routes to explicit clipboard recovery; no old target activation. | Pending |
+| Terminal text input | `com.apple.Terminal` | Automatic, explicit Unicode / legacy | CJK/English, multiline synthetic text | Complete text appears once at the stop target; never submit or execute a command during validation. | Pending |
+| Safari text control | `com.apple.Safari` | Automatic, explicit Unicode / legacy | URL, emoji, user concurrent copy | Record whether paste is accepted and keep an uncertain outcome when it cannot be verified. | Pending |
+| Edge text control | `com.microsoft.edgemac` | Automatic, explicit Unicode / legacy | URL, path, focus switch | Same target/focus checks and no automatic repeat after an ambiguous event. | Pending |
+| Unknown app / non-text or secure control | tester bundle ID | Automatic, explicit Unicode / legacy | Focus change, secure field, button, AX unavailable | Complete result is copied with the matching recovery message; it is never blindly typed into a non-editable target. | Pending |
 
 For every app row record app version, bundle ID, focused element before stop and
 at delivery, selected mode, delivery outcome, and whether a tester copied the
@@ -187,3 +190,13 @@ P50/P95 with the repository definition `round((n - 1) × p)` on sorted samples.
 Also count duplicate attempts, focus-change recoveries, clipboard ownership
 losses, uncertain dispatches, preserved literals, and successful manual recovery.
 The current repository has no live measurements; leave every unrun row Pending.
+
+M3-A presentation source (2026-11-02) adds a metadata-only recent-delivery menu.
+Manual acceptance must distinguish sent typing/paste, clipboard recovery naming
+the original target, and uncertain dispatch. The uncertain copy is
+「已发送，但无法确认是否插入；可从历史复制」. Check an open menu and reopen it,
+then cancel a session and release an older callback after a newer delivery;
+neither may erase or replace the newer summary. Synthetic controller/menu tests
+do not establish real insertion, clipboard consumption within 150ms, or any
+Pending app/device/service result. Final bundle and real-app execution follow
+stable M3-A/M3-B source review; no intermediate Task3 GUI batch was run.

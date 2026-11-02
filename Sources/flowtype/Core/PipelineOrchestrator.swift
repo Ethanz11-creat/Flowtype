@@ -31,7 +31,7 @@ enum DeliveryCopy: Equatable, Sendable {
         case .focusChanged: return "焦点已变化 · 已复制，按 ⌘V 粘贴"
         case .clipboardRecovery: return "已复制，按 ⌘V 粘贴"
         case .clipboardOwnershipChanged: return "剪贴板已变化 · 可从历史复制"
-        case .uncertainDispatch: return "已发送 · 可从历史复制"
+        case .uncertainDispatch: return "已发送，但无法确认是否插入；可从历史复制"
         case .literalPreservationFallback: return "技术内容已保留 · 已使用识别结果"
         }
     }
@@ -85,6 +85,7 @@ final class SessionController: ObservableObject {
     @Published private(set) var lastErrorRawText: String?
     @Published private(set) var errorActions: [ErrorAction] = []
     @Published private(set) var preparationNotice: String?
+    @Published private(set) var lastDeliverySummary: LastDeliverySummary?
 
     // MARK: - Session Identity
 
@@ -294,6 +295,7 @@ final class SessionController: ObservableObject {
         // suppressing all stale UI/state publication below.
         if let cancelledContext, cancelledContext.deliveryOutcome == .uncertain {
             saveHistory(context: cancelledContext)
+            recordLastDelivery(context: cancelledContext)
         }
         // Invalidate ownership before cancellation can resume a stage on another executor.
         activeSessionID = 0
@@ -469,7 +471,10 @@ final class SessionController: ObservableObject {
     /// All terminal delivery paths converge here; no optional-stage failure saves early.
     private func finish(context: SessionContext) {
         guard activeSessionID == context.sessionID, !context.isCancelled else { return }
-        if context.hasInjected { saveHistory(context: context) }
+        if context.hasInjected {
+            saveHistory(context: context)
+            recordLastDelivery(context: context)
+        }
         let state = context.hasInjected ? context.completionNotice.map(SessionState.notice) ?? .idle : .idle
         transition(to: state, context: context)
     }
@@ -610,6 +615,18 @@ final class SessionController: ObservableObject {
     }
 
     // MARK: - History
+
+    /// Publish only while this context owns the lifecycle. Cancellation may keep
+    /// its existing uncertain recovery result, but a late stage cannot publish.
+    private func recordLastDelivery(context: SessionContext) {
+        guard activeSessionID == context.sessionID, currentContext === context,
+              let outcome = context.deliveryOutcome, outcome.isTerminalDelivery,
+              !context.isCancelled || (context.deliveryEffectStarted && outcome == .uncertain) else { return }
+        let summary = LastDeliverySummary(sessionID: context.sessionID, outcome: outcome,
+            targetAppName: context.targetApp?.localizedName, targetBundleID: context.targetApp?.bundleIdentifier)
+        guard lastDeliverySummary != summary else { return }
+        lastDeliverySummary = summary
+    }
 
     /// History label for a finished session: `.polish` only when polish was requested AND succeeded.
     /// A degraded (failed-polish) session is stored as `.raw` — its text is the un-polished original.
