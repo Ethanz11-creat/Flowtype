@@ -53,15 +53,15 @@
 - `ErrorRecoveryContext.init(failedStage: String, error: Error, rawText: String?, retryable: Bool, failureKind: FailureKind? = nil, textKind: RecoveryTextKind? = nil)` keeps original four fields, adds resolved nonoptional failureKind/textKind; inferred textKind raw iff rawText exists.
 - Task3 will replace old nested ErrorAction with typealias. Task1 does not yet switch old controller/view, to keep this pure deliverable buildable.
 
-- [ ] **Step 1: Add focused RED matrix** in `M4RecoveryPolicySelfTests.run(_ r: SelfTest.Reporter)` (MainActor if required by existing types). Add `--m4-recovery-only` early runner path and call same suite in full runner. Assert actual classifier/policy values, not fixture logic. RED may be compile failure before new types exist.
+- [x] **Step 1: Add focused RED matrix** in `M4RecoveryPolicySelfTests.run(_ r: SelfTest.Reporter)` (MainActor if required by existing types). Add `--m4-recovery-only` early runner path and call same suite in full runner. Assert actual classifier/policy values, not fixture logic. RED may be compile failure before new types exist.
   - CancellationError, Cloud.cancelled, URLError.cancelled, ingress.cancelled → cancelled; nested Cloud/Speech wrappers including cancellation and depth limit.
   - All typed Cloud cases and statuses 301/400/401/403/404/408/413/429/500/599/other, hostile secret/provider body never appears in message/actions.
   - badURL/unsupportedURL/TLS/certificate vs offline/timeout, realtime config missing key vs transport config, Speech unavailable/permission/transcription, Whisper unsupported language/sample rate/local runtime errors; recorder permissions/start/format, invalid stage payloads, unknown NSError.
   - policy matrix covers every kind, readiness(noEngine) under automatic/localOnly/cloudOnly, text none/raw/result, audio yes/no, event yes/no. Retry only transient + stage "ASR" + audio + no event. deliveryUncertain never retry. Max4 actions, exact order/copy.
   - Contradictory legacy retryable=true + typed configuration stays configuration, retryable=false + explicit transient stays typed transient; rawText inference and explicit result inference.
-- [ ] **Step 2:** `swift run FlowType --self-test --m4-recovery-only` capture RED log, implement only declared types/classifier/context defaults/policy. Read concrete existing errors before mapping; missing typed errors are not invented.
-- [ ] **Step 3:** Re-run focused GREEN, then sequential `swift build` and `swift run FlowType --self-test`, all exit0/failed0. Capture commands/counts/raw logs in task report; no GUI/network/hardware.
-- [ ] **Step 4:** self-review diff, scoped commit `feat: classify failures and define safe recovery policy`; report source/API decisions, TDD logs and full counts.
+- [x] **Step 2:** `swift run FlowType --self-test --m4-recovery-only` capture RED log, implement only declared types/classifier/context defaults/policy. Read concrete existing errors before mapping; missing typed errors are not invented.
+- [x] **Step 3:** Re-run focused GREEN, then sequential `swift build` and `swift run FlowType --self-test`, all exit0/failed0. Capture commands/counts/raw logs in task report; no GUI/network/hardware.
+- [x] **Step 4:** self-review diff, scoped commit `feat: classify failures and define safe recovery policy`; report source/API decisions, TDD logs and full counts.
 
 ### Task 2: Preserve stage causes and propagate recorder startup failure
 
@@ -77,25 +77,27 @@
 - ASRStage adds `phrases: @escaping @MainActor @Sendable () -> [String]` defaulting to existing DictionaryStore.shared.enabledPhrases; tests inject `{ [] }`. This is a test seam only, no production dictionary behavior change.
 - invalid PCM recording(invalidAudio); startup error recording(interrupted); stage invalidPayload internalFailure. pre-event injection failure deliveryBlocked + result textKind. Actual uncertain remains existing outcome at finish, not inferred from Error.
 
-- [ ] **Step 1:** RED tests execute real ASRStage with fake providers, no network. `M4StageFailureSelfTests.run(_:)` called by focused/full runner.
+- [x] **Step 1:** RED tests execute real ASRStage with fake providers, no network. `M4StageFailureSelfTests.run(_:)` called by focused/full runner.
   - 401 vs timeout through actual batch/realtime terminal suspension, assert typed kind and policy action (config no retry, transient original audio retry).
   - Two failed candidates both orders (401→timeout and timeout→401), later budget expiry with known401, fallback success still success, no candidates readiness. Cancellation no further provider/health failure.
   - invalid PCM never provider/preview/health. Local directory/runtime and Apple preview ID "apple-preview" classification; no nonexistent `.apple` constant. Optional preview failure remains optional.
   - Synthetic startup prepare→start(throws arbitrary domain)→failure→finish order and count; successful start no failure/finish. Test startup failure path cannot reach ASR as empty recording where the narrow seam permits without accessing real AudioRecorder hardware.
-- [ ] **Step 2:** run focused command RED, implement stage annotations and narrow startup boundary; preserve optional Polish degradation, do not broadly rewrite recorder. Do not expose provider localizedDescription in new UI/logs.
-- [ ] **Step 3:** focused GREEN, sequential build/full self-test once stable; capture logs. If fixture intent was transient retry, make explicit and provide actual synthetic audio instead of weakening policy.
-- [ ] **Step 4:** self-review, scoped commit `fix: preserve stage failure causes for safe recovery`, report all changed contracts and test evidence.
+- [x] **Step 2:** run focused command RED, implement stage annotations and narrow startup boundary; preserve optional Polish degradation, do not broadly rewrite recorder. Do not expose provider localizedDescription in new UI/logs.
+- [x] **Step 3:** focused GREEN, sequential build/full self-test once stable; capture logs. If fixture intent was transient retry, make explicit and provide actual synthetic audio instead of weakening policy.
+- [x] **Step 4:** self-review, scoped commit `fix: preserve stage failure causes for safe recovery`, report all changed contracts and test evidence.
 
 ### Task 3: Current-card action ownership, terminal recovery and UI
 
 **Files:**
 - Create `Sources/flowtype/Core/Recovery/SessionRecoveryState.swift`, `RecoveryEffects.swift`.
 - Modify `Sources/flowtype/Core/PipelineOrchestrator.swift`, `Sources/flowtype/CapsuleView.swift`.
+- Modify `Sources/flowtype/App/StatusBarController.swift` two state subscriptions only, migrating from $sessionState to sessionStatePublisher for commit-before-notify semantics.
 - Create `Sources/flowtype/Testing/M4RecoveryControllerSelfTests.swift`; extend focused/full runner and update legitimate old controller expectations in SelfTest/M3 tests.
 
 **Interfaces:**
 - Consumes Tasks1/2. `SessionController.ErrorAction` becomes `typealias ErrorAction = RecoveryAction`; old methods source-compatible wrappers, same single action handler.
-- `SessionRecoveryState` stores optional current RecoveryCard and optional copyText (no Error/audio/lifecycle authority). Controller privately owns value; exposes `@Published private(set) var recoveryCard: RecoveryCard?` for View/tests; clear/update atomically with errorActions/lastErrorRawText.
+- `SessionRecoveryState` stores optional current RecoveryCard and optional copyText (no Error/audio/lifecycle authority). Controller privately owns value; recoveryCard/errorActions/lastErrorRawText are computed reads from that one committed snapshot, with explicit `recoveryCardPublisher: AnyPublisher<RecoveryCard?, Never>` for View/tests subscribing updates. Commit coherent values/error state before notifying; do not use card @Published willSet, which can store an old card after a subscriber creates a newer session. Keep lastDeliverySummary subscription compatibility, claim notification before publishing and revalidate ownership after callback.
+- `sessionState` remains read-only canonical controller state with explicit `sessionStatePublisher: AnyPublisher<SessionState, Never>`; migrate exactly the two StatusBar subscriptions. Commit state/recovery snapshot before any notification, generation-check after synchronous publishers/objectWillChange and stop older continuations when a newer commit occurs. No second state machine; no spectrum/preparation rewrite absent a concrete need.
 - `@MainActor struct RecoveryEffects`: `openAccessibilitySettings`, `openMicrophoneSettings`, `openSpeechRecognitionSettings`, `openASRSettings`, `openHistory` each `@MainActor @Sendable () -> Void`, `copyText: @MainActor @Sendable (String) -> Void`. `.live` uses existing PermissionHelper/settings(.settings)/settings(.history)/pasteboard. Add `recoveryEffects: RecoveryEffects = .live` to controller init; injected tests never call globals.
 - `performRecoveryAction(_ action: RecoveryAction, cardID: UUID)` validates current error/card ID/sessionID/allowed action before any effect. All UI buttons capture current card ID, no direct singleton actions in View.
 - Stage retry verifies typed policy again plus actual currentContext/retained nonempty audio/actual ASR index/no event, never legacy retryable. Clear card before work. Original route/audio/lease, fresh handle/new20s budget. No retry injection or hidden polish opt-in.
@@ -104,7 +106,7 @@
 - M3 clipboardChanged can conservatively finish uncertain BEFORE any actual event. Preserve outcome/history/no-resend, but choose presentation deliveryBlocked when deliveryEventStarted=false: "未发送文本，可复制结果" +copy/dismiss, never automatic clipboard overwrite. Only actual-event uncertain uses deliveryUncertain +history actions.
 - Error capsule380×156, two-column LazyVGrid/rows up to4 actions, two-line safe text; no transcript preview, current theme. Notices remain240×70.
 
-- [ ] **Step 1:** RED integration tests use real controller with synthetic stages and injected SessionEffects/RecoveryEffects/configuration/readiness; real ASR/InjectionStage for meaningful boundaries. Add suite to focused/full runner.
+- [x] **Step 1:** RED integration tests use real controller with synthetic stages and injected SessionEffects/RecoveryEffects/configuration/readiness; real ASR/InjectionStage for meaningful boundaries. Add suite to focused/full runner.
   - Old card after new recording and after refreshed blocked card: iterate every old allowed action (retry/copy/settings/history/rerecord/recheck/route/dismiss across representative cards); counters, clipboard/config, session state/history/summary unaffected. Disallowed current action also no effect.
   - transient retry preserves original PCM/route/lease/language; new realtime handle and20s budget; actual ASR stage only. Conflicting legacy retryable cannot unlock. No saved audio → no retry; configuration no retry even after settings change; rerecord new ID and fresh capture. No implicit requests on settings/recheck.
   - noEngine constrained→auto still blocked mic updates message/actions; ready/degraded clears and remains idle, no AX degrade stays eligible menu path. Two permissions map correct settings and recheck.
@@ -112,9 +114,9 @@
   - Real uncertain typing/paste terminal: persistent card, complete explicit copy via fake board, history navigation only, no retry/double attempt/save/summary. Explicit cancel after actual event saves once then idle, late complete ignored; repeat cancel/dismiss do not save again.
   - Real clipboard ownership change before event: keep uncertain outcome/history, zero events and automatic copies, persistent deliveryBlocked safe message (never "已发送"), no retry; explicit user copy alone may overwrite board.
   - Privacy storeTranscriptText=false and failing/no-op storage: safe uncertain message does not claim stored transcript; no secret/URL/body in card; copy returns complete text only on click. Card has no raw preview. Error size and max4 action layout model.
-- [ ] **Step 2:** capture RED, implement pure recovery state/effects then controller-owned validation/transitions and card rendering. Keep lifecycle fields private; no new coordinator/parallel state machine. Clear subscriptions/tasks/gates consistently with M3.
-- [ ] **Step 3:** focused GREEN, sequential build/full self-test once stable, preserving all M3 coverage with updated deliberate uncertain-card expectations. Report counts and GUI Pending explicitly.
-- [ ] **Step 4:** self-review, scoped commit `feat: bind recovery cards to the current session` with TDD/full evidence.
+- [x] **Step 2:** capture RED, implement pure recovery state/effects then controller-owned validation/transitions and card rendering. Keep lifecycle fields private; no new coordinator/parallel state machine. Clear subscriptions/tasks/gates consistently with M3.
+- [x] **Step 3:** focused GREEN, sequential build/full self-test once stable, preserving all M3 coverage with updated deliberate uncertain-card expectations. Report counts and GUI Pending explicitly.
+- [x] **Step 4:** self-review, scoped commit `feat: bind recovery cards to the current session` with TDD/full evidence.
 
 ## Whole-M4 closeout
 

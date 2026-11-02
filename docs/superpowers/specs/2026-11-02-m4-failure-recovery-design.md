@@ -95,6 +95,10 @@ AudioRecorder299 的 catch 只对某个CoreAudio域调用冻结通知，其他�
 
 每次呈现卡生成新UUID，记录sessionID、kind、message、允许动作；CapsuleView 捕获这张卡的ID调用 `performRecoveryAction(_:cardID:)`，控制器核对error状态、当前卡ID/sessionID和动作存在。配置/权限跳转、复制等全部在验证后才调用可注入 RecoveryEffects；不得由View直接操作单例。旧方法retryFailedStage/copyRawText/recheckReadiness/useAutomaticRouting/dismissError可作为当前卡的兼容包装，核心只有一个入口。
 
+审查后的发布合同：recoveryCard/errorActions/lastErrorRawText 从同一已提交的私有 recoveryState 计算读取，显式 `recoveryCardPublisher` 用于订阅卡片更新，替代卡片字段的 @Published willSet。先提交一致状态，再通知；通知中启动新会话后，旧调用不得继续改写其字段。lastDeliverySummary 保留原订阅接口，在发布前先领取一次通知资格，并在同步订阅回调返回后复检所有权。
+
+同一提交约束覆盖 sessionState：保持只读属性，增加显式 `sessionStatePublisher`，迁移 StatusBarController 的两个原投影订阅；不改变状态枚举或增加生命周期。状态/恢复快照先提交，再按代次通知；若通知中出现更新提交，停止旧提交剩余通知/收尾。objectWillChange 也视为同步回调边界。spectrum/preparationNotice 不因该修复重构。
+
 - retry仅ASR+保留audio+活动context+无事件，清旧恢复卡再重跑同阶段。保留saved route/lease、完整audio/preflight、polish偏好，新20s预算和新realtime handle；不隐式重试。
 - rerecord 调startRecording创建新session，清旧卡/上下文，不复用损坏PCM。设置修复需要新录音；打开设置本身不发请求、不自动重绑route。
 - recheck重新读readiness：仍blocked时更新类别/文案/动作；ready/degraded时回idle，绝不自动录音/发送。useAutomaticRouting只改policy，刷新后仍blocked则保留新卡，否则idle；旧捕获重试被清除。
