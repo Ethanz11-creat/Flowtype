@@ -125,6 +125,7 @@ enum M4StageFailureSelfTests {
         await cancellations(r)
         await localAndPreview(r)
         await boundaries(r)
+        await typingCancellation(r)
     }
 
     @MainActor private static func startup(_ r: SelfTest.Reporter) {
@@ -231,5 +232,35 @@ enum M4StageFailureSelfTests {
             r.eq(recovery.failureKind, .deliveryBlocked, "M4 unknown pre-event delivery failure blocked")
             r.eq(recovery.textKind, .result, "M4 delivery copy owns complete result")
         } else { r.check(false, "M4 pre-event delivery failure suspends") }
+    }
+
+    @MainActor private static func typingCancellation(_ r: SelfTest.Reporter) async {
+        let errors: [Error] = [CancellationError(), URLError(.cancelled),
+            CloudASRError.networkError(SpeechProviderError.networkError(URLError(.cancelled)))]
+        let target = DeliveryTargetSnapshot(pid: 42, focusIdentity: .init(testID: "synthetic-safe-field"),
+            signals: .init(secureInputActive: false, focus: .editableText))
+        for (index, error) in errors.enumerated() {
+            let context = SessionContext(sessionID: UInt64(960 + index))
+            context.deliveryTarget = target
+            let injections = OSAllocatedUnfairLock<Int>(initialState: 0)
+            var copies = 0
+            let stage = InjectionStage(settle: {}, accessibilityTrusted: { true },
+                currentTarget: { target }, inject: { _, _ in
+                    injections.withLock { $0 += 1 }
+                    throw error
+                }, mode: { .unicode }, bundleID: { _ in nil }, copy: { _ in copies += 1 })
+            let result = await stage.execute(payload: .polished("synthetic complete result", raw: "synthetic raw"), context: context)
+            r.eq(injections.withLock { $0 }, 1, "M4 typed cancel \(index): actual typing boundary called once")
+            r.eq(copies, 0, "M4 typed cancel \(index): no clipboard fallback")
+            r.check(!context.deliveryEventStarted && !context.deliveryEffectStarted,
+                    "M4 typed cancel \(index): no event or delivery effect")
+            r.eq(context.deliveryOutcome, .cancelled, "M4 typed cancel \(index): cancelled terminal outcome")
+            r.check(context.completionNotice == nil && !context.hasInjected,
+                    "M4 typed cancel \(index): no clipboard success completion")
+            if case .suspend(let recovery) = result {
+                r.eq(recovery.failureKind, .cancelled, "M4 typed cancel \(index): cancelled recovery kind")
+                r.eq(recovery.textKind, .result, "M4 typed cancel \(index): complete result ownership retained")
+            } else { r.check(false, "M4 typed cancel \(index): suspension instead of successful completion") }
+        }
     }
 }

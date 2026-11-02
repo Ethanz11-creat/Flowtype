@@ -161,13 +161,13 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             }
             do {
                 try checkActive(context)
-                if error is CancellationError { throw error }
+                if FailureClassifier.classify(error) == .cancelled { throw error }
                 // The paste transaction protected this board. Failure before the
                 // fallback's first pair must not replace it with recovery text.
                 if preserveClipboardOnFailure {
                     return .suspend(ErrorRecoveryContext(failedStage: name,
                         error: error, rawText: text, retryable: false,
-                    failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+                        failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
                 }
                 try await copyToClipboard(text, context: context)
                 await MainActor.run {
@@ -179,7 +179,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 await complete(.cancelled, context: context, start: start)
                 return .suspend(ErrorRecoveryContext(failedStage: name,
                     error: error, rawText: text, retryable: false,
-                        failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+                    failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
             }
         }
     }
