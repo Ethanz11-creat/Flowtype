@@ -281,6 +281,11 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m4-recovery-only") {
+            M4RecoveryPolicySelfTests.run(r)
+            print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
             await M3SpeechPreflightSelfTests.benchmark(r)
             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
@@ -452,6 +457,7 @@ enum SelfTest {
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         await CloudProviderSelfTests.runConnectionOwnership(r)
+        M4RecoveryPolicySelfTests.run(r)
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }

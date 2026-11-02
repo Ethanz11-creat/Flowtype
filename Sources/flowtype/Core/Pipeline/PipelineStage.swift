@@ -34,12 +34,24 @@ enum StageResult {
 
 // MARK: - ErrorRecoveryContext
 
-/// Context for retryable error cards displayed to the user.
+/// Session-owned error and copyable text; presentation uses only safe categories.
 struct ErrorRecoveryContext {
     let failedStage: String
     let error: Error
     let rawText: String?
     let retryable: Bool
+    let failureKind: FailureKind
+    let textKind: RecoveryTextKind
+
+    init(failedStage: String, error: Error, rawText: String?, retryable: Bool,
+         failureKind: FailureKind? = nil, textKind: RecoveryTextKind? = nil) {
+        self.failedStage = failedStage
+        self.error = error
+        self.rawText = rawText
+        self.retryable = retryable
+        self.failureKind = failureKind ?? FailureClassifier.classify(error)
+        self.textKind = textKind ?? (rawText == nil ? .none : .raw)
+    }
 }
 
 // MARK: - PipelineStage
