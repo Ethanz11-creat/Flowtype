@@ -52,3 +52,44 @@ Task3 在已批准运行时 `7700f36` 上添加内存 `LastDeliverySummary`、�
 若桌面/工具/应用/有效云配置/外设不可用，记录具体前提并保持 Pending，不能用假传输、旧运行进程或静态元数据作为 Pass。M2 的实际模型推理剩余覆盖继续保留；M3 源码通过不能自动关闭 V1–V5。
 
 静音候选值：20ms/320 samples、minimum 100ms/1600 samples、RMS 0.0003、peak 0.001，全部是待校准的 Float32 参数，并非 Typeless 量化阈值。一次真实 Fail 必须保留；调整参数时记录理由、旧/新结果及新回归，重新固定源码/bundle 后再验收。
+
+### M3-B Task2 ASR integration evidence — 2026-11-02
+
+ASRStage now calls the production `SpeechPreflight.evaluate` before route creation,
+DictionaryStore lookup, provider recognition or preview fallback. It takes the
+live handle and installs ingress/start/session cleanup before awaiting preflight.
+A capture's existing monotonic completion budget is preserved; a direct stage
+entry without one creates its single 20-second budget before scanning. Silence
+and empty capture return the specified notices without downstream processing,
+health/history/delivery writes or a new delivery summary. Known invalid PCM/rate
+returns non-retryable `ASRStageError.invalidAudio`; the existing controller presents
+that data error as a notice without retry/copy actions. Technical detector errors
+fail open with full original PCM; cancellation wins over detector results/errors.
+
+Synthetic coverage uses the real ASRStage and SessionController, synthetic capture,
+real PostProcess/Polish/Injection stages with external-effect seams, isolated
+settings, fake batch/realtime providers and completion barriers. It covers the
+three routing policies; nonempty Apple preview; previous summary preservation;
+live cancel without finish; invalid PCM; original short/head/tail/delayed PCM and
+fallback; unchanged/reduced/expired budgets; explicit ASR retry with a fresh live
+handle; and obsolete silent/speech results after newer successful delivery.
+Only three tiny imported-lease routing fixtures changed from zeros to deterministic
+nonzero PCM, preserving their lengths. No global preflight bypass was introduced.
+
+Task2 validation: initial real-ASR/controller RED 756 passed / 51 failed; focused
+GREEN 987/0; related realtime/route/imported-lease regression 292/0; sequential
+`swift build` then full `swift run FlowType --self-test` both exit 0, full 3875/0.
+A final test-only refinement replaced fixed yields with an explicit old-ASR
+completion observation; focused rerun passed 989/0, followed by `swift build`.
+Production source was unchanged after the full run; per controller ruling the
+unchanged full suite was not repeated. The focused compile retains the existing
+AppLogger.swift:27 Sendable warning; no new warning was introduced.
+Task2 command outcomes and exact source identities are retained in the local
+implementation report `.superpowers/sdd/2026-11-02-m3-b-silence-preflight/task-2-report.md`.
+Independent Task2/full-M3 review and final app packaging belong to the controller.
+This evidence does not close any real-device row: 5s microphone silence, quiet or
+short words, head/tail/delayed speech, keyboard/fan/wind noise, five applications,
+20 consecutive sessions, V1–V5 and device recovery all remain **Pending**. The
+Float32 energy thresholds remain uncalibrated candidate values. An already-started
+realtime session may have uploaded audio or incurred charges during recording;
+this integration prevents stop-time finalize and delivery, not prior upload.

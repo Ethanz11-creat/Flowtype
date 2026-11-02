@@ -107,10 +107,10 @@ enum ImportedLifecycleSelfTests {
 
         let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil })
         let first = SessionContext(sessionID: 9301); first.captureRoute = captured
-        _ = await stage.execute(payload: .audio(samples: [0, 0, 0], previewText: ""), context: first)
+        _ = await stage.execute(payload: .audio(samples: [0.25, -0.5, 0.75], previewText: ""), context: first)
         r.eq(first.rawTranscript, "qwenMLX:3", "recording captured before switch retains Qwen provider")
         let next = SessionContext(sessionID: 9302); next.captureRoute = await router.captureStartRoute()
-        _ = await stage.execute(payload: .audio(samples: [0, 0], previewText: ""), context: next)
+        _ = await stage.execute(payload: .audio(samples: [0.25, -0.5], previewText: ""), context: next)
         r.eq(next.rawTranscript, "whisperCoreML:2", "new recording captures Whisper provider")
         r.eq(SessionController.backendLabel(forProviderID: next.usedProviderID, localIdentity: next.captureRoute?.localLease?.identity),
              "whisperCoreML", "history derives Whisper identity from capture lease")
@@ -138,7 +138,7 @@ enum ImportedLifecycleSelfTests {
         r.eq(store.current.activeImportedASRModelID, nil, "removing active row clears durable intent")
         r.eq(store.current.customLocalModelPath, nil, "removing library row clears legacy aliases")
         let retained = SessionContext(sessionID: 9303); retained.captureRoute = next.captureRoute
-        _ = await stage.execute(payload: .audio(samples: [0], previewText: ""), context: retained)
+        _ = await stage.execute(payload: .audio(samples: [0.25], previewText: ""), context: retained)
         r.eq(retained.rawTranscript, "whisperCoreML:1", "removed library row cannot invalidate an existing capture")
         store.flushPendingSave()
         r.eq(ConfigurationStore(defaults: defaults).current.activeImportedASRModelID, nil, "removed active import stays removed after restart")

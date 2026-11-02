@@ -89,3 +89,17 @@ real pasteboard, permissions, microphone, model, service or user configuration.
 The controller defers app packaging and real-app execution until stable final
 M3 source after B. All V1–V5 Pending cells remain unchanged; source tests cannot
 confirm insertion or consumption within the unchanged 150ms restore window.
+
+## M3-B Task2 source stage — 2026-11-02
+
+The production ASR stage now performs full-recording silence preflight before
+recognition and Apple-preview fallback. Synthetic real-controller tests cover
+no history/delivery/health effects, live cancellation without finalize, consumed
+stop budget, retry and old-result ownership. See the [M3 source record](2026-11-02-m3-validation.md).
+These are source tests with isolated settings and fake external boundaries;
+no current-bundle GUI, microphone calibration, cloud billing, network disruption,
+permission change or device action was performed in this task. Existing realtime
+capture may already have uploaded audio; zero upload/zero cost is not claimed.
+All V1–V5, five-application delivery, continuous 20-round stability and actual
+quiet/short/delayed-speech versus silence/noise cases remain **Pending** until the
+controller fixes final reviewed source/bundle identity and executes those cases.

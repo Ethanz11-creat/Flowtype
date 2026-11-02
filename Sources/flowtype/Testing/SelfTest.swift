@@ -289,7 +289,15 @@ enum SelfTest {
         if CommandLine.arguments.contains("--m3-silence-only") {
             M3SpeechPreflightSelfTests.pure(r)
             await M3SpeechPreflightSelfTests.background(r)
+            await M3SpeechPreflightSelfTests.integration(r)
             print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
+        if CommandLine.arguments.contains("--m3-asr-regression-only") {
+            await testRealtimePipelineIntegration(r)
+            await ImportedLifecycleSelfTests.run(r)
+            await ModelProvisionSelfTests.runPresentationAndRouting(r)
+            print("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
             exit(r.failed == 0 ? 0 : 1)
         }
         if CommandLine.arguments.contains("--m3-delivery-only") {
@@ -438,6 +446,7 @@ enum SelfTest {
         await testDeliveryModeStage(r)
         M3SpeechPreflightSelfTests.pure(r)
         await M3SpeechPreflightSelfTests.background(r)
+        await M3SpeechPreflightSelfTests.integration(r)
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         await CloudProviderSelfTests.runConnectionOwnership(r)

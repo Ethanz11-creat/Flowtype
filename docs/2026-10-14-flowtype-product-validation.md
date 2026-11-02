@@ -200,3 +200,16 @@ neither may erase or replace the newer summary. Synthetic controller/menu tests
 do not establish real insertion, clipboard consumption within 150ms, or any
 Pending app/device/service result. Final bundle and real-app execution follow
 stable M3-A/M3-B source review; no intermediate Task3 GUI batch was run.
+
+M3-B Task2 source integration (2026-11-02) adds stop-time preflight inside the real
+ASR stage, so direct entry and explicit ASR Retry cannot skip it. Digital silence
+and empty capture produce notices before provider/preview/downstream effects;
+known malformed PCM produces a non-retryable recording-data error. Full original
+short/head/tail/delayed audio and uncertain detector results retain the existing
+recognition chain. Existing live resources are cancelled without finish on silence,
+and scan time consumes the same stop budget. Synthetic real-controller coverage
+also protects previous delivery summaries against silence and obsolete results.
+See the [M3 evidence](evidence/2026-11-02-m3-validation.md) for source evidence and
+limits. Actual microphone silence/quiet-word/noise calibration, the app matrix,
+continuous 20 rounds and V1–V5 remain **Pending**. No synthetic waveform proves
+human-speech accuracy, real target insertion, or zero prior realtime upload/cost.

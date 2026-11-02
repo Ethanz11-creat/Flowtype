@@ -7,6 +7,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
     private let providerForID: @Sendable (String) -> (any ASRProvider)?
     private let realtimeFactory: RealtimeSessionFactory
     private let routeFactory: @Sendable () async -> ASRRouteSnapshot
+    private let speechPreflight: @Sendable ([Float], Int) async throws -> SpeechPreflightDecision
 
     init(healthRecorder: @escaping @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void = { id, latency, route in
         if let latency { ASRRouter.shared.recordSuccess(providerID: id, latencyMs: latency, route: route) }
@@ -16,11 +17,14 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
     }, realtimeFactory: @escaping RealtimeSessionFactory = liveRealtimeSessionFactory,
          routeFactory: @escaping @Sendable () async -> ASRRouteSnapshot = {
         await ASRRouter.shared.captureStartRoute()
+    }, speechPreflight: @escaping @Sendable ([Float], Int) async throws -> SpeechPreflightDecision = {
+        try await SpeechPreflight.evaluate(samples: $0, sampleRate: $1)
     }) {
         self.healthRecorder = healthRecorder
         self.providerForID = providerForID
         self.realtimeFactory = realtimeFactory
         self.routeFactory = routeFactory
+        self.speechPreflight = speechPreflight
     }
 
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
@@ -29,21 +33,10 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                                                  rawText: nil, retryable: false))
         }
         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
-        let savedRoute = await MainActor.run { context.captureRoute }
-        let route: ASRRouteSnapshot
-        if let savedRoute { route = savedRoute } else { route = await routeFactory() }
-        let (budget, live, phrases, foreground) = await MainActor.run {
+        let (budget, live) = await MainActor.run {
             if context.completionBudget == nil { context.completionBudget = CompletionBudget() }
-            context.captureRoute = route
-            context.syncRealtimeFailure()
-            return (context.completionBudget!, context.takeRealtimeAttempt(),
-                    DictionaryStore.shared.enabledPhrases, context.foregroundContextText)
+            return (context.completionBudget!, context.takeRealtimeAttempt())
         }
-        let ids = route.candidateIDs
-        var firstFailure: Error?
-        var finalResult: ASRResult?
-        var finalProviderID: String?
-        var usedFallback = false
         defer {
             if let live {
                 live.0.ingress.cancel()
@@ -51,6 +44,44 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                 Task { await live.0.session.cancel() }
             }
         }
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        let decision: SpeechPreflightDecision
+        do {
+            decision = try await speechPreflight(samples, 16000)
+        } catch {
+            guard !(error is CancellationError), !Task.isCancelled, !context.isCancellationRequested else {
+                return cancelled()
+            }
+            decision = .indeterminate(.detectorUnavailable)
+        }
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        switch decision {
+        case .clearlySilent: return .notice("未检测到声音，请重试")
+        case .emptyCapture: return .notice("未录到音频，请重试")
+        case .indeterminate(.invalidSamples), .indeterminate(.unsupportedSampleRate):
+            return .suspend(ErrorRecoveryContext(failedStage: name, error: ASRStageError.invalidAudio,
+                                                 rawText: nil, retryable: false))
+        case .possiblySpeech, .indeterminate(.tooShort), .indeterminate(.detectorUnavailable): break
+        }
+        guard !budget.isExpired else {
+            return .suspend(ErrorRecoveryContext(failedStage: name,
+                error: ASRStageError.transcriptionFailed(message: "识别超时，请重试"), rawText: nil, retryable: true))
+        }
+        let savedRoute = await MainActor.run { context.captureRoute }
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        let route: ASRRouteSnapshot
+        if let savedRoute { route = savedRoute } else { route = await routeFactory() }
+        guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        let (phrases, foreground) = await MainActor.run {
+            context.captureRoute = route
+            context.syncRealtimeFailure()
+            return (DictionaryStore.shared.enabledPhrases, context.foregroundContextText)
+        }
+        let ids = route.candidateIDs
+        var firstFailure: Error?
+        var finalResult: ASRResult?
+        var finalProviderID: String?
+        var usedFallback = false
 
         for id in ids where !samples.isEmpty {
             guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
@@ -61,6 +92,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             await MainActor.run {
                 if !context.isCancelled { context.statePublisher.send(.processing(provider: "识别中")) }
             }
+            guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
             do {
                 let request = ASRRequest(samples: samples, sampleRate: 16000, language: route.language,
                                          context: ASRContext(phrases: phrases, foreground: foreground),
@@ -162,10 +194,12 @@ func transcribeSavedRealtime(samples: [Float], handle: RealtimeASRSessionHandle)
 
 enum ASRStageError: Error, LocalizedError {
     case invalidPayload
+    case invalidAudio
     case transcriptionFailed(message: String)
     var errorDescription: String? {
         switch self {
         case .invalidPayload: return "无效的输入数据"
+        case .invalidAudio: return "录音数据异常，请重新录音"
         case .transcriptionFailed(let msg): return msg
         }
     }
