@@ -296,19 +296,13 @@ final class AudioRecorder: @unchecked Sendable {
                 }
             }
 
-            do {
-                freshEngine.prepare()
+            RecordingEngineStartup.run(prepare: { freshEngine.prepare() }, start: {
                 try freshEngine.start()
                 AppLogger.log("[AudioRecorder] Engine prepared and started successfully")
-            } catch {
-                AppLogger.log("[AudioRecorder] Engine start FAILED: \(error)")
-                let nsError = error as NSError
-                if nsError.domain == "com.apple.coreaudio.avfaudio" {
-                    AppLogger.log("[AudioRecorder] CoreAudio error detected, device may have been disconnected")
-                    onRecordingFrozen?()
-                }
-                continuation.finish()
-            }
+            }, onFailure: {
+                AppLogger.log("[AudioRecorder] Engine start failed")
+                onRecordingFrozen?()
+            }, finish: { continuation.finish() })
         }
 
         return RecordingOutput(spectrum: spectrumStream)

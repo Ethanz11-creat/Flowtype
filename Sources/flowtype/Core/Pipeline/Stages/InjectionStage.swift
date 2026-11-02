@@ -128,7 +128,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                     }
                     return .suspend(ErrorRecoveryContext(failedStage: name,
                         error: result == .unsafeSnapshot ? InjectionStageError.clipboardSnapshotIncomplete : .pasteNotDispatched,
-                        rawText: text, retryable: false))
+                        rawText: text, retryable: false, failureKind: .deliveryBlocked, textKind: .result))
                 }
             }
             return .complete
@@ -138,7 +138,8 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             let outcome: DeliveryOutcome = context.deliveryEventStarted ? .uncertain : .cancelled
             await complete(outcome, context: context, start: start)
             if outcome == .uncertain { return .complete }
-            return .suspend(ErrorRecoveryContext(failedStage: name, error: error, rawText: text, retryable: false))
+            return .suspend(ErrorRecoveryContext(failedStage: name, error: error, rawText: text, retryable: false,
+                failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
         }
     }
 
@@ -165,7 +166,8 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 // fallback's first pair must not replace it with recovery text.
                 if preserveClipboardOnFailure {
                     return .suspend(ErrorRecoveryContext(failedStage: name,
-                        error: error, rawText: text, retryable: false))
+                        error: error, rawText: text, retryable: false,
+                    failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
                 }
                 try await copyToClipboard(text, context: context)
                 await MainActor.run {
@@ -176,7 +178,8 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             } catch {
                 await complete(.cancelled, context: context, start: start)
                 return .suspend(ErrorRecoveryContext(failedStage: name,
-                    error: error, rawText: text, retryable: false))
+                    error: error, rawText: text, retryable: false,
+                        failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
             }
         }
     }

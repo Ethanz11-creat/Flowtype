@@ -8,6 +8,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
     private let realtimeFactory: RealtimeSessionFactory
     private let routeFactory: @Sendable () async -> ASRRouteSnapshot
     private let speechPreflight: @Sendable ([Float], Int) async throws -> SpeechPreflightDecision
+    private let phrases: @MainActor @Sendable () -> [String]
 
     init(healthRecorder: @escaping @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void = { id, latency, route in
         if let latency { ASRRouter.shared.recordSuccess(providerID: id, latencyMs: latency, route: route) }
@@ -19,12 +20,13 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         await ASRRouter.shared.captureStartRoute()
     }, speechPreflight: @escaping @Sendable ([Float], Int) async throws -> SpeechPreflightDecision = {
         try await SpeechPreflight.evaluate(samples: $0, sampleRate: $1)
-    }) {
+    }, phrases: @escaping @MainActor @Sendable () -> [String] = { DictionaryStore.shared.enabledPhrases }) {
         self.healthRecorder = healthRecorder
         self.providerForID = providerForID
         self.realtimeFactory = realtimeFactory
         self.routeFactory = routeFactory
         self.speechPreflight = speechPreflight
+        self.phrases = phrases
     }
 
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
@@ -49,7 +51,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         do {
             decision = try await speechPreflight(samples, 16000)
         } catch {
-            guard !(error is CancellationError), !Task.isCancelled, !context.isCancellationRequested else {
+            guard FailureClassifier.classify(error) != .cancelled, !Task.isCancelled, !context.isCancellationRequested else {
                 return cancelled()
             }
             decision = .indeterminate(.detectorUnavailable)
@@ -65,7 +67,8 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         }
         guard !budget.isExpired else {
             return .suspend(ErrorRecoveryContext(failedStage: name,
-                error: ASRStageError.transcriptionFailed(message: "识别超时，请重试"), rawText: nil, retryable: true))
+                error: ASRStageError.transcriptionFailed(message: "识别超时，请重试"), rawText: nil, retryable: true,
+                failureKind: .transientASR))
         }
         let savedRoute = await MainActor.run { context.captureRoute }
         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
@@ -75,10 +78,11 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         let (phrases, foreground) = await MainActor.run {
             context.captureRoute = route
             context.syncRealtimeFailure()
-            return (DictionaryStore.shared.enabledPhrases, context.foregroundContextText)
+            return (self.phrases(), context.foregroundContextText)
         }
         let ids = route.candidateIDs
         var firstFailure: Error?
+        var firstFailureKind: FailureKind?
         var finalResult: ASRResult?
         var finalProviderID: String?
         var usedFallback = false
@@ -88,7 +92,13 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             let timeout = completionStageTimeout(remaining: budget.remainingSeconds,
                                                   cloud: id == ASRProviderID.cloud,
                                                   policy: route.policy, localAvailable: route.localAvailable)
-            guard timeout > 0 else { firstFailure = AsyncDeadlineError.timedOut; break }
+            guard timeout > 0 else {
+                if firstFailure == nil {
+                    firstFailure = AsyncDeadlineError.timedOut
+                    firstFailureKind = .transientASR
+                }
+                break
+            }
             await MainActor.run {
                 if !context.isCancelled { context.statePublisher.send(.processing(provider: "识别中")) }
             }
@@ -136,10 +146,15 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                 await healthRecorder(id, route.isRealtime ? latencyMs : result.latencyMs, route)
                 break
             } catch {
-                guard !(error is CancellationError), !Task.isCancelled, !context.isCancellationRequested else {
+                // Classify before the safe generic terminal error hides provider causes.
+                let kind: FailureKind = error is AsyncDeadlineError ? .transientASR : FailureClassifier.classify(error)
+                guard kind != .cancelled, !Task.isCancelled, !context.isCancellationRequested else {
                     return cancelled()
                 }
-                if firstFailure == nil { firstFailure = error }
+                if firstFailure == nil {
+                    firstFailure = error
+                    firstFailureKind = kind
+                }
                 usedFallback = true
                 await healthRecorder(id, nil, route)
                 AppLogger.log("[ASRStage#\(context.sessionID)] engine=\(id == ASRProviderID.local ? route.localLease?.identity.engine ?? "local" : "cloud") transport=\(route.isRealtime ? "realtime" : "batch") fallback=\(fallbackReason(for: error))")
@@ -171,7 +186,8 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         return .suspend(ErrorRecoveryContext(failedStage: name,
             error: (firstFailure as? RealtimeASRConfigurationError).map { $0 as Error } ?? ASRStageError.transcriptionFailed(message: budget.isExpired ? "识别超时，请重试" :
                 ids.isEmpty ? "语音识别未就绪，请配置云端 API Key 或加载本地模型" : "语音识别失败，请重试"),
-            rawText: nil, retryable: true))
+            rawText: nil, retryable: true,
+            failureKind: firstFailureKind ?? (ids.isEmpty ? .readiness(.noEngine) : budget.isExpired ? .transientASR : .internalFailure)))
     }
 
     private func cancelled() -> StageResult {

@@ -283,6 +283,7 @@ enum SelfTest {
         print("=== FlowType --self-test ===")
         if CommandLine.arguments.contains("--m4-recovery-only") {
             M4RecoveryPolicySelfTests.run(r)
+            await M4StageFailureSelfTests.run(r)
             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
             exit(r.failed == 0 ? 0 : 1)
         }
@@ -458,6 +459,7 @@ enum SelfTest {
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
         await CloudProviderSelfTests.runConnectionOwnership(r)
         M4RecoveryPolicySelfTests.run(r)
+        await M4StageFailureSelfTests.run(r)
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -484,6 +486,13 @@ enum SelfTest {
         func visit(_ polish: Bool) -> Bool { polishRequests.append(polish); return polishRequests.count == 1 }
     }
 
+    private struct RecoveryAudioStarter: PipelineStage {
+        let name = "Recording"
+        func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
+            .continue(.audio(samples: [0.5, -0.25], previewText: ""))
+        }
+    }
+
     private struct RetryASRStage: PipelineStage {
         let name = "ASR"
         let ledger: RetryLedger
@@ -491,7 +500,7 @@ enum SelfTest {
             let polish = await MainActor.run { context.usePolish }
             if await ledger.visit(polish) {
                 await MainActor.run { context.completionBudget = CompletionBudget(seconds: 0) }
-                return .suspend(ErrorRecoveryContext(failedStage: name, error: LLMError.invalidResponse, rawText: nil, retryable: true))
+                return .suspend(ErrorRecoveryContext(failedStage: name, error: CloudASRError.timeout, rawText: nil, retryable: true, failureKind: .transientASR))
             }
             await ledger.recordBudget(await MainActor.run { context.completionBudget?.remainingSeconds })
             return .complete
@@ -518,11 +527,11 @@ enum SelfTest {
     static func testSessionRecoveryDelivery(_ r: Reporter) async {
         let ledger = RetryLedger()
         let quietEffects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
-        let recovery = SessionController(pipeline: [RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
+        let recovery = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: ledger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
         recovery.startRecording()
         await waitForSession(recovery) { if case .error = $0 { return true }; return false }
         let immediateLedger = RetryLedger()
-        let immediate = SessionController(pipeline: [RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
+        let immediate = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: immediateLedger)], observers: [], effects: quietEffects, readinessLevel: { .ready })
         immediate.startRecording()
         await waitForSession(immediate) { if case .error = $0 { return true }; return false }
         immediate.retryFailedStage()
@@ -1372,7 +1381,7 @@ enum SelfTest {
         defer { store.flushPendingSave() }
         let readiness = ReadinessRecoveryProbe()
         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
-        let session = SessionController(pipeline: [RetryASRStage(ledger: RetryLedger())], observers: [],
+        let session = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return readiness.level
@@ -1393,7 +1402,7 @@ enum SelfTest {
         r.eq(readiness.policies, [.localOnly, .localOnly], "readiness recovery: each recheck refreshes without changing policy")
 
         // Enter another real stage failure before repairing its routing policy.
-        let reroute = SessionController(pipeline: [RetryASRStage(ledger: RetryLedger())], observers: [],
+        let reroute = SessionController(pipeline: [RecoveryAudioStarter(), RetryASRStage(ledger: RetryLedger())], observers: [],
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return .blocked(.noEngine)
