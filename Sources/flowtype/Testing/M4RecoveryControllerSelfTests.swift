@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import os
 
 /// Real controller ownership with synthetic stage inputs and isolated system seams.
@@ -38,6 +39,8 @@ enum M4RecoveryControllerSelfTests {
         await terminal(r, configuration)
         await capturedResources(r, configuration)
         await historyReentrancy(r, configuration)
+        await publicationReentrancy(r, configuration)
+        statePublicationReentrancy(r, configuration)
         r.eq(SessionState.error("safe").capsuleSize.width, 380, "M4 controller: recovery width")
         r.eq(SessionState.error("safe").capsuleSize.height, 156, "M4 controller: recovery height")
     }
@@ -432,6 +435,142 @@ extension M4RecoveryControllerSelfTests {
             if let card = c.recoveryCard { c.performRecoveryAction(.recheckReadiness, cardID: card.id) }
             r.eq(c.recoveryCard?.presentation.kind, .readiness(.noEngine), "M4 history reentrancy \(cancelDuringPaste): newer context retains action authority")
             c.cancel()
+        }
+    }
+}
+
+extension M4RecoveryControllerSelfTests {
+    @MainActor private static func publicationReentrancy(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) async {
+        let target = DeliveryTargetSnapshot(pid: 42, focusIdentity: .init(testID: "publication"),
+            signals: .init(secureInputActive: false, focus: .editableText))
+        for explicitCancel in [false, true] {
+            let f = Fixture(configuration)
+            var c: SessionController!
+            let capture = Stage(name: "Text", run: { _, context in
+                f.contexts.append(context); context.deliveryTarget = target
+                return .continue(.polished("complete result", raw: "raw"))
+            })
+            let injection = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { target },
+                mode: { .pasteInSupportedApps }, bundleID: { _ in "com.apple.TextEdit" }, paste: { _, context, _ in
+                    try? KeyboardInjector.postIfActive(context: context) {}
+                    if explicitCancel { c.cancel() }
+                    return .uncertain
+                }, copy: { _ in r.check(false, "M4 publication: no implicit copy") })
+            c = f.controller([capture, injection])
+            var fired = false
+            var summaries: [LastDeliverySummary] = []
+            var newerCard: RecoveryCard?
+            let subscription = c.$lastDeliverySummary.sink { summary in
+                guard let summary else { return }
+                summaries.append(summary)
+                guard !fired else { return }
+                fired = true
+                f.level = .blocked(.microphoneDenied)
+                c.cancel()
+                c.startRecording()
+                newerCard = c.recoveryCard
+            }
+            c.startRecording()
+            await wait { fired }
+            for _ in 0..<10 { await Task.yield() }
+            let label = "M4 summary subscriber \(explicitCancel ? "cancel" : "finish")"
+            r.eq(summaries.count, 1, "\(label): once-only synchronous summary publication")
+            r.eq(f.histories.count, 1, "\(label): once-only history")
+            r.eq(c.recoveryCard, newerCard, "\(label): newer blocked card retained")
+            r.eq(c.sessionState, .error("麦克风权限未开启"), "\(label): newer message retained")
+            r.eq(f.windows.last, "show", "\(label): newer window retained")
+            if let card = c.recoveryCard { c.performRecoveryAction(.openMicrophoneSettings, cardID: card.id) }
+            r.eq(f.events, ["mic"], "\(label): displayed card owns allowed effects")
+            f.level = .blocked(.noEngine)
+            if let card = c.recoveryCard { c.performRecoveryAction(.recheckReadiness, cardID: card.id) }
+            r.eq(c.recoveryCard?.presentation.kind, .readiness(.noEngine), "\(label): newer context retains refresh authority")
+            r.eq(c.recoveryCard?.sessionID, newerCard?.sessionID, "\(label): refreshed card retains newer identity")
+            subscription.cancel()
+            c.cancel(); c.cancel()
+            r.eq(f.histories.count, 1, "\(label): repeated cancel never saves again")
+        }
+
+        let f = Fixture(configuration)
+        f.level = .blocked(.microphoneDenied)
+        let c = f.controller([f.capture(.complete)])
+        c.startRecording()
+        let original = c.recoveryCard!
+        var armed = false, fired = false
+        var newerCard: RecoveryCard?
+        let subscription = c.recoveryCardPublisher.sink { card in
+            guard armed, !fired, card != nil else { return }
+            fired = true
+            f.level = .blocked(.microphoneDenied)
+            c.startRecording()
+            newerCard = c.recoveryCard
+        }
+        armed = true
+        f.level = .blocked(.noEngine)
+        c.performRecoveryAction(.recheckReadiness, cardID: original.id)
+        r.check(fired, "M4 card subscriber: real synchronous publisher fired")
+        r.eq(c.recoveryCard, newerCard, "M4 card subscriber: public card matches newest private authority")
+        r.eq(c.sessionState, .error("麦克风权限未开启"), "M4 card subscriber: newest message survives outer setter")
+        r.eq(c.errorActions, newerCard?.presentation.actions ?? [], "M4 card subscriber: action projection coherent")
+        r.eq(c.lastErrorRawText, nil, "M4 card subscriber: copy projection coherent")
+        r.eq(f.windows.last, "show", "M4 card subscriber: newest window remains visible")
+        if let card = c.recoveryCard { c.performRecoveryAction(.openMicrophoneSettings, cardID: card.id) }
+        r.eq(f.events, ["mic"], "M4 card subscriber: displayed card can execute its allowed action")
+        f.level = .ready
+        if let card = c.recoveryCard { c.performRecoveryAction(.recheckReadiness, cardID: card.id) }
+        r.eq(c.sessionState, .idle, "M4 card subscriber: current context owns recheck and clears coherently")
+        subscription.cancel()
+        c.cancel()
+    }
+}
+
+extension M4RecoveryControllerSelfTests {
+    @MainActor private static func statePublicationReentrancy(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) {
+        for channel in ["state", "objectWillChange"] {
+            let f = Fixture(configuration)
+            f.level = .blocked(.microphoneDenied)
+            let c = f.controller([f.capture(.complete)])
+            c.startRecording()
+            let original = c.recoveryCard!
+            var armed = false, fired = false
+            var newerCard: RecoveryCard?
+            let replace: @MainActor () -> Void = {
+                guard armed, !fired else { return }
+                fired = true
+                f.level = .blocked(.microphoneDenied)
+                c.startRecording()
+                newerCard = c.recoveryCard
+            }
+            let subscription: AnyCancellable
+            if channel == "state" {
+                subscription = c.sessionStatePublisher.sink { state in
+                    if state == .error("没有可用的语音识别引擎") { replace() }
+                }
+            } else {
+                subscription = c.objectWillChange.sink {
+                    if c.recoveryCard?.presentation.kind == .readiness(.noEngine) { replace() }
+                }
+            }
+            var observedStates: [SessionState] = []
+            var observedCards: [RecoveryCard?] = []
+            let stateObservation = c.sessionStatePublisher.sink { observedStates.append($0) }
+            let cardObservation = c.recoveryCardPublisher.sink { observedCards.append($0) }
+            armed = true
+            f.level = .blocked(.noEngine)
+            c.performRecoveryAction(.recheckReadiness, cardID: original.id)
+            r.check(fired, "M4 \(channel) subscriber: synchronous error callback exercised")
+            r.eq(c.recoveryCard, newerCard, "M4 \(channel) subscriber: newest card retained")
+            r.eq(c.sessionState, .error("麦克风权限未开启"), "M4 \(channel) subscriber: canonical error retained")
+            r.eq(c.errorActions, newerCard?.presentation.actions ?? [], "M4 \(channel) subscriber: coherent actions")
+            r.eq(observedStates.last, c.sessionState, "M4 \(channel) subscriber: later state consumer never ends on superseded outer value")
+            r.eq(observedCards.last ?? nil, c.recoveryCard, "M4 \(channel) subscriber: later card consumer never ends on superseded outer value")
+            r.eq(f.windows.last, "show", "M4 \(channel) subscriber: window remains visible")
+            if let card = c.recoveryCard { c.performRecoveryAction(.openMicrophoneSettings, cardID: card.id) }
+            r.eq(f.events, ["mic"], "M4 \(channel) subscriber: current card owns settings action")
+            f.level = .ready
+            if let card = c.recoveryCard { c.performRecoveryAction(.recheckReadiness, cardID: card.id) }
+            r.eq(c.sessionState, .idle, "M4 \(channel) subscriber: current context owns refresh")
+            stateObservation.cancel(); cardObservation.cancel()
+            subscription.cancel(); c.cancel()
         }
     }
 }

@@ -17,10 +17,9 @@ final class DictationMenuController: NSObject {
         super.init()
         item.target = self
         refresh(for: session.sessionState)
-        // Session state is published on MainActor. Update synchronously, including
-        // during menu tracking; use the emitted value because @Published sends
-        // before session.sessionState itself changes.
-        sessionCancellable = session.$sessionState.sink { [weak self] state in
+        // Session state is committed before MainActor publication. Update
+        // synchronously, including during menu tracking.
+        sessionCancellable = session.sessionStatePublisher.sink { [weak self] state in
             self?.refresh(for: state)
         }
     }
@@ -87,7 +86,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
 
         buildMenu()
 
-        sessionCancellable = SessionController.shared.$sessionState
+        sessionCancellable = SessionController.shared.sessionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self else { return }

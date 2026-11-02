@@ -82,13 +82,31 @@ final class SessionController: ObservableObject {
 
     // MARK: - Published State
 
-    @Published private(set) var sessionState: SessionState = .idle
+    // Canonical presentation is committed before Combine invokes any subscriber.
+    // The subject carries a notification generation, never lifecycle authority.
+    private var stateValue: SessionState = .idle
+    private var presentationGeneration: UInt64 = 0
+    private let presentationChanges = CurrentValueSubject<UInt64, Never>(0)
+    var sessionState: SessionState { stateValue }
+    var sessionStatePublisher: AnyPublisher<SessionState, Never> {
+        presentationChanges.compactMap { [weak self] generation in
+            guard let self, self.presentationGeneration == generation else { return nil }
+            return self.stateValue
+        }.eraseToAnyPublisher()
+    }
+    var recoveryCardPublisher: AnyPublisher<RecoveryCard?, Never> {
+        presentationChanges.compactMap { [weak self] generation -> SessionRecoveryState? in
+            guard let self, self.presentationGeneration == generation else { return nil }
+            return self.recoveryState
+        }.map(\.card).removeDuplicates().eraseToAnyPublisher()
+    }
     @Published private(set) var spectrum: [Float] = []
-    @Published private(set) var lastErrorRawText: String?
-    @Published private(set) var recoveryCard: RecoveryCard?
-    @Published private(set) var errorActions: [ErrorAction] = []
+    var lastErrorRawText: String? { recoveryState.copyText }
+    var recoveryCard: RecoveryCard? { recoveryState.card }
+    var errorActions: [ErrorAction] { recoveryState.card?.presentation.actions ?? [] }
     @Published private(set) var preparationNotice: String?
     @Published private(set) var lastDeliverySummary: LastDeliverySummary?
+    private var claimedDeliverySummary: LastDeliverySummary?
 
     // MARK: - Session Identity
 
@@ -303,6 +321,7 @@ final class SessionController: ObservableObject {
             saveHistory(context: cancelledContext)
             guard activeSessionID == cancelledSessionID, currentContext === cancelledContext else { return }
             recordLastDelivery(context: cancelledContext)
+            guard activeSessionID == cancelledSessionID, currentContext === cancelledContext else { return }
         }
         // Invalidate ownership before cancellation can resume a stage on another executor.
         activeSessionID = 0
@@ -385,23 +404,31 @@ final class SessionController: ObservableObject {
         presentReadinessBlocked(issue, context: context)
     }
 
+    /// Clear every recovery value without notifying midway through a lifecycle mutation.
+    /// The enclosing transition/reset publishes once the new state is committed.
     private func clearSuspension() {
         recoveryState = SessionRecoveryState()
-        recoveryCard = nil
-        lastErrorRawText = nil
-        errorActions = []
         suspendedContext = nil
         suspendedPayload = nil
         suspendedStageIndex = nil
+        presentationGeneration &+= 1
     }
 
     private func presentRecovery(_ presentation: FailurePresentation, copyText: String?, context: SessionContext) {
+        guard activeSessionID == context.sessionID else { return }
         let card = RecoveryCard(id: UUID(), sessionID: context.sessionID, presentation: presentation)
         recoveryState = SessionRecoveryState(card: card, copyText: copyText)
-        lastErrorRawText = copyText
-        errorActions = presentation.actions
-        recoveryCard = card
         transition(to: .error(presentation.message), context: context)
+    }
+
+    private func publishPresentation() {
+        let generation = presentationGeneration
+        // Each projection filters this generation when it reaches that subscriber.
+        // If an earlier subscriber starts a newer session, later subscribers never
+        // receive the superseded outer value after the nested notification.
+        presentationChanges.send(generation)
+        guard presentationGeneration == generation else { return }
+        objectWillChange.send()
     }
 
     private func recoveryPresentation(_ recovery: ErrorRecoveryContext, payload: StagePayload,
@@ -502,6 +529,8 @@ final class SessionController: ObservableObject {
             guard activeSessionID == context.sessionID, currentContext === context,
                   !context.isCancelled else { return }
             recordLastDelivery(context: context)
+            guard activeSessionID == context.sessionID, currentContext === context,
+                  !context.isCancelled else { return }
         }
         if context.deliveryOutcome == .uncertain {
             let presentation = RecoveryPolicy.presentation(
@@ -518,6 +547,7 @@ final class SessionController: ObservableObject {
             readinessCancellable?.cancel(); readinessCancellable = nil
             stopRecordingTimer()
             spectrum = []
+            guard activeSessionID == context.sessionID else { return }
             clearSuspension()
             presentRecovery(presentation, copyText: context.finalText, context: context)
             return
@@ -530,9 +560,15 @@ final class SessionController: ObservableObject {
 
     private func transition(to newState: SessionState, context: SessionContext) {
         let oldState = sessionState
-        sessionState = newState
+        stateValue = newState
+        presentationGeneration &+= 1
+        let generation = presentationGeneration
         if newState.showPanel { effects.showWindow() }
-        observers.forEach { $0.sessionDidTransition(from: oldState, to: newState, context: context) }
+        guard presentationGeneration == generation else { return }
+        for observer in observers {
+            observer.sessionDidTransition(from: oldState, to: newState, context: context)
+            guard presentationGeneration == generation else { return }
+        }
 
         // Hide the capsule when the session finishes normally (slides down). resetToIdle()
         // covers the cancel/error paths; the normal .complete → .idle path needs this.
@@ -564,6 +600,8 @@ final class SessionController: ObservableObject {
             errorDismissTask?.cancel()
             errorDismissTask = nil
         }
+        guard presentationGeneration == generation else { return }
+        publishPresentation()
     }
 
     // MARK: - Error Actions
@@ -631,7 +669,11 @@ final class SessionController: ObservableObject {
                                                  isRecording: self.isRecording),
                       self.currentContext === context else { return }
                 self.elapsedSeconds += 1
-                self.sessionState = .recording(elapsedSeconds: self.elapsedSeconds)
+                self.stateValue = .recording(elapsedSeconds: self.elapsedSeconds)
+                self.presentationGeneration &+= 1
+                self.publishPresentation()
+                guard self.activeSessionID == sessionID, self.currentContext === context,
+                      !context.isCancelled else { return }
 
                 // Auto-stop at max duration
                 if self.elapsedSeconds >= maxDuration {
@@ -657,7 +699,9 @@ final class SessionController: ObservableObject {
               !context.isCancelled || (context.deliveryEffectStarted && outcome == .uncertain) else { return }
         let summary = LastDeliverySummary(sessionID: context.sessionID, outcome: outcome,
             targetAppName: context.targetApp?.localizedName, targetBundleID: context.targetApp?.bundleIdentifier)
-        guard lastDeliverySummary != summary else { return }
+        guard claimedDeliverySummary != summary else { return }
+        // @Published emits in willSet: claim before subscribers can call cancel.
+        claimedDeliverySummary = summary
         lastDeliverySummary = summary
     }
 
@@ -791,7 +835,7 @@ final class SessionController: ObservableObject {
     private func resetToIdle() {
         OptionTapDetector.shared.cancelPendingTaps()
         currentContext?.cancel()
-        sessionState = .idle
+        stateValue = .idle
         activeSessionID = 0
         currentContext = nil
         stateCancellable?.cancel()
@@ -801,14 +845,19 @@ final class SessionController: ObservableObject {
         readinessCancellable?.cancel()
         readinessCancellable = nil
         clearSuspension()
-        preparationNotice = nil
         currentTask?.cancel()
         currentTask = nil
         errorDismissTask?.cancel()
         errorDismissTask = nil
         stopRecordingTimer()
+        let generation = presentationGeneration
+        preparationNotice = nil
+        guard presentationGeneration == generation else { return }
         spectrum = []
+        guard presentationGeneration == generation else { return }
         effects.hideWindow()
+        guard presentationGeneration == generation else { return }
+        publishPresentation()
     }
 
     // MARK: - Helpers
