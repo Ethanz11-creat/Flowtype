@@ -20,6 +20,8 @@ C4 检查点后全 M2 审查发现三项 Important（普通重试意图、Whispe
 [已批准设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)及[决策归档](evidence/2026-11-01-m2-rulings.md)是当前依据。
 下表 M2 行更新为当前状态；M3–M5 保留原核对结果，不代表本轮重新验收。
 
+M3 规划更新（2026-11-02）：已核对恢复的 Typeless 音量检测代码，并补齐 [M3 设计](superpowers/specs/2026-11-02-m3-delivery-and-silence-design.md)、[M3-A 自动交付计划](superpowers/plans/2026-11-02-m3-a-automatic-delivery.md)与[M3-B 静音预检计划](superpowers/plans/2026-11-02-m3-b-silence-preflight.md)。状态为待审阅、尚未实施；不重做 10 月已实现的目标/剪贴板/历史基础。静音第一版采用无额外模型的保守声音存在检查，候选阈值必须真机校准。[M3 验证清单](evidence/2026-11-02-m3-validation.md)均为 Pending，与 V1–V5 主线衔接。
+
 | 项目 | 现状与剩余工作 | 代码证据 / 边界 |
 | --- | --- | --- |
 | **M2 模型修复 / 云端接入 / 本地导入** | 源码修复与限定复审通过（e69d688，2507/0）；共享预检/恢复、厂商合同及配置检查、多个本地模型的静态预览/切换/重新定位/移除均已接入。源包原生编译与后台复检已补齐；真实加载/听写及 GUI 验收 Pending。 | `QwenModelState` 单一事务协调器；`ImportedASRModelActions` 只管理预览；`ImportedASRModelList` 通过 UUID 操作。静态检查不保存选择，运行成功才提交。旧基线的三次不透明重试、写死 0.6B 卡片与单路径选择已被替换。 |
