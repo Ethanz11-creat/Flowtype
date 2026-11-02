@@ -201,16 +201,6 @@ struct KeyboardInjector {
 
 // MARK: - Experimental native paste
 
-enum DeliveryMode: String, Codable, Sendable {
-    case unicode, pasteInSupportedApps
-
-    func usesPaste(bundleID: String?) -> Bool {
-        guard self == .pasteInSupportedApps, let bundleID else { return false }
-        return ["com.apple.TextEdit", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92",
-                "com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"].contains(bundleID)
-    }
-}
-
 typealias PasteboardContents = [[String: Data]]
 
 struct PasteboardWriteReceipt {

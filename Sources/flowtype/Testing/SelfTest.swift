@@ -281,6 +281,11 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m3-delivery-only") {
+            M3DeliverySelfTests.policy(r)
+            print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--m2-review-inspection-only") {
             await M2ReviewFixSelfTests.inspection(r)
             print("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
@@ -414,6 +419,7 @@ enum SelfTest {
         await testPolishDelivery(r)
         await testClipboardTransactions(r)
         testDeliveryPersistence(r)
+        M3DeliverySelfTests.policy(r)
         await testDeliveryModeStage(r)
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
