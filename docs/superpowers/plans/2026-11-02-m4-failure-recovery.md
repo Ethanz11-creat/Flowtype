@@ -19,6 +19,7 @@
 - 可选 polish 失败继续完整 processed fallback；静音/空录音保持 notice，不走 provider/preview/health/交付/历史；非法音频不重试原 PCM。
 - 用户界面和新增诊断只用稳定安全文案/枚举；不展示或记录 provider message、HTTP body、URL/query、NSError userInfo、原始文本或密钥。
 - 自动化仅用合成数据、假系统/网络/剪贴板与隔离配置。验证顺序 swift build → swift run FlowType --self-test；不运行 swift test，不重复未变全套或30分钟 benchmark。
+- Task2 起每个 self-test 进程设置 `CFFIXED_USER_HOME` 为本计划 scratch 下独立 task-N-runtime-home（mkdir 后以 env 前缀启动），不改 HOME；注入空 ASR 词典，避免全局词典读取。Task1/历史 full 的用户目录读取和日志写入隔离限制单独记账，不虚记全隔离。
 - 分支/worktree保留，不push、不merge；源码审查、固定产物与真机矩阵分别记账，未执行为 Pending。
 
 ## Review Focus
@@ -73,6 +74,7 @@
 - Consumes Task1 FailureClassifier, FailureKind, ErrorRecoveryContext typed initializer; no controller change yet.
 - `RecordingEngineStartup.run(prepare: () -> Void, start: () throws -> Void, onFailure: () -> Void, finish: () -> Void)` executes prepare/start; on throw calls onFailure then finish exactly once; on success neither failure nor finish. No hardware/async dependencies. AudioRecorder uses existing onRecordingFrozen and spectrum finish via this seam.
 - ASR firstFailureKind retained alongside first error; every catch classifies original error before wrapping; terminal `.suspend` explicitly passes kind. Unknown remains internalFailure; empty candidate list readiness(noEngine); budget-only transientASR. Existing captured route and health accounting, one pass fallback, local lease, cancellation, preflight unchanged.
+- ASRStage adds `phrases: @escaping @MainActor @Sendable () -> [String]` defaulting to existing DictionaryStore.shared.enabledPhrases; tests inject `{ [] }`. This is a test seam only, no production dictionary behavior change.
 - invalid PCM recording(invalidAudio); startup error recording(interrupted); stage invalidPayload internalFailure. pre-event injection failure deliveryBlocked + result textKind. Actual uncertain remains existing outcome at finish, not inferred from Error.
 
 - [ ] **Step 1:** RED tests execute real ASRStage with fake providers, no network. `M4StageFailureSelfTests.run(_:)` called by focused/full runner.
@@ -99,6 +101,7 @@
 - Stage retry verifies typed policy again plus actual currentContext/retained nonempty audio/actual ASR index/no event, never legacy retryable. Clear card before work. Original route/audio/lease, fresh handle/new20s budget. No retry injection or hidden polish opt-in.
 - Rerecord uses startRecording fresh identity; settings only opens. Recheck refreshes blocked card with new UUID/current reason/actions, ready or degraded idle. Automatic routing only changes policy and refreshes; still blocked stays new card. New session/clear invalidates all old buttons.
 - Normal uncertain finish saves history/summary once while owner, closes context and event gate then shows terminal-only card, retaining full final text for explicit copy; viewHistory if entered save path only. Explicit cancel unchanged idle with M3 uncertain saved once. No raw text in published card/log.
+- M3 clipboardChanged can conservatively finish uncertain BEFORE any actual event. Preserve outcome/history/no-resend, but choose presentation deliveryBlocked when deliveryEventStarted=false: "未发送文本，可复制结果" +copy/dismiss, never automatic clipboard overwrite. Only actual-event uncertain uses deliveryUncertain +history actions.
 - Error capsule380×156, two-column LazyVGrid/rows up to4 actions, two-line safe text; no transcript preview, current theme. Notices remain240×70.
 
 - [ ] **Step 1:** RED integration tests use real controller with synthetic stages and injected SessionEffects/RecoveryEffects/configuration/readiness; real ASR/InjectionStage for meaningful boundaries. Add suite to focused/full runner.
@@ -107,7 +110,8 @@
   - noEngine constrained→auto still blocked mic updates message/actions; ready/degraded clears and remains idle, no AX degrade stays eligible menu path. Two permissions map correct settings and recheck.
   - Startup/invalid audio failures stay error with rerecord, not temporary notice. Optional polish and silence original notices unchanged.
   - Real uncertain typing/paste terminal: persistent card, complete explicit copy via fake board, history navigation only, no retry/double attempt/save/summary. Explicit cancel after actual event saves once then idle, late complete ignored; repeat cancel/dismiss do not save again.
-  - Privacy recordTranscript=false and failing/no-op storage: safe uncertain message does not claim stored transcript; no secret/URL/body in card; copy returns complete text only on click. Card has no raw preview. Error size and max4 action layout model.
+  - Real clipboard ownership change before event: keep uncertain outcome/history, zero events and automatic copies, persistent deliveryBlocked safe message (never "已发送"), no retry; explicit user copy alone may overwrite board.
+  - Privacy storeTranscriptText=false and failing/no-op storage: safe uncertain message does not claim stored transcript; no secret/URL/body in card; copy returns complete text only on click. Card has no raw preview. Error size and max4 action layout model.
 - [ ] **Step 2:** capture RED, implement pure recovery state/effects then controller-owned validation/transitions and card rendering. Keep lifecycle fields private; no new coordinator/parallel state machine. Clear subscriptions/tasks/gates consistently with M3.
 - [ ] **Step 3:** focused GREEN, sequential build/full self-test once stable, preserving all M3 coverage with updated deliberate uncertain-card expectations. Report counts and GUI Pending explicitly.
 - [ ] **Step 4:** self-review, scoped commit `feat: bind recovery cards to the current session` with TDD/full evidence.

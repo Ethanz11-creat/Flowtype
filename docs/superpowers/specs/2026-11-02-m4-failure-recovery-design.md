@@ -27,6 +27,7 @@ M4 解决“失败后知道发生什么、有什么安全动作、不会重发�
 - 可选 polish 失败继续完整 processed fallback；静音/空录音保持 notice，不走 provider/preview/health/交付/历史；非法音频不重试原 PCM。
 - 用户界面和新增诊断只用稳定安全文案/枚举；不展示或记录 provider message、HTTP body、URL/query、NSError userInfo、原始文本或密钥。
 - 自动化仅用合成数据、假系统/网络/剪贴板与隔离配置。验证顺序 swift build → swift run FlowType --self-test；不运行 swift test，不重复未变全套或30分钟 benchmark。
+- Task2 起自测进程以 CFFIXED_USER_HOME 指向本计划独立 scratch；不修改 HOME。ASRStage 词典增加默认保持现状的可注入闭包，新测试注入空词典。旧 full runner 的用户目录读取/日志写入不能虚称全隔离，证据单列该限制。
 - 分支/worktree保留，不push、不merge；源码审查、固定产物与真机矩阵分别记账，未执行为 Pending。
 
 ## 4. 失败模型与纯策略
@@ -82,6 +83,8 @@ RealtimeASRConfigurationError 全部 configuration（missingAPIKey为credentials
 
 ASR 原一次候选链及健康记录不改：每次 catch 在原因丢失前记安全 firstFailureKind；成功 fallback 仍成功；失败保留第一实际候选原因，后续预算到期不盖掉已知配置/权限问题。无候选→readiness(noEngine)，仅预算到期无先前原因→transientASR。混合候选两种顺序都固定该规则并写回归；这是保守修复第一失败来源，不重排候选。
 
+已有 `ASRStageError.transcriptionFailed` 的类型语义归 transientASR，不检查其字符串；阶段仍必须在通用包装前显式保留原始分类，不能用它覆盖401等原因。`PostProcessStageError.emptyResult` / `PolishStageError.damagedLiterals` 归 processing，invalidPayload 均 internalFailure；Polish 的正常降级不因分类变成阻断。ModelProvisionError 归 configuration(endpointOrModel)，ASR 恢复入口不执行下载。
+
 ### 4.2 录音启动错误的小范围补齐
 
 AudioRecorder299 的 catch 只对某个CoreAudio域调用冻结通知，其他启动错误可能伪装成正常空录音。本轮仅补齐“任何 engine.start 失败都进入已有设备失败路径”，不改采集转换/心跳/选设备/音频长度。抽取窄同步 engine-start 边界，生产调用真实 prepare/start，测试用抛错闭包；失败先通知frozen再finish spectrum一次，RecordingStage沿用现有engineStartFailed，不把失败送ASR/preview。不可访问真实硬件作单测；真实拔麦另列Pending。
@@ -98,6 +101,7 @@ AudioRecorder299 的 catch 只对某个CoreAudio域调用冻结通知，其他�
 - copy只复制当前卡完整raw/result，使用效果seam，仅用户点击才可覆盖剪贴板；复制后卡仍可见。viewHistory只导航，不复制/重试。
 - stage suspend统一用typed policy；取消先处理，不根据动作数/legacy retryable猜原因。有动作→error常驻，无可执行动作只限cancelled（idle）或真实notice信号；不为非法PCM/设备错误自动2.2s消失。
 - 正常 finish 的uncertain先一次保存历史/摘要，再建立只复制/历史/忽略的终态恢复卡并关闭context资源/事件gate；保留卡所有权元数据，不给旧stage继续发布权。显式cancel维持M3的uncertain一次保存后idle，不新弹卡。
+- 例外由真实事件证据决定：M3 的 clipboardChanged 可能在首个事件前就产生保守 uncertain outcome。保留该 outcome/历史及禁止重发，但无事件时卡片使用 deliveryBlocked（“未发送文本，可复制结果”、复制/忽略）；不能声称“已发送”，也不能自动覆盖用户新剪贴板。发过事件才用 deliveryUncertain 卡及其历史入口。
 - noAX仍按M1降级可菜单录音/复制；不得把readiness degraded变成录音阻断。polish降级/静音无新卡，正常typed/paste无卡。
 
 界面错误区固定380×156，使用两列动作布局（最多四项），安全文案允许两行；保留既有主题与无转写预览。源码测试覆盖模型尺寸/动作顺序及真实controller效果，GUI布局仍为Pending。
