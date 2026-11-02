@@ -5,7 +5,7 @@ enum LocalASRRuntimeFactory {
         try Task.checkCancellation()
         // Reinspect immediately before constructing any runtime. A stale library row is
         // not permission to load a replaced model or substitute another tokenizer folder.
-        let current = try ASRModelInspector.inspect(directory: model.directory)
+        let current = try await LocalModelInspection.inspect(directory: model.directory)
         guard current.fileFingerprint == model.fileFingerprint, current.engine == model.engine,
               current.tokenizerDirectory == model.tokenizerDirectory,
               current.qwenCompatibilityModelID == model.qwenCompatibilityModelID else {

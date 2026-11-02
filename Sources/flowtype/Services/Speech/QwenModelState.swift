@@ -127,6 +127,7 @@ final class QwenModelState: ObservableObject {
             let repo: String
             let identity: LocalModelIdentity
             switch target {
+            case .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
             case .imported(let model): return try await LocalASRRuntimeFactory.load(model)
             case .preset(let preset):
                 directory = destination(preset); repo = preset.repoId
@@ -154,7 +155,7 @@ final class QwenModelState: ObservableObject {
         self.init(preflight: { _, _ in }, load: { target, _, _ in
             let preset: ModelPreset
             switch target {
-            case .imported: throw ModelProvisionError.incompleteLocal()
+            case .imported, .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
             case .preset(let value): preset = value
             case .offline(let resolved):
                 guard let value = ModelPreset.allPresets.first(where: { $0.repoId == resolved.modelId }) else {
@@ -175,6 +176,7 @@ final class QwenModelState: ObservableObject {
         operationID = id; failure = nil; didAutoFallback = false; userCancelled = false
         hardwareAssessment = nil; importFailureDetail = nil
         if case .imported(let model) = request.target { pendingImportDirectory = model.directory }
+        else if case .uninspectedDirectory(let directory) = request.target { pendingImportDirectory = directory }
         else { pendingImportDirectory = nil }
         selectionRequest = request
         target = request.target; operationSource = request.source
@@ -272,19 +274,11 @@ final class QwenModelState: ObservableObject {
     /// All folder pickers share this strictly offline entry point. Only the coordinator persists selection.
     func importOfflineModel(at directory: URL) async throws {
         guard operationID == nil else { throw ModelProvisionError.loadFailed() }
-        let model: ImportedASRModel
-        do { model = try inspect(directory) }
-        catch {
-            pendingImportDirectory = directory
-            target = nil
-            selectionRequest = nil
-            operationSource = configuration().downloadSource
-            didAutoFallback = false
-            importFailureDetail = (error as? ASRModelInspectionError)?.detail
-            publish(.incompleteLocal())
-            throw error
-        }
-        try await useImportedModel(model)
+        let previous = activeLease?.id
+        await perform(.init(target: .uninspectedDirectory(directory), source: configuration().downloadSource, origin: .offlineImport))
+        try Task.checkCancellation()
+        if let failure { throw failure }
+        guard let activeLease, activeLease.id != previous else { throw CancellationError() }
     }
 
     func useImportedModel(_ model: ImportedASRModel) async throws {
@@ -347,7 +341,8 @@ final class QwenModelState: ObservableObject {
             }
             else {
                 if let inspection = error as? ASRModelInspectionError { importFailureDetail = inspection.detail }
-                publish(error as? ModelProvisionError ?? .loadFailed())
+                if case .uninspectedDirectory = target { publish(.incompleteLocal()) }
+                else { publish(error as? ModelProvisionError ?? .loadFailed()) }
             }
         }
     }
@@ -359,12 +354,21 @@ final class QwenModelState: ObservableObject {
 
     private func provision(_ target: ModelProvisionTarget, source: DownloadSource, attempts: Int, id: UUID) async throws -> LocalASRLease {
         self.target = target
-        if case .imported(let staged) = target {
-            // Refresh stale records (including legacy nil resource bounds) while holding the
-            // same gate as preset work. The factory checks this fresh fingerprint again.
-            var current = try inspect(staged.directory)
-            current.id = staged.id
-            current.name = staged.name
+        let importDirectory: URL?
+        switch target {
+        case .imported(let staged): importDirectory = staged.directory
+        case .uninspectedDirectory(let directory): importDirectory = directory
+        default: importDirectory = nil
+        }
+        if let importDirectory {
+            // The reservation and global gate are already held, including legacy initial
+            // inspection. Cancellation cannot publish a late assessment or enter a runtime.
+            var current = try await LocalModelInspection.inspect(directory: importDirectory, using: inspect)
+            try checkOwnership(id)
+            if case .imported(let staged) = target {
+                current.id = staged.id
+                current.name = staged.name
+            }
             current = LocalModelLibrary.canonicalizing(current, in: configuration())
             let refreshed = ModelProvisionTarget.imported(current)
             self.target = refreshed

@@ -281,6 +281,17 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m2-review-inspection-only") {
+            await M2ReviewFixSelfTests.inspection(r)
+            print("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
+        if CommandLine.arguments.contains("--m2-review-packages-only") {
+            await M2ReviewFixSelfTests.packages(r)
+            await M2ReviewFixSelfTests.compilationLifecycle(r)
+            print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--m2-fix-only") {
             LocalModelImportSelfTests.runInspection(r)
             await WhisperRuntimeSelfTests.run(r)
@@ -318,6 +329,7 @@ enum SelfTest {
         testModelLocator(r)        // ModelLocator completeness validation
         LocalModelImportSelfTests.runInspection(r)
         await WhisperRuntimeSelfTests.run(r)
+        await M2ReviewFixSelfTests.packages(r)
         await ModelProvisionSelfTests.runPreflight(r)
         testStatsDataModel(r)      // stats data model: language tag + legacy decode
         testStatsEngine(r)         // StatsEngine: metrics, streaks, heatmap
@@ -384,6 +396,8 @@ enum SelfTest {
         await WholeM2FixSelfTests.runGraphAdmission(r)
         await ModelProvisionSelfTests.runCoordinator(r)
         await ImportedLifecycleSelfTests.run(r)
+        await M2ReviewFixSelfTests.inspection(r)
+        await M2ReviewFixSelfTests.compilationLifecycle(r)
         await ImportedModelUISelfTests.run(r)
         await ModelProvisionSelfTests.runPresentationAndRouting(r)
         await testTerminalModelLoadPreflight(r)

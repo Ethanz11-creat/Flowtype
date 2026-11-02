@@ -27,6 +27,7 @@ struct QwenModelStatusCard: View {
         case .preset: return nil
         case .offline(let resolved): return resolved.directory.path
         case .imported(let model): return model.directory.path
+        case .uninspectedDirectory(let directory): return directory.path
         case nil: return modelState.pendingImportDirectory?.path ?? configuredPath
         }
     }

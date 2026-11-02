@@ -168,24 +168,28 @@ final class OfflineWhisperKit: WhisperKit {
 actor WhisperKitBackend: OfflineWhisperBackend {
     nonisolated let verifiedMetadata: WhisperRuntimeMetadata?
     private let kit: OfflineWhisperKit
+    // The backend is retained by active/captured leases and by in-flight inference.
+    private let preparedModels: PreparedWhisperModels
 
-    private init(kit: sending OfflineWhisperKit, metadata: WhisperRuntimeMetadata) {
+    private init(kit: sending OfflineWhisperKit, metadata: WhisperRuntimeMetadata, preparedModels: PreparedWhisperModels) {
         self.kit = kit
+        self.preparedModels = preparedModels
         verifiedMetadata = metadata
     }
 
     static func load(_ options: WhisperOfflineLoadOptions) async throws -> WhisperKitBackend {
         try WhisperGraphContract.validateRuntimeABI()
-        let kit = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: options.modelDirectory.path,
+        // Fail on local tokenizer errors before compiling or allocating model memory.
+        _ = try await OfflineWhisperKit.localTokenizer(at: options.tokenizerDirectory)
+        let prepared = try await WhisperModelPreparation.prepare(directory: options.modelDirectory)
+        let kit = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: prepared.directory.path,
             tokenizerFolder: options.tokenizerDirectory, verbose: false, logLevel: .none,
             prewarm: false, load: options.load, download: options.download))
         try Task.checkCancellation()
-        // Fail on local tokenizer errors before allocating model memory.
-        _ = try await OfflineWhisperKit.localTokenizer(at: options.tokenizerDirectory)
         try await kit.loadModels()
         try Task.checkCancellation()
         guard let metadata = kit.detectedMetadata else { throw OfflineWhisperError.incompatibleGraph }
-        return WhisperKitBackend(kit: kit, metadata: metadata)
+        return WhisperKitBackend(kit: kit, metadata: metadata, preparedModels: prepared)
     }
 
     func transcribe(samples: [Float], language: String?, prompt: String?) async throws -> [String] {

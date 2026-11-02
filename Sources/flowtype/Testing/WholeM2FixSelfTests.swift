@@ -112,7 +112,7 @@ private actor RetryIntentProbe {
         switch target {
         case .preset(let value): preset = value
         case .offline(let value): preset = value.modelId == ModelPreset.qwen317B.repoId ? .qwen317B : .qwen306B
-        case .imported: throw ModelProvisionError.loadFailed()
+        case .imported, .uninspectedDirectory: throw ModelProvisionError.loadFailed()
         }
         attempts.append(preset.id)
         guard preset.id == ModelPreset.qwen317B.id ? largeReady : smallReady else { throw ModelProvisionError.loadFailed() }

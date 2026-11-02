@@ -272,7 +272,7 @@ private actor ImportedLifecycleProbe {
         case .preset(let preset):
             return .init(id: UUID(), identity: .init(id: preset.id, displayName: preset.name, engine: "qwen",
                 repoID: preset.repoId, directory: URL(fileURLWithPath: "/fixture/preset")), provider: ImportedSpeechFixture(name: "preset"))
-        case .offline: throw ModelProvisionError.incompleteLocal()
+        case .offline, .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
         }
     }
 }
