@@ -11,6 +11,7 @@ enum InjectionError: Error {
     case textTooLong
     case injectionAlreadyInProgress
     case noEventsDispatched
+    case targetNoLongerSafe
 }
 
 struct KeyboardInjector {
@@ -27,7 +28,30 @@ struct KeyboardInjector {
 
     // MARK: - Entry point: type the text (Shift+Return for newlines)
 
-    static func insertText(_ text: String, context: SessionContext? = nil) async throws {
+    enum TypingPair: Sendable, Equatable {
+        case unicode(String), newline
+    }
+
+    /// Only OS posting and the inter-pair suspension are replaceable; segmentation,
+    /// validation and the cancellation/event gate always run in the production loop.
+    struct TypingEvents: Sendable {
+        let prepare: @Sendable (TypingPair) throws -> (@Sendable () -> Void)
+        let wait: @Sendable () async throws -> Void
+    }
+
+    private final class UnicodeSource: @unchecked Sendable {
+        let value: CGEventSource
+        init() throws {
+            guard let value = CGEventSource(stateID: .hidSystemState) else {
+                throw InjectionError.eventSourceCreationFailed
+            }
+            self.value = value
+        }
+    }
+
+    static func insertText(_ text: String, context: SessionContext? = nil,
+                           validate: @escaping @Sendable () async throws -> Void = {},
+                           events: TypingEvents? = nil) async throws {
         try Task.checkCancellation()
         guard context?.isCancellationRequested != true else { throw CancellationError() }
         let canProceed = injectionLock.withLock { state in
@@ -45,8 +69,29 @@ struct KeyboardInjector {
             AppLogger.log("[KeyboardInjector] insertText rejected: \(text.count) chars exceeds \(maxChars) cap")
             throw InjectionError.textTooLong
         }
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
-            throw InjectionError.eventSourceCreationFailed
+        let driver: TypingEvents
+        if let events { driver = events }
+        else {
+            let source = try UnicodeSource()
+            driver = TypingEvents(prepare: { pair in
+                switch pair {
+                case .unicode(let text): return try prepareUnicode(text, source: source.value)
+                case .newline: return try prepareShiftReturn(source: source.value)
+                }
+            }, wait: { try await Task.sleep(nanoseconds: interEventDelayNs * 2) })
+        }
+        func dispatch(_ pair: TypingPair) async throws {
+            try Task.checkCancellation()
+            guard context?.isCancellationRequested != true else { throw CancellationError() }
+            let post = try driver.prepare(pair)
+            // Every pair, including the first and newline pairs, samples the
+            // strict fallback target again after the previous suspension. AX
+            // collection remains in currentDeliveryTarget's detached worker.
+            try await validate()
+            try Task.checkCancellation()
+            guard context?.isCancellationRequested != true else { throw CancellationError() }
+            try postIfActive(context: context, action: post)
+            try await driver.wait()
         }
 
         let start = Date()
@@ -60,10 +105,10 @@ struct KeyboardInjector {
         let segments = splitIntoLineSegments(normalizeNewlines(text))
         for (i, segment) in segments.enumerated() {
             if i > 0 {
-                try await postShiftReturn(source: source, context: context)
+                try await dispatch(.newline)
             }
             for piece in chunk(segment, size: chunkSize) {
-                try await postUnicode(piece, source: source, context: context)
+                try await dispatch(.unicode(piece))
             }
         }
     }
@@ -93,8 +138,16 @@ struct KeyboardInjector {
 
     // MARK: - Low-level CGEvent posting
 
-    private static func postUnicode(_ s: String, source: CGEventSource, context: SessionContext?) async throws {
-        guard !s.isEmpty else { return }
+    private struct PreparedPair: @unchecked Sendable {
+        let down: CGEvent
+        let up: CGEvent
+        func post() {
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
+    }
+
+    private static func prepareUnicode(_ s: String, source: CGEventSource) throws -> (@Sendable () -> Void) {
         let utf16 = Array(s.utf16)
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
@@ -102,14 +155,11 @@ struct KeyboardInjector {
         }
         keyDown.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
         keyUp.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
-        try postIfActive(context: context) {
-            keyDown.post(tap: .cghidEventTap)
-            keyUp.post(tap: .cghidEventTap)
-        }
-        try await Task.sleep(nanoseconds: interEventDelayNs * 2)
+        let pair = PreparedPair(down: keyDown, up: keyUp)
+        return { pair.post() }
     }
 
-    private static func postShiftReturn(source: CGEventSource, context: SessionContext?) async throws {
+    private static func prepareShiftReturn(source: CGEventSource) throws -> (@Sendable () -> Void) {
         let returnKey: CGKeyCode = 0x24 // kVK_Return
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false) else {
@@ -117,11 +167,8 @@ struct KeyboardInjector {
         }
         down.flags = .maskShift
         up.flags   = .maskShift
-        try postIfActive(context: context) {
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-        }
-        try await Task.sleep(nanoseconds: interEventDelayNs * 2)
+        let pair = PreparedPair(down: down, up: up)
+        return { pair.post() }
     }
 
     /// Serialize each balanced key pair with session cancellation. The synchronous

@@ -324,10 +324,20 @@ final class SessionContext {
     }
 
     /// Invalidates all future stage results and readiness/state callbacks.
-    func cancel() {
+    func cancel(recordPendingDelivery: Bool = false) {
+        // Closing the event gate first makes the snapshot final: a balanced pair
+        // either completed under this lock or can never begin. Publication stays
+        // synchronous on MainActor while the controller still owns this context.
+        let eventStarted = cancellationLock.withLock { state in
+            state.cancelled = true
+            return state.eventStarted
+        }
+        if recordPendingDelivery, !historySaved, eventStarted,
+           deliveryOutcome == nil || deliveryOutcome == .typedDispatched || deliveryOutcome == .pasteDispatched {
+            deliveryOutcome = .uncertain
+        }
         isCancelled = true
         cancelForegroundCollection()
-        cancellationLock.withLock { $0.cancelled = true }
         deliveryTargetTask?.cancel()
         deliveryTargetTask = nil
         realtimeHandle?.ingress.cancel()

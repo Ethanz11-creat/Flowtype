@@ -289,7 +289,7 @@ final class SessionController: ObservableObject {
     func cancel() {
         AppLogger.log("[SessionController#\(activeSessionID)] cancel called, state=\(sessionState)")
         let cancelledContext = currentContext
-        cancelledContext?.cancel()
+        cancelledContext?.cancel(recordPendingDelivery: cancelledContext?.sessionID == activeSessionID)
         // A paste/key event can already have escaped when cancellation arrives.
         // Persist that uncertain terminal outcome once for recovery/metrics while
         // suppressing all stale UI/state publication below.

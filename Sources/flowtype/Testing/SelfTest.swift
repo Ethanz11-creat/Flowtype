@@ -304,6 +304,7 @@ enum SelfTest {
             M3DeliverySelfTests.policy(r)
             await M3DeliverySelfTests.runtime(r)
             await M3DeliverySelfTests.presentation(r)
+            await M3FinalFixSelfTests.run(r)
             print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
             exit(r.failed == 0 ? 0 : 1)
         }
@@ -443,6 +444,7 @@ enum SelfTest {
         M3DeliverySelfTests.policy(r)
         await M3DeliverySelfTests.runtime(r)
         await M3DeliverySelfTests.presentation(r)
+        await M3FinalFixSelfTests.run(r)
         await testDeliveryModeStage(r)
         M3SpeechPreflightSelfTests.pure(r)
         await M3SpeechPreflightSelfTests.background(r)

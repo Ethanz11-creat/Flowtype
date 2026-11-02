@@ -8,7 +8,8 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
     private let accessibilityTrusted: @MainActor @Sendable () -> Bool
     private let currentTarget: @Sendable () async -> DeliveryTargetSnapshot
     private let focus: (@MainActor @Sendable () -> FocusSignals)?
-    private let inject: @Sendable (String, SessionContext) async throws -> Void
+    private let inject: (@Sendable (String, SessionContext) async throws -> Void)?
+    private let typingEvents: KeyboardInjector.TypingEvents?
     private let mode: @MainActor @Sendable () -> DeliveryMode
     private let bundleID: @MainActor @Sendable (Int32?) -> String?
     private let paste: @MainActor @Sendable (String, SessionContext, DeliveryTargetSnapshot?) async -> PasteTransactionResult
@@ -18,9 +19,8 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
          accessibilityTrusted: @escaping @MainActor @Sendable () -> Bool = { PermissionHelper.checkAccessibility() },
          focus: (@MainActor @Sendable () -> FocusSignals)? = nil,
          currentTarget: @escaping @Sendable () async -> DeliveryTargetSnapshot = { await KeyboardInjector.currentDeliveryTarget() },
-         inject: @escaping @Sendable (String, SessionContext) async throws -> Void = { text, context in
-             try await KeyboardInjector.insertText(text, context: context)
-         },
+         inject: (@Sendable (String, SessionContext) async throws -> Void)? = nil,
+         typingEvents: KeyboardInjector.TypingEvents? = nil,
          mode: @escaping @MainActor @Sendable () -> DeliveryMode = { ConfigurationStore.shared.current.deliveryMode },
          bundleID: @escaping @MainActor @Sendable (Int32?) -> String? = { pid in
              pid.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
@@ -40,6 +40,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
         self.focus = focus
         self.currentTarget = currentTarget
         self.inject = inject
+        self.typingEvents = typingEvents
         self.copy = copy
         self.mode = mode
         self.bundleID = bundleID
@@ -112,7 +113,17 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                             eventDispatched: context.deliveryEventStarted, target: target,
                             current: refreshed, accessibilityTrusted: trusted) {
                             return await typeText(text, context: context,
-                                preserveClipboardOnFailure: true, start: start)
+                                preserveClipboardOnFailure: true, start: start, validate: {
+                                    try self.checkActive(context)
+                                    let fresh = await self.currentTarget()
+                                    try self.checkActive(context)
+                                    let permitted = await MainActor.run { self.accessibilityTrusted() }
+                                    try self.checkActive(context)
+                                    guard permitted, fresh.signals.focus == .editableText,
+                                          decideDelivery(target: target, current: fresh) == .inject else {
+                                        throw InjectionError.targetNoLongerSafe
+                                    }
+                                })
                         }
                     }
                     return .suspend(ErrorRecoveryContext(failedStage: name,
@@ -132,10 +143,12 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
     }
 
     private func typeText(_ text: String, context: SessionContext,
-                          preserveClipboardOnFailure: Bool, start: Date) async -> StageResult {
+                          preserveClipboardOnFailure: Bool, start: Date,
+                          validate: @escaping @Sendable () async throws -> Void = {}) async -> StageResult {
         do {
             try checkActive(context)
-            try await inject(text, context)
+            if let inject { try await inject(text, context) }
+            else { try await KeyboardInjector.insertText(text, context: context, validate: validate, events: typingEvents) }
             try checkActive(context)
             guard context.deliveryEventStarted else { throw InjectionError.noEventsDispatched }
             await complete(.typedDispatched, context: context, start: start)
