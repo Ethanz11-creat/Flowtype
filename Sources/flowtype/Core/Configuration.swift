@@ -410,7 +410,7 @@ struct Configuration: Codable, Equatable {
 
     // Privacy: whether to persist transcript text alongside session metadata
     var storeTranscriptText: Bool = true
-    var deliveryMode: DeliveryMode = .unicode
+    var deliveryMode: DeliveryMode = .automatic
 
     // Model provisioning
     var localModelPath: String? = nil          // user-specified model folder (offline load)
@@ -523,7 +523,7 @@ struct Configuration: Codable, Equatable {
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
         importedASRModels = try c.decodeIfPresent([ImportedASRModel].self, forKey: .importedASRModels) ?? []
         activeImportedASRModelID = try c.decodeIfPresent(UUID.self, forKey: .activeImportedASRModelID)
-        deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? .unicode
+        deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? .automatic
         storeTranscriptText = (try? c.decodeIfPresent(Bool.self, forKey: .storeTranscriptText)) ?? true
         providerAPIKeys = (try? c.decodeIfPresent([String: String].self, forKey: .providerAPIKeys)) ?? [:]
 

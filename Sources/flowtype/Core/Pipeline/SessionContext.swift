@@ -53,7 +53,11 @@ final class SessionContext {
     /// Cancellation is owned by the controller. Stages and callbacks must check it
     /// before publishing state or advancing the pipeline.
     private(set) var isCancelled = false
-    private struct DeliveryGateState { var cancelled = false; var effectStarted = false }
+    private struct DeliveryGateState {
+        var cancelled = false
+        var effectStarted = false
+        var eventStarted = false
+    }
     private let cancellationLock = OSAllocatedUnfairLock(initialState: DeliveryGateState())
 
     /// Synchronous cancellation snapshot for audio callbacks, which cannot await
@@ -98,6 +102,22 @@ final class SessionContext {
 
     nonisolated var deliveryEffectStarted: Bool {
         cancellationLock.withLock { $0.effectStarted }
+    }
+
+    /// Clipboard preparation is an effect, but only a balanced key pair proves
+    /// that text may have been sent. Both latches belong to the same attempt.
+    nonisolated var deliveryEventStarted: Bool {
+        cancellationLock.withLock { $0.eventStarted }
+    }
+
+    nonisolated func performDeliveryEvent(_ action: () -> Void) -> Bool {
+        cancellationLock.withLockUnchecked { state in
+            guard !state.cancelled, !Task.isCancelled else { return false }
+            state.effectStarted = true
+            state.eventStarted = true
+            action()
+            return true
+        }
     }
 
     /// Raw transcript from ASR before any post-processing.

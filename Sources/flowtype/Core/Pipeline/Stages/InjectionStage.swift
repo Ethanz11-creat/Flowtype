@@ -58,6 +58,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             let reserved = await MainActor.run { !Task.isCancelled && context.beginDeliveryAttempt() }
             guard reserved else { return .complete }
             ownsAttempt = true
+            let selectedMode = await MainActor.run { mode() }
             try checkActive(context)
             try await settle()
             let target = await context.resolvedDeliveryTarget()
@@ -71,78 +72,99 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
             try checkActive(context)
             let decision = applyAccessibilityGate(decideDelivery(target: target, current: current),
                                                   accessibilityTrusted: trusted)
-            let outcome: DeliveryOutcome
-            switch decision {
+            let method = await MainActor.run {
+                decision == .clipboard ? DeliveryMethod.clipboard :
+                    resolveDeliveryMethod(mode: selectedMode, signals: current.signals,
+                        accessibilityTrusted: trusted, bundleID: bundleID(current.pid))
+            }
+            try checkActive(context)
+            switch method {
             case .clipboard:
                 try await copyToClipboard(text, context: context)
-                outcome = .clipboard
                 await MainActor.run {
                     guard !context.isCancelled else { return }
                     let changed = target?.pid != current.pid ||
                         (target?.focusIdentity != nil && current.focusIdentity != nil && target?.focusIdentity != current.focusIdentity)
                     context.completionNotice = DeliveryCopy.forOutcome(.clipboard, focusChanged: changed)?.message
                 }
-            case .inject:
-                let usePaste = await MainActor.run {
-                    let selected = mode()
-                    return selected == .pasteInSupportedApps && selected.usesPaste(bundleID: bundleID(current.pid))
-                }
-                if usePaste {
-                    let result = await paste(text, context, target)
-                    switch result {
-                    case .dispatched: await complete(.pasteDispatched, context: context, start: start)
-                    case .uncertain: await complete(.uncertain, context: context, start: start)
-                    case .cancelled: await complete(.cancelled, context: context, start: start)
-                    case .unsafeSnapshot:
-                        // A partial representation snapshot is unsafe to replace.
-                        // Keep the text available through the session's explicit
-                        // recovery/history path and never clear the user's board.
-                        return .suspend(ErrorRecoveryContext(failedStage: name,
-                            error: InjectionStageError.clipboardSnapshotIncomplete,
-                            rawText: text, retryable: false))
-                    case .clipboardChanged:
-                        await complete(.uncertain, context: context, start: start)
-                        await MainActor.run {
-                            if !context.isCancelled { context.completionNotice = DeliveryCopy.clipboardOwnershipChanged.message }
-                        }
-                    case .notDispatched:
-                        return .suspend(ErrorRecoveryContext(failedStage: name,
-                            error: InjectionStageError.pasteNotDispatched,
-                            rawText: text, retryable: false))
-                    }
-                    return .complete
-                }
-                do {
-                    try checkActive(context)
-                    try await inject(text, context)
-                    try checkActive(context)
-                    guard context.deliveryEffectStarted else { throw InjectionError.noEventsDispatched }
-                    outcome = .typedDispatched
-                } catch {
-                    if context.deliveryEffectStarted {
-                        await complete(.uncertain, context: context, start: start)
-                        return .complete
-                    }
-                    try checkActive(context)
-                    guard !(error is CancellationError) else { throw error }
-                    try await copyToClipboard(text, context: context)
+                await complete(.clipboard, context: context, start: start)
+            case .type:
+                return await typeText(text, context: context, preserveClipboardOnFailure: false, start: start)
+            case .paste:
+                let result = await paste(text, context, target)
+                switch result {
+                case .dispatched: await complete(.pasteDispatched, context: context, start: start)
+                case .uncertain: await complete(.uncertain, context: context, start: start)
+                case .cancelled: await complete(.cancelled, context: context, start: start)
+                case .clipboardChanged:
+                    await complete(.uncertain, context: context, start: start)
                     await MainActor.run {
-                        if !context.isCancelled { context.completionNotice = DeliveryCopy.forOutcome(.clipboard)?.message }
+                        if !context.isCancelled { context.completionNotice = DeliveryCopy.clipboardOwnershipChanged.message }
                     }
-                    outcome = .clipboard
+                case .unsafeSnapshot, .notDispatched:
+                    try checkActive(context)
+                    if selectedMode == .automatic {
+                        let refreshed = await currentTarget()
+                        try checkActive(context)
+                        let trusted = await MainActor.run { accessibilityTrusted() }
+                        try checkActive(context)
+                        if canFallbackToTyping(mode: selectedMode, pasteResult: result,
+                            eventDispatched: context.deliveryEventStarted, target: target,
+                            current: refreshed, accessibilityTrusted: trusted) {
+                            return await typeText(text, context: context,
+                                preserveClipboardOnFailure: true, start: start)
+                        }
+                    }
+                    return .suspend(ErrorRecoveryContext(failedStage: name,
+                        error: result == .unsafeSnapshot ? InjectionStageError.clipboardSnapshotIncomplete : .pasteNotDispatched,
+                        rawText: text, retryable: false))
                 }
             }
-            // An effect may complete just as cancellation arrives; keep the honest
-            // terminal result on the old context, whose UI is already invalidated.
-            await complete(outcome, context: context, start: start)
             return .complete
         } catch {
             // A cancelled duplicate invocation does not own the live attempt.
             if !ownsAttempt, await context.deliveryAttempted { return .complete }
-            let outcome: DeliveryOutcome = context.deliveryEffectStarted ? .uncertain : .cancelled
+            let outcome: DeliveryOutcome = context.deliveryEventStarted ? .uncertain : .cancelled
             await complete(outcome, context: context, start: start)
             if outcome == .uncertain { return .complete }
             return .suspend(ErrorRecoveryContext(failedStage: name, error: error, rawText: text, retryable: false))
+        }
+    }
+
+    private func typeText(_ text: String, context: SessionContext,
+                          preserveClipboardOnFailure: Bool, start: Date) async -> StageResult {
+        do {
+            try checkActive(context)
+            try await inject(text, context)
+            try checkActive(context)
+            guard context.deliveryEventStarted else { throw InjectionError.noEventsDispatched }
+            await complete(.typedDispatched, context: context, start: start)
+            return .complete
+        } catch {
+            if context.deliveryEventStarted {
+                await complete(.uncertain, context: context, start: start)
+                return .complete
+            }
+            do {
+                try checkActive(context)
+                if error is CancellationError { throw error }
+                // The paste transaction protected this board. Failure before the
+                // fallback's first pair must not replace it with recovery text.
+                if preserveClipboardOnFailure {
+                    return .suspend(ErrorRecoveryContext(failedStage: name,
+                        error: error, rawText: text, retryable: false))
+                }
+                try await copyToClipboard(text, context: context)
+                await MainActor.run {
+                    if !context.isCancelled { context.completionNotice = DeliveryCopy.forOutcome(.clipboard)?.message }
+                }
+                await complete(.clipboard, context: context, start: start)
+                return .complete
+            } catch {
+                await complete(.cancelled, context: context, start: start)
+                return .suspend(ErrorRecoveryContext(failedStage: name,
+                    error: error, rawText: text, retryable: false))
+            }
         }
     }
 
@@ -164,10 +186,10 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
         guard !context.isCancellationRequested else { throw CancellationError() }
     }
 
-    private func copyToClipboard(_ text: String, context: SessionContext, afterPastePreparation: Bool = false) async throws {
+    private func copyToClipboard(_ text: String, context: SessionContext) async throws {
         try checkActive(context)
         let copied = await MainActor.run {
-            guard !Task.isCancelled, (!context.deliveryEffectStarted || afterPastePreparation) else { return false }
+            guard !Task.isCancelled, !context.deliveryEffectStarted else { return false }
             return context.performDeliveryEffect { copy(text) }
         }
         guard copied else { throw CancellationError() }

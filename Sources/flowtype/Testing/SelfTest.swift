@@ -283,6 +283,7 @@ enum SelfTest {
         print("=== FlowType --self-test ===")
         if CommandLine.arguments.contains("--m3-delivery-only") {
             M3DeliverySelfTests.policy(r)
+            await M3DeliverySelfTests.runtime(r)
             print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
             exit(r.failed == 0 ? 0 : 1)
         }
@@ -420,6 +421,7 @@ enum SelfTest {
         await testClipboardTransactions(r)
         testDeliveryPersistence(r)
         M3DeliverySelfTests.policy(r)
+        await M3DeliverySelfTests.runtime(r)
         await testDeliveryModeStage(r)
         await testDeliveryContract(r)
         await testStageOwnership(r) // actual async wrapper, before/during cancellation
@@ -827,6 +829,7 @@ enum SelfTest {
         afterInject.deliveryTarget = DeliveryTargetSnapshot(pid: 42)
         let cancelledDuringInject = InjectionStage(settle: {}, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: false, focus: .blindOrUnknown) },
             inject: { _, context in await context.cancel(); throw LLMError.invalidResponse },
+            mode: { .unicode },
             copy: { text in events.append(text) })
         _ = await cancelledDuringInject.execute(payload: .polished("禁止回退。", raw: "禁止回退"), context: afterInject)
         r.eq(events.value, [], "injection: cancellation during keyboard await prevents clipboard fallback")
@@ -837,7 +840,7 @@ enum SelfTest {
             inject: { _, context in
                 try KeyboardInjector.postIfActive(context: context) { partialEvents.append("first-event") }
                 throw InjectionError.eventCreationFailed
-            }, copy: { _ in partialEvents.append("duplicate-clipboard") })
+            }, mode: { .unicode }, copy: { _ in partialEvents.append("duplicate-clipboard") })
         _ = await partialStage.execute(payload: .polished("不可重复。", raw: "不可重复"), context: partial)
         r.eq(partialEvents.value, ["first-event"], "delivery contract: partial dispatch must never duplicate to clipboard")
         r.eq(partial.deliveryOutcome, .uncertain, "delivery: failed partial dispatch is uncertain, never confirmed")
@@ -873,7 +876,7 @@ enum SelfTest {
             let events = DeliveryLog()
             let stage = InjectionStage(settle: {}, accessibilityTrusted: { true }, currentTarget: { current }, inject: { _, ctx in
                 try KeyboardInjector.postIfActive(context: ctx) { events.append("typed") }
-            }, copy: { _ in events.append("copied") })
+            }, mode: { .unicode }, copy: { _ in events.append("copied") })
             _ = await stage.execute(payload: .polished("交付。", raw: "交付"), context: context)
             _ = await stage.execute(payload: .polished("交付。", raw: "交付"), context: context)
             r.eq(context.deliveryOutcome, expected, "delivery stage: target validation propagates explicit outcome")
@@ -934,7 +937,7 @@ enum SelfTest {
                 }
                 await ctx.cancel()
                 try KeyboardInjector.postIfActive(context: ctx) { events.append("forbidden") }
-            }, copy: { _ in events.append("duplicate") })
+            }, mode: { .unicode }, copy: { _ in events.append("duplicate") })
             _ = await stage.execute(payload: .polished("交付。", raw: "交付"), context: context)
             r.eq(events.value, afterFirstEvent ? ["first"] : [], "delivery: cancellation gates each actual event and forbids fallback")
             r.eq(context.deliveryOutcome, afterFirstEvent ? .uncertain : .cancelled,
@@ -947,7 +950,7 @@ enum SelfTest {
             try KeyboardInjector.postIfActive(context: ctx) { taskEvents.append("first") }
             withUnsafeCurrentTask { $0?.cancel() }
             try KeyboardInjector.postIfActive(context: ctx) { taskEvents.append("forbidden") }
-        }, copy: { _ in taskEvents.append("duplicate") })
+        }, mode: { .unicode }, copy: { _ in taskEvents.append("duplicate") })
         let taskCancelledDelivery = Task {
             await taskCancelledStage.execute(payload: .polished("交付。", raw: "交付"), context: taskCancelledContext)
         }
@@ -961,7 +964,7 @@ enum SelfTest {
             let started = ctx.deliveryEffectStarted
             if started { throw InjectionError.noEventsDispatched }
             throw InjectionError.eventCreationFailed
-        }, copy: { _ in fallback.append("copied") })
+        }, mode: { .unicode }, copy: { _ in fallback.append("copied") })
         _ = await failing.execute(payload: .polished("交付。", raw: "交付"), context: beforeFirstEvent)
         r.eq(beforeFirstEvent.deliveryOutcome, .clipboard, "delivery: pre-event failure permits clipboard fallback")
         r.eq(fallback.value, ["copied"], "delivery: preparation does not consume first effect latch")
@@ -4717,16 +4720,16 @@ extension SelfTest {
     }
 
     @MainActor static func testDeliveryModeStage(_ r: Reporter) async {
-        r.eq(Configuration().deliveryMode, .unicode, "delivery mode: Unicode remains default")
+        r.eq(Configuration().deliveryMode, .automatic, "delivery mode: automatic is the production default")
         let legacy = try? JSONDecoder().decode(Configuration.self, from: Data("{}".utf8))
-        r.eq(legacy?.deliveryMode, .unicode, "delivery mode: old configuration defaults Unicode")
+        r.eq(legacy?.deliveryMode, .automatic, "delivery mode: missing old configuration mode defaults automatic")
         var config = Configuration(); config.deliveryMode = .pasteInSupportedApps
         let encoded = try? JSONEncoder().encode(config)
         let decoded = encoded.flatMap { try? JSONDecoder().decode(Configuration.self, from: $0) }
         r.eq(decoded?.deliveryMode, .pasteInSupportedApps, "delivery mode: opt-in persists")
         for id in ["com.apple.TextEdit", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.google.Chrome", "com.apple.Safari", "com.microsoft.edgemac"] {
             r.check(DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: id), "delivery mode: explicit candidate \(id)")
-            r.check(!DeliveryMode.unicode.usesPaste(bundleID: id), "delivery mode: default never pastes")
+            r.check(!DeliveryMode.unicode.usesPaste(bundleID: id), "delivery mode: explicit Unicode never pastes")
         }
         r.check(!DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: "com.apple.Terminal"), "delivery mode: unknown apps keep Unicode")
         r.check(!DeliveryMode.pasteInSupportedApps.usesPaste(bundleID: nil), "delivery mode: missing identity keeps Unicode")

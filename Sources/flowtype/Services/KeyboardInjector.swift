@@ -129,7 +129,7 @@ struct KeyboardInjector {
     static func postIfActive(context: SessionContext?, action: () -> Void) throws {
         try Task.checkCancellation()
         if let context {
-            guard context.performDeliveryEffect(action) else { throw CancellationError() }
+            guard context.performDeliveryEvent(action) else { throw CancellationError() }
         } else { action() }
         try Task.checkCancellation()
     }

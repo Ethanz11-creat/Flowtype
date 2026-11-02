@@ -13,10 +13,11 @@ extension SettingsPage {
             }
 
             Picker("文字交付方式", selection: $store.current.deliveryMode) {
-                Text("Unicode 键入（默认）").tag(DeliveryMode.unicode)
-                Text("候选应用粘贴（实验）").tag(DeliveryMode.pasteInSupportedApps)
+                Text("自动（推荐）").tag(DeliveryMode.automatic)
+                Text("仅键入（兼容）").tag(DeliveryMode.unicode)
+                Text("旧版候选应用模式").tag(DeliveryMode.pasteInSupportedApps)
             }
-            Text("实验候选：TextEdit、VS Code、Cursor、Chrome、Safari、Edge；其他应用使用键入。候选目录不代表已完成真机验证。")
+            Text("自动模式优先粘贴，确认未发送且目标可编辑时尝试键入。旧版候选：TextEdit、VS Code、Cursor、Chrome、Safari、Edge；其他应用使用键入。候选目录不代表已完成真机验证。")
                 .font(.system(size: 11)).foregroundColor(.secondary)
 
             Toggle("停止后自动整理", isOn: $store.current.polishOnStop)
