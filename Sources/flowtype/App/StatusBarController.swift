@@ -58,6 +58,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
     private var statusMenuItem: NSMenuItem?
     private var sessionCancellable: AnyCancellable?
     private var readinessCancellable: AnyCancellable?
+    private var settingsChangeCoordinator: SettingsChangeCoordinator?
     private var dictationMenuController: DictationMenuController?
     private var lastDeliveryMenuController: LastDeliveryMenuController?
     private var originalStatusImage: NSImage?
@@ -73,6 +74,11 @@ class StatusBarController: NSObject, NSMenuDelegate {
 
     func setup() {
         guard statusItem == nil else { return }
+        let settingsCoordinator = SettingsChangeCoordinator(store: ConfigurationStore.shared) {
+            WindowManager.shared.reloadHotkey()
+        }
+        settingsChangeCoordinator = settingsCoordinator
+        settingsCoordinator.startObserving()
         let statusBar = NSStatusBar.system
         statusItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -222,6 +228,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
     func finishValidation() {
         guard RuntimeEnvironment.current.role != .app else { return }
         sessionCancellable = nil; readinessCancellable = nil
+        settingsChangeCoordinator = nil
         dictationMenuController = nil; lastDeliveryMenuController = nil
         statusItem?.menu?.delegate = nil
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
@@ -325,8 +332,6 @@ class StatusBarController: NSObject, NSMenuDelegate {
            let config = try? JSONDecoder().decode(Configuration.self, from: data) {
             ConfigurationStore.shared.current = config
         }
-        WindowManager.shared.reloadHotkey()
-
         if let button = statusItem?.button {
             let originalTitle = button.title
             button.title = "已重新加载"

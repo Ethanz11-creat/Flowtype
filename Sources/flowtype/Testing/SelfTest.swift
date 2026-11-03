@@ -290,7 +290,7 @@ enum SelfTest {
         let r = Reporter()
         print("=== FlowType --self-test ===")
         if CommandLine.arguments.contains("--native-client-only") {
-            NativeClientSelfTests.run(r)
+            await NativeClientSelfTests.run(r)
             print("=== Native client self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -399,7 +399,7 @@ enum SelfTest {
             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
-        NativeClientSelfTests.run(r)
+        await NativeClientSelfTests.run(r)
         await M5RuntimeSelfTests.run(r)
         await M5IsolationSelfTests.run(r)
         await M5BuildInfoSelfTests.run(r)

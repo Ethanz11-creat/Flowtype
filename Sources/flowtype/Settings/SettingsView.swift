@@ -4,7 +4,6 @@ import SwiftUI
 
 struct SettingsPage: View {
     @ObservedObject var store = ConfigurationStore.shared
-    @State var showSaved = false
     @State var hasAccessibility = false
     @State var availableDevices: [AudioDevice] = []
     @State var selectedDeviceUnavailable: Bool = false
@@ -25,6 +24,9 @@ struct SettingsPage: View {
                             .font(Theme.Typography.pageTitle)
                         Text("配置语音识别与文本润色服务")
                             .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        Text("更改会自动保存")
+                            .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
                     Spacer()
@@ -61,36 +63,6 @@ struct SettingsPage: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 hasAccessibility = PermissionHelper.checkAccessibility()
-            }
-        }
-        .onChange(of: store.current) { _, _ in
-            store.save(store.current)
-            WindowManager.shared.reloadHotkey()
-            withAnimation(.easeInOut(duration: 0.2)) {
-                showSaved = true
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    showSaved = false
-                }
-            }
-        }
-        .overlay(alignment: .top) {
-            if showSaved {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12))
-                    Text("设置已自动保存")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.green.opacity(0.9))
-                .clipShape(Capsule())
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
-                .padding(.top, 12)
-                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
         .sheet(isPresented: $showAddProvider) {
