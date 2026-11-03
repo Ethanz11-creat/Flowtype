@@ -78,6 +78,12 @@ struct SessionEffects {
 final class SessionController: ObservableObject {
     static let shared = SessionController()
 
+    private let purpose: SessionPurpose
+    private let resources: SessionResourceCoordinator
+    private let resourceOwner = UUID()
+    private var resourceLease: SessionResourceLease?
+    private var startAttempt: UUID?
+
     private let pipeline: [PipelineStage]
     private let observers: [SessionObserver]
     private let recoveryEffects: RecoveryEffects
@@ -175,8 +181,12 @@ final class SessionController: ObservableObject {
         readinessLevel: @escaping @MainActor @Sendable () -> ReadinessLevel = {
             ReadinessMonitor.shared.refresh()
             return ReadinessMonitor.shared.rawLevel
-        }
+        },
+        purpose: SessionPurpose = .dictation,
+        resources: SessionResourceCoordinator = .shared
     ) {
+        self.purpose = purpose
+        self.resources = resources
         self.pipeline = pipeline
         self.observers = observers
 
@@ -185,7 +195,14 @@ final class SessionController: ObservableObject {
         self.configurationStore = configurationStore
         self.refreshReadiness = refreshReadiness
         self.readinessLevel = readinessLevel
-        effects.prepare()
+        if purpose == .dictation { effects.prepare() }
+    }
+
+    deinit {
+        currentTask?.cancel()
+        let lease = resourceLease
+        let context = currentContext
+        Task { @MainActor in context?.cancel(); lease?.end() }
     }
 
     // MARK: - Public API
@@ -201,6 +218,18 @@ final class SessionController: ObservableObject {
             AppLogger.log("[SessionController#\(newID)] REJECTED: state=\(sessionState)")
             return
         }
+
+        guard startAttempt == nil else { return }
+        let attempt = UUID()
+        startAttempt = attempt
+        guard let token = resources.acquire(owner: resourceOwner) else {
+            startAttempt = nil
+            presentResourceBusy()
+            return
+        }
+        guard startAttempt == attempt else { resources.release(token: token); return }
+        startAttempt = nil
+        resourceLease = SessionResourceLease(token: token, resources: resources)
 
         errorDismissTask?.cancel()
         errorDismissTask = nil
@@ -288,7 +317,7 @@ final class SessionController: ObservableObject {
     }
 
     func endRecording() {
-        OptionTapDetector.shared.cancelPendingTaps()
+        if purpose == .dictation { OptionTapDetector.shared.cancelPendingTaps() }
         let withPolish = configurationStore.current.polishOnStop
         AppLogger.log("[SessionController#\(activeSessionID)] endRecording called, withPolish=\(withPolish)")
 
@@ -316,8 +345,10 @@ final class SessionController: ObservableObject {
         // Stages derive their own bounded timeout from this snapshot.
         context.completionBudget = CompletionBudget(seconds: 20)
         context.stopRecordingAt = Date()
-        context.targetApp = NSWorkspace.shared.frontmostApplication
-        context.captureDeliveryTarget(pid: context.targetApp?.processIdentifier)
+        if purpose == .dictation {
+            context.targetApp = NSWorkspace.shared.frontmostApplication
+            context.captureDeliveryTarget(pid: context.targetApp?.processIdentifier)
+        }
 
         currentTask?.cancel()
         currentTask = nil
@@ -328,6 +359,7 @@ final class SessionController: ObservableObject {
 
     func cancel() {
         AppLogger.log("[SessionController#\(activeSessionID)] cancel called, state=\(sessionState)")
+        startAttempt = nil
         let cancelledSessionID = activeSessionID
         let cancelledContext = currentContext
         cancelledContext?.cancel(recordPendingDelivery: cancelledContext?.sessionID == activeSessionID)
@@ -364,6 +396,7 @@ final class SessionController: ObservableObject {
                   !context.deliveryEventStarted,
                   recoveryPresentation(recovery, payload: payload, index: index, context: context).actions.contains(action)
             else { return }
+            guard acquireRetryResource(context: context) else { return }
             clearSuspension()
             context.completionBudget = CompletionBudget(seconds: 20)
             context.realtimeResult = nil
@@ -464,7 +497,7 @@ final class SessionController: ObservableObject {
     // MARK: - Orchestration
 
     private func executeStage(at index: Int, payload: StagePayload, context: SessionContext) {
-        guard ownsActiveContext(context) else {
+        guard ownsActiveContext(context), let lease = resourceLease, lease.isActive else {
             AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, aborting pipeline")
             return
         }
@@ -482,11 +515,13 @@ final class SessionController: ObservableObject {
                   ownsActiveContext(context) else { return }
         }
 
-        let task = Task { [weak self] in
-            guard let self else { return }
+        guard ownsActiveContext(context), resourceLease === lease, lease.enterStage() else { return }
+        let task = Task { [weak self, lease] in
             let result = await stage.executeIfOwned(payload: payload, context: context)
+            lease.leaveStage()
 
-            guard self.ownsActiveContext(context) else {
+            guard let self, self.resourceLease === lease, lease.isActive,
+                  self.ownsActiveContext(context) else {
                 AppLogger.log("[SessionController] Session \(context.sessionID) no longer active, ignoring stage result")
                 return
             }
@@ -586,6 +621,11 @@ final class SessionController: ObservableObject {
         stateValue = newState
         presentationGeneration &+= 1
         let generation = presentationGeneration
+        switch newState {
+        case .idle, .notice, .error: endResourceOwnership()
+        default: break
+        }
+        guard presentationGeneration == generation else { return false }
         if newState.showPanel { effects.showWindow() }
         guard presentationGeneration == generation else { return false }
         for observer in observers {
@@ -719,6 +759,7 @@ final class SessionController: ObservableObject {
     /// Publish only while this context owns the lifecycle. Cancellation may keep
     /// its existing uncertain recovery result, but a late stage cannot publish.
     private func recordLastDelivery(context: SessionContext) {
+        guard purpose == .dictation else { return }
         guard activeSessionID == context.sessionID, currentContext === context,
               let outcome = context.deliveryOutcome, outcome.isTerminalDelivery,
               !context.isCancelled || (context.deliveryEffectStarted && outcome == .uncertain) else { return }
@@ -758,7 +799,7 @@ final class SessionController: ObservableObject {
 
     @discardableResult
     private func saveHistory(context: SessionContext) -> Bool {
-        guard context.claimHistorySave() else { return false }
+        guard purpose == .dictation, context.claimHistorySave() else { return false }
         if let saveHistory = effects.saveHistory { saveHistory(context); return true }
         let durationMs: UInt64?
         if let recStart = context.recordingStartTime {
@@ -858,7 +899,8 @@ final class SessionController: ObservableObject {
     // MARK: - Reset
 
     private func resetToIdle() {
-        OptionTapDetector.shared.cancelPendingTaps()
+        startAttempt = nil
+        if purpose == .dictation { OptionTapDetector.shared.cancelPendingTaps() }
         currentContext?.cancel()
         stateValue = .idle
         activeSessionID = 0
@@ -876,6 +918,8 @@ final class SessionController: ObservableObject {
         errorDismissTask = nil
         stopRecordingTimer()
         let generation = presentationGeneration
+        endResourceOwnership()
+        guard presentationGeneration == generation else { return }
         preparationNotice = nil
         guard presentationGeneration == generation else { return }
         spectrum = []
@@ -886,6 +930,53 @@ final class SessionController: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    private func endResourceOwnership() {
+        let lease = resourceLease
+        resourceLease = nil
+        lease?.end()
+    }
+
+    private static let resourceBusyMessage = "未开始录音：资源正在使用或收尾，请稍后再试"
+    var resourceBusyNotice: String? { preparationNotice == Self.resourceBusyMessage ? preparationNotice : nil }
+
+    private func presentResourceBusy() {
+        let message = Self.resourceBusyMessage
+        let generation = presentationGeneration
+        preparationNotice = message
+        guard presentationGeneration == generation else { return }
+        switch sessionState {
+        case .idle, .notice:
+            transition(to: .notice(message), context: SessionContext(sessionID: 0))
+        case .error:
+            // Preserve retained audio, card identity and retry authority.
+            effects.showWindow()
+        default: break
+        }
+    }
+
+    private func acquireRetryResource(context: SessionContext) -> Bool {
+        let generation = presentationGeneration
+        guard let token = resources.acquire(owner: resourceOwner) else {
+            presentResourceBusy()
+            return false
+        }
+        guard ownsActiveContext(context), presentationGeneration == generation else {
+            resources.release(token: token); return false
+        }
+        let lease = SessionResourceLease(token: token, resources: resources)
+        resourceLease = lease
+        preparationNotice = nil
+        return ownsActiveContext(context) && presentationGeneration == generation && resourceLease === lease
+    }
+
+    var ownsRecordingResource: Bool { resourceLease?.isActive == true }
+
+    /// Scoped result identity for the trial presenter, never a process-wide event.
+    var currentSessionIdentifier: UInt64? {
+        guard let context = currentContext, ownsActiveContext(context) else { return nil }
+        return context.sessionID
+    }
 
     private func ownsActiveContext(_ context: SessionContext) -> Bool {
         activeSessionID == context.sessionID && currentContext === context && !context.isCancelled

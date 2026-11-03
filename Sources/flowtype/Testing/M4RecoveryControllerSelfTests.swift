@@ -23,7 +23,7 @@ enum M4RecoveryControllerSelfTests {
                     rawText: nil, retryable: kind == .transientASR, failureKind: kind))
             })], observers: [], effects: .init(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in }),
             recoveryEffects: Fixture(configuration).recovery,
-            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
             controller.startRecording()
             await wait { calls == 1 }
             r.check({ if case .error = controller.sessionState { return true }; return false }(), "M4 controller: \(kind) remains actionable error")
@@ -36,6 +36,7 @@ enum M4RecoveryControllerSelfTests {
         await ownership(r, configuration)
         await readiness(r, configuration)
         await retries(r, configuration)
+        await retryResourceContention(r, configuration)
         await terminal(r, configuration)
         await capturedResources(r, configuration)
         await historyReentrancy(r, configuration)
@@ -57,6 +58,7 @@ enum M4RecoveryControllerSelfTests {
 extension M4RecoveryControllerSelfTests {
     @MainActor private final class Fixture {
         let configuration: ConfigurationStore
+        let resources = SessionResourceCoordinator()
         var contexts: [SessionContext] = []
         var events: [String] = []
         var copied: [String] = []
@@ -82,7 +84,7 @@ extension M4RecoveryControllerSelfTests {
                 showWindow: { self.windows.append("show") }, hideWindow: { self.windows.append("hide") },
                 saveHistory: { self.histories.append($0.sessionID); self.onHistory?() }), recoveryEffects: recovery,
                 configurationStore: configuration, refreshReadiness: { self.refreshes += 1; self.onRefresh?(); return self.level },
-                readinessLevel: { self.level })
+                readinessLevel: { self.level }, resources: resources)
         }
         func capture(_ result: StageResult) -> Stage {
             Stage(name: "Recording", run: { _, context in
@@ -206,6 +208,44 @@ extension M4RecoveryControllerSelfTests {
             requests.withLock { $0.append(request) }
             throw error
         }
+    }
+
+    @MainActor private static func retryResourceContention(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) async {
+        let f = Fixture(configuration), provider = Provider(CloudASRError.timeout)
+        let route = ASRRouteSnapshot(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
+            localAvailable: false, cloudAvailable: true, cloudConfiguration: nil)
+        let capture = Stage(name: "Recording", run: { _, context in
+            f.contexts.append(context); context.captureRoute = route
+            return .continue(.audio(samples: [0.5, -0.25], previewText: ""))
+        })
+        let asr = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider }, phrases: { [] })
+        let c = f.controller([capture, asr])
+        c.startRecording()
+        await wait { c.recoveryCard != nil && f.resources.owner == nil }
+        guard let card = c.recoveryCard else { r.check(false, "M4 contention: retained audio recovery exists"); return }
+        let barrier = AsyncStream<Void>.makeStream()
+        let trial = SessionController(pipeline: [Stage(name: "Trial", run: { _, context in
+            context.markReady()
+            for await _ in barrier.stream {}
+            return .complete
+        })], observers: [], effects: .init(prepare: {}, showWindow: {}, hideWindow: {}),
+            recoveryEffects: f.recovery, configurationStore: configuration,
+            refreshReadiness: { .ready }, readinessLevel: { .ready }, purpose: .trial, resources: f.resources)
+        trial.startRecording()
+        await wait { trial.isRecording }
+        c.retryFailedStage()
+        r.eq(c.recoveryCard, card, "M4 contention: busy retry preserves card identity and actions")
+        r.eq(provider.requests.withLock { $0.count }, 1, "M4 contention: busy retry makes no ASR call")
+        r.check(c.preparationNotice?.contains("未开始录音") == true, "M4 contention: busy retry exposes visible explanation")
+        r.check(f.contexts.first?.isCancelled == false, "M4 contention: retained audio context remains valid")
+        trial.cancel(); barrier.continuation.finish()
+        await wait { f.resources.owner == nil }
+        c.retryFailedStage()
+        await wait { provider.requests.withLock { $0.count } == 2 && c.recoveryCard != nil }
+        r.eq(provider.requests.withLock { $0.count }, 2, "M4 contention: explicit retry reacquires after competing drain")
+        r.eq(f.contexts.count, 1, "M4 contention: retry reuses audio without recapture")
+        r.check((f.contexts.first?.completionBudget?.remainingSeconds ?? 0) > 19, "M4 contention: retry retains fresh 20 second budget")
+        c.cancel()
     }
 
     @MainActor private static func retries(_ r: SelfTest.Reporter, _ configuration: ConfigurationStore) async {
@@ -427,6 +467,12 @@ extension M4RecoveryControllerSelfTests {
                 c.startRecording()
             }
             c.startRecording()
+            if cancelDuringPaste {
+                await wait { !f.histories.isEmpty && f.resources.owner == nil }
+                r.eq(f.contexts.count, 1, "M4 history reentrancy: cancel inside delivery blocks restart until stage drains")
+                r.check(c.preparationNotice?.contains("收尾") == true, "M4 history reentrancy: blocked restart explains drain")
+                c.startRecording()
+            }
             await wait { f.contexts.count == 2 && c.recoveryCard?.presentation.kind == .permission(.microphone) }
             r.eq(f.contexts.count, 2, "M4 history reentrancy \(cancelDuringPaste): fresh capture survives old completion")
             r.eq(c.recoveryCard?.presentation.kind, .permission(.microphone), "M4 history reentrancy \(cancelDuringPaste): newer card survives")
@@ -475,6 +521,13 @@ extension M4RecoveryControllerSelfTests {
             }
             c.startRecording()
             await wait { fired }
+            if explicitCancel {
+                await wait { f.resources.owner == nil }
+                r.eq(f.contexts.count, 1, "M4 summary subscriber: no capture starts inside cancelled delivery")
+                r.check(c.preparationNotice?.contains("收尾") == true, "M4 summary subscriber: restart waits for stage drain")
+                c.startRecording()
+                newerCard = c.recoveryCard
+            }
             for _ in 0..<10 { await Task.yield() }
             let label = "M4 summary subscriber \(explicitCancel ? "cancel" : "finish")"
             r.eq(summaries.count, 1, "\(label): once-only synchronous summary publication")

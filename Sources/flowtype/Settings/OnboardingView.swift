@@ -357,11 +357,6 @@ struct OnboardingView: View {
             Text("试一试")
                 .font(.system(size: 20, weight: .bold))
 
-            Text("双击 \(store.current.triggerKey.symbolName) 开始录音，说一句话试试。")
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
             HStack(spacing: 8) {
                 Text(ImportedASRModelPresentation.availability(modelState.activeLease?.identity))
                     .font(.system(size: 11)).foregroundColor(.secondary)
@@ -377,43 +372,7 @@ struct OnboardingView: View {
                 .controlSize(.small).disabled(modelState.operationID != nil)
                 .sheet(isPresented: $showsModelLibrary) { ImportedASRModelLibrarySheet(store: store, coordinator: modelState, actions: importedActions) }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("录音结果会显示在这里：")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-
-                TextEditor(text: $demoText)
-                    .font(.system(size: 14))
-                    .padding(8)
-                    .frame(height: 120)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(nsColor: .textBackgroundColor))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                    )
-            }
-
-            HStack(spacing: 12) {
-                if isRecording {
-                    HStack(spacing: 6) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 12))
-                            .foregroundColor(.red)
-                        Text("正在录音...")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.red.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-
-                Spacer()
-            }
+            TrialSessionView(presenter: trialPresenter)
 
             Spacer()
 
@@ -434,37 +393,13 @@ struct OnboardingView: View {
                 .tint(Brand.accent)
             }
         }
-        .onAppear {
-            setupDemo()
-        }
-        .onDisappear {
-            teardownDemo()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .onboardingDemoTextReceived)) { notification in
-            if let text = notification.object as? String {
-                demoText = text
-            }
-        }
     }
 
-    @State private var demoText: String = ""
-    @StateObject private var demoSession = SessionController(
-        pipeline: OnboardingPipeline.makeStages()
-    )
-
-    private var isRecording: Bool {
-        if case .recording = demoSession.sessionState { return true }
-        return false
-    }
-
-    private func setupDemo() {
-        // demoSession uses OnboardingPipeline which posts notifications
-        // via DemoInjectionStage. No additional setup needed.
-    }
-
-    private func teardownDemo() {
-        OnboardingPipeline.cancelDemo(demoSession)
-    }
+    @StateObject private var trialPresenter = TrialSessionPresenter(
+        configuration: .shared, resources: .shared,
+        refreshReadiness: { ReadinessMonitor.shared.refresh(); return ReadinessMonitor.shared.rawLevel },
+        readinessLevel: { ReadinessMonitor.shared.refresh(); return ReadinessMonitor.shared.rawLevel },
+        copy: { KeyboardInjector.copyText($0) })
 
     private func completeOnboarding(startModel: Bool = true) {
         store.current.hasCompletedOnboarding = true

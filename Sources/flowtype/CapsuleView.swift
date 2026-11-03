@@ -108,7 +108,7 @@ struct CapsuleView: View {
         case .notice:
             return ""
         case .error(let msg):
-            return msg
+            return session.resourceBusyNotice ?? msg
         }
     }
 

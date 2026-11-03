@@ -1,53 +1,25 @@
 import Foundation
 
-// MARK: - Notification Names
-
-extension Notification.Name {
-    /// Posted when the onboarding demo receives final text from the pipeline.
-    /// The `object` is the text string.
-    static let onboardingDemoTextReceived = Notification.Name("onboardingDemoTextReceived")
-}
-
-// MARK: - OnboardingPipeline
-
-/// Provides a pipeline configuration for the onboarding demo step.
-///
-/// The demo replaces the standard `InjectionStage` with `DemoInjectionStage`,
-/// which delivers the final text via `NotificationCenter` instead of injecting
-/// it into the active application.
+/// Reuse capture/ASR/processing/polish, with delivery scoped to one presenter.
 enum OnboardingPipeline {
     @MainActor
-    static func cancelDemo(_ session: SessionController) {
-        session.cancel()
-    }
+    static func cancelDemo(_ session: SessionController) { session.cancel() }
 
-    static func makeStages() -> [PipelineStage] {
-        var stages = PipelineRegistry.defaultPipeline()
-        if let idx = stages.firstIndex(where: { $0 is InjectionStage }) {
-            stages[idx] = DemoInjectionStage()
-        }
-        return stages
+    static func makeStages(onResult: @escaping @MainActor @Sendable (UInt64, String) -> Void) -> [PipelineStage] {
+        [RecordingStage(), ASRStage(), PostProcessStage(), PolishStage(), DemoInjectionStage(onResult: onResult)]
     }
 }
 
-// MARK: - DemoInjectionStage
-
-/// Pipeline stage that delivers text via NotificationCenter instead of injecting into the active app.
-///
-/// Input: `.polished(String, raw: String)`
-/// Output: `.complete`
 struct DemoInjectionStage: PipelineStage {
     var name: String { "DemoInjectionStage" }
+    let onResult: @MainActor @Sendable (UInt64, String) -> Void
 
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
         guard case .polished(let text, _) = payload else { return .continue(payload) }
-
-        // Reserve and notify without an actor hop between the cancellation gate
-        // and side effect. Do not hold a lock while calling reentrant observers.
         await MainActor.run {
             guard !Task.isCancelled, context.beginDeliveryAttempt() else { return }
             guard context.performDeliveryEffect({}) else { context.finishDelivery(.cancelled); return }
-            NotificationCenter.default.post(name: .onboardingDemoTextReceived, object: text)
+            onResult(context.sessionID, text)
             context.finishDelivery(.typedDispatched)
         }
         return .complete

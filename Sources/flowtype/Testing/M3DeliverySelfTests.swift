@@ -514,7 +514,7 @@ extension M3DeliverySelfTests {
             return await action(context)
         }], observers: [], effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
             saveHistory: { [weak self] context in self?.saved.append(context.sessionID) }),
-            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
 
         init(configuration: ConfigurationStore) { self.configuration = configuration }
 

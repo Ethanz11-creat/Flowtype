@@ -627,11 +627,11 @@ enum SelfTest {
             openSpeechRecognitionSettings: {}, openASRSettings: {}, openHistory: {}, copyText: { _ in })
         let ledger = RetryLedger()
         let quietEffects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
-        let recovery = SessionController(pipeline: [RecoveryAudioStarter(ledger: ledger), retryASR(ledger: ledger)], observers: [], effects: quietEffects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+        let recovery = SessionController(pipeline: [RecoveryAudioStarter(ledger: ledger), retryASR(ledger: ledger)], observers: [], effects: quietEffects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         recovery.startRecording()
         await waitForSession(recovery) { if case .error = $0 { return true }; return false }
         let immediateLedger = RetryLedger()
-        let immediate = SessionController(pipeline: [RecoveryAudioStarter(ledger: immediateLedger), retryASR(ledger: immediateLedger)], observers: [], effects: quietEffects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+        let immediate = SessionController(pipeline: [RecoveryAudioStarter(ledger: immediateLedger), retryASR(ledger: immediateLedger)], observers: [], effects: quietEffects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         immediate.startRecording()
         await waitForSession(immediate) { if case .error = $0 { return true }; return false }
         immediate.retryFailedStage()
@@ -658,7 +658,7 @@ enum SelfTest {
         let delivery = InjectionStage(settle: {}, accessibilityTrusted: { true }, focus: { FocusSignals(secureInputActive: true, focus: .blindOrUnknown) },
                                      copy: { text in log.events.append("delivered:\(text)") })
         let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in log.events.append("history") })
-        let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+        let session = SessionController(pipeline: [ProcessedStarter(), failure, delivery], observers: [log], effects: effects, recoveryEffects: recoveryEffects, configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         session.startRecording()
         await waitForSession(session) { if case .notice = $0 { return true }; return $0 == .idle }
         r.eq(log.events, ["delivered:你好，世界。", "history", "notice"], "session: complete processed delivery precedes single history save and gentle notice")
@@ -1307,23 +1307,18 @@ enum SelfTest {
 
     @MainActor
     static func testOnboardingDemoDelivery(_ r: Reporter) async {
-        // Construct the real stage list but execute only its notification delivery
+        // Construct the real stage list but execute only its callback delivery
         // stage. This never starts capture/models or touches clipboard/CGEvent.
         let normal = PipelineRegistry.defaultPipeline()
-        let demo = OnboardingPipeline.makeStages()
+        let received = DeliveryLog()
+        let demo = OnboardingPipeline.makeStages { _, text in received.append(text) }
         r.eq(demo.map(\.name).dropLast(), normal.map(\.name).dropLast(),
              "onboarding: capture, recognition, processing and polish stages stay unchanged")
         r.check(!demo.contains { $0 is InjectionStage }, "onboarding: active-app injection is replaced")
         guard let delivery = demo.last as? DemoInjectionStage else {
-            r.check(false, "onboarding: final stage is demo notification delivery")
+            r.check(false, "onboarding: final stage is demo callback delivery")
             return
         }
-        let received = DeliveryLog()
-        let observer = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
-                                                              object: nil, queue: nil) { notification in
-            if let text = notification.object as? String { received.append(text) }
-        }
-        defer { NotificationCenter.default.removeObserver(observer) }
         let context = SessionContext(sessionID: 401)
         let intermediate = await delivery.execute(payload: .processed("中间文本", raw: "原文"), context: context)
         if case .continue(.processed(let text, _)) = intermediate {
@@ -1333,10 +1328,10 @@ enum SelfTest {
         r.check(!context.hasInjected, "onboarding: nonfinal payload does not claim delivery")
         let finalText = "完整结果 🧪\n第二行。"
         let result = await delivery.execute(payload: .polished(finalText, raw: "原始识别"), context: context)
-        if case .complete = result { r.check(true, "onboarding: final notification completes session") }
-        else { r.check(false, "onboarding: final notification completes session") }
+        if case .complete = result { r.check(true, "onboarding: final callback completes session") }
+        else { r.check(false, "onboarding: final callback completes session") }
         r.eq(received.value, [finalText], "onboarding: demo editor receives complete final text verbatim")
-        r.check(context.hasInjected, "onboarding: final notification claims terminal delivery")
+        r.check(context.hasInjected, "onboarding: final callback claims terminal delivery")
         _ = await delivery.execute(payload: .polished("重复结果", raw: "原始识别"), context: context)
         r.eq(received.value, [finalText], "onboarding: repeated completion cannot overwrite demo text")
     }
@@ -1361,17 +1356,12 @@ enum SelfTest {
     @MainActor
     static func testOnboardingDeliveryCancellation(_ r: Reporter) async {
         let received = DeliveryLog()
-        let observer = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
-                                                              object: nil, queue: nil) { notification in
-            if let text = notification.object as? String { received.append(text) }
-        }
-        defer { NotificationCenter.default.removeObserver(observer) }
-        let stage = DemoInjectionStage()
+        let stage = DemoInjectionStage { _, text in received.append(text) }
         let cancelled = SessionContext(sessionID: 402)
         cancelled.cancel()
         let beforeContextCancel = received.value.count
         _ = await stage.execute(payload: .polished("已取消", raw: "原文"), context: cancelled)
-        r.eq(received.value.count, beforeContextCancel, "onboarding delivery: cancelled context sends no notification")
+        r.eq(received.value.count, beforeContextCancel, "onboarding delivery: cancelled context sends no callback")
         r.check(!cancelled.hasInjected, "onboarding delivery: cancelled context does not reserve delivery")
         let taskContext = SessionContext(sessionID: 403)
         let beforeTaskCancel = received.value.count
@@ -1380,7 +1370,7 @@ enum SelfTest {
             _ = await stage.execute(payload: .polished("任务已取消", raw: "原文"), context: taskContext)
         }
         await task.value
-        r.eq(received.value.count, beforeTaskCancel, "onboarding delivery: cancelled task sends no notification")
+        r.eq(received.value.count, beforeTaskCancel, "onboarding delivery: cancelled task sends no callback")
         r.check(!taskContext.hasInjected, "onboarding delivery: cancelled task does not reserve delivery")
         let concurrent = SessionContext(sessionID: 404)
         let beforeConcurrent = received.value.count
@@ -1388,34 +1378,35 @@ enum SelfTest {
         async let second = stage.execute(payload: .polished("完整并发结果", raw: "原文"), context: concurrent)
         _ = await (first, second)
         r.eq(Array(received.value.dropFirst(beforeConcurrent)), ["完整并发结果"],
-             "onboarding delivery: concurrent stage calls notify exactly once")
+             "onboarding delivery: concurrent stage calls deliver exactly once")
         let reentrant = SessionContext(sessionID: 405)
-        let reentrantObserver = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
-                                                                       object: nil, queue: nil) { notification in
-            guard notification.object as? String == "observer cancels" else { return }
-            MainActor.assumeIsolated { reentrant.cancel() }
+        let reentrantStage = DemoInjectionStage { _, text in
+            received.append(text)
+            reentrant.cancel()
         }
-        defer { NotificationCenter.default.removeObserver(reentrantObserver) }
         let beforeReentrant = received.value.count
-        _ = await stage.execute(payload: .polished("observer cancels", raw: "raw"), context: reentrant)
+        _ = await reentrantStage.execute(payload: .polished("observer cancels", raw: "raw"), context: reentrant)
         r.check(reentrant.isCancelled, "onboarding delivery: observer can reenter cancellation without deadlock")
-        r.eq(received.value.count, beforeReentrant + 1, "onboarding delivery: reentrant observer sees only the reserved notification")
+        r.eq(received.value.count, beforeReentrant + 1, "onboarding delivery: reentrant observer sees only the reserved callback")
     }
 
     @MainActor
     static func testOnboardingDemoTeardown(_ r: Reporter) async {
+        let suite = "FlowTypeDemoTeardown.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let config = ConfigurationStore(defaults: defaults)
+        let recovery = RecoveryEffects(openAccessibilitySettings: {}, openMicrophoneSettings: {},
+            openSpeechRecognitionSettings: {}, openASRSettings: {}, openHistory: {}, copyText: { _ in })
         for state in [SessionState.preparing, .recording(elapsedSeconds: 0),
                       .processing(provider: "test"), .polishing(preview: "")] {
             let received = DeliveryLog()
-            let observer = NotificationCenter.default.addObserver(forName: .onboardingDemoTextReceived,
-                                                                  object: nil, queue: nil) { notification in
-                if let text = notification.object as? String { received.append(text) }
-            }
-            defer { NotificationCenter.default.removeObserver(observer) }
             let rendezvous = StageRendezvous()
             let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
             let session = SessionController(pipeline: [SuspendedDemoStage(state: state, rendezvous: rendezvous),
-                                                       DemoInjectionStage()], observers: [], effects: effects, readinessLevel: { .ready })
+                                                       DemoInjectionStage { _, text in received.append(text) }], observers: [], effects: effects, recoveryEffects: recovery, configurationStore: config,
+                                                       refreshReadiness: { .ready }, readinessLevel: { .ready }, purpose: .trial,
+                                                       resources: SessionResourceCoordinator())
             session.startRecording()
             await rendezvous.waitForInvocation()
             r.eq(session.sessionState, state, "onboarding teardown: exercise actual suspended state (\(state))")
@@ -1425,7 +1416,7 @@ enum SelfTest {
             await waitForSession(session) { $0 == .idle }
             // Allow the released old stage task to reach the real controller ownership gate.
             for _ in 0..<10 { await Task.yield() }
-            r.eq(received.value, [], "onboarding teardown: late completion sends no notification (\(state))")
+            r.eq(received.value, [], "onboarding teardown: late completion sends no callback (\(state))")
             session.cancel()
         }
     }
@@ -1485,7 +1476,7 @@ enum SelfTest {
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return readiness.level
-        }, readinessLevel: { .blocked(.microphoneDenied) })
+        }, readinessLevel: { .blocked(.microphoneDenied) }, resources: SessionResourceCoordinator())
         defer { session.cancel() }
         session.startRecording()
         await waitForSession(session) { if case .error = $0 { return true }; return false }
@@ -1506,7 +1497,7 @@ enum SelfTest {
                                         effects: effects, configurationStore: store, refreshReadiness: {
             readiness.policies.append(store.current.asrRoutingPolicy)
             return .blocked(.noEngine)
-        }, readinessLevel: { .blocked(.noEngine) })
+        }, readinessLevel: { .blocked(.noEngine) }, resources: SessionResourceCoordinator())
         defer { reroute.cancel() }
         reroute.startRecording()
         await waitForSession(reroute) { if case .error = $0 { return true }; return false }
@@ -1528,7 +1519,7 @@ enum SelfTest {
         let rendezvous = StageRendezvous()
         let active = SessionController(pipeline: [SuspensibleStage(rendezvous: rendezvous, suspend: true)],
                                        observers: [], effects: effects, configurationStore: store,
-                                       refreshReadiness: { .ready }, readinessLevel: { .ready })
+                                       refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         active.startRecording()
         await rendezvous.waitForInvocation()
         active.recheckReadiness()
@@ -1919,7 +1910,7 @@ enum SelfTest {
         let session = SessionController(pipeline: [SuspensibleStage(rendezvous: stage, suspend: true)],
                                         observers: [probe],
                                         effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
-                                        readinessLevel: { .ready })
+                                        readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         let menu = DictationMenuController(session: session, actionGate: ValidationActionGate(role: .app))
         let staleStart = menu.item.copy() as! NSMenuItem
         click(menu.item)
@@ -1952,7 +1943,7 @@ enum SelfTest {
         let secondStage = StageRendezvous()
         let second = SessionController(pipeline: [SuspensibleStage(rendezvous: secondStage, suspend: true)], observers: [],
                                        effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}),
-                                       readinessLevel: { .ready })
+                                       readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         let secondMenu = DictationMenuController(session: second, actionGate: ValidationActionGate(role: .app))
         second.startRecording()
         await secondStage.waitForInvocation()
@@ -2022,7 +2013,7 @@ enum SelfTest {
         let session = SessionController(pipeline: [SuspensibleStage(rendezvous: stage, suspend: true)],
                                         observers: [probe],
                                         effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
-                                        readinessLevel: { classifyReadiness(snapshot()) })
+                                        readinessLevel: { classifyReadiness(snapshot()) }, resources: SessionResourceCoordinator())
         session.startRecording()
         r.eq(session.sessionState, .error("没有可用的语音识别引擎"),
              "terminal model: fresh producer state blocks Start before recording")
@@ -2060,7 +2051,7 @@ enum SelfTest {
                                      showWindow: { probe.windowShows += 1 }, hideWindow: {},
                                      saveHistory: { _ in probe.historySaves += 1 })
         let session = SessionController(pipeline: [SuspensibleStage(rendezvous: rendezvous, suspend: true)],
-                                        observers: [probe], effects: effects, readinessLevel: { probe.level })
+                                        observers: [probe], effects: effects, readinessLevel: { probe.level }, resources: SessionResourceCoordinator())
         defer { session.cancel() }
         session.startRecording()
         r.eq(session.sessionState, .error("没有可用的语音识别引擎"),

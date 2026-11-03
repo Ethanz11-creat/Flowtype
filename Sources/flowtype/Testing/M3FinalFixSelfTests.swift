@@ -103,7 +103,7 @@ enum M3FinalFixSelfTests {
                 })
             ], observers: [], effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
                 saveHistory: { self.histories.append(($0.sessionID, $0.deliveryOutcome, $0.finalText)) }),
-                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         }
         func readTarget() async -> DeliveryTargetSnapshot {
             reads += 1

@@ -352,7 +352,7 @@ extension M3SpeechPreflightSelfTests {
                 let controller = SessionController(pipeline: [capture, stage] + tail(ledger), observers: [],
                     effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
                         saveHistory: { _ in ledger.update { $0.history += 1 } }),
-                    configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+                    configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
                 controller.startRecording()
                 await waitFor { if case .notice = controller.sessionState { return true }; return controller.sessionState == .idle }
                 r.eq(controller.sessionState, .notice(expected), "\(label): controller notice")
@@ -592,7 +592,7 @@ extension M3SpeechPreflightSelfTests {
             }
             let controller = SessionController(pipeline: [capture, ObservedASR(stage: stage, ledger: ledger)] + tail(ledger), observers: [],
                 effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in ledger.update { $0.history += 1 } }),
-                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
             defer { controller.cancel() }
             controller.startRecording()
             await waitFor { ledger.snapshot.history == 1 }
@@ -671,7 +671,7 @@ extension M3SpeechPreflightSelfTests {
         }
         let controller = SessionController(pipeline: [capture, stage] + tail(ledger), observers: [],
             effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in ledger.update { $0.history += 1 } }),
-            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready })
+            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
         defer { controller.cancel() }
         controller.startRecording()
         await waitFor { if case .error = controller.sessionState { return true }; return false }

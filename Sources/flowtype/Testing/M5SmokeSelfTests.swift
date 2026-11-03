@@ -46,7 +46,7 @@ enum M5SmokeSelfTests {
             for action in ValidationAction.allCases { r.check(!gate.allow(action), "M5 validation action denied: \(action)") }
             let shows = OSAllocatedUnfairLock(initialState: 0)
             let session = SessionController(pipeline: [], observers: [],
-                effects: SessionEffects(prepare: {}, showWindow: { shows.withLock { $0 += 1 } }, hideWindow: {}), readinessLevel: { .ready })
+                effects: SessionEffects(prepare: {}, showWindow: { shows.withLock { $0 += 1 } }, hideWindow: {}), readinessLevel: { .ready }, resources: SessionResourceCoordinator())
             let menu = DictationMenuController(session: session, actionGate: gate)
             menu.item.isEnabled = true
             _ = (menu.item.target as? NSObject)?.perform(menu.item.action!, with: menu.item)
