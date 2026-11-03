@@ -13,7 +13,7 @@ class FloatingPanel: NSPanel {
 
     init(view: AnyView) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 240, height: 70),
+            contentRect: NSRect(x: 0, y: 0, width: 216, height: 54),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false)
 
@@ -32,7 +32,7 @@ class FloatingPanel: NSPanel {
 
         hostingView.layer?.mask = capsuleMask
         self.contentView = hostingView
-        setCapsuleSize(NSSize(width: 240, height: 70))
+        setCapsuleSize(NSSize(width: 216, height: 54))
 
         setupDragMonitors()
     }

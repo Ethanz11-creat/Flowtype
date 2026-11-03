@@ -154,6 +154,7 @@ final class PolishStage: PipelineStage, @unchecked Sendable {
                     if case .damagedLiterals = $0 { return true }
                     return false
                 } ?? false
+                context.capsuleNotice = .polishFallback(literalDamage ? .literalPreserved : (error is AsyncDeadlineError ? .timedOut : .failed))
                 context.completionNotice = if literalDamage {
                     DeliveryCopy.literalPreservationFallback.message
                 } else if error is AsyncDeadlineError {

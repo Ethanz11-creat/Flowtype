@@ -2,148 +2,87 @@ import SwiftUI
 
 struct CapsuleView: View {
     @EnvironmentObject var session: SessionController
+    // The preview supplies only presentation data; the native production layout/material
+    // and actual AudioVisualizer remain the same as in the floating panel.
+    var presentationOverride: CapsulePresentation? = nil
 
-    @State private var breathScale: CGFloat = 1.0
-    @State private var glowOpacity: Double = 0.3
+    private let purple = Color(red: 0.522, green: 0.361, blue: 1)
+    private let blue = Color(red: 0.302, green: 0.631, blue: 1)
+    private var presentation: CapsulePresentation { presentationOverride ?? session.capsulePresentation }
+    private var isRecovery: Bool { presentation.size.height == 156 }
 
     var body: some View {
-        HStack(spacing: 14) {
-            if session.sessionState.showSpinner {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .tint(statusColor)
-                    .scaleEffect(0.65)
-                    .frame(width: 40, height: 24)
-            } else {
-                AudioVisualizer()
-            }
-
+        let p = presentation
+        HStack(spacing: 12) {
+            indicator(p.indicator)
+                .frame(width: 40, height: 24)
             VStack(alignment: .leading, spacing: 3) {
-                Text(session.sessionState.statusTitle)
+                Text(p.title)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
-
-                subtitleContent
+                    .foregroundStyle(.white)
+                    .lineLimit(isRecovery ? 2 : 1)
+                HStack(spacing: 4) {
+                    if let timer = p.timer {
+                        Text(timer).fixedSize(horizontal: true, vertical: false)
+                    }
+                    Text(p.subtitle)
+                        .lineLimit(isRecovery ? 3 : 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color(red: 0.82, green: 0.83, blue: 0.96))
+                if isRecovery, let card = session.recoveryCard, presentationOverride == nil {
+                    recoveryActions(p.actions) { session.performRecoveryAction($0, cardID: card.id) }
+                } else if isRecovery, !p.actions.isEmpty {
+                    recoveryActions(p.actions) { _ in }
+                }
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 20)
-        .frame(width: session.sessionState.capsuleSize.width,
-               height: session.sessionState.capsuleSize.height)
-        .background(
+        .padding(.horizontal, isRecovery ? 28 : 16)
+        .frame(width: p.size.width, height: p.size.height)
+        .background {
             ZStack {
                 VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
-
-                RadialGradient(
-                    gradient: Gradient(colors: [
-                        statusColor.opacity(0.25),
-                        statusColor.opacity(0.05),
-                        Color.clear
-                    ]),
-                    center: .center,
-                    startRadius: 20,
-                    endRadius: 160
-                )
+                Color(red: 0.12, green: 0.11, blue: 0.16).opacity(0.66)
+                RadialGradient(colors: [purple.opacity(0.27), purple.opacity(0.05), .clear],
+                    center: .center, startRadius: 18, endRadius: isRecovery ? 210 : 145)
+                LinearGradient(colors: [.clear, blue.opacity(0.07)], startPoint: .leading, endPoint: .trailing)
             }
-        )
+        }
         .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .stroke(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.3),
-                            statusColor.opacity(0.5),
-                            Color.white.opacity(0.2)
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .shadow(color: statusColor.opacity(glowOpacity), radius: 15, x: 0, y: 0)
-        .shadow(color: statusColor.opacity(glowOpacity * 0.5), radius: 30, x: 0, y: 0)
-        .scaleEffect(breathScale)
-        .onChange(of: session.sessionState.isRecordingIndicator) { oldValue, isRecording in
-            if isRecording {
-                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                    breathScale = 1.02
-                    glowOpacity = 0.6
-                }
-            } else {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    breathScale = 1.0
-                    glowOpacity = 0.3
-                }
-            }
+        .overlay {
+            Capsule().stroke(LinearGradient(colors: [.white.opacity(0.30), purple.opacity(0.52), blue.opacity(0.40), .white.opacity(0.20)],
+                startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+        }
+        .shadow(color: purple.opacity(0.28), radius: 15)
+        .shadow(color: blue.opacity(0.10), radius: 25)
+        .opacity(p.hidden ? 0 : 1)
+        .accessibilityElement(children: .contain)
+    }
+
+    @ViewBuilder private func indicator(_ indicator: CapsulePresentation.Indicator) -> some View {
+        switch indicator {
+        case .waveform: AudioVisualizer()
+        case .spinner:
+            ProgressView().progressViewStyle(.circular).controlSize(.small).tint(purple)
+        case .symbol(let name):
+            Image(systemName: name).font(.system(size: isRecovery ? 23 : 19, weight: .medium))
+                .foregroundStyle(LinearGradient(colors: [purple, blue], startPoint: .leading, endPoint: .trailing))
         }
     }
 
-    private var recordingTimerText: String? {
-        if case .recording(let seconds) = session.sessionState {
-            let maxDuration = ConfigurationStore.shared.current.maxRecordingDuration
-            let remaining = maxDuration - seconds
-            if remaining <= 30 && remaining > 0 {
-                return "剩余 \(remaining)s"
-            }
-            return String(format: "%02d:%02d", seconds / 60, seconds % 60)
-        }
-        return nil
-    }
-
-    private var statusSubtitle: String {
-        switch session.sessionState {
-        case .idle:
-            return ""
-        case .preparing:
-            return session.preparationNotice ?? "正在准备麦克风..."
-        case .recording:
-            return "正在听写..."
-        case .processing, .polishing:
-            return "完成后自动输入"
-        case .injecting:
-            return "输入中..."
-        case .notice:
-            return ""
-        case .error(let msg):
-            return session.resourceBusyNotice ?? msg
-        }
-    }
-
-    @ViewBuilder
-    private var subtitleContent: some View {
-        HStack(spacing: 4) {
-            if let timer = recordingTimerText {
-                Text(timer)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(statusColor.opacity(0.7))
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            Text(statusSubtitle)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(statusColor.opacity(0.7))
-                .lineLimit(session.recoveryCard == nil ? 1 : 2)
-                .truncationMode(.head)
-        }
-        if case .error = session.sessionState, let card = session.recoveryCard {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 8) {
-                ForEach(card.presentation.actions, id: \.self) { action in
-                    Button(action.displayName) {
-                        session.performRecoveryAction(action, cardID: card.id)
-                    }
+    private func recoveryActions(_ actions: [RecoveryAction], perform: @escaping (RecoveryAction) -> Void) -> some View {
+        LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading, spacing: 8) {
+            ForEach(actions, id: \.self) { action in
+                Button(action.displayName) { perform(action) }
                     .buttonStyle(.borderless)
                     .font(.system(size: 11, weight: .medium))
-                }
+                    .foregroundStyle(Color(red: 0.73, green: 0.78, blue: 1))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 5)
         }
-    }
-
-
-    private var statusColor: Color {
-        session.sessionState.statusColor
+        .padding(.top, 5)
     }
 }
 

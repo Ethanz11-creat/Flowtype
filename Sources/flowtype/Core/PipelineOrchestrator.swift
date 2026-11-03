@@ -78,6 +78,15 @@ struct SessionEffects {
 final class SessionController: ObservableObject {
     static let shared = SessionController()
 
+    private let presentationTiming: CapsulePresentationTiming
+    private var noticeValue: CapsuleNotice?
+    private var slowValue = false
+    var capsulePresentation: CapsulePresentation {
+        CapsulePresentation(state: sessionState, preparationNotice: preparationNotice, notice: noticeValue,
+            slow: slowValue, recoveryCard: recoveryCard, resourceBusyNotice: resourceBusyNotice,
+            maxRecordingDuration: configurationStore.current.maxRecordingDuration)
+    }
+
     private let purpose: SessionPurpose
     private let resources: SessionResourceCoordinator
     private let resourceOwner = UUID()
@@ -146,6 +155,9 @@ final class SessionController: ObservableObject {
 
     private var currentTask: Task<Void, Never>?
     private var errorDismissTask: Task<Void, Never>?
+    private var noticeDismissToken: UUID?
+    private var slowProgressTask: Task<Void, Never>?
+    private var slowOperation: (token: UUID, sessionID: UInt64, started: TimeInterval)?
 
     // MARK: - Combine
 
@@ -186,9 +198,11 @@ final class SessionController: ObservableObject {
             ReadinessMonitor.shared.refresh()
             return ReadinessMonitor.shared.rawLevel
         },
+        presentationTiming: CapsulePresentationTiming = .init(),
         purpose: SessionPurpose = .dictation,
         resources: SessionResourceCoordinator = .shared
     ) {
+        self.presentationTiming = presentationTiming
         self.purpose = purpose
         self.resources = resources
         self.pipeline = pipeline
@@ -204,6 +218,8 @@ final class SessionController: ObservableObject {
 
     deinit {
         currentTask?.cancel()
+        errorDismissTask?.cancel()
+        slowProgressTask?.cancel()
         let lease = resourceLease
         let context = currentContext
         Task { @MainActor in context?.cancel(); lease?.end() }
@@ -235,8 +251,9 @@ final class SessionController: ObservableObject {
         startAttempt = nil
         resourceLease = SessionResourceLease(token: token, resources: resources)
 
-        errorDismissTask?.cancel()
-        errorDismissTask = nil
+        invalidateNoticeDismissal()
+        invalidateSlowProgress()
+        noticeValue = nil
         // Starting fresh from .error/.notice must not carry over the previous
         // session's recovery state (suspended payload, error actions).
         clearSuspension()
@@ -356,6 +373,7 @@ final class SessionController: ObservableObject {
         // Stages derive their own bounded timeout from this snapshot.
         context.completionBudget = CompletionBudget(seconds: 20)
         context.stopRecordingAt = Date()
+        guard beginSlowProgress(context: context) else { return }
         if purpose == .dictation {
             context.targetApp = NSWorkspace.shared.frontmostApplication
             context.captureDeliveryTarget(pid: context.targetApp?.processIdentifier)
@@ -410,6 +428,7 @@ final class SessionController: ObservableObject {
             guard acquireRetryResource(context: context) else { return }
             clearSuspension()
             context.completionBudget = CompletionBudget(seconds: 20)
+            guard beginSlowProgress(context: context) else { return }
             context.realtimeResult = nil
             guard transition(to: .processing(provider: "识别中"), context: context),
                   ownsActiveContext(context) else { return }
@@ -620,7 +639,9 @@ final class SessionController: ObservableObject {
             presentRecovery(presentation, copyText: context.finalText, context: context)
             return
         }
-        let state = context.hasInjected ? context.completionNotice.map(SessionState.notice) ?? .idle : .idle
+        let notice = CapsuleNotice.completion(outcome: context.deliveryOutcome, fallback: context.capsuleNotice)
+        let state: SessionState = context.hasInjected && (context.completionNotice != nil || notice != nil)
+            ? .notice(context.completionNotice ?? "") : .idle
         transition(to: state, context: context)
     }
 
@@ -632,6 +653,14 @@ final class SessionController: ObservableObject {
     private func transition(to newState: SessionState, context: SessionContext) -> Bool {
         let oldState = sessionState
         stateValue = newState
+        invalidateNoticeDismissal()
+        switch newState {
+        case .idle, .notice, .error, .preparing, .recording: invalidateSlowProgress()
+        default: break
+        }
+        if case .notice = newState {
+            noticeValue = CapsuleNotice.completion(outcome: context.deliveryOutcome, fallback: context.capsuleNotice)
+        } else { noticeValue = nil }
         presentationGeneration &+= 1
         let generation = presentationGeneration
         if !newState.isRecordingIndicator {
@@ -661,18 +690,18 @@ final class SessionController: ObservableObject {
             effects.hideWindow()
         }
 
-        // Auto-dismiss the gentle notice after ~2.2s (no buttons; slides away like a normal finish).
+        // Notices lose session ownership, so dismissal belongs to an independent token.
         if case .notice = newState {
             context.cancel()
             activeSessionID = 0
-            errorDismissTask?.cancel()
-            let noticeSessionID = activeSessionID
-            errorDismissTask = Task { @MainActor [weak self] in
-                do { try await Task.sleep(nanoseconds: 2_200_000_000) } catch { return }
-                guard let self else { return }
-                if case .notice = self.sessionState, self.activeSessionID == noticeSessionID {
-                    self.resetToIdle()
-                }
+            let token = UUID()
+            noticeDismissToken = token
+            let duration = noticeValue?.duration ?? 2.2
+            errorDismissTask = Task { @MainActor [weak self, timing = presentationTiming] in
+                do { try await timing.delay(duration) } catch { return }
+                guard let self, self.noticeDismissToken == token,
+                      case .notice = self.sessionState else { return }
+                self.resetToIdle()
             }
         }
 
@@ -765,6 +794,46 @@ final class SessionController: ObservableObject {
                 }
             }
         }
+    }
+
+    private func invalidateNoticeDismissal() {
+        noticeDismissToken = nil
+        errorDismissTask?.cancel()
+        errorDismissTask = nil
+    }
+
+    private func invalidateSlowProgress() {
+        slowOperation = nil
+        slowProgressTask?.cancel()
+        slowProgressTask = nil
+        slowValue = false
+    }
+
+    /// One monotonic origin per stop/retry, independent of provider transitions and budget.
+    private func beginSlowProgress(context: SessionContext) -> Bool {
+        invalidateSlowProgress()
+        let token = UUID()
+        let generation = presentationGeneration
+        let started = presentationTiming.now()
+        guard ownsActiveContext(context), presentationGeneration == generation else { return false }
+        slowOperation = (token, context.sessionID, started)
+        slowProgressTask = Task { @MainActor [weak self, timing = presentationTiming] in
+            do { try await timing.delay(max(0, 6 - (timing.now() - started))) } catch { return }
+            let now = timing.now()
+            guard let self, let operation = self.slowOperation,
+                  operation.token == token, operation.sessionID == context.sessionID,
+                  self.ownsActiveContext(context), now - operation.started >= 6 else { return }
+            switch self.sessionState {
+            case .processing, .polishing: break
+            default: return
+            }
+            // Commit before publishing. A subscriber may synchronously cancel/start;
+            // there is deliberately no assignment after this notification.
+            self.slowValue = true
+            self.presentationGeneration &+= 1
+            self.publishPresentation()
+        }
+        return true
     }
 
     private func stopRecordingTimer() {
@@ -917,6 +986,9 @@ final class SessionController: ObservableObject {
     // MARK: - Reset
 
     private func resetToIdle() {
+        invalidateNoticeDismissal()
+        invalidateSlowProgress()
+        noticeValue = nil
         startAttempt = nil
         if purpose == .dictation { OptionTapDetector.shared.cancelPendingTaps() }
         currentContext?.cancel()
@@ -966,7 +1038,9 @@ final class SessionController: ObservableObject {
         guard presentationGeneration == generation else { return }
         switch sessionState {
         case .idle, .notice:
-            transition(to: .notice(message), context: SessionContext(sessionID: 0))
+            let context = SessionContext(sessionID: 0)
+            context.capsuleNotice = .resourceBusy
+            transition(to: .notice(message), context: context)
         case .error:
             // Preserve retained audio, card identity and retry authority.
             effects.showWindow()
@@ -1042,7 +1116,7 @@ extension SessionState {
 
     var capsuleSize: NSSize {
         if case .error = self { return NSSize(width: 380, height: 156) }
-        return NSSize(width: 240, height: 70)
+        return NSSize(width: 216, height: 54)
     }
 
     var statusColor: Color {
@@ -1051,7 +1125,7 @@ extension SessionState {
         case .preparing:  return Color(red: 0.5, green: 0.3, blue: 1.0)
         case .recording:  return Color(red: 0.5, green: 0.3, blue: 1.0)
         case .processing, .polishing: return .blue
-        case .injecting:  return .green
+        case .injecting:  return Color(red: 0.30, green: 0.63, blue: 1.0)
         case .notice:     return Color(red: 0.66, green: 0.61, blue: 1.0)  // 温和紫 #A99BFF,非红
         case .error:      return .red
         }
@@ -1060,10 +1134,10 @@ extension SessionState {
     var statusTitle: String {
         switch self {
         case .idle:                      return "准备就绪"
-        case .preparing:                 return "正在准备..."
+        case .preparing:                 return "正在准备"
         case .recording:                 return "Listening..."
-        case .processing, .polishing:    return "处理中..."
-        case .injecting:                 return "输入中..."
+        case .processing, .polishing:    return "正在处理"
+        case .injecting:                 return "正在输入"
         case .notice(let msg):           return msg
         case .error:                     return "出错了"
         }

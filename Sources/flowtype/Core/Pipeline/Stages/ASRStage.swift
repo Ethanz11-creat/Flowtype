@@ -58,8 +58,12 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         }
         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
         switch decision {
-        case .clearlySilent: return .notice("未检测到声音，请重试")
-        case .emptyCapture: return .notice("未录到音频，请重试")
+        case .clearlySilent:
+            await MainActor.run { if !context.isCancelled { context.capsuleNotice = .noSpeech } }
+            return .notice("未检测到声音，请重试")
+        case .emptyCapture:
+            await MainActor.run { if !context.isCancelled { context.capsuleNotice = .emptyAudio } }
+            return .notice("未录到音频，请重试")
         case .indeterminate(.invalidSamples), .indeterminate(.unsupportedSampleRate):
             return .suspend(ErrorRecoveryContext(failedStage: name, error: ASRStageError.invalidAudio,
                                                  rawText: nil, retryable: false))

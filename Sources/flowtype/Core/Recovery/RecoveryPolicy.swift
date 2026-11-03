@@ -59,7 +59,7 @@ struct RecoveryCard: Equatable, Sendable {
 
 enum RecoveryPolicy {
     static func presentation(kind: FailureKind, resources: RecoveryResources) -> FailurePresentation {
-        let message: String
+        var message: String
         var actions: [RecoveryAction]
         switch kind {
         case .permission(let permission):
@@ -91,9 +91,10 @@ enum RecoveryPolicy {
             }
             actions = [.openASRSettings, .rerecord, .dismiss]
         case .transientASR:
-            message = "语音识别未完成，可重试原录音"
+            let canRetry = resources.stage == "ASR" && resources.hasAudio && !resources.deliveryEventStarted
+            message = canRetry ? "语音识别未完成，可重试原录音" : "语音识别未完成，请重新录音"
             actions = []
-            if resources.stage == "ASR", resources.hasAudio, !resources.deliveryEventStarted {
+            if canRetry {
                 actions.append(.retry(stage: "ASR"))
             }
             actions.append(.rerecord)
@@ -115,10 +116,12 @@ enum RecoveryPolicy {
             }
             actions += [.rerecord, .dismiss]
         case .deliveryBlocked:
-            message = "未发送文本，可复制结果"
+            message = resources.textKind == .result ? "未发送文本，可复制结果" : "未发送文本"
             actions = resources.textKind == .result ? [.copyResult, .dismiss] : [.dismiss]
         case .deliveryUncertain:
-            message = "已发送，但无法确认是否插入；可复制结果"
+            message = "已发送，但无法确认是否插入"
+            if resources.textKind == .result { message += "；可复制结果" }
+            else if resources.hasHistory { message += "；可查看历史" }
             actions = resources.textKind == .result ? [.copyResult] : []
             if resources.hasHistory { actions.append(.viewHistory) }
             actions.append(.dismiss)

@@ -289,12 +289,22 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--capsule-presentation-only") {
+            await CapsulePresentationSelfTests.run(r)
+            print("=== Capsule presentation self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--capsule-waveform-only") {
             await CapsuleWaveformSelfTests.run(r)
             print("=== Capsule waveform self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
         #if DEBUG
+        if CommandLine.arguments.contains("--capsule-previews-only") {
+            await CapsulePreviewSelfTests.run(r)
+            print("=== Capsule preview self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--native-client-previews-only") {
             await NativeClientPreviewSelfTests.run(r)
             print("=== Native preview self-test: \(r.passed) passed, \(r.failed) failed ===")
@@ -427,6 +437,7 @@ enum SelfTest {
         testInjectionEdgeCases(r) // injection edge cases: emoji/newlines/config/continuation
         testInjectionSegmentation(r) // injection helpers
         testASRWiring(r)         // ASR language + context
+        await CapsulePresentationSelfTests.run(r)
         await CapsuleWaveformSelfTests.run(r)
         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
         testFFTPeak(r)           // SpectrumAnalyzer FFT correctness

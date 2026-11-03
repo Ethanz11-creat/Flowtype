@@ -135,7 +135,7 @@ enum NativeClientPreviewSelfTests {
         r.eq(ValidationEffects.live.snapshot.permitted, effects.permitted, "native preview performs no live system effects")
     }
 
-    @MainActor private static func renderHost(_ view: AnyView, width: Int, height: Int, dark: Bool) async -> NSHostingView<AnyView> {
+    @MainActor static func renderHost(_ view: AnyView, width: Int, height: Int, dark: Bool) async -> NSHostingView<AnyView> {
         let host = NSHostingView(rootView: AnyView(view.environment(\.colorScheme, dark ? .dark : .light)))
         host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         host.frame = NSRect(x: 0, y: 0, width: width, height: height)
@@ -152,9 +152,17 @@ enum NativeClientPreviewSelfTests {
         host.layoutSubtreeIfNeeded()
     }
 
-    @MainActor private static func capture(_ host: NSView, to file: URL) throws {
+    @MainActor static func capture(_ host: NSView, to file: URL, pixelScale: Int? = nil) throws {
         host.layoutSubtreeIfNeeded()
-        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw FixtureError.bitmap }
+        let representation: NSBitmapImageRep?
+        if let scale = pixelScale {
+            representation = NSBitmapImageRep(bitmapDataPlanes: nil,
+                pixelsWide: Int(host.bounds.width) * scale, pixelsHigh: Int(host.bounds.height) * scale,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+            representation?.size = host.bounds.size
+        } else { representation = host.bitmapImageRepForCachingDisplay(in: host.bounds) }
+        guard let bitmap = representation else { throw FixtureError.bitmap }
         host.cacheDisplay(in: host.bounds, to: bitmap)
         guard let data = bitmap.representation(using: .png, properties: [:]) else { throw FixtureError.bitmap }
         try data.write(to: file)

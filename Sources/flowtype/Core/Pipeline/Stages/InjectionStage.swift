@@ -85,6 +85,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                     guard !context.isCancelled else { return }
                     let changed = target?.pid != current.pid ||
                         (target?.focusIdentity != nil && current.focusIdentity != nil && target?.focusIdentity != current.focusIdentity)
+                    context.capsuleNotice = .clipboard
                     context.completionNotice = DeliveryCopy.forOutcome(.clipboard, focusChanged: changed)?.message
                 }
                 await complete(.clipboard, context: context, start: start)
@@ -170,7 +171,10 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 }
                 try await copyToClipboard(text, context: context)
                 await MainActor.run {
-                    if !context.isCancelled { context.completionNotice = DeliveryCopy.forOutcome(.clipboard)?.message }
+                    if !context.isCancelled {
+                        context.capsuleNotice = .clipboard
+                        context.completionNotice = DeliveryCopy.forOutcome(.clipboard)?.message
+                    }
                 }
                 await complete(.clipboard, context: context, start: start)
                 return .complete

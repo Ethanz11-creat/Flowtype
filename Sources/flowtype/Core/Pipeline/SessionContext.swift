@@ -129,7 +129,9 @@ final class SessionContext {
     /// Set when optional polish is unavailable or degraded (history then marks it .raw).
     var polishFailed: Bool = false
 
-    /// Displayed only after the terminal delivery succeeds.
+    /// Typed source metadata for gentle ASR notices and terminal delivery/fallback presentation.
+    var capsuleNotice: CapsuleNotice?
+    /// Legacy copy retained for history and source-compatible notice consumers.
     var completionNotice: String?
 
     private var historySaved = false

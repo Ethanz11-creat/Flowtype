@@ -153,8 +153,8 @@ enum M4RecoveryPolicySelfTests {
             (.recording(.tooLarge), "音频过长，请缩短后重新录音", [.rerecord, .dismiss]),
             (.processing, "文本处理未完成，请重新录音", [.copyRaw, .rerecord, .dismiss]),
             (.internalFailure, "处理未完成，请重新录音", [.copyRaw, .rerecord, .dismiss]),
-            (.deliveryBlocked, "未发送文本，可复制结果", [.dismiss]),
-            (.deliveryUncertain, "已发送，但无法确认是否插入；可复制结果", [.viewHistory, .dismiss]),
+            (.deliveryBlocked, "未发送文本", [.dismiss]),
+            (.deliveryUncertain, "已发送，但无法确认是否插入；可查看历史", [.viewHistory, .dismiss]),
             (.cancelled, "", [])
         ]
         for (kind, message, defaultActions) in rows {
@@ -167,12 +167,12 @@ enum M4RecoveryPolicySelfTests {
                             for routing in ASRRoutingPolicy.allCases {
                                 for history in [false, true] {
                                     let value = RecoveryPolicy.presentation(kind: kind, resources: resources(stage: stage, audio: audio, text: text, event: event, routing: routing, history: history))
-                                    r.eq(value.message, message, "M4 stable copy \(kind)")
                                     r.eq(value.kind, kind, "M4 kind preserved")
                                     r.check(value.actions.count <= 4, "M4 at most four actions")
                                     r.eq(value.actions.contains(.retry(stage: "ASR")), kind == .transientASR && stage == "ASR" && audio && !event, "M4 retry eligibility")
                                     r.check(!value.actions.contains(.retry(stage: "Injection")), "M4 never retry delivery")
                                     var expected = defaultActions
+                                    var expectedMessage = message
                                     switch kind {
                                     case .readiness(.noEngine) where routing != .auto:
                                         expected = [.openASRSettings, .useAutomaticRouting, .dismiss]
@@ -180,17 +180,24 @@ enum M4RecoveryPolicySelfTests {
                                         expected = stage == "ASR" && audio && !event ? [.retry(stage: "ASR"), .rerecord] : [.rerecord]
                                         if text == .raw { expected.append(.copyRaw) }
                                         expected.append(.dismiss)
+                                        expectedMessage = expected.contains(.retry(stage: "ASR"))
+                                            ? "语音识别未完成，可重试原录音" : "语音识别未完成，请重新录音"
                                     case .processing, .internalFailure:
                                         expected = text == .raw ? [.copyRaw] : text == .result ? [.copyResult] : []
                                         expected += [.rerecord, .dismiss]
                                     case .deliveryBlocked:
                                         expected = text == .result ? [.copyResult, .dismiss] : [.dismiss]
+                                        expectedMessage = text == .result ? "未发送文本，可复制结果" : "未发送文本"
                                     case .deliveryUncertain:
                                         expected = text == .result ? [.copyResult] : []
                                         if history { expected.append(.viewHistory) }
                                         expected.append(.dismiss)
+                                        expectedMessage = "已发送，但无法确认是否插入"
+                                        if text == .result { expectedMessage += "；可复制结果" }
+                                        else if history { expectedMessage += "；可查看历史" }
                                     default: break
                                     }
+                                    r.eq(value.message, expectedMessage, "M4 resource-aware copy \(kind)")
                                     r.eq(value.actions, expected, "M4 exact matrix action order \(kind)")
                                 }
                             }
