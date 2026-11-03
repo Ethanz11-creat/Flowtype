@@ -1,0 +1,15 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/11] Compiling FlowType M4RecoveryPolicySelfTests.swift
+[6/11] Compiling FlowType CapsulePresentation.swift
+[7/11] Emitting module FlowType
+[8/11] Compiling FlowType CapsulePresentationSelfTests.swift
+[9/11] Compiling FlowType SessionContext.swift
+[9/12] Write Objects.LinkFileList
+[10/12] Linking FlowType
+[11/12] Applying FlowType
+Build complete! (30.02s)

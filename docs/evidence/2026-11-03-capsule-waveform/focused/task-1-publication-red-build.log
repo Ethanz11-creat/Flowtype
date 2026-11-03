@@ -1,0 +1,12 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/8] Compiling FlowType CapsuleWaveformSelfTests.swift
+[6/8] Emitting module FlowType
+[6/9] Write Objects.LinkFileList
+[7/9] Linking FlowType
+[8/9] Applying FlowType
+Build complete! (33.42s)

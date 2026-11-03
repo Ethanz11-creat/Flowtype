@@ -1,0 +1,17 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/7] Write sources
+[3/7] Write swift-version--1AB21518FC5DEDBE.txt
+[5/13] Compiling FlowType SelfTest.swift
+[6/13] Compiling FlowType RuntimeEnvironment.swift
+[7/13] Compiling FlowType CapsulePresentationSelfTests.swift
+[8/13] Emitting module FlowType
+[9/13] Compiling FlowType NativeClientPreviewSelfTests.swift
+[10/13] Compiling FlowType CapsulePreviewSelfTests.swift
+[11/14] Compiling FlowType M5RuntimeSelfTests.swift
+[11/14] Write Objects.LinkFileList
+[12/14] Linking FlowType
+[13/14] Applying FlowType
+Build complete! (42.61s)

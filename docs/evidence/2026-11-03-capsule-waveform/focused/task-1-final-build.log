@@ -1,0 +1,67 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/10] Compiling FlowType AudioRecorder.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:166:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+164 |                 }
+165 |                 // Set requested device
+166 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+167 |                 var mutableAudioDeviceID = audioDeviceID
+168 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:275:21: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+273 |             var inputConsumed = false
+274 |             converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+275 |                 if !inputConsumed {
+    |                     `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+276 |                     inputConsumed = true
+277 |                     outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:276:21: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+274 |             converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+275 |                 if !inputConsumed {
+276 |                     inputConsumed = true
+    |                     `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+277 |                     outStatus.pointee = .haveData
+278 |                     return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[6/10] Compiling FlowType SessionContext.swift
+[7/10] Compiling FlowType PipelineOrchestrator.swift
+[8/10] Emitting module FlowType
+[9/38] Compiling FlowType M3DeliverySelfTests.swift
+[10/38] Compiling FlowType M3FinalFixSelfTests.swift
+[11/38] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[12/38] Compiling FlowType M4RecoveryControllerSelfTests.swift
+[13/38] Compiling FlowType OnboardingPipeline.swift
+[14/38] Compiling FlowType OnboardingView.swift
+[15/38] Compiling FlowType OnboardingWindowController.swift
+[16/38] Compiling FlowType SettingsView.swift
+[17/38] Compiling FlowType M5IsolationSelfTests.swift
+[18/38] Compiling FlowType M5SmokeSelfTests.swift
+[19/38] Compiling FlowType ModelProvisionSelfTests.swift
+[20/38] Compiling FlowType TrialSessionSelfTests.swift
+[21/38] Compiling FlowType AudioVisualizer.swift
+[22/38] Compiling FlowType WindowManager.swift
+[23/38] Compiling FlowType TrialSessionPresenter.swift
+[24/38] Compiling FlowType TrialSessionView.swift
+[25/38] Compiling FlowType CapsuleWaveformSelfTests.swift
+[26/38] Compiling FlowType ImportedLifecycleSelfTests.swift
+[27/38] Compiling FlowType LastDeliveryMenuController.swift
+[28/38] Compiling FlowType StatusBarController.swift
+[29/38] Compiling FlowType StartupSmoke.swift
+[30/38] Compiling FlowType CapsuleView.swift
+[31/38] Compiling FlowType ProviderDraftCheckSelfTests.swift
+[32/38] Compiling FlowType ReadinessPresentationSelfTests.swift
+[33/38] Compiling FlowType SelfTest.swift
+[34/38] Compiling FlowType NativeClientPreviewSelfTests.swift
+[35/38] Compiling FlowType NativeRecoveryNavigationSelfTests.swift
+[36/38] Compiling FlowType OnboardingFlowSelfTests.swift
+[36/39] Write Objects.LinkFileList
+[37/39] Linking FlowType
+[38/39] Applying FlowType
+Build complete! (40.78s)

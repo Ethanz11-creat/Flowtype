@@ -1,0 +1,164 @@
+[
+  {
+    "file" : "recording.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "正在听写",
+    "title" : "Listening...",
+    "width" : 216
+  },
+  {
+    "file" : "silent-recording.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "正在听写",
+    "title" : "Listening...",
+    "width" : 216
+  },
+  {
+    "file" : "recording-countdown.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "正在听写",
+    "title" : "Listening...",
+    "width" : 216
+  },
+  {
+    "file" : "preparing.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "启动麦克风",
+    "title" : "正在准备",
+    "width" : 216
+  },
+  {
+    "file" : "preparing-diagnostic.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "首次使用 · 将请求麦克风权限",
+    "title" : "正在准备",
+    "width" : 216
+  },
+  {
+    "file" : "processing.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "识别语音中",
+    "title" : "正在处理",
+    "width" : 216
+  },
+  {
+    "file" : "polishing.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "整理文字中",
+    "title" : "正在处理",
+    "width" : 216
+  },
+  {
+    "file" : "slow.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "仍在处理，请稍候",
+    "title" : "处理时间较长",
+    "width" : 216
+  },
+  {
+    "file" : "injecting.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "请保持当前光标",
+    "title" : "正在输入",
+    "width" : 216
+  },
+  {
+    "file" : "clipboard.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "按 ⌘V 粘贴",
+    "title" : "结果已复制",
+    "width" : 216
+  },
+  {
+    "file" : "no-speech.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "请重新录音",
+    "title" : "未检测到声音",
+    "width" : 216
+  },
+  {
+    "file" : "empty-audio.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "请重新录音",
+    "title" : "未录到音频",
+    "width" : 216
+  },
+  {
+    "file" : "polish-fallback.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "整理未完成",
+    "title" : "已保留识别结果",
+    "width" : 216
+  },
+  {
+    "file" : "resource-busy.png",
+    "height" : 54,
+    "pixelHeight" : 54,
+    "pixelWidth" : 216,
+    "subtitle" : "资源使用中，请稍后再试",
+    "title" : "暂时无法开始",
+    "width" : 216
+  },
+  {
+    "file" : "recoverable-error.png",
+    "height" : 156,
+    "pixelHeight" : 156,
+    "pixelWidth" : 380,
+    "subtitle" : "语音识别未完成，可重试原录音",
+    "title" : "语音识别未完成",
+    "width" : 380
+  },
+  {
+    "file" : "error-long-diagnostic.png",
+    "height" : 156,
+    "pixelHeight" : 156,
+    "pixelWidth" : 380,
+    "subtitle" : "当前模型不支持所选语言，请调整设置后重新录音",
+    "title" : "请检查识别设置",
+    "width" : 380
+  },
+  {
+    "file" : "uncertain-delivery.png",
+    "height" : 156,
+    "pixelHeight" : 156,
+    "pixelWidth" : 380,
+    "subtitle" : "已发送，但无法确认是否插入；可复制结果",
+    "title" : "请检查输入结果",
+    "width" : 380
+  },
+  {
+    "file" : "permission-error.png",
+    "height" : 156,
+    "pixelHeight" : 156,
+    "pixelWidth" : 380,
+    "subtitle" : "辅助功能权限未开启",
+    "title" : "需要开启权限",
+    "width" : 380
+  }
+]

@@ -1,0 +1,56 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/7] Write sources
+[3/7] Write swift-version--1AB21518FC5DEDBE.txt
+[5/13] Compiling FlowType PipelineOrchestrator.swift
+[6/13] Compiling FlowType RecoveryPolicy.swift
+[7/13] Compiling FlowType CapsulePresentationSelfTests.swift
+[8/13] Compiling FlowType SessionContext.swift
+[9/13] Compiling FlowType CapsulePresentation.swift
+[10/13] Emitting module FlowType
+[11/41] Compiling FlowType TrialSessionPresenter.swift
+[12/41] Compiling FlowType TrialSessionView.swift
+[13/41] Compiling FlowType CapsuleWaveformSelfTests.swift
+[14/41] Compiling FlowType ImportedLifecycleSelfTests.swift
+[15/43] Compiling FlowType AudioFeedbackObserver.swift
+[16/43] Compiling FlowType SessionObserver.swift
+[17/45] Compiling FlowType NativeClientPreviewSelfTests.swift
+[18/45] Compiling FlowType NativeRecoveryNavigationSelfTests.swift
+[19/45] Compiling FlowType OnboardingFlowSelfTests.swift
+[20/45] Compiling FlowType LastDeliveryMenuController.swift
+[21/45] Compiling FlowType StatusBarController.swift
+[22/45] Compiling FlowType StartupSmoke.swift
+[23/45] Compiling FlowType CapsuleView.swift
+[24/45] Compiling FlowType OnboardingPipeline.swift
+[25/45] Compiling FlowType OnboardingView.swift
+[26/45] Compiling FlowType OnboardingWindowController.swift
+[27/45] Compiling FlowType SettingsView.swift
+[28/50] Compiling FlowType PipelineRegistry.swift
+[29/50] Compiling FlowType PipelineStage.swift
+[30/51] Compiling FlowType RecordingStage.swift
+[31/52] Compiling FlowType PolishStage.swift
+[32/52] Compiling FlowType PostProcessStage.swift
+[33/53] Compiling FlowType KeyboardInjector.swift
+[34/53] Compiling FlowType ASRStage.swift
+[35/53] Compiling FlowType InjectionStage.swift
+[36/53] Compiling FlowType M4StageFailureSelfTests.swift
+[37/53] Compiling FlowType RecordingStageTerminationSelfTests.swift
+[38/53] Compiling FlowType TrialSessionSelfTests.swift
+[39/53] Compiling FlowType AudioVisualizer.swift
+[40/53] Compiling FlowType WindowManager.swift
+[41/53] Compiling FlowType M3DeliverySelfTests.swift
+[42/53] Compiling FlowType M3FinalFixSelfTests.swift
+[43/53] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[44/53] Compiling FlowType M4RecoveryControllerSelfTests.swift
+[45/53] Compiling FlowType M5IsolationSelfTests.swift
+[46/53] Compiling FlowType M5SmokeSelfTests.swift
+[47/53] Compiling FlowType ModelProvisionSelfTests.swift
+[48/53] Compiling FlowType ProviderDraftCheckSelfTests.swift
+[49/53] Compiling FlowType ReadinessPresentationSelfTests.swift
+[50/53] Compiling FlowType SelfTest.swift
+[50/53] Write Objects.LinkFileList
+[51/53] Linking FlowType
+[52/53] Applying FlowType
+Build complete! (47.69s)

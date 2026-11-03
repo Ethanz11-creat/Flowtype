@@ -1,0 +1,42 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/9] Compiling FlowType CapsuleWaveformSelfTests.swift
+[6/10] Emitting module FlowType
+[7/10] Compiling FlowType AudioRecorder.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:167:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+165 |                 }
+166 |                 // Set requested device
+167 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+168 |                 var mutableAudioDeviceID = audioDeviceID
+169 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:276:21: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+274 |             var inputConsumed = false
+275 |             converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+276 |                 if !inputConsumed {
+    |                     `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+277 |                     inputConsumed = true
+278 |                     outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:277:21: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+275 |             converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+276 |                 if !inputConsumed {
+277 |                     inputConsumed = true
+    |                     `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+278 |                     outStatus.pointee = .haveData
+279 |                     return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[8/13] Compiling FlowType RecordingStage.swift
+[9/13] Compiling FlowType TrialSessionSelfTests.swift
+[10/13] Compiling FlowType RecordingStageTerminationSelfTests.swift
+[11/13] Compiling FlowType SelfTest.swift
+[11/14] Write Objects.LinkFileList
+[12/14] Linking FlowType
+[13/14] Applying FlowType
+Build complete! (35.51s)

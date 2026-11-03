@@ -1,0 +1,7 @@
+  ✗ FAIL: waveform: actual quiet sine PCM RMS
+  ✗ FAIL: waveform: actual loud sine PCM RMS
+  ✗ FAIL: waveform: absolute quiet/loud separation despite identical normalized FFT
+  ✗ FAIL: waveform: center responds before outer bars
+  ✗ FAIL: waveform: short pulse diffuses outward after input stops
+  ✗ FAIL: waveform: stable slight asymmetry
+  ✗ FAIL: waveform: sustained quiet stays smaller than sustained loud

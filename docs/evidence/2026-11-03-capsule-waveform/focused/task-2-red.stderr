@@ -1,0 +1,6 @@
+  ✗ FAIL: capsule: ordinary width is 216 — got 240.0, want 216.0
+  ✗ FAIL: capsule: ordinary height is 54 — got 70.0, want 54.0
+  ✗ FAIL: capsule: preparation title — got 正在准备..., want 正在准备
+  ✗ FAIL: capsule: processing title — got 处理中..., want 正在处理
+  ✗ FAIL: capsule: injecting title — got 输入中..., want 正在输入
+  ✗ FAIL: capsule: missing audio cannot promise original-audio retry

@@ -1,0 +1,4 @@
+  ✗ FAIL: waveform: bounded queue keeps newest whole frame — got Optional(FlowType.AudioVisualizationFrame(spectrum: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], rms: 0.014119295, timestamp: 0.0)), want Optional(FlowType.AudioVisualizationFrame(spectrum: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], rms: 0.21178944, timestamp: 0.1))
+  ✗ FAIL: waveform: finish drains newest then terminates
+  ✗ FAIL: waveform: stop clears published visual energy — got AudioVisualizationFrame(spectrum: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], rms: 0.21178944, timestamp: 1.0), want AudioVisualizationFrame(spectrum: [], rms: 0.0, timestamp: 0.0)
+  ✗ FAIL: waveform: queued audio after stop cannot restart visualizer — got AudioVisualizationFrame(spectrum: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], rms: 0.21178944, timestamp: 1.0), want AudioVisualizationFrame(spectrum: [], rms: 0.0, timestamp: 0.0)
