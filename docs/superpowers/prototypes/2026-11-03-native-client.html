@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlowType · 概览细化</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#252529;color:#e8e8ed;font-family:"SF Pro Text","PingFang SC",sans-serif;-webkit-font-smoothing:antialiased}button,select{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:2px solid #a99bff;outline-offset:3px}button{color:inherit}.review{max-width:1240px;margin:auto;padding:20px 24px}.review-bar{display:flex;align-items:center;justify-content:space-between;gap:20px;font-size:12px;color:#aaaab3;margin-bottom:14px}.review-bar strong{font-weight:500;color:#eeeef1}.review-controls{display:flex;gap:10px;align-items:center}.review-controls select,.review-controls button{color:#d6d6df;background:#303035;border:1px solid #48484f;border-radius:6px;padding:5px 9px;font-size:12px}.review-note{font-size:12px;color:#aaaab3;margin:12px 0 0;line-height:1.7}
+.app{--page:#101013;--side:#17171b;--card:#1c1c21;--line:#2b2b31;--ink:#f1f1f4;--secondary:#a4a4af;--muted:#81818d;--purple:#b2a3ff;--fill:#9582f5;--soft:#2b253d;--warm:#edb770;--empty:#24242b;--heat1:#463a68;--heat2:#68528f;--heat3:#8c72ba;--heat4:#b2a3ff;display:grid;grid-template-columns:176px minmax(0,1fr);height:calc(100vh - 112px);max-height:990px;min-height:580px;border:1px solid #3d3d44;border-radius:12px;background:var(--page);color:var(--ink);overflow:hidden;box-shadow:0 20px 65px #0003}
+.app.light{--page:#f6f6f8;--side:#ededf0;--card:#fff;--line:#e1e1e7;--ink:#222228;--secondary:#666672;--muted:#777783;--purple:#6d50c4;--fill:#7d63dc;--soft:#f0ebfa;--warm:#a86a25;--empty:#e6e6eb;--heat1:#d5c9ee;--heat2:#b8a3dd;--heat3:#9579cc;--heat4:#7356b5;border-color:#d3d3da;box-shadow:0 20px 65px #0002}
+.ico{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}.sidebar{background:var(--side);border-right:1px solid var(--line);padding:17px 10px 14px;display:flex;flex-direction:column;min-height:0}.traffic{display:flex;gap:8px;padding:0 9px}.traffic i{width:11px;height:11px;border-radius:50%;background:#ed6a60}.traffic i:nth-child(2){background:#f5bf4f}.traffic i:nth-child(3){background:#61c555}.brand{margin:31px 11px 24px;font-size:17px;font-weight:650;letter-spacing:-.5px;color:var(--ink)}.brand span{font-weight:400;color:var(--secondary)}.nav{width:100%;border:0;background:none;padding:9px 11px;border-radius:7px;display:flex;align-items:center;gap:10px;text-align:left;font-size:13px;color:var(--secondary);margin-bottom:4px}.nav.active{background:var(--card);color:var(--ink);font-weight:550}.nav.active .ico{color:var(--purple)}.nav:hover{background:var(--card)}.side-bottom{margin-top:auto}.availability{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);padding:14px 11px 0;border-top:1px solid var(--line);margin-top:10px}.availability i{width:5px;height:5px;background:#74b497;border-radius:50%}
+.workspace{display:flex;flex-direction:column;min-height:0;min-width:0}.window-bar{height:42px;flex:none;padding:0 28px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.window-bar .hotkey{display:flex;align-items:center;gap:7px}.key{font-family:"SF Pro Text",sans-serif;border:1px solid var(--line);border-radius:4px;min-width:20px;text-align:center;padding:0 3px;color:var(--secondary)}.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent;min-height:0}.content{width:100%;max-width:900px;padding:23px 28px 22px;margin:auto}.heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:19px}.heading h1{font-size:18px;font-weight:600;margin:0;letter-spacing:-.3px}.range{display:flex;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:7px;padding:2px}.range button{border:0;border-radius:5px;padding:4px 11px;background:none;font-size:12px;color:var(--secondary)}.range button.active{background:var(--soft);color:var(--purple);font-weight:550}
+.hero{display:grid;grid-template-columns:178px minmax(0,1fr);gap:12px;margin-bottom:24px}.personal{border:1px solid var(--line);border-radius:11px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 9px}.ring{width:77px;height:77px;position:relative}.ring svg{display:block;width:77px;height:77px;transform:rotate(-90deg)}.ring circle{fill:none;stroke:var(--line);stroke-width:4}.ring .value{stroke:var(--fill);stroke-linecap:round}.ring strong{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;font-family:"Avenir Next","PingFang SC",sans-serif;font-size:22px;font-weight:600;letter-spacing:-.5px}.ring small{font-size:12px;margin-top:5px;margin-left:1px;font-weight:500;color:var(--secondary)}.personal-title{font-size:13px;font-weight:500;margin-top:13px}.text-link{border:0;background:none;font-size:11px;color:var(--muted);padding:0;margin-top:5px}.text-link:hover{color:var(--purple)}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px 16px 12px;min-height:92px}.metric.saved{border-color:#73629755}.light .metric.saved{border-color:#b5a2e3}.metric-head{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--secondary)}.metric-head .ico{width:14px;height:14px;color:var(--muted)}.metric.saved .ico{color:var(--purple)}.number{font-family:"Avenir Next","PingFang SC",sans-serif;font-size:31px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2;letter-spacing:-.9px;margin-top:7px;white-space:nowrap}.number small{font-family:"SF Pro Text","PingFang SC",sans-serif;font-size:12px;font-weight:400;letter-spacing:0;color:var(--secondary);margin:0 4px}.saved .number{color:var(--purple)}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.section-head h2{font-size:13px;font-weight:550;margin:0}.section-head .meta{font-size:11px;color:var(--muted)}.achievements{margin-bottom:24px}.achievement-values{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:0;padding-bottom:17px}.achievement{padding:0 18px}.achievement:first-child{padding-left:1px}.achievement:last-child{padding-right:0}.achievement+.achievement{border-left:1px solid var(--line)}.achievement-label{font-size:12px;color:var(--secondary);display:flex;align-items:center;gap:7px;margin-bottom:7px}.achievement-label .ico{width:14px;height:14px;color:var(--warm)}.achievement-number{display:flex;gap:7px;align-items:baseline;font-family:"Avenir Next","PingFang SC",sans-serif;font-size:28px;letter-spacing:-.5px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums}.achievement-number small{font-family:"SF Pro Text","PingFang SC",sans-serif;font-size:12px;font-weight:400;color:var(--secondary)}.achievement-sub{font-size:11px;color:var(--muted);margin-top:5px}.streak .achievement-number{color:var(--warm)}.progress{height:3px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:10px}.progress i{height:100%;display:block;background:var(--warm);border-radius:3px;transition:width .2s}.milestones{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:13px 0 12px;gap:5px}.milestone{display:flex;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-size:11px}.milestone .ico{width:17px;height:19px;color:var(--tier);opacity:.6}.milestone .lock{width:9px;height:10px;color:var(--muted);opacity:.6}.milestone.done{color:var(--ink)}.milestone.done .ico{opacity:1}.milestone.done .lock{color:#79b99b}
+.analytics{margin:0 0 24px}.heat-layout{display:grid;grid-template-columns:23px minmax(0,1fr);gap:6px}.weekdays{display:grid;grid-template-rows:repeat(7,1fr);gap:3px;font-size:10px;color:var(--muted);padding-top:25px;padding-bottom:0}.weekdays span{display:flex;align-items:center}.heat-content{min-width:0}.months{height:25px;position:relative;font-size:11px;color:var(--muted)}.months span{position:absolute;top:0;white-space:nowrap}.heat-grid{display:grid;grid-template-columns:repeat(53,minmax(0,1fr));gap:3px}.heat-week{display:flex;flex-direction:column;gap:3px}.heat-cell{aspect-ratio:1;min-width:0;border-radius:2px;background:var(--empty)}.heat-cell.pad{visibility:hidden}.heat-cell[data-level="1"]{background:var(--heat1)}.heat-cell[data-level="2"]{background:var(--heat2)}.heat-cell[data-level="3"]{background:var(--heat3)}.heat-cell[data-level="4"]{background:var(--heat4)}.heat-cell:hover{outline:1px solid var(--purple);outline-offset:2px;position:relative;z-index:2}.heat-bottom{display:flex;justify-content:space-between;gap:20px;margin:11px 0 0 29px;font-size:11px;color:var(--muted)}.legend{display:flex;gap:4px;align-items:center}.legend i{width:9px;height:9px;border-radius:2px;background:var(--empty)}.legend i:nth-of-type(2){background:var(--heat1)}.legend i:nth-of-type(3){background:var(--heat2)}.legend i:nth-of-type(4){background:var(--heat3)}.legend i:nth-of-type(5){background:var(--heat4)}
+.hour-heading{margin-bottom:14px}.hour-heading .meta{font-size:12px;color:var(--secondary)}.hour-heading b{color:var(--purple);font-weight:450}.hours{display:grid;grid-template-columns:23px minmax(0,1fr);gap:6px}.y-axis{height:112px;display:flex;flex-direction:column;justify-content:space-between;font-size:10px;color:var(--muted);text-align:left;padding-bottom:0}.bars{position:relative;display:flex;gap:6px;align-items:flex-end;height:112px;border-bottom:1px solid var(--line);border-top:1px solid var(--line);background:linear-gradient(to top,transparent calc(50% - .5px),var(--line) calc(50% - .5px),var(--line) calc(50% + .5px),transparent calc(50% + .5px))}.bar-track{height:100%;flex:1;min-width:0;display:flex;align-items:flex-end;position:relative}.bar{width:100%;min-height:0;background:#7b65ac;border-radius:3px 3px 0 0;transition:height .25s,background .15s}.light .bar{background:#b6a3d8}.bar.peak{background:var(--purple)}.bar-track:hover .bar{background:var(--purple)}.bar-track.zero:after{content:"";position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--empty)}.x-axis{display:grid;grid-template-columns:repeat(24,1fr);gap:6px;margin:8px 0 0 29px;font-size:11px;color:var(--muted);text-align:center}.x-axis span{grid-column:var(--column)}.footer{border-top:1px solid var(--line);padding-top:15px;margin-top:24px;font-size:12px;color:var(--muted);line-height:1.7}.footer strong{color:var(--secondary);font-weight:450}.footer span+span:before{content:"·";margin:0 9px;color:var(--muted)}.tip{position:fixed;z-index:10;background:var(--ink);color:var(--page);border-radius:6px;box-shadow:0 3px 15px #0003;padding:7px 10px;font-size:12px;pointer-events:none;max-width:300px}.tip[hidden]{display:none}.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);padding:10px 15px;border-radius:8px;border:1px solid #555;background:#28282e;color:#eee;font-size:12px;z-index:20}.toast[hidden]{display:none}
+@media(max-width:1100px){.review{padding:12px 0}.review-bar,.review-note{padding:0 15px}.app{border-left:0;border-right:0;border-radius:0;height:calc(100vh - 92px)}}
+@media(max-width:900px){.app{grid-template-columns:148px 1fr}.content{padding-left:22px;padding-right:22px}.hero{grid-template-columns:145px 1fr}.metric{padding:12px}.number{font-size:27px}.heat-grid{min-width:690px}.heat-content{overflow-x:auto}.weekdays{height:122px}.milestone{flex-wrap:wrap;gap:3px}.bars,.x-axis{gap:4px}.review-bar{align-items:flex-start}.review-controls{flex-wrap:wrap;justify-content:end}.brand{font-size:16px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+[hidden]{display:none!important}.settings-heading{margin-bottom:17px}.setting-tabs{display:flex;gap:23px;border-bottom:1px solid var(--line);margin-bottom:24px}.setting-tabs button{border:0;border-bottom:2px solid transparent;background:none;color:var(--secondary);padding:0 0 11px;font-size:13px;white-space:nowrap}.setting-tabs button.active{color:var(--ink);border-bottom-color:var(--purple);font-weight:550}
+.settings-pane{padding-top:23px}.section-copy{color:var(--muted);font-size:12px;line-height:1.65;margin:7px 0 15px}.setting-section{margin-bottom:25px}.setting-section h2{font-size:13px;font-weight:550;margin:0}.setting-row{display:flex;gap:18px;align-items:center;justify-content:space-between;padding:13px 0;min-height:48px}.setting-row+.setting-row{border-top:1px solid var(--line)}.setting-label{font-size:13px}.setting-caption{font-size:11px;color:var(--muted);line-height:1.65;margin-top:4px;max-width:440px}.setting-row select,.edit-form input,.edit-form select{font:12px "SF Pro Text","PingFang SC",sans-serif;border:1px solid var(--line);border-radius:6px;padding:6px 9px;color:var(--ink);background:var(--card);min-width:150px;max-width:230px}.setting-box{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:0 15px}.setting-box .setting-row{padding:13px 0}.setting-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}.native-button{border:1px solid var(--line);border-radius:6px;padding:5px 10px;background:var(--card);color:var(--secondary);font-size:12px;white-space:nowrap}.native-button:hover{color:var(--ink);border-color:var(--muted)}.native-button.primary{background:var(--fill);border-color:transparent;color:#fff}.link-button{border:0;background:none;padding:0;color:var(--purple);font-size:12px}.service-name{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:500}.status{font-size:11px;font-weight:400;color:var(--muted);white-space:nowrap}.status.ready{color:#87b9a0}.light .status.ready{color:#3e8061}.tag{font-size:10px;padding:1px 5px;border-radius:4px;border:1px solid var(--line);color:var(--purple);font-weight:400}.toggle{position:relative;display:inline-block;width:30px;height:18px;flex:none}.toggle input{opacity:0;width:0;height:0;position:absolute}.toggle .track{position:absolute;inset:0;border-radius:12px;background:var(--line);cursor:pointer}.toggle .track:before{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#f4f4f5;box-shadow:0 1px 2px #0002;transition:transform .15s}.toggle input:checked+.track{background:var(--fill)}.toggle input:checked+.track:before{transform:translateX(12px)}.toggle input:disabled+.track{opacity:.4;cursor:not-allowed}.toggle input:focus-visible+.track{outline:2px solid var(--purple);outline-offset:3px}.route-selector{display:flex;padding:3px;background:var(--card);border:1px solid var(--line);border-radius:7px;gap:3px}.route-selector button{border:0;background:none;flex:1;border-radius:4px;color:var(--secondary);font-size:12px;padding:7px 12px}.route-selector button.active{background:var(--soft);color:var(--purple);font-weight:550}.section-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}.advanced{font-size:12px;margin-top:13px;color:var(--secondary)}.advanced summary{cursor:pointer;color:var(--secondary);padding:2px 0}.advanced p{font-size:11px;color:var(--muted);line-height:1.7}.setting-help{font-size:11px;color:var(--muted);line-height:1.7;margin:10px 0 0}.settings-foot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:15px;font-size:11px;color:var(--muted)}.permission-warning{color:var(--warm)}.permission-summary{border-left:2px solid var(--warm);padding:1px 0 1px 12px;margin:0 0 18px}.permission-summary strong{font-weight:500;font-size:13px}.permission-summary p{margin:4px 0 0;font-size:12px;color:var(--secondary);line-height:1.7}.preview-prompt{width:100%;min-height:100px;border:1px solid var(--line);border-radius:6px;background:var(--page);color:var(--secondary);font:12px/1.7 "SF Mono","PingFang SC",monospace;padding:10px;resize:vertical}.modal-cover{position:fixed;inset:0;background:#0006;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px}.modal{width:520px;max-height:calc(100vh - 48px);overflow:auto;border:1px solid var(--line);border-radius:13px;background:var(--page);box-shadow:0 20px 80px #0004;padding:23px;color:var(--ink)}.modal h2{font-size:17px;font-weight:550;margin:0 0 7px}.modal p{font-size:12px;color:var(--secondary);line-height:1.7}.edit-form label{display:block;margin-top:15px;font-size:12px;color:var(--secondary)}.edit-form input,.edit-form select{display:block;width:100%;max-width:none;margin-top:6px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:22px}.check-note{font-size:11px;color:var(--muted);min-height:20px;margin-top:8px}.trial-box{padding:13px;border:1px solid var(--line);background:var(--card);border-radius:8px;font-size:13px;line-height:1.8;min-height:100px}.trial-status{font-size:12px;color:var(--secondary);margin:10px 0}.settings-content{max-width:900px}
+@media(max-width:1100px){.setting-tabs{gap:19px}.setting-caption{max-width:380px}.setting-actions{gap:6px}}
+
+/* Content-sized mode control; engine setup remains reachable in every mode. */
+.mode-section h2{margin-bottom:12px}
+.route-selector{display:inline-flex;width:auto;max-width:100%;gap:2px;padding:3px;border-radius:8px}
+.route-selector button{flex:none;min-width:82px;padding:7px 14px;font-size:12px;line-height:18px;border-radius:5px}
+.route-selector button.active{background:var(--soft);color:var(--purple)}
+.mode-section .section-copy{margin:11px 0 0;max-width:580px;line-height:1.75}
+.mode-privacy{font-size:11px;line-height:1.8;color:var(--secondary);margin:7px 0 0;max-width:580px}
+.mode-privacy .link-button{font-size:11px;margin-left:9px}
+.engine-heading{margin-bottom:11px;min-height:22px}
+.engine-heading h2{display:flex;align-items:center;gap:10px}
+.engine-toggle{display:inline-flex;align-items:center;gap:8px;padding:0;border:0;background:none;color:var(--ink);font-size:13px;font-weight:550;line-height:22px}
+.engine-toggle:before{content:"";width:5px;height:5px;border-top:1.5px solid var(--muted);border-right:1.5px solid var(--muted);transform:rotate(45deg);margin:0 2px 0 1px;transition:transform .15s}
+.engine-toggle[aria-expanded="true"]:before{transform:rotate(135deg);margin-top:-3px}
+.engine-scope{font-size:11px;color:var(--muted);font-weight:400}
+.engine-section.collapsed{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
+@media(max-width:760px){.route-selector button{min-width:70px;padding-left:10px;padding-right:10px}.engine-scope{display:none}}
+
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="home" viewBox="0 0 24 24"><path d="M4 20V10m5 10V4m6 16v-8m5 8V7"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="book" viewBox="0 0 24 24"><path d="M12 5C9 3 5 3 3 4v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-2-1-6-1-9 1Zm0 0v15"/></symbol>
+<symbol id="style" viewBox="0 0 24 24"><path d="m4 20 7-17h2l7 17M7 14h10"/></symbol>
+<symbol id="settings" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="var(--side)"/><circle cx="16" cy="12" r="2" fill="var(--side)"/><circle cx="10" cy="18" r="2" fill="var(--side)"/></symbol>
+<symbol id="hourglass" viewBox="0 0 24 24"><path d="M6 3h12M6 21h12M7 3v4l5 5-5 5v4m10-18v4l-5 5 5 5v4M9 18h6"/></symbol>
+<symbol id="text" viewBox="0 0 24 24"><path d="M4 6h16M4 10h12M4 14h16M4 18h9"/></symbol>
+<symbol id="bolt" viewBox="0 0 24 24"><path d="m14 2-9 12h7l-2 8 9-12h-7l2-8Z"/></symbol>
+<symbol id="calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4m8-4v4M4 10h16m-11 4h.01m3 0h.01m3 0h.01m-6 3h.01m3 0h.01"/></symbol>
+<symbol id="flame" viewBox="0 0 24 24"><path d="M12 2c3 4 7 6 7 12a7 7 0 1 1-14 0c0-3 2-6 4-8 0 4 2 5 3 5 2-2 2-5 0-9Z"/><path d="M12 14c2 2 3 4 0 6-3-2-2-4 0-6Z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="trophy" viewBox="0 0 24 24"><path d="M8 3h8v8a4 4 0 0 1-8 0V3Zm0 2H4v3a4 4 0 0 0 4 4m8-7h4v3a4 4 0 0 1-4 4m-4 3v5m-4 1h8"/></symbol>
+<symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+</defs></svg>
+<div class="review">
+<div class="review-bar"><strong>设置细化 · 紧凑选择器与完整模式说明</strong><div class="review-controls"><label for="permission-example">权限示例</label><select id="permission-example"><option value="ready">可正常听写</option><option value="ax">辅助功能未授权</option><option value="mic">麦克风未授权</option></select><label for="dataset">示例数据</label><select id="dataset"><option value="sparse">少量使用</option><option value="regular">持续使用</option></select><button id="theme" aria-pressed="false">浅色</button></div></div>
+<div class="app" id="app">
+<aside class="sidebar">
+<div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div><div class="brand">Flow<span>Type</span></div>
+<nav aria-label="主导航">
+<button class="nav" data-view="overview"><svg class="ico"><use href="#home"/></svg>概览</button>
+<button class="nav" data-placeholder="历史"><svg class="ico"><use href="#clock"/></svg>历史</button>
+<button class="nav" data-placeholder="词典"><svg class="ico"><use href="#book"/></svg>词典</button>
+<button class="nav" data-placeholder="风格"><svg class="ico"><use href="#style"/></svg>风格</button>
+</nav>
+<div class="side-bottom"><button class="nav active" data-view="settings" aria-current="page"><svg class="ico"><use href="#settings"/></svg>设置</button><div class="availability"><i></i>已就绪</div></div>
+</aside>
+<div class="workspace">
+<div class="window-bar"><span aria-hidden="true"></span><span class="hotkey">双击 <span class="key">⌘</span> 开始听写</span></div>
+<div class="scroll" id="scroll"><main class="content" id="overview-pane" hidden>
+<header class="heading"><h1>概览</h1><div class="range" aria-label="统计范围"><button class="active" data-range="all" aria-pressed="true">全部</button><button data-range="d30" aria-pressed="false">30 天</button><button data-range="d7" aria-pressed="false">7 天</button></div></header>
+<section class="hero" aria-label="口述统计">
+<div class="personal"><div class="ring"><svg viewBox="0 0 77 77" aria-hidden="true"><circle cx="38.5" cy="38.5" r="34"/><circle class="value" cx="38.5" cy="38.5" r="34"/></svg><strong>100<small>%</small></strong></div><div class="personal-title">个性化进度</div><button class="text-link" id="personal-detail">词典已启用 12 / 12 条</button></div>
+<div class="metrics">
+<div class="metric saved"><div class="metric-head"><svg class="ico"><use href="#hourglass"/></svg>节省时间</div><div class="number" id="saved"></div></div>
+<div class="metric"><div class="metric-head"><svg class="ico"><use href="#text"/></svg>口述字数</div><div class="number" id="chars"></div></div>
+<div class="metric"><div class="metric-head"><svg class="ico"><use href="#clock"/></svg>总口述时间</div><div class="number" id="duration"></div></div>
+<div class="metric"><div class="metric-head"><svg class="ico"><use href="#bolt"/></svg>平均速度</div><div class="number" id="speed"></div></div>
+</div>
+</section>
+<section class="achievements" aria-labelledby="achievement-title">
+<div class="section-head"><h2 id="achievement-title">成就</h2></div>
+<div class="achievement-values">
+<div class="achievement"><div class="achievement-label"><svg class="ico"><use href="#calendar"/></svg>活跃天数</div><div class="achievement-number"><span id="active"></span><small>天</small></div><div class="achievement-sub" id="month-active"></div></div>
+<div class="achievement streak"><div class="achievement-label"><svg class="ico"><use href="#flame"/></svg>当前连续</div><div class="achievement-number"><span id="streak"></span><small>天</small></div><div class="achievement-sub" id="streak-hint"></div><div class="progress" role="progressbar" aria-label="下一里程碑进度" aria-valuemin="0" aria-valuemax="100" id="progress"><i id="progress-fill"></i></div></div>
+<div class="achievement"><div class="achievement-label"><svg class="ico"><use href="#trophy"/></svg>最长连续</div><div class="achievement-number"><span id="best"></span><small>天</small></div><div class="achievement-sub" id="best-month"></div></div>
+</div>
+<div class="milestones" id="milestones" aria-label="连续使用里程碑"></div>
+</section>
+<section class="analytics" aria-labelledby="heat-title">
+<div class="section-head"><h2 id="heat-title">活动热力图</h2><span class="meta">最近一年 · 不随统计范围变化</span></div>
+<div class="heat-layout"><div class="weekdays" aria-hidden="true"><span></span><span>一</span><span></span><span>三</span><span></span><span>五</span><span></span></div><div class="heat-content"><div class="months" id="months"></div><div class="heat-grid" id="heat"></div></div></div>
+<div class="heat-bottom"><span id="annual-count"></span><span class="legend">少<i></i><i></i><i></i><i></i><i></i>多</span></div>
+</section>
+<section class="analytics" aria-labelledby="hours-title">
+<div class="section-head hour-heading"><h2 id="hours-title">24 小时分布</h2><span class="meta">高峰 <b id="peak"></b></span></div>
+<div class="hours"><div class="y-axis" aria-label="听写次数"><span id="y-max"></span><span id="y-mid"></span><span>0</span></div><div class="bars" id="bars"></div></div>
+<div class="x-axis" aria-label="小时"><span style="--column:1">0</span><span style="--column:7">6</span><span style="--column:13">12</span><span style="--column:19">18</span><span style="--column:24">23</span></div>
+</section>
+<footer class="footer" id="footer"></footer>
+</main>
+<main class="content settings-content settings-pane" id="settings-pane">
+<header class="heading settings-heading"><h1>设置</h1><div class="setting-actions"><span style="font-size:11px;color:var(--muted)" id="settings-feedback" role="status">本轮仅展示交互</span><button class="native-button" id="open-trial">试说一句…</button></div></header>
+<div class="setting-tabs" role="tablist" aria-label="设置分组">
+<button id="tab-speech" role="tab" aria-selected="true" aria-controls="group-speech" class="active" data-group="speech">语音识别</button>
+<button id="tab-polish" role="tab" aria-selected="false" aria-controls="group-polish" data-group="polish" tabindex="-1">文本整理</button>
+<button id="tab-general" role="tab" aria-selected="false" aria-controls="group-general" data-group="general" tabindex="-1">通用</button>
+<button id="tab-privacy" role="tab" aria-selected="false" aria-controls="group-privacy" data-group="privacy" tabindex="-1">权限与隐私</button>
+</div>
+<section id="group-speech" role="tabpanel" aria-labelledby="tab-speech">
+<div class="setting-section mode-section"><h2>识别方式</h2><div class="route-selector" role="radiogroup" aria-label="识别方式" aria-describedby="route-description"><button data-route="local" role="radio" aria-checked="false" tabindex="-1">仅本地</button><button data-route="auto" role="radio" class="active" aria-checked="true" tabindex="0">自动（推荐）</button><button data-route="cloud" role="radio" aria-checked="false" tabindex="-1">仅云端</button></div><p class="section-copy" id="route-description">优先云端；网络较慢或服务异常时，尝试已加载的本地模型。</p><p class="mode-privacy" id="mode-privacy" hidden>已开启云端文本整理，转写文字仍会发送给整理服务。<button class="link-button" id="manage-polish">管理文本整理</button></p></div>
+<div class="setting-section engine-section" id="local-settings"><div class="section-heading engine-heading"><h2><button class="engine-toggle" data-engine="local" aria-expanded="true" aria-controls="local-body">本地模型</button><span class="engine-scope" id="local-scope"></span></h2><button class="link-button" data-preview="模型导入沿用现有文件夹校验与管理流程；此原型不读取文件。">导入模型…</button></div><div id="local-body"><div class="setting-box">
+<div class="setting-row"><div><div class="service-name">Qwen3-ASR 0.6B <span class="tag">已选模型</span></div><div class="setting-caption">MLX · 4-bit · 在本机离线处理</div></div><div class="setting-actions"><span class="status ready">已加载</span><button class="native-button" data-preview="展示当前模型详情与管理入口。">管理</button></div></div>
+<div class="setting-row"><div><div class="service-name">Qwen3-ASR 1.7B</div><div class="setting-caption">更高准确率，需要更多内存与存储空间</div></div><button class="native-button" data-preview="正式客户端会先展示资源需求和下载信息，再开始下载。此处不会下载模型。">下载…</button></div>
+</div><p class="setting-help">也可导入已下载的兼容 Qwen3-ASR MLX 或 Whisper Core ML 模型。</p></div></div>
+<div class="setting-section engine-section" id="cloud-settings"><div class="section-heading engine-heading"><h2><button class="engine-toggle" data-engine="cloud" aria-expanded="true" aria-controls="cloud-body">云端服务</button><span class="engine-scope" id="cloud-scope"></span></h2><button class="link-button" data-provider-action="add">添加服务…</button></div><div id="cloud-body"><div class="setting-box">
+<div class="setting-row"><div><div class="service-name">硅基流动 <span class="tag">已选服务</span></div><div class="setting-caption">FunAudioLLM/SenseVoiceSmall</div></div><div class="setting-actions"><span class="status" id="provider-status">未验证</span><button class="native-button" data-provider-action="edit">编辑…</button></div></div>
+<div class="setting-row"><div><div class="service-name">OpenAI</div><div class="setting-caption">gpt-4o-mini-transcribe</div></div><button class="native-button" data-preview="原型仅演示切换入口；不会更改当前服务或发起请求。">设为当前</button></div>
+</div><p class="setting-help">使用云端识别时，录音会发送给当前服务商。</p></div></div>
+<div class="setting-section"><div class="setting-box">
+<div class="setting-row"><div class="setting-label">识别语言</div><select aria-label="识别语言"><option>自动检测</option><option>中文</option><option>English</option></select></div>
+<div class="setting-row"><div><div class="setting-label">麦克风</div><div class="setting-caption">设备不可用时会显示提示，保留你的选择。</div></div><select aria-label="麦克风"><option>系统默认</option></select></div>
+</div></div>
+<div class="settings-foot"><span>更改识别配置后，进行中的听写继续使用原配置。</span></div>
+</section>
+<section id="group-polish" role="tabpanel" aria-labelledby="tab-polish" hidden>
+<div class="setting-section"><div class="setting-box"><div class="setting-row"><div><div class="setting-label">停止后自动整理</div><div class="setting-caption">整理口语、标点与段落；关闭后直接使用识别文本。</div></div><label class="toggle"><input id="polish-enabled" type="checkbox" checked aria-label="停止后自动整理"><span class="track"></span></label></div></div></div>
+<div class="setting-section"><div class="section-heading"><h2>整理服务</h2><button class="link-button" data-preview="添加独立的文本整理服务，沿用现有服务商编辑流程。">添加服务…</button></div><div class="setting-box"><div class="setting-row"><div><div class="service-name">硅基流动 <span class="tag">当前使用</span></div><div class="setting-caption">Qwen/Qwen3-8B · 文本整理服务与语音识别服务独立配置</div></div><button class="native-button" data-preview="这里编辑文本整理服务。不会修改语音识别的 URL、模型或密钥。">编辑…</button></div></div></div>
+<div class="setting-section"><h2>文本风格</h2><div class="setting-row"><div><div class="setting-label">使用当前风格包</div><div class="setting-caption">风格包决定整理方式；原始识别文本会按隐私设置保留。</div></div><button class="native-button" data-preview="正式客户端会跳转到「风格」，选中当前生效的风格包。">管理风格</button></div><details class="advanced"><summary>高级：默认提示词</summary><p>当前提示词来自生效风格包；未显式选择时仍会使用内置「结构化」风格。编辑默认提示词不会覆盖当前风格。</p><textarea class="preview-prompt" aria-label="默认提示词示例" readonly>这是默认提示词编辑区的样式示例。实际客户端会显示现有配置，并注明当前提示词来自哪个风格包。</textarea><button class="link-button" data-preview="正式客户端会在确认后恢复默认提示词。">恢复默认…</button></details></div>
+</section>
+<section id="group-general" role="tabpanel" aria-labelledby="tab-general" hidden>
+<div class="setting-section"><h2>外观</h2><div class="setting-row"><div class="setting-label">窗口外观</div><select id="appearance-preview" aria-label="窗口外观"><option value="dark">深色</option><option value="light">浅色</option><option value="system">随系统</option></select></div></div>
+<div class="setting-section"><div class="section-heading"><h2>快捷键与录音</h2></div><div class="setting-box">
+<div class="setting-row"><div class="setting-label">触发键</div><select aria-label="触发键"><option>Command ⌘</option><option>Option ⌥</option></select></div>
+<div class="setting-row"><div class="setting-label">交互方式</div><select aria-label="交互方式"><option>双击开始，单击停止</option><option>单击开始 / 停止</option></select></div>
+<div class="setting-row"><div class="setting-label">开始与结束提示音</div><label class="toggle"><input type="checkbox" checked aria-label="开始与结束提示音"><span class="track"></span></label></div>
+<div class="setting-row"><div><div class="setting-label">最长录音时间</div><div class="setting-caption">达到上限会自动停止；最后 30 秒显示提醒。</div></div><select aria-label="最长录音时间"><option>5 分钟</option><option>10 分钟</option><option>30 分钟</option></select></div>
+</div></div>
+<div class="setting-section"><h2>文字输入</h2><div class="setting-row"><div><div class="setting-label">输入方式</div><div class="setting-caption">无法安全输入时保留结果，并提供复制操作。</div></div><select aria-label="输入方式"><option>自动（推荐）</option><option>仅键入（兼容）</option><option>旧版候选应用模式</option></select></div></div>
+</section>
+<section id="group-privacy" role="tabpanel" aria-labelledby="tab-privacy" hidden>
+<div class="permission-summary" id="permission-summary" hidden><strong id="permission-title"></strong><p id="permission-body"></p></div>
+<div class="setting-section"><h2>系统权限</h2><div class="setting-box">
+<div class="setting-row"><div><div class="setting-label">麦克风</div><div class="setting-caption">用于录制语音</div></div><span class="status ready" id="mic-permission-status">已允许</span></div>
+<div class="setting-row"><div><div class="setting-label">辅助功能</div><div class="setting-caption">用于全局快捷键与自动输入</div></div><div class="setting-actions"><span class="status ready" id="ax-permission-status">已允许</span><button class="native-button" data-preview="正式客户端会打开 macOS 的辅助功能设置；此原型不会打开系统设置。">打开系统设置</button></div></div>
+<div class="setting-row"><div><div class="setting-label">Apple 语音识别</div><div class="setting-caption">仅在使用 Apple 基础识别时需要</div></div><span class="status">未请求</span></div>
+</div></div>
+<div class="setting-section"><h2>文本与上下文</h2><div class="setting-box">
+<div class="setting-row"><div><div class="setting-label">保存转写文本</div><div class="setting-caption">关闭后只保留时长、字数等统计；已有文本可在历史中清除。</div></div><label class="toggle"><input type="checkbox" checked aria-label="保存转写文本"><span class="track"></span></label></div>
+<div class="setting-row"><div><div class="setting-label">云端发送上下文</div><div class="setting-caption">向支持此功能的云端服务发送前台文本，辅助识别术语。</div></div><label class="toggle"><input id="send-context" type="checkbox" aria-label="云端发送上下文"><span class="track"></span></label></div>
+<div class="setting-row"><div><div class="setting-label">整理时使用上下文</div><div class="setting-caption">需先开启「云端发送上下文」。</div></div><label class="toggle"><input id="polish-context" type="checkbox" disabled aria-label="整理时使用上下文"><span class="track"></span></label></div>
+</div><p class="setting-help">仅本地识别不发送前台上下文。实时 Paraformer 识别不发送上下文。</p></div>
+<details class="advanced"><summary>诊断与支持</summary><div class="setting-row"><div class="setting-label">诊断日志与性能报告</div><button class="native-button" data-preview="沿用现有诊断日志与性能报告入口。原型不会读取或复制日志。">查看诊断</button></div></details>
+</section>
+</main>
+</div>
+</div>
+</div>
+<p class="review-note">交互原型，数据与权限状态均为示例。可切换概览／设置与四个设置分组，打开服务编辑或试说示例；不会保存配置、联网、下载或录音。</p>
+</div>
+
+<div class="modal-cover" id="modal-cover" hidden><section class="modal" id="provider-modal" role="dialog" aria-modal="true" aria-labelledby="provider-title" hidden>
+<h2 id="provider-title">编辑云端服务</h2><p>选择服务商，再填写服务地址、密钥与模型。</p><div class="edit-form">
+<label>服务商<select id="provider-vendor"><option value="silicon">硅基流动</option><option value="openai">OpenAI</option><option value="dashscope">阿里云 Paraformer 实时</option><option value="custom">自定义兼容服务</option></select></label><div style="margin-top:9px"><button class="link-button" id="provider-defaults">使用厂商默认值</button></div>
+<label>服务地址<input id="provider-url" value="https://api.siliconflow.cn/v1" aria-label="服务地址"></label>
+<label>密钥<input value="example-key" type="password" readonly aria-label="示例密钥"></label>
+<label>模型<input id="provider-model" value="FunAudioLLM/SenseVoiceSmall" aria-label="模型 ID"></label>
+<details class="advanced"><summary>高级配置</summary><p>正式客户端保留协议选择、自定义请求字段与能力说明。</p></details>
+</div><div style="display:flex;gap:8px;margin-top:17px"><button class="native-button" id="preview-check">检查配置</button><button class="native-button" id="preview-test">测试识别…</button></div><div class="check-note" id="check-note">检查配置不联网。原型中的所有操作均不发送请求。</div>
+<div class="modal-actions"><button class="native-button" data-close-modal>取消</button><button class="native-button primary" id="preview-save">保存</button></div>
+</section>
+<section class="modal" id="trial-modal" role="dialog" aria-modal="true" aria-labelledby="trial-title" hidden><h2 id="trial-title">试说一句</h2><p>结果会显示在这里。正式客户端将复用现有试说管线，不会输入到其他应用。</p><div class="trial-box" id="trial-result">试着说一句日常工作中会输入的话。</div><div class="trial-status" id="trial-status">当前是静态原型，不会请求麦克风。</div><div class="modal-actions"><button class="native-button" data-close-modal>关闭</button><button class="native-button primary" id="trial-simulate">查看结果示例</button></div></section></div>
+<div class="tip" id="tooltip" role="tooltip" hidden></div><div class="toast" id="toast" role="status" hidden></div>
+<script>
+(function(){
+const $=id=>document.getElementById(id),today=new Date(2026,10,3),ms=86400000,tiers=[3,7,14,30,60,100,365],colors=['#FFB454','#FF8A3D','#FF6B35','#FF4D4D','#E0479E','#A99BFF','#FFD24D'];let range='all',dataset='sparse',toastTimer;
+function key(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function dayAgo(n){const d=new Date(today);d.setDate(d.getDate()-n);return d}
+const sparse=[['2026-06-01',300,70,9],['2026-06-02',400,95,16],['2026-06-20',650,155,14],['2026-07-05',532,125,21],['2026-11-01',620,145,16]].map(x=>({date:x[0],chars:x[1],seconds:x[2],hour:x[3],sessions:1}));
+const regular=[];for(let i=115;i>=0;i--){if(i%3===0||i<6){const chars=380+((i*193+71)%1500);regular.push({date:key(dayAgo(i)),chars:chars,seconds:Math.floor(chars/(210+(i%5)*18)*60),hour:[9,10,14,16,16,20,21][i%7],sessions:1})}}
+const sets={sparse:sparse,regular:regular};
+function longest(rows){const dates=rows.map(x=>x.date).sort();let best=0,run=0,previous=null,end=null;dates.forEach(date=>{const t=new Date(date+'T12:00:00').getTime();run=previous!==null&&Math.round((t-previous)/ms)===1?run+1:1;if(run>best){best=run;end=date}previous=t});return {days:best,end:end}}
+function current(rows){const dates=new Set(rows.map(x=>x.date));let offset=dates.has(key(today))?0:1,count=0;while(dates.has(key(dayAgo(offset)))){count++;offset++}return count}
+function number(n){return n.toLocaleString('zh-CN')}
+function duration(n){if(n>=3600)return Math.floor(n/3600)+'<small>时</small>'+Math.floor(n%3600/60)+'<small>分</small>';return Math.floor(n/60)+'<small>分</small>'+n%60+'<small>秒</small>'}
+function tooltip(e,label){const box=$('tooltip');box.hidden=false;box.textContent=label;box.style.background=getComputedStyle($('app')).getPropertyValue('--ink');box.style.color=getComputedStyle($('app')).getPropertyValue('--page');box.style.left=Math.max(8,Math.min(innerWidth-box.offsetWidth-8,e.clientX+12))+'px';box.style.top=Math.max(8,Math.min(innerHeight-box.offsetHeight-8,e.clientY-box.offsetHeight-12))+'px'}
+function attachTip(el,label){el.addEventListener('mousemove',e=>tooltip(e,label));el.addEventListener('mouseleave',()=>{$('tooltip').hidden=true})}
+function heatmap(all){const amounts=new Map(all.map(x=>[x.date,x.chars])),max=Math.max(1,...amounts.values()),start=dayAgo(364),leading=start.getDay();$('heat').replaceChildren();$('months').replaceChildren();let lastMonth=null;
+for(let w=0;w<53;w++){const col=document.createElement('div');col.className='heat-week';for(let d=0;d<7;d++){const offset=w*7+d-leading,date=new Date(start);date.setDate(date.getDate()+offset);const cell=document.createElement('div');cell.className='heat-cell';if(offset<0||date>today)cell.classList.add('pad');else{const amount=amounts.get(key(date))||0,r=amount/max;cell.dataset.level=String(amount===0?0:r>.75?4:r>.5?3:r>.25?2:1);const text=(date.getMonth()+1)+'月'+date.getDate()+'日 · '+number(amount)+' 字';cell.setAttribute('aria-label',text);attachTip(cell,text);
+if(date.getMonth()!==lastMonth){lastMonth=date.getMonth();{const label=document.createElement('span');label.textContent=(lastMonth+1)+'月';if(w>=51)label.style.right='0';else label.style.left=(w/53*100)+'%';$('months').appendChild(label)}}}col.appendChild(cell)}$('heat').appendChild(col)}
+$('annual-count').textContent='最近一年，共 '+all.filter(x=>x.chars>0).length+' 天留下表达';
+}
+function render(){const all=sets[dataset],cutoff=range==='all'?'0000-00-00':key(dayAgo(range==='d30'?29:6)),rows=all.filter(x=>x.date>=cutoff),chars=rows.reduce((a,x)=>a+x.chars,0),seconds=rows.reduce((a,x)=>a+x.seconds,0),saved=Math.max(0,Math.floor(chars/45*60)-seconds),streak=current(rows),best=longest(rows),bestAll=longest(all),next=tiers.find(x=>x>streak),prev=tiers.filter(x=>x<=streak).at(-1)||0,pct=next?((streak-prev)/(next-prev)*100):100;
+$('saved').innerHTML=duration(saved);$('chars').innerHTML=number(chars)+'<small>字</small>';$('duration').innerHTML=duration(seconds);$('speed').innerHTML=(seconds?Math.floor(chars/seconds*60):0)+'<small>字 / 分</small>';$('active').textContent=rows.length;$('streak').textContent=streak;$('best').textContent=best.days;$('month-active').textContent='本月共 '+all.filter(x=>x.date.startsWith('2026-11')).length+' 天';$('best-month').textContent=bestAll.end?'个人最佳 · '+Number(bestAll.end.slice(5,7))+' 月':'个人最佳';$('streak-hint').textContent=next?'还差 '+(next-streak)+' 天，解锁 '+next+' 天里程碑':'已达成全部里程碑';$('progress-fill').style.width=pct+'%';$('progress').setAttribute('aria-valuenow',String(Math.round(pct)));
+$('milestones').replaceChildren();tiers.forEach((n,i)=>{const el=document.createElement('div'),done=streak>=n;el.className='milestone'+(done?' done':'');el.style.setProperty('--tier',colors[i]);el.innerHTML='<svg class="ico"><use href="#flame"/></svg><span>'+n+' 天</span><svg class="ico lock"><use href="#'+(done?'check':'lock')+'"/></svg>';el.setAttribute('aria-label',n+'天，'+(done?'已达成':'未解锁'));$('milestones').appendChild(el)});
+heatmap(all);
+const hist=Array(24).fill(0);rows.forEach(x=>hist[x.hour]+=x.sessions);const max=Math.max(1,...hist),ceiling=max<=2?2:Math.ceil(max/2)*2,peak=hist.indexOf(Math.max(...hist));$('bars').replaceChildren();hist.forEach((n,h)=>{const track=document.createElement('div');track.className='bar-track'+(n===0?' zero':'');const bar=document.createElement('div');bar.className='bar'+(h===peak?' peak':'');bar.style.height=(n/ceiling*100)+'%';track.appendChild(bar);attachTip(track,String(h).padStart(2,'0')+':00–'+String((h+1)%24).padStart(2,'0')+':00 · '+n+' 次听写');$('bars').appendChild(track)});$('y-max').textContent=ceiling;$('y-mid').textContent=ceiling/2;$('peak').textContent=String(peak).padStart(2,'0')+':00–'+String((peak+1)%24).padStart(2,'0')+':00';
+const keyCount=chars>=10000?(chars/10000).toFixed(1)+' 万':number(chars);const comparison=saved>=7200?'<span>节省时间够看 <strong>'+Math.floor(saved/7200)+'</strong> 部电影</span>':saved>=300?'<span>够泡 <strong>'+Math.floor(saved/300)+'</strong> 杯咖啡</span>':'';$('footer').innerHTML=chars?'<span>已累计口述 <strong>'+number(chars)+'</strong> 字</span>'+(chars>=50?'<span>少敲约 <strong>'+keyCount+'</strong> 次键盘</span>':'')+comparison:'';document.querySelectorAll('[data-range]').forEach(el=>{el.classList.toggle('active',el.dataset.range===range);el.setAttribute('aria-pressed',String(el.dataset.range===range))});
+}
+document.querySelectorAll('[data-range]').forEach(el=>el.addEventListener('click',()=>{range=el.dataset.range;render()}));$('dataset').addEventListener('change',()=>{dataset=$('dataset').value;render()});$('theme').addEventListener('click',()=>{const light=$('app').classList.toggle('light');$('theme').textContent=light?'深色':'浅色';$('theme').setAttribute('aria-pressed',String(light))});
+function toast(text){clearTimeout(toastTimer);$('toast').textContent=text;$('toast').hidden=false;toastTimer=setTimeout(()=>{$('toast').hidden=true},3000)}
+$('personal-detail').addEventListener('click',()=>toast('此进度表示词典启用比例。示例为 12 条词条全部启用。'));document.querySelectorAll('[data-placeholder]').forEach(el=>el.addEventListener('click',()=>toast(el.dataset.placeholder+'页面本轮未展示，现有功能会保留。')));$('scroll').addEventListener('scroll',()=>{$('tooltip').hidden=true});render();
+const query=new URLSearchParams(location.search);if(query.get('theme')==='light')$('theme').click();if(query.get('data')==='regular'){$('dataset').value='regular';dataset='regular';render()}
+})();
+</script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);let previousFocus=null,activeGroup='speech',modalType=null,notifyTimer,previewRoute='auto';
+function previewToast(text){clearTimeout(notifyTimer);$('toast').textContent=text;$('toast').hidden=false;notifyTimer=setTimeout(()=>{$('toast').hidden=true},3500)}
+function showView(view){$('overview-pane').hidden=view!=='overview';$('settings-pane').hidden=view!=='settings';document.querySelectorAll('[data-view]').forEach(b=>{const selected=b.dataset.view===view;b.classList.toggle('active',selected);if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});$('scroll').scrollTop=0}
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+function selectGroup(group,focus){activeGroup=group;document.querySelectorAll('[data-group]').forEach(b=>{const active=b.dataset.group===group;b.classList.toggle('active',active);b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;if(active&&focus)b.focus()});['speech','polish','general','privacy'].forEach(g=>$('group-'+g).hidden=g!==group);$('scroll').scrollTop=0}
+document.querySelectorAll('[data-group]').forEach(b=>{b.addEventListener('click',()=>selectGroup(b.dataset.group,false));b.addEventListener('keydown',e=>{const gs=['speech','polish','general','privacy'],i=gs.indexOf(activeGroup);if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();selectGroup(e.key==='Home'?gs[0]:e.key==='End'?gs.at(-1):gs[(i+(e.key==='ArrowRight'?1:3))%4],true)}})});
+document.querySelectorAll('[data-preview]').forEach(b=>b.addEventListener('click',()=>previewToast(b.dataset.preview)));
+
+function setEngineOpen(engine,open){$(engine+'-body').hidden=!open;$(engine+'-settings').classList.toggle('collapsed',!open);document.querySelector('[data-engine='+engine+']').setAttribute('aria-expanded',String(open))}
+function describeRoute(){
+ $('route-description').textContent=previewRoute==='local'?'仅在本机进行语音识别，识别录音不发送给云端 ASR。':previewRoute==='cloud'?'录音发送给已选云端服务；失败时不会切换至本地识别。':'优先云端；网络较慢或服务异常时，尝试已加载的本地模型。';
+ $('mode-privacy').hidden=previewRoute!=='local'||!$('polish-enabled').checked;
+ $('local-scope').textContent=previewRoute==='cloud'?'此模式不使用':'';
+ $('cloud-scope').textContent=previewRoute==='local'?'此模式不使用':'';
+}
+function selectRoute(route,focus){
+ previewRoute=route;syncContext();
+ document.querySelectorAll('[data-route]').forEach(x=>{const active=x.dataset.route===route;x.classList.toggle('active',active);x.setAttribute('aria-checked',String(active));x.tabIndex=active?0:-1;if(active&&focus)x.focus()});
+ setEngineOpen('local',route!=='cloud');setEngineOpen('cloud',route!=='local');describeRoute();
+}
+document.querySelectorAll('[data-route]').forEach(b=>{
+ b.addEventListener('click',()=>selectRoute(b.dataset.route,false));
+ b.addEventListener('keydown',e=>{const keys=['local','auto','cloud'],i=keys.indexOf(previewRoute);if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)){e.preventDefault();selectRoute(e.key==='Home'?keys[0]:e.key==='End'?keys.at(-1):keys[(i+(['ArrowRight','ArrowDown'].includes(e.key)?1:2))%3],true)}});
+});
+document.querySelectorAll('[data-engine]').forEach(b=>b.addEventListener('click',()=>setEngineOpen(b.dataset.engine,b.getAttribute('aria-expanded')!=='true')));
+$('polish-enabled').addEventListener('change',describeRoute);
+$('manage-polish').addEventListener('click',()=>selectGroup('polish',true));
+selectRoute('auto',false);
+const appVars=['--page','--card','--line','--ink','--secondary','--muted','--purple','--fill'];
+function syncModal(){const style=getComputedStyle($('app'));appVars.forEach(k=>$('modal-cover').style.setProperty(k,style.getPropertyValue(k)))}
+function openModal(type){previousFocus=document.activeElement;modalType=type;syncModal();$('modal-cover').hidden=false;$('provider-modal').hidden=type!=='provider';$('trial-modal').hidden=type!=='trial';const first=document.querySelector('#'+(type==='provider'?'provider-modal':'trial-modal')+' button, #'+(type==='provider'?'provider-modal':'trial-modal')+' select');if(first)first.focus()}
+function closeModal(){$('modal-cover').hidden=true;modalType=null;if(previousFocus)previousFocus.focus()}
+document.querySelectorAll('[data-provider-action]').forEach(b=>b.addEventListener('click',()=>{$('provider-title').textContent=b.dataset.providerAction==='add'?'添加云端服务':'编辑云端服务';openModal('provider')}));
+document.querySelectorAll('[data-close-modal]').forEach(b=>b.addEventListener('click',closeModal));$('open-trial').addEventListener('click',()=>{if($('permission-example').value==='mic'){selectGroup('privacy',false);previewToast('请先在系统设置中开启麦克风权限。原型不会请求权限。')}else openModal('trial')});
+document.addEventListener('keydown',e=>{if($('modal-cover').hidden)return;if(e.key==='Escape'){e.preventDefault();closeModal()}else if(e.key==='Tab'){const items=[...document.querySelectorAll('#'+(modalType==='provider'?'provider-modal':'trial-modal')+' button, #'+(modalType==='provider'?'provider-modal':'trial-modal')+' input, #'+(modalType==='provider'?'provider-modal':'trial-modal')+' select, #'+(modalType==='provider'?'provider-modal':'trial-modal')+' summary')].filter(x=>x.getClientRects().length&&!x.disabled);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
+
+function providerDefaults(){const presets={silicon:['https://api.siliconflow.cn/v1','FunAudioLLM/SenseVoiceSmall'],openai:['https://api.openai.com/v1','gpt-4o-mini-transcribe'],dashscope:['wss://dashscope.aliyuncs.com/api-ws/v1/inference','paraformer-realtime-v2'],custom:['https://service.example/v1','']};return presets[$('provider-vendor').value]}
+$('provider-vendor').addEventListener('change',()=>{const realtime=$('provider-vendor').value==='dashscope';$('preview-test').hidden=realtime;$('check-note').textContent=realtime?'已保留现有地址、模型与密钥；请核对 WSS 配置。实时识别在录音时验证。':'已保留现有地址、模型与密钥。可手动修改，或使用厂商默认值。';});
+$('provider-defaults').addEventListener('click',()=>{const values=providerDefaults();$('provider-url').value=values[0];$('provider-model').value=values[1];$('check-note').textContent='已在草稿中填入厂商默认地址与模型；密钥保持不变。原型不保存配置。'});
+$('preview-check').addEventListener('click',()=>{$('check-note').textContent=$('provider-model').value.trim()?'示例：配置有效；尚未连接。':'示例：请填写模型 ID。'});
+$('preview-test').addEventListener('click',()=>{$('check-note').textContent='正式客户端会向当前 URL 发送密钥与 0.5 秒合成静音音频，可能产生费用。此原型不会发送。'});
+$('preview-save').addEventListener('click',()=>{closeModal();previewToast('这里只演示保存位置，未保存或修改任何配置。')});
+$('trial-simulate').addEventListener('click',()=>{$('trial-result').textContent='明天下午三点，我们一起确认这次客户端的交互设计。';$('trial-status').textContent='结果样式示例 · 未录音、未输入到其他应用。'});
+function syncContext(){$('send-context').disabled=previewRoute==='local';$('polish-context').disabled=previewRoute==='local'||!$('send-context').checked}$('send-context').addEventListener('change',syncContext);
+$('appearance-preview').addEventListener('change',()=>{const v=$('appearance-preview').value,light=v==='light'||(v==='system'&&matchMedia('(prefers-color-scheme:light)').matches);$('app').classList.toggle('light',light);$('theme').textContent=light?'深色':'浅色';$('theme').setAttribute('aria-pressed',String(light))});
+
+const readyHint=document.querySelector('.window-bar .hotkey').innerHTML;
+function renderPermission(){
+ const state=$('permission-example').value,summary=$('permission-summary'),ax=$('ax-permission-status'),mic=$('mic-permission-status');
+ summary.hidden=state==='ready';ax.textContent=state==='ax'?'未开启':'已允许';ax.classList.toggle('ready',state!=='ax');mic.textContent=state==='mic'?'未开启':'已允许';mic.classList.toggle('ready',state!=='mic');
+ $('permission-title').textContent=state==='mic'?'麦克风权限未开启':'辅助功能尚未开启，仍可从菜单开始听写';
+ $('permission-body').textContent=state==='mic'?'开启后即可录音；已有模型与服务配置会保留。':'结果会写入剪贴板。开启后可使用全局快捷键和自动输入。';
+ document.querySelector('.availability').innerHTML='<i></i>'+(state==='ready'?'已就绪':state==='ax'?'菜单听写 · 复制结果':'麦克风未开启');
+ document.querySelector('.availability i').style.background=state==='ready'?'#74b497':'#edb770';
+ document.querySelector('.window-bar .hotkey').innerHTML=state==='ready'?readyHint:state==='ax'?'可从菜单开始听写':'需开启麦克风权限';
+ $('open-trial').textContent=state==='mic'?'检查麦克风权限…':'试说一句…';
+}
+$('permission-example').addEventListener('change',renderPermission);renderPermission();
+
+$('theme').addEventListener('click',()=>{$('appearance-preview').value=$('app').classList.contains('light')?'light':'dark'});showView('settings');
+})();
+</script>
+</body>
+</html>
