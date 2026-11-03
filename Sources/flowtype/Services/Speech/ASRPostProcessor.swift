@@ -406,7 +406,7 @@ struct ASRPostProcessor {
     // MARK: - Resource loading
 
     private static func loadTechTerms() -> [(String, String)] {
-        guard let url = Bundle.module.url(forResource: "tech_terms", withExtension: "json"),
+        guard let url = AppResources.url(forResource: "tech_terms", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let dict = try? JSONDecoder().decode([String: String].self, from: data)
         else {
@@ -417,7 +417,7 @@ struct ASRPostProcessor {
     }
 
     private static func loadFillers() -> [String] {
-        guard let url = Bundle.module.url(forResource: "filler_words", withExtension: "json"),
+        guard let url = AppResources.url(forResource: "filler_words", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let array = try? JSONDecoder().decode([String].self, from: data)
         else {

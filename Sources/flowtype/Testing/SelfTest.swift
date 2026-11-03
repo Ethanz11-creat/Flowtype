@@ -289,6 +289,13 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m5-artifact-contract-only") {
+            await M5ArtifactSelfTests.run(r)
+            AppLogger.log("=== M5 artifact contract self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
+            print("=== M5 artifact contract self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--m5-smoke-contract-only") {
             await M5SmokeSelfTests.run(r)
             AppLogger.log("=== M5 smoke contract self-test: \(r.passed) passed, \(r.failed) failed ===")
@@ -391,6 +398,7 @@ enum SelfTest {
         await M5IsolationSelfTests.run(r)
         await M5BuildInfoSelfTests.run(r)
         await M5SmokeSelfTests.run(r)
+        await M5ArtifactSelfTests.run(r)
         testLLMURL(r)            // B1
         testSSEParse(r)          // B8
         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock

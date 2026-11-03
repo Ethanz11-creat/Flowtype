@@ -78,7 +78,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
 
         guard let button = statusItem?.button else { return }
 
-        if let image = Bundle.module.image(forResource: "status_bar_icon") {
+        if let url = AppResources.url(forResource: "status_bar_icon", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
             image.size = NSSize(width: 18, height: 18)
             image.isTemplate = true
             button.image = image
