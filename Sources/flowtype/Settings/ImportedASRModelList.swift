@@ -2,9 +2,9 @@ import SwiftUI
 import AppKit
 
 struct ImportedASRModelList: View {
-    @ObservedObject private var store = ConfigurationStore.shared
-    @ObservedObject private var coordinator = QwenModelState.shared
-    @StateObject private var actions = ImportedASRModelActions(coordinator: .shared, configuration: { ConfigurationStore.shared.current })
+    @ObservedObject var store: ConfigurationStore
+    @ObservedObject var coordinator: QwenModelState
+    @ObservedObject var actions: ImportedASRModelActions
 
     private var busy: Bool { coordinator.operationID != nil || actions.isInspecting }
 
@@ -116,10 +116,17 @@ struct ImportedASRModelList: View {
 }
 
 struct ImportedASRModelLibrarySheet: View {
+    @ObservedObject var store: ConfigurationStore
+    @ObservedObject var coordinator: QwenModelState
+    @ObservedObject var actions: ImportedASRModelActions
+    var modelList: ImportedASRModelList {
+        ImportedASRModelList(store: store, coordinator: coordinator, actions: actions)
+    }
+
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         VStack(alignment: .trailing, spacing: 12) {
-            ScrollView { ImportedASRModelList().padding(4) }
+            ScrollView { modelList.padding(4) }
             Button("完成") { dismiss() }.keyboardShortcut(.cancelAction)
         }.padding(20).frame(width: 600, height: 560)
     }

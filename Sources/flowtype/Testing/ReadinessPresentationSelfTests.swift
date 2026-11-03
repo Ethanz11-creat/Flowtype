@@ -99,8 +99,13 @@ enum ReadinessPresentationSelfTests {
         let navigation = SettingsNavigation()
         let checks = CloudASRConnectionCheck(recognitionTest: { _, _ in .success("fixture") })
         let drafts = CloudASRConnectionCheck(recognitionTest: { _, _ in .success("fixture") })
-        let page = SettingsPage(navigation: navigation, store: store, monitor: monitor, checks: checks, draftChecks: drafts)
-        let asr = ASRSettingsContent(store: store, monitor: monitor, navigation: navigation,
+        let coordinator = LocalSettingsOwnershipSelfTests.coordinator(store: store)
+        let downloader = ModelDownloader(coordinator: coordinator, configuration: { store.current })
+        let importedActions = ImportedASRModelActions(coordinator: coordinator, configuration: { store.current })
+        let page = SettingsPage(navigation: navigation, store: store, monitor: monitor,
+            modelState: coordinator, downloader: downloader, importedActions: importedActions, checks: checks, draftChecks: drafts)
+        let asr = ASRSettingsContent(store: store, monitor: monitor, modelState: coordinator,
+            downloader: downloader, importedActions: importedActions, navigation: navigation,
             checks: checks, draftChecks: drafts, devices: { [] })
         let permissions = PermissionSettingsContent(store: store, monitor: monitor, navigation: navigation,
             openMicrophoneSettings: {}, openAccessibilitySettings: {}, openSpeechSettings: {})

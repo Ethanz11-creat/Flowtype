@@ -2,9 +2,18 @@ import SwiftUI
 import AppKit
 
 struct QwenModelStatusCard: View {
-    @ObservedObject private var modelState = QwenModelState.shared
-    @ObservedObject private var store = ConfigurationStore.shared
+    @ObservedObject var modelState: QwenModelState
+    @ObservedObject var store: ConfigurationStore
+    @ObservedObject var importedActions: ImportedASRModelActions
     @State private var showsLibrary = false
+
+    var downloadSourceSelection: Binding<DownloadSource> {
+        Binding(get: { store.current.downloadSource }, set: { store.current.downloadSource = $0 })
+    }
+
+    var modelLibrary: ImportedASRModelLibrarySheet {
+        ImportedASRModelLibrarySheet(store: store, coordinator: modelState, actions: importedActions)
+    }
 
     private var configuredPath: String? {
         [store.current.customLocalModelPath, store.current.localModelPath].compactMap { $0 }.first { !$0.isEmpty }
@@ -100,7 +109,7 @@ struct QwenModelStatusCard: View {
         }
         .padding(14)
         .glassCard(cornerRadius: 10)
-        .sheet(isPresented: $showsLibrary) { ImportedASRModelLibrarySheet() }
+        .sheet(isPresented: $showsLibrary) { modelLibrary }
     }
 
     @ViewBuilder private var progressArea: some View {
@@ -126,7 +135,7 @@ struct QwenModelStatusCard: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text("下载源").font(.system(size: 12)).foregroundColor(.secondary)
-                Picker("下载源", selection: $store.current.downloadSource) {
+                Picker("下载源", selection: downloadSourceSelection) {
                     Text("自动").tag(DownloadSource.auto)
                     Text("官方").tag(DownloadSource.official)
                     Text("镜像").tag(DownloadSource.mirror)

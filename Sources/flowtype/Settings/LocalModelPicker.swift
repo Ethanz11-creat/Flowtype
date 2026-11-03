@@ -2,8 +2,18 @@ import SwiftUI
 import AppKit
 
 struct LocalModelPicker: View {
-    @ObservedObject private var downloader = ModelDownloader.shared
-    @ObservedObject private var modelState = QwenModelState.shared
+    @ObservedObject var store: ConfigurationStore
+    @ObservedObject var modelState: QwenModelState
+    @ObservedObject var downloader: ModelDownloader
+    @ObservedObject var importedActions: ImportedASRModelActions
+
+    func selectPreset(_ preset: ModelPreset?, automatic: Bool = false) async {
+        await modelState.selectPreset(preset, automatic: automatic)
+    }
+
+    var importedModels: ImportedASRModelList {
+        ImportedASRModelList(store: store, coordinator: modelState, actions: importedActions)
+    }
 
     private var currentTier: HardwareTier {
         HardwareProfiler.currentTier()
@@ -24,10 +34,10 @@ struct LocalModelPicker: View {
             VStack(alignment: .leading, spacing: 10) {
                 Menu("选择内置下载预设") {
                     Button("自动选择（推荐）") {
-                        Task { await modelState.selectPreset(nil, automatic: true) }
+                        Task { await selectPreset(nil, automatic: true) }
                     }
                     ForEach(ImportedASRModelPresentation.downloadablePresets) { preset in
-                        Button(preset.name) { Task { await modelState.selectPreset(preset) } }
+                        Button(preset.name) { Task { await selectPreset(preset) } }
                     }
                 }.disabled(modelState.operationID != nil)
 
@@ -39,7 +49,7 @@ struct LocalModelPicker: View {
 
                 Divider().opacity(0.5)
 
-                ImportedASRModelList()
+                importedModels
             }
             .padding(14)
             .glassCard(cornerRadius: 10)
@@ -87,7 +97,7 @@ struct LocalModelPicker: View {
                     .foregroundColor(.red.opacity(0.8))
                 } else if isDownloaded {
                     Button("使用") {
-                        Task { await modelState.selectPreset(preset) }
+                        Task { await selectPreset(preset) }
                     }.controlSize(.small).disabled(modelState.operationID != nil)
                     Button("删除") {
                         Task {

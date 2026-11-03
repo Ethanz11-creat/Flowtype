@@ -2,6 +2,9 @@ import SwiftUI
 
 struct ASRModelStatusCard: View {
     @ObservedObject private var store = ConfigurationStore.shared
+    @ObservedObject private var modelState = QwenModelState.shared
+    @StateObject private var importedActions = ImportedASRModelActions(
+        coordinator: .shared, configuration: { ConfigurationStore.shared.current })
     @State private var cloudAvailable: Bool?
 
     var body: some View {
@@ -30,7 +33,7 @@ struct ASRModelStatusCard: View {
     private var localStatusView: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("本地离线识别").font(.system(size: 12, weight: .medium))
-            QwenModelStatusCard()
+            QwenModelStatusCard(modelState: modelState, store: store, importedActions: importedActions)
         }
     }
 

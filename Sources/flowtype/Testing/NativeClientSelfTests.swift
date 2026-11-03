@@ -8,6 +8,7 @@ enum NativeClientSelfTests {
         await ProviderDraftCheckSelfTests.run(r)
         NativeNavigationSelfTests.run(r)
         ReadinessPresentationSelfTests.run(r)
+        await LocalSettingsOwnershipSelfTests.run(r)
         await SettingsChangeSelfTests.run(r)
     }
 }

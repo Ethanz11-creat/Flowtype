@@ -5,6 +5,9 @@ import AVFoundation
 struct ASRSettingsContent: View {
     @ObservedObject var store: ConfigurationStore
     @ObservedObject var monitor: ReadinessMonitor
+    @ObservedObject var modelState: QwenModelState
+    @ObservedObject var downloader: ModelDownloader
+    @ObservedObject var importedActions: ImportedASRModelActions
     let navigation: SettingsNavigation?
     @ObservedObject var checks: CloudASRConnectionCheck
     @ObservedObject var draftChecks: CloudASRConnectionCheck
@@ -15,12 +18,20 @@ struct ASRSettingsContent: View {
     @State private var localExpanded = true
     @State private var cloudExpanded = true
 
+    var localModelPicker: LocalModelPicker {
+        LocalModelPicker(store: store, modelState: modelState, downloader: downloader, importedActions: importedActions)
+    }
+
+    var localModelStatus: QwenModelStatusCard {
+        QwenModelStatusCard(modelState: modelState, store: store, importedActions: importedActions)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             modeSection
             DisclosureGroup(isExpanded: $localExpanded) {
-                LocalModelPicker()
-                QwenModelStatusCard()
+                localModelPicker
+                localModelStatus
             } label: {
                 Text(store.current.asrRoutingPolicy == .cloudOnly ? "本地模型 · 此模式不使用" : "本地模型")
                     .font(.system(size: 13, weight: .medium))

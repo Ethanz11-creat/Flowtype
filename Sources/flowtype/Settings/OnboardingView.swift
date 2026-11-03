@@ -10,6 +10,8 @@ struct OnboardingView: View {
     @ObservedObject private var modelState = QwenModelState.shared
     @State private var showsModelLibrary = false
     @StateObject private var store = ConfigurationStore.shared
+    @StateObject private var importedActions = ImportedASRModelActions(
+        coordinator: .shared, configuration: { ConfigurationStore.shared.current })
 
     var body: some View {
         VStack(spacing: 0) {
@@ -373,7 +375,7 @@ struct OnboardingView: View {
                 .font(.system(size: 11)).foregroundColor(.secondary)
             Button("导入与管理本地 ASR 模型") { showsModelLibrary = true }
                 .controlSize(.small).disabled(modelState.operationID != nil)
-                .sheet(isPresented: $showsModelLibrary) { ImportedASRModelLibrarySheet() }
+                .sheet(isPresented: $showsModelLibrary) { ImportedASRModelLibrarySheet(store: store, coordinator: modelState, actions: importedActions) }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("录音结果会显示在这里：")

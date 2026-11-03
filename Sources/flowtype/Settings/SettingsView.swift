@@ -4,6 +4,9 @@ struct SettingsPage: View {
     let navigation: SettingsNavigation?
     @ObservedObject var store: ConfigurationStore
     @ObservedObject var monitor: ReadinessMonitor
+    @ObservedObject var modelState: QwenModelState
+    @ObservedObject var downloader: ModelDownloader
+    @StateObject var importedActions: ImportedASRModelActions
     @StateObject var checks: CloudASRConnectionCheck
     @StateObject var draftChecks: CloudASRConnectionCheck
     @Environment(\.clientNavigationRequest) private var request
@@ -11,12 +14,25 @@ struct SettingsPage: View {
     @State private var showTrialPlaceholder = false
     @State var providerDraft: LLMProviderDraft?
 
-    init(navigation: SettingsNavigation? = nil, store: ConfigurationStore = .shared,
-         monitor: ReadinessMonitor = .shared,
+    /// Production composition boundary. Reusable constructors below resolve no singletons.
+    init(navigation: SettingsNavigation? = nil) {
+        let store = ConfigurationStore.shared
+        let coordinator = QwenModelState.shared
+        self.init(navigation: navigation, store: store, monitor: .shared,
+                  modelState: coordinator, downloader: .shared,
+                  importedActions: ImportedASRModelActions(coordinator: coordinator, configuration: { store.current }))
+    }
+
+    init(navigation: SettingsNavigation? = nil, store: ConfigurationStore,
+         monitor: ReadinessMonitor, modelState: QwenModelState, downloader: ModelDownloader,
+         importedActions: ImportedASRModelActions,
          checks: CloudASRConnectionCheck? = nil, draftChecks: CloudASRConnectionCheck? = nil) {
         self.navigation = navigation
         self.store = store
         self.monitor = monitor
+        self.modelState = modelState
+        self.downloader = downloader
+        _importedActions = StateObject(wrappedValue: importedActions)
         _checks = StateObject(wrappedValue: checks ?? CloudASRConnectionCheck())
         _draftChecks = StateObject(wrappedValue: draftChecks ?? CloudASRConnectionCheck())
     }
@@ -110,7 +126,8 @@ struct SettingsPage: View {
     @ViewBuilder private var groupContent: some View {
         switch location.section {
         case .speech:
-            ASRSettingsContent(store: store, monitor: monitor, navigation: navigation,
+            ASRSettingsContent(store: store, monitor: monitor, modelState: modelState,
+                               downloader: downloader, importedActions: importedActions, navigation: navigation,
                                checks: checks, draftChecks: draftChecks, target: location.target,
                                requestID: location.requestID)
         case .text: llmSection
