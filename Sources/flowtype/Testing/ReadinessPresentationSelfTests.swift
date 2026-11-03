@@ -102,7 +102,9 @@ enum ReadinessPresentationSelfTests {
         let coordinator = LocalSettingsOwnershipSelfTests.coordinator(store: store)
         let downloader = ModelDownloader(coordinator: coordinator, configuration: { store.current })
         let importedActions = ImportedASRModelActions(coordinator: coordinator, configuration: { store.current })
-        let page = SettingsPage(navigation: navigation, store: store, monitor: monitor,
+        let page = SettingsPage(navigation: navigation, store: store,
+            styleStore: StylePackStore(store: PersistentStore(filename: "settings-style-fixture.json",
+                directory: RuntimeEnvironment.current.paths.applicationSupportDirectory)), monitor: monitor,
             modelState: coordinator, downloader: downloader, importedActions: importedActions,
             trialPresenter: TrialSessionPresenter(configuration: store, resources: SessionResourceCoordinator(),
                 refreshReadiness: { monitor.rawLevel }, readinessLevel: { monitor.rawLevel }, copy: { _ in }),

@@ -74,10 +74,15 @@ final class StylePackStore: ObservableObject {
 
     @Published private(set) var packs: [StylePack] = []
 
-    private let store = PersistentStore<[StylePack]>(filename: "style-packs.json")
+    private let store: PersistentStore<[StylePack]>
     private var saveDebounce: Task<Void, Never>?
 
-    private init() {
+    private convenience init() {
+        self.init(store: PersistentStore(filename: "style-packs.json"))
+    }
+
+    init(store: PersistentStore<[StylePack]>) {
+        self.store = store
         var loaded = store.load() ?? []
         for builtin in StylePack.allBuiltins {
             if !loaded.contains(where: { $0.id == builtin.id }) {

@@ -130,7 +130,7 @@ struct MainWindowView: View {
 
     @ViewBuilder private var detail: some View {
         switch selectedTab {
-        case .overview: OverviewPage()
+        case .overview: OverviewPage(navigation: navigation)
         case .history:  HistoryPage()
         case .vocab:    VocabPage()
         case .style:    StylePage()

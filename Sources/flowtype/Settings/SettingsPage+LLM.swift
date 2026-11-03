@@ -90,10 +90,9 @@ extension SettingsPage {
     }
 
     private var effectiveStyleSection: some View {
-        let pack = StylePackStore.shared.activePack
-        return SettingsRow("生效风格", description: pack.map { "来自风格包：\($0.name)。优先使用已启用的活动风格，否则使用内置 AI Prompt 模式。" }
-                           ?? "当前使用高级默认提示词。") {
-            Button("管理风格") { navigation?.navigate(to: .style(pack?.id)) }.controlSize(.small)
+        let pack = styleStore.activePack
+        return SettingsRow("生效风格", description: StylePresentation.effectiveSource(pack: pack, configuration: store.current)) {
+            Button("编辑生效风格") { navigation?.navigate(to: .style(pack?.id)) }.controlSize(.small)
         }
     }
 }

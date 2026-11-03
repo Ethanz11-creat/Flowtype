@@ -1,47 +1,34 @@
 import SwiftUI
 
-/// Prototype `.seg` pill — All / 30d / 7d. Active span = solid accent with near-black text.
 struct RangeSegmented: View {
     @Binding var range: StatsRange
-
+    private func label(_ range: StatsRange) -> String {
+        switch range { case .all: "全部"; case .d30: "30 天"; case .d7: "7 天" }
+    }
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(StatsRange.allCases) { r in
-                let active = r == range
-                Text(r.displayName)
-                    .font(.system(size: 12, weight: active ? .semibold : .regular))
-                    .foregroundColor(active ? Color(hex: 0x0C0C0F) : Theme.textSecondary)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(active ? Theme.accent : Color.clear)
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture { range = r }
+            ForEach(StatsRange.allCases) { item in
+                Button { range = item } label: {
+                    Text(label(item)).font(.system(size: 12, weight: item == range ? .semibold : .regular))
+                        .foregroundStyle(item == range ? Theme.accentText : Theme.textSecondary)
+                        .padding(.horizontal, 11).padding(.vertical, 4)
+                        .background(RoundedRectangle(cornerRadius: 5)
+                            .fill(item == range ? Theme.accent.opacity(0.13) : .clear))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(item == range ? .isSelected : [])
             }
         }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Theme.cardBackground)
-                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5))
-        )
+        .padding(2).glassCard(cornerRadius: 7)
+        .accessibilityLabel("统计范围")
     }
 }
 
-/// §3.1 control bar: 概览 (active) / 应用 / 语言 (v2, muted) on the left, range on the right.
 struct OverviewControlBar: View {
     @Binding var range: StatsRange
-
     var body: some View {
-        HStack(spacing: 0) {
-            HStack(spacing: 18) {
-                Text("概览").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.accentText)
-                Text("应用").font(.system(size: 14)).foregroundColor(Theme.textSecondary.opacity(0.7))
-                Text("语言").font(.system(size: 14)).foregroundColor(Theme.textSecondary.opacity(0.7))
-            }
+        HStack {
+            Text("概览").font(Theme.Typography.pageTitle)
             Spacer()
             RangeSegmented(range: $range)
         }

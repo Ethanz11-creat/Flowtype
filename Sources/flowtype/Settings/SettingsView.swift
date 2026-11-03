@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsPage: View {
     let navigation: SettingsNavigation?
     @ObservedObject var store: ConfigurationStore
+    @ObservedObject var styleStore: StylePackStore
     @ObservedObject var monitor: ReadinessMonitor
     @ObservedObject var modelState: QwenModelState
     @ObservedObject var downloader: ModelDownloader
@@ -20,7 +21,7 @@ struct SettingsPage: View {
         let store = ConfigurationStore.shared
         let coordinator = QwenModelState.shared
         let monitor = ReadinessMonitor.shared
-        self.init(navigation: navigation, store: store, monitor: monitor,
+        self.init(navigation: navigation, store: store, styleStore: .shared, monitor: monitor,
                   modelState: coordinator, downloader: .shared,
                   importedActions: ImportedASRModelActions(coordinator: coordinator, configuration: { store.current }),
                   trialPresenter: TrialSessionPresenter(configuration: store, resources: .shared,
@@ -29,12 +30,13 @@ struct SettingsPage: View {
                     copy: { KeyboardInjector.copyText($0) }))
     }
 
-    init(navigation: SettingsNavigation? = nil, store: ConfigurationStore,
+    init(navigation: SettingsNavigation? = nil, store: ConfigurationStore, styleStore: StylePackStore,
          monitor: ReadinessMonitor, modelState: QwenModelState, downloader: ModelDownloader,
          importedActions: ImportedASRModelActions, trialPresenter: TrialSessionPresenter,
          checks: CloudASRConnectionCheck? = nil, draftChecks: CloudASRConnectionCheck? = nil) {
         self.navigation = navigation
         self.store = store
+        self.styleStore = styleStore
         self.monitor = monitor
         self.modelState = modelState
         self.downloader = downloader

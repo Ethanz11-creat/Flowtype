@@ -2,11 +2,13 @@ import SwiftUI
 
 struct HeroSection: View {
     let summary: StatsSummary
+    let entries: [DictionaryEntry]
+    let openDictionary: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            PersonalizationCard()
-                .frame(width: 188)
+            PersonalizationCard(entries: entries, openDictionary: openDictionary)
+                .frame(width: 178)
                 .frame(maxHeight: .infinity)
             StatGrid2x2(s: summary)
         }
@@ -15,32 +17,28 @@ struct HeroSection: View {
 }
 
 private struct PersonalizationCard: View {
-    @ObservedObject private var dictionaryStore = DictionaryStore.shared
-
-    private var progress: Double {
-        let total = dictionaryStore.entries.count
-        guard total > 0 else { return 0 }
-        return Double(dictionaryStore.entries.filter(\.enabled).count) / Double(total)
-    }
+    let entries: [DictionaryEntry]
+    let openDictionary: () -> Void
+    private var progress: Double { DictionaryPresentation.enabledRatio(entries) }
 
     var body: some View {
         VStack(spacing: 10) {
             ZStack {
-                Circle().stroke(Color.white.opacity(0.10), lineWidth: 6)
-                    .frame(width: 72, height: 72)
+                Circle().stroke(Theme.cardBorder, lineWidth: 4)
+                    .frame(width: 77, height: 77)
                 Circle().trim(from: 0, to: progress)
-                    .stroke(Theme.accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                    .frame(width: 72, height: 72)
+                    .stroke(Theme.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .frame(width: 77, height: 77)
                     .rotationEffect(.degrees(-90))
                 Text("\(Int(progress * 100))%")
-                    .font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                    .font(.system(size: 22, weight: .semibold)).monospacedDigit()
                     .foregroundColor(Theme.textPrimary)
             }
             VStack(spacing: 4) {
-                Text("个性化进度").font(.system(size: 14, weight: .semibold)).foregroundColor(Theme.textPrimary)
-                Text("继续口述，让转写更贴合你")
-                    .font(.system(size: 11)).foregroundColor(Theme.textSecondary)
-                    .multilineTextAlignment(.center).lineSpacing(2)
+                Text("词典启用比例").font(.system(size: 13, weight: .medium)).foregroundColor(Theme.textPrimary)
+                Button("词典已启用 \(entries.filter(\.enabled).count) / \(entries.count) 条", action: openDictionary)
+                    .buttonStyle(.link).font(.system(size: 11))
+                    .help("查看与管理已启用词条；此比例不表示模型学习进度")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -88,9 +86,10 @@ private struct StatCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Image(systemName: icon).font(.system(size: 16)).foregroundColor(iconColor)
-            StatValueView(segments: segments, numberSize: 27, unitSize: 15, numberColor: numberColor)
-            Text(label).font(.system(size: 12)).foregroundColor(Theme.textSecondary)
+            Label { Text(label) } icon: {
+                Image(systemName: icon).foregroundColor(iconColor)
+            }.font(.system(size: 12)).foregroundColor(Theme.textSecondary)
+            StatValueView(segments: segments, numberSize: 30, unitSize: 12, numberColor: numberColor)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.horizontal, 15).padding(.vertical, 14)

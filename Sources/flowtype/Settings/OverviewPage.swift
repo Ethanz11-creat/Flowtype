@@ -2,24 +2,40 @@ import SwiftUI
 import AppKit
 
 struct OverviewPage: View {
-    @ObservedObject private var statsStore = DailyStatsStore.shared
-    @State private var range: StatsRange = .d30
+    @ObservedObject private var statsStore: DailyStatsStore
+    @ObservedObject private var dictionaryStore: DictionaryStore
+    private let openDictionary: () -> Void
+    private let now: () -> Date
+    @State private var range: StatsRange = .all
+
+    init(navigation: SettingsNavigation? = nil) {
+        self.init(statsStore: .shared, dictionaryStore: .shared,
+                  openDictionary: { navigation?.navigate(to: .tab(.vocab)) })
+    }
+
+    init(statsStore: DailyStatsStore, dictionaryStore: DictionaryStore,
+         now: @escaping () -> Date = Date.init, openDictionary: @escaping () -> Void) {
+        self.statsStore = statsStore
+        self.dictionaryStore = dictionaryStore
+        self.now = now
+        self.openDictionary = openDictionary
+    }
 
     var body: some View {
-        let s = StatsEngine.summarize(statsStore.stats, range: range, now: Date())
-        let yearCells = StatsEngine.denseHeatmap(statsStore.stats, range: .all, now: Date(), cal: .current)
+        let date = now()
+        let s = StatsEngine.summarize(statsStore.stats, range: range, now: date)
+        let yearCells = StatsEngine.denseHeatmap(statsStore.stats, range: .all, now: date, cal: .current)
 
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.sectionSpacing) {
+            VStack(alignment: .leading, spacing: 24) {
                 OverviewControlBar(range: $range)
-                HeroSection(summary: s)
-                AchievementsSection(summary: s)
+                HeroSection(summary: s, entries: dictionaryStore.entries, openDictionary: openDictionary)
+                AchievementsSection(summary: s, allStats: statsStore.stats, now: date)
                 if s.isEmpty {
                     emptyGuideCard
-                } else {
-                    ActivityHeatmap(cells: yearCells)
-                    HourDistributionChart(summary: s)
                 }
+                ActivityHeatmap(cells: yearCells)
+                HourDistributionChart(summary: s)
                 footerLine(s: s)
             }
             .frame(maxWidth: StatsConfig.contentMaxWidth)
@@ -41,11 +57,10 @@ struct OverviewPage: View {
             Spacer()
             Text("开始你的第一次口述，数据会出现在这里")
                 .font(.system(size: 13)).foregroundColor(Theme.textSecondary)
-                .multilineTextAlignment(.center).padding(.vertical, 32)
+                .multilineTextAlignment(.center).padding(.vertical, 12)
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .glassCard()
     }
 
     @ViewBuilder private func footerLine(s: StatsSummary) -> some View {

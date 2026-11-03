@@ -49,13 +49,23 @@ struct DailyStats: Codable, Identifiable {
 final class DailyStatsStore: ObservableObject {
     static let shared = DailyStatsStore()
     @Published private(set) var stats: [DailyStats] = []
-    private let repo = StatsRepository(db: AppDatabaseProvider.shared)
-    private init() { refresh() }
+    private let readStats: () async -> [DailyStats]
+
+    private convenience init() {
+        let repo = StatsRepository(db: AppDatabaseProvider.shared)
+        self.init(stats: [], readStats: {
+            await Task.detached(priority: .utility) { repo.buildDailyStats() }.value
+        })
+        refresh()
+    }
+
+    /// Explicit source keeps fixture pages independent of the production database.
+    init(stats: [DailyStats], readStats: @escaping () async -> [DailyStats]) {
+        self.stats = stats
+        self.readStats = readStats
+    }
+
     func refresh() {
-        let repo = self.repo
-        Task.detached(priority: .utility) {
-            let result = repo.buildDailyStats()
-            await MainActor.run { self.stats = result }
-        }
+        Task { self.stats = await readStats() }
     }
 }

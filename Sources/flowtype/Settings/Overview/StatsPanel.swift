@@ -1,146 +1,154 @@
 import SwiftUI
-import Charts
 
-// MARK: - ActivityHeatmap (GitHub-style 7-row LazyHGrid; dense year; tooltip)
-
+/// Weekday-aligned 365-day calendar. Horizontal scrolling preserves readable 12pt cells.
 struct ActivityHeatmap: View {
     let cells: [HeatCell]
-
     @State private var hovered: HeatCell?
+    private let size: CGFloat = 12
+    private let gap: CGFloat = 2
 
-    private func cellDateLabel(_ iso: String) -> String {
-        let parts = iso.split(separator: "-")
-        guard parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]) else { return iso }
-        return "\(m)月\(d)日"
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("活动热力图 · 最近一年")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.textSecondary)
-            heatGrid
-            legendRow
-        }
-    }
-
-    /// Level 0 = neutral (empty) cell; 1...4 = accent ramp (#8E7DF5 @ §8 opacities).
+    private var leading: Int { cells.first?.weekday ?? 0 }
+    private var columns: Int { (leading + cells.count + 6) / 7 }
+    private var gridWidth: CGFloat { CGFloat(columns) * (size + gap) - gap }
     private func heatColor(_ level: Int) -> Color {
         level == 0 ? Theme.heatEmpty : Theme.accent.opacity(StatsConfig.heatOpacity[level])
     }
-
-    private var heatGrid: some View {
-        // GitHub-style weekday-aligned calendar: 7 rows = Sun…Sat, each column = one week, left→right is
-        // time, TODAY sits in the rightmost column on its own weekday row. The two ragged corners (the
-        // week before the range start, and this week's not-yet-arrived days) are filled with EMPTY dark
-        // cells (level 0) instead of left transparent — so it reads as a tidy rectangle while staying a
-        // real calendar. Cell brightness = that day's word-count level. Fixed 11px cell → fits the width.
-        let leading = cells.first?.weekday ?? 0       // pad up to the starting Sunday
-        let total = leading + cells.count
-        let cols = (total + 6) / 7
-        let trailing = cols * 7 - total               // pad this week's future days up to Saturday
-        let size: CGFloat = 11
-        let gap: CGFloat = 2
-        let rows = Array(repeating: GridItem(.fixed(size), spacing: gap), count: 7)
-        return LazyHGrid(rows: rows, spacing: gap) {
-            ForEach(0..<leading, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 2).fill(heatColor(0)).frame(width: size, height: size)
-            }
-            ForEach(cells, id: \.dayOrdinal) { cell in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(heatColor(cell.level))
-                    .frame(width: size, height: size)
-                    .onHover { inside in
-                        if inside { hovered = cell }
-                        else if hovered?.dayOrdinal == cell.dayOrdinal { hovered = nil }
-                    }
-                    .popover(isPresented: Binding(
-                        get: { hovered?.dayOrdinal == cell.dayOrdinal },
-                        set: { if !$0 { hovered = nil } }
-                    ), arrowEdge: .top) {
-                        Text("\(cellDateLabel(cell.date)) — \(cell.chars)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Theme.textPrimary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Theme.cardBackground)
-                    }
-                    .accessibilityLabel("\(cell.date), \(cell.chars) 字")
-            }
-            ForEach(0..<trailing, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 2).fill(heatColor(0)).frame(width: size, height: size)
+    private func cell(at index: Int) -> HeatCell? {
+        let offset = index - leading
+        return cells.indices.contains(offset) ? cells[offset] : nil
+    }
+    private var monthLabels: [(column: Int, label: String)] {
+        var result: [(Int, String)] = []
+        var previous: Substring?
+        for (index, cell) in cells.enumerated() {
+            let month = cell.date.split(separator: "-").dropFirst().first ?? ""
+            if month != previous {
+                result.append(((index + leading) / 7, "\(Int(month) ?? 0)月"))
+                previous = month
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // When the rolling year starts late in a month, two labels may share a week.
+        return result.enumerated().filter { index, item in
+            index == result.count - 1 || result[index + 1].0 - item.0 >= 2
+        }.map(\.element)
     }
 
-    private var legendRow: some View {
-        HStack(spacing: 4) {
-            Spacer()
-            Text("少").font(.system(size: 9)).foregroundColor(Theme.textSecondary)
-            ForEach(0..<5, id: \.self) { lvl in
-                RoundedRectangle(cornerRadius: 2).fill(heatColor(lvl)).frame(width: 10, height: 10)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("活动热力图").font(Theme.Typography.sectionTitle)
+                Spacer()
+                Text("最近一年 · 不随统计范围变化").font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
             }
-            Text("多").font(.system(size: 9)).foregroundColor(Theme.textSecondary)
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(spacing: gap) {
+                        Color.clear.frame(height: 18)
+                        ForEach(0..<7) { day in
+                            Text(["", "一", "", "三", "", "五", ""][day])
+                                .font(.system(size: 10)).foregroundStyle(Theme.textSecondary)
+                                .frame(width: 16, height: size)
+                        }
+                    }.accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: gap) {
+                        ZStack(alignment: .leading) {
+                            ForEach(monthLabels, id: \.column) { item in
+                                Text(item.label).font(.system(size: 10)).foregroundStyle(Theme.textSecondary)
+                                    .offset(x: CGFloat(item.column) * (size + gap))
+                            }
+                        }.frame(width: gridWidth, height: 18, alignment: .leading)
+                        HStack(spacing: gap) {
+                            ForEach(0..<columns, id: \.self) { column in
+                                VStack(spacing: gap) {
+                                    ForEach(0..<7) { weekday in
+                                        if let day = cell(at: column * 7 + weekday) {
+                                            RoundedRectangle(cornerRadius: 2).fill(heatColor(day.level))
+                                                .frame(width: size, height: size)
+                                                .help("\(day.date) · \(day.chars) 字 · \(day.sessions) 次听写")
+                                                .onHover { inside in
+                                                    if inside { hovered = day }
+                                                    else if hovered?.dayOrdinal == day.dayOrdinal { hovered = nil }
+                                                }
+                                                .accessibilityLabel("\(day.date)，\(day.chars) 字，\(day.sessions) 次听写")
+                                        } else {
+                                            Color.clear.frame(width: size, height: size).accessibilityHidden(true)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(minWidth: 779, alignment: .leading)
+            }
+            HStack(spacing: 4) {
+                Text(hovered.map { "\($0.date) · \($0.chars) 字 · \($0.sessions) 次听写" }
+                    ?? "过去一年共 \(cells.reduce(0) { $0 + $1.sessions }) 次听写")
+                Spacer()
+                Text("少")
+                ForEach(0..<5) { level in
+                    RoundedRectangle(cornerRadius: 2).fill(heatColor(level)).frame(width: 10, height: 10)
+                }
+                Text("多")
+            }.font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
         }
     }
 }
 
-// MARK: - HourDistributionChart (Swift Charts 24-bar; peak by mode)
-
+/// The plot is always 112pt high; a zero count draws no positive-height bar.
 struct HourDistributionChart: View {
     let summary: StatsSummary
+    private var maximum: Int { summary.hourHistogram.max() ?? 0 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            headerLabel
-            chartBody
-        }
-    }
-
-    private var headerLabel: some View {
-        HStack(spacing: 4) {
-            Text("24 小时分布")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.textSecondary)
-            if let peak = summary.peakHour {
-                let nextHour = (peak + 1) % 24
-                Text("· 高峰 \(peak):00–\(nextHour):00")
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.textSecondary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("24 小时分布").font(Theme.Typography.sectionTitle)
+                Text("听写次数").font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                Spacer()
+                Text(summary.peakHour.map { "高峰 \($0):00–\(($0 + 1) % 24):00" } ?? "暂无听写数据")
+                    .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var chartBody: some View {
-        let hist = summary.hourHistogram
-        let allZero = hist.allSatisfy { $0 == 0 }
-
-        if allZero {
-            Text("暂无分布数据")
-                .font(.system(size: 11))
-                .foregroundColor(Theme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .frame(height: 80)
-        } else {
-            Chart(Array(hist.enumerated()), id: \.offset) { index, count in
-                BarMark(
-                    x: .value("时", index),
-                    y: .value("次", count),
-                    width: .ratio(0.72)   // thicker bars — more design weight (HTML uses flex:1 full-width bars)
-                )
-                .foregroundStyle(index == summary.peakHour ? Theme.accentBright : Theme.accent.opacity(0.55))
-                .cornerRadius(3)
-            }
-            .chartXScale(domain: -0.5...23.5)
-            .chartXAxis {
-                AxisMarks(values: [0, 6, 12, 18, 23]) { _ in
-                    AxisValueLabel()
+            HStack(alignment: .top, spacing: 7) {
+                VStack(alignment: .leading) {
+                    Text("\(maximum)")
+                    Spacer()
+                    Text("\(maximum / 2)")
+                    Spacer()
+                    Text("0")
+                }.font(.system(size: 10)).foregroundStyle(Theme.textSecondary)
+                    .frame(width: 22, height: 112)
+                    .accessibilityLabel("听写次数，最高 \(maximum)")
+                VStack(spacing: 7) {
+                    HStack(alignment: .bottom, spacing: 6) {
+                        ForEach(0..<24) { hour in
+                            let count = summary.hourHistogram.indices.contains(hour) ? summary.hourHistogram[hour] : 0
+                            let height = maximum > 0 ? CGFloat(count) / CGFloat(maximum) * 112 : 0
+                            VStack {
+                                Spacer(minLength: 0)
+                                UnevenRoundedRectangle(topLeadingRadius: 3, topTrailingRadius: 3)
+                                    .fill(hour == summary.peakHour ? Theme.accentBright : Theme.accent.opacity(0.55))
+                                    .frame(height: height)
+                            }
+                            .frame(maxWidth: .infinity).frame(height: 112)
+                            .contentShape(Rectangle())
+                            .help("\(hour):00–\((hour + 1) % 24):00 · \(count) 次听写")
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("\(hour) 时，\(count) 次听写")
+                        }
+                    }
+                    .frame(height: 112)
+                    .background {
+                        VStack { Divider(); Spacer(); Divider(); Spacer(); Divider() }
+                    }
+                    HStack(spacing: 6) {
+                        ForEach(0..<24) { hour in
+                            Text([0, 6, 12, 18, 23].contains(hour) ? "\(hour)" : "")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }.font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
                 }
             }
-            .chartYAxis(.hidden)
-            .frame(height: 80)
         }
     }
 }

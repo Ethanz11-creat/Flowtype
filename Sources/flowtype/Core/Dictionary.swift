@@ -45,10 +45,15 @@ final class DictionaryStore: ObservableObject {
 
     @Published private(set) var entries: [DictionaryEntry] = []
 
-    private let store = PersistentStore<[DictionaryEntry]>(filename: "dictionary.json")
+    private let store: PersistentStore<[DictionaryEntry]>
     private var saveDebounce: Task<Void, Never>?
 
-    private init() {
+    private convenience init() {
+        self.init(store: PersistentStore(filename: "dictionary.json"))
+    }
+
+    init(store: PersistentStore<[DictionaryEntry]>) {
+        self.store = store
         entries = store.load() ?? []
     }
 

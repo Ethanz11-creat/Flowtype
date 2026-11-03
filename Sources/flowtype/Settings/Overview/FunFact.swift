@@ -48,15 +48,15 @@ struct FunFact {
 struct FunFactFooter: View {
     let fact: FunFact
     private let grey = Theme.textSecondary
-    private let highlight = Color(hex: 0xC9C9CF)   // prototype #C9C9CF — brighter than the grey body
+    private let highlight = Theme.textPrimary   // prototype #C9C9CF — brighter than the grey body
 
     var body: some View {
         composed
-            .font(.system(size: 13))
+            .font(.system(size: 12))
             .lineSpacing(3)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, 14)
-            .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5), alignment: .top)
+            .overlay(Rectangle().fill(Theme.cardBorder).frame(height: 0.5), alignment: .top)
     }
 
     private var composed: Text {

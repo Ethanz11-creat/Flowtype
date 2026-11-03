@@ -1,202 +1,107 @@
 import SwiftUI
 
 struct VocabPage: View {
-    @ObservedObject private var store = DictionaryStore.shared
-    @State private var newPhrase: String = ""
-    @State private var newNote: String = ""
+    @ObservedObject private var store: DictionaryStore
+    @State private var newPhrase = ""
+    @State private var newNote = ""
+    @State private var search = ""
+
+    init() { self.init(store: .shared) }
+    init(store: DictionaryStore) { self.store = store }
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerBar
-            Divider()
-            content
-        }
-    }
-
-    // MARK: - Header
-
-    private var headerBar: some View {
-        HStack(spacing: 12) {
-            PageHeader(title: "词典", subtitle: "管理专有名词和热词，提升识别与润色准确度")
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-    }
-
-    // MARK: - Content
-
-    private var content: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                addEntryCard
-
-                if store.entries.isEmpty {
-                    emptyState
-                } else {
-                    entryList
+            VStack(alignment: .leading, spacing: 22) {
+                PageHeader(title: "词典", subtitle: "管理专有名词、备注与识别提示")
+                VStack(alignment: .leading, spacing: 9) {
+                    Text("添加词条").font(Theme.Typography.sectionTitle)
+                    HStack(spacing: 8) {
+                        TextField("专有名词，如 Claude、FlowType", text: $newPhrase)
+                        TextField("备注（可选）", text: $newNote).frame(width: 170)
+                        Button("添加", action: addEntry).buttonStyle(.borderedProminent)
+                            .disabled(newPhrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }.textFieldStyle(.roundedBorder)
                 }
-
-                usageHint
-            }
-            .padding(20)
-        }
-    }
-
-    // MARK: - Add Entry
-
-    private var addEntryCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("添加词条")
-                .font(.system(size: 13, weight: .semibold))
-
-            HStack(spacing: 8) {
-                TextField("专有名词（如 Claude、FlowType）", text: $newPhrase)
-                    .textFieldStyle(.roundedBorder)
-
-                TextField("备注（可选）", text: $newNote)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 140)
-
-                Button("添加") {
-                    store.add(phrase: newPhrase, note: newNote.isEmpty ? nil : newNote)
-                    newPhrase = ""
-                    newNote = ""
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("\(store.entries.count) 条 · 已启用 \(store.entries.filter(\.enabled).count) 条")
+                            .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                        Spacer()
+                        TextField("搜索词条或备注", text: $search).textFieldStyle(.roundedBorder).frame(width: 230)
+                    }
+                    let entries = DictionaryPresentation.filtered(store.entries, search: search)
+                    if entries.isEmpty {
+                        Text(store.entries.isEmpty ? "还没有词条，添加常用专有名词作为识别与整理的参考。" : "没有匹配的词条")
+                            .font(.system(size: 12)).foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity).padding(.vertical, 28)
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(entries) { entry in
+                                VocabRow(entry: entry, setEnabled: { store.setEnabled(id: entry.id, $0) },
+                                         remove: { store.remove(id: entry.id) })
+                                Divider()
+                            }
+                        }
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .disabled(newPhrase.trimmingCharacters(in: .whitespaces).isEmpty)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("启用的词条会作为识别和文本整理的提示；实际支持取决于所选引擎。")
+                    Text("命中次数记录识别文本包含该词条的次数。禁用保留词条，删除会移除词条。")
+                    Text("可在风格提示词中使用 {{HOTWORDS}} 指定词典注入位置。")
+                }.font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        }
-        .padding(16)
-        .glassCard()
-    }
-
-    // MARK: - Entry List
-
-    private var entryList: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("词条列表")
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Text("\(store.entries.count) 条")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }
-
-            // Tag grid
-            let columns = [GridItem(.adaptive(minimum: 100), spacing: 8)]
-            LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(store.entries) { entry in
-                    VocabTag(entry: entry)
-                }
-            }
+            .frame(maxWidth: StatsConfig.contentMaxWidth, alignment: .leading)
+            .padding(.horizontal, StatsConfig.contentHorizontalPadding).padding(.vertical, 24)
+            .frame(maxWidth: .infinity)
         }
     }
 
-    // MARK: - Empty State
-
-    private var emptyState: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "character.book.closed")
-                .font(.system(size: 28))
-                .foregroundColor(.secondary.opacity(0.4))
-            Text("还没有词条")
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
-            Text("添加专有名词后，FlowType 会在识别和润色时优先使用正确写法。")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary.opacity(0.7))
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 30)
-    }
-
-    // MARK: - Usage Hint
-
-    private var usageHint: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("使用说明")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.secondary)
-
-            VStack(alignment: .leading, spacing: 4) {
-                hintRow(icon: "waveform", text: "启用的词条会作为识别提示注入本地 ASR，帮助模型认对这些专有名词")
-                hintRow(icon: "sparkles", text: "润色时，启用的词条会被添加到系统提示词中，优先使用这些写法")
-                hintRow(icon: "chart.bar", text: "命中次数统计每次识别结果中包含该词条的频率")
-                hintRow(icon: "text.badge.plus", text: "支持在 prompt 中使用 {{HOTWORDS}} 占位符精确控制注入位置")
-            }
-        }
-        .padding(14)
-        .glassCard(cornerRadius: 10)
-    }
-
-    private func hintRow(icon: String, text: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundColor(Brand.accent.opacity(0.7))
-                .frame(width: 16)
-            Text(text)
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-        }
+    private func addEntry() {
+        guard DictionaryPresentation.add(phrase: newPhrase, note: newNote.isEmpty ? nil : newNote, to: store) else { return }
+        newPhrase = ""; newNote = ""
     }
 }
 
-struct VocabTag: View {
+private struct VocabRow: View {
     let entry: DictionaryEntry
-
+    let setEnabled: (Bool) -> Void
+    let remove: () -> Void
     var body: some View {
-        HStack(spacing: 4) {
-            // Source indicator
-            if entry.source == .autoDetected {
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: 9))
-                    .foregroundColor(Brand.accent)
-            }
+        HStack(alignment: .center, spacing: 12) {
+            Toggle("启用 \(entry.phrase)", isOn: Binding(get: { entry.enabled }, set: { setEnabled($0) }))
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.phrase).font(.system(size: 13, weight: .medium))
+                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                if let note = entry.note, !note.isEmpty {
+                    Text(note).font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(entry.source == .manual ? "手动添加" : "自动发现")
+                Text("命中 \(entry.hits) 次 · \(entry.enabled ? "已启用" : "已禁用")").monospacedDigit()
+            }.font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+            Button(role: .destructive, action: remove) { Image(systemName: "trash") }
+                .buttonStyle(.borderless).help("删除词条").accessibilityLabel("删除 \(entry.phrase)")
+        }.padding(.vertical, 11)
+    }
+}
 
-            Text(entry.phrase)
-                .font(.system(size: 12, weight: .medium))
-                .lineLimit(1)
-
-            if entry.hits > 0 {
-                Text("\(entry.hits)")
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary)
-            }
-
-            Button {
-                DictionaryStore.shared.remove(id: entry.id)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(.secondary.opacity(0.6))
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, 2)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(entry.enabled ? Brand.accent.opacity(0.10) : Color.secondary.opacity(0.06))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(entry.enabled ? Brand.accent.opacity(0.30) : Color.secondary.opacity(0.15), lineWidth: 1)
-        )
-        .opacity(entry.enabled ? 1.0 : 0.5)
-        .contextMenu {
-            Button(entry.enabled ? "禁用" : "启用") {
-                DictionaryStore.shared.setEnabled(id: entry.id, !entry.enabled)
-            }
-            Divider()
-            Button("删除", role: .destructive) {
-                DictionaryStore.shared.remove(id: entry.id)
-            }
-        }
+/// Display filtering and the page's add action do not change backend normalization.
+enum DictionaryPresentation {
+    static func enabledRatio(_ entries: [DictionaryEntry]) -> Double {
+        entries.isEmpty ? 0 : Double(entries.filter(\.enabled).count) / Double(entries.count)
+    }
+    static func filtered(_ entries: [DictionaryEntry], search: String) -> [DictionaryEntry] {
+        entries.filter { search.isEmpty || $0.phrase.localizedCaseInsensitiveContains(search)
+            || ($0.note?.localizedCaseInsensitiveContains(search) ?? false) }
+    }
+    @MainActor @discardableResult
+    static func add(phrase: String, note: String?, to store: DictionaryStore) -> Bool {
+        guard !phrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        store.add(phrase: phrase, note: note)
+        return true
     }
 }
