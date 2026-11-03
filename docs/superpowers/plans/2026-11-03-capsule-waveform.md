@@ -57,5 +57,5 @@
 ### Final verification (controller owned)
 
 - [x] Review combined implementation against spec, including native render geometry and long diagnostics.
-- [ ] Run `scripts/verify.sh --lane code` and `scripts/verify.sh --lane artifact` with existing isolated verification setup; inspect complete reports.
-- [ ] Record evidence and manual hardware limitations in `docs/evidence/2026-11-03-capsule-waveform/README.md`, update plan checkboxes, commit documentation, leave local branch reviewable.
+- [x] Run `scripts/verify.sh --lane code` and `scripts/verify.sh --lane artifact` with existing isolated verification setup; inspect complete reports.
+- [x] Record evidence and manual hardware limitations in `docs/evidence/2026-11-03-capsule-waveform/README.md`, update plan checkboxes, commit documentation, leave local branch reviewable.

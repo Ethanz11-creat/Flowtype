@@ -1,0 +1,907 @@
+[2026-11-03T15:10:55.087Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] BuildIdentity {"metadata":null,"failureCode":null,"origin":"development"}
+[2026-11-03T15:10:55.091Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1101] engine=cloud transport=batch fallback=unavailable
+[2026-11-03T15:10:55.091Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1101] engine=local transport=batch fallback=error
+[2026-11-03T15:10:55.093Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1101] engine=local transport=batch fallback=error
+[2026-11-03T15:10:55.093Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1101] engine=cloud transport=batch fallback=unavailable
+[2026-11-03T15:10:55.093Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1102] engine=cloud transport=batch fallback=unavailable
+[2026-11-03T15:10:55.098Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.102Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.106Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("ASR 密钥无效或未配置，请检查设置后重新录音")
+[2026-11-03T15:10:55.106Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.107Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.110Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.113Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("ASR 密钥无效或未配置，请检查设置后重新录音")
+[2026-11-03T15:10:55.113Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.113Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.117Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.120Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("ASR 密钥无效或未配置，请检查设置后重新录音")
+[2026-11-03T15:10:55.120Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.120Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.124Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("辅助功能权限未开启")
+[2026-11-03T15:10:55.124Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.124Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.127Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("麦克风权限未开启")
+[2026-11-03T15:10:55.127Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.127Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.130Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("语音识别权限未开启")
+[2026-11-03T15:10:55.130Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.134Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.134Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.134Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.134Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.135Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.136Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.136Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.136Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.144Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.144Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.144Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.151Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] endRecording called, withPolish=true
+[2026-11-03T15:10:55.151Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=processing(provider: "识别中")
+[2026-11-03T15:10:55.151Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.151Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.151Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.151Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:55.157Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.157Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.157Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.164Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.164Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.164Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.164Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.164Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 2 no longer active, ignoring stage result
+[2026-11-03T15:10:55.170Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.171Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.171Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:10:55.176Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.176Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.176Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.176Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.176Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 3 no longer active, ignoring stage result
+[2026-11-03T15:10:55.183Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.183Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.183Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] startRecording requested
+[2026-11-03T15:10:55.189Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.190Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.190Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.190Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.190Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 4 no longer active, ignoring stage result
+[2026-11-03T15:10:55.196Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.196Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.196Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] startRecording requested
+[2026-11-03T15:10:55.202Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.203Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.203Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] startRecording requested
+[2026-11-03T15:10:55.204Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未开始录音：资源正在使用或收尾，请稍后再试")
+[2026-11-03T15:10:55.204Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.204Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 5 no longer active, ignoring stage result
+[2026-11-03T15:10:55.211Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.211Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.211Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] startRecording requested
+[2026-11-03T15:10:55.217Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.217Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.217Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.217Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.217Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 7 no longer active, ignoring stage result
+[2026-11-03T15:10:55.224Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.224Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("麦克风权限未开启")
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.225Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.232Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.232Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.232Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:55.242Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.249Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.252Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.252Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.252Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.252Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:55.255Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:10:55.262Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.264Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.264Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:55.264Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.264Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 3 no longer active, ignoring stage result
+[2026-11-03T15:10:55.269Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.275Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.276Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.276Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.281Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.281Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.281Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.287Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("已发送，但无法确认是否插入；可复制结果")
+[2026-11-03T15:10:55.287Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.287Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("已发送，但无法确认是否插入；可复制结果")
+[2026-11-03T15:10:55.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:10:55.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:55.300Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.300Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.300Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.301Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:10:55.301Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.301Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:55.307Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.307Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.307Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.307Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.307Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.314Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.314Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.314Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.314Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.314Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.319Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.319Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.320Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.325Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.326Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.326Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.326Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.340Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [Migration] imported 0 sessions, 0 legacy days
+[2026-11-03T15:10:55.343Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.343Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.343Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.343Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:10:55.348Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:10:55.348Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.348Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.349Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:10:55.355Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:10:55.355Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.355Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.356Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.356Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.356Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未录到音频，请重试
+[2026-11-03T15:10:55.363Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未录到音频，请重试")
+[2026-11-03T15:10:55.363Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.363Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:55.363Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Stage returned notice: 未录到音频，请重试
+[2026-11-03T15:10:55.369Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未录到音频，请重试")
+[2026-11-03T15:10:55.369Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.369Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:55.369Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:55.369Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:55.371Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#1] Degraded to complete processed text: apiError("fixture offline")
+[2026-11-03T15:10:57.809Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.810Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.810Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:57.811Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#2] Degraded to complete processed text: apiError("fixture offline")
+[2026-11-03T15:10:57.815Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("整理失败 · 已保留识别结果")
+[2026-11-03T15:10:57.816Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.816Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.828Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:57.835Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.835Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.835Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.835Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] Recording phase started
+[2026-11-03T15:10:57.848Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:57.848Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.848Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.849Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] AudioRecorder started
+[2026-11-03T15:10:57.849Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] Recording phase ended (duration: 0.0s)
+[2026-11-03T15:10:57.849Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:57.855Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:57.861Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.862Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.862Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.862Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.862Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.862Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.862Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.862Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] Recording phase started
+[2026-11-03T15:10:57.869Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] endRecording called, withPolish=true
+[2026-11-03T15:10:57.869Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.870Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] AudioRecorder started
+[2026-11-03T15:10:57.870Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] Recording cancelled
+[2026-11-03T15:10:57.870Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] Raw samples: 0 (0.0s)
+[2026-11-03T15:10:57.870Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#1] Recording phase ended (duration: 0.0s)
+[2026-11-03T15:10:57.876Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:57.883Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.883Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.883Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.883Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.883Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.883Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.883Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.884Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:57.898Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.898Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:10:57.899Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.899Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:57.899Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.900Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.900Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.900Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:57.900Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=processing(provider: "test")
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:57.902Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=polishing(preview: "")
+[2026-11-03T15:10:57.902Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:57.902Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:57.902Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:57.902Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:58.002Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: unavailable
+[2026-11-03T15:10:58.033Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-next-read Code=1 "(null)"
+[2026-11-03T15:10:58.044Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-next-read Code=1 "(null)"
+[2026-11-03T15:10:58.053Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-next-read Code=1 "(null)"
+[2026-11-03T15:10:58.062Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] clear transcripts failed: SQLite error 19: fixture write rejected - while executing `UPDATE session SET rawTranscript=NULL, finalText=NULL`
+[2026-11-03T15:10:58.071Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] delete failed: SQLite error 19: fixture write rejected - while executing `DELETE FROM "session" WHERE "id" = ?`
+[2026-11-03T15:10:58.082Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reset failed: SQLite error 19: fixture write rejected - while executing `DELETE FROM daily_legacy`
+[2026-11-03T15:10:58.091Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-reentrant-read Code=1 "(null)"
+[2026-11-03T15:10:58.098Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-publication Code=1 "latest mutation read failure" UserInfo={NSLocalizedDescription=latest mutation read failure}
+[2026-11-03T15:10:58.104Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-publication Code=1 "latest mutation read failure" UserInfo={NSLocalizedDescription=latest mutation read failure}
+[2026-11-03T15:10:58.111Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-publication Code=1 "outer history read failure" UserInfo={NSLocalizedDescription=outer history read failure}
+[2026-11-03T15:10:58.112Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [History] reload failed: Error Domain=history-publication Code=1 "latest mutation read failure" UserInfo={NSLocalizedDescription=latest mutation read failure}
+[2026-11-03T15:10:58.915Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ConfigurationStore] Migrated API key to Keychain
+[2026-11-03T15:10:58.919Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ConfigurationStore] Failed to decode persisted config (dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'i' around line 1, column 3." UserInfo={NSDebugDescription=Unexpected character 'i' around line 1, column 3., NSJSONSerializationErrorIndex=2})))); backed up REDACTED blob to /Users/yiheng/pycode/flowtype-local/build/verification/FF2E0D81-59A2-41BE-BAEA-DD2AD1B66522/children/ADE86EC0-3B22-4722-A6E6-1108645ADB9B/validation-6E5C9FE8-C473-45BC-AB71-81E2B1DF4011/Tmp/m5-isolation-816D59DF-0F5F-4614-A86E-22238AED1122/flowtype.config.corrupt-1793718658.json and reset to default
+[2026-11-03T15:10:58.929Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [Migration] imported 1 sessions, 0 legacy days
+[2026-11-03T15:10:58.969Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ConfigurationStore] Failed to decode persisted config (dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'i' around line 1, column 1." UserInfo={NSDebugDescription=Unexpected character 'i' around line 1, column 1., NSJSONSerializationErrorIndex=0})))); backed up REDACTED blob to /Users/yiheng/pycode/flowtype-local/build/verification/FF2E0D81-59A2-41BE-BAEA-DD2AD1B66522/children/ADE86EC0-3B22-4722-A6E6-1108645ADB9B/validation-6E5C9FE8-C473-45BC-AB71-81E2B1DF4011/Logs/flowtype.config.corrupt-1793718658.json and reset to default
+[2026-11-03T15:10:59.073Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:59.074Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.074Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:59.074Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.074Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRRouter] cloud probe started (interval 30s)
+[2026-11-03T15:10:59.509Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] Single tap, timer started (window: 0.35s)
+[2026-11-03T15:10:59.509Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] DOUBLE-TAP detected
+[2026-11-03T15:10:59.509Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] Single tap, timer started (window: 0.35s)
+[2026-11-03T15:10:59.509Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] Single tap, timer started (window: 0.35s)
+[2026-11-03T15:10:59.511Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ConfigurationStore] Failed to decode persisted config (dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'h' in expected boolean value around line 1, column 2." UserInfo={NSJSONSerializationErrorIndex=1, NSDebugDescription=Unexpected character 'h' in expected boolean value around line 1, column 2.})))); backed up REDACTED blob to /Users/yiheng/pycode/flowtype-local/build/verification/FF2E0D81-59A2-41BE-BAEA-DD2AD1B66522/children/ADE86EC0-3B22-4722-A6E6-1108645ADB9B/validation-6E5C9FE8-C473-45BC-AB71-81E2B1DF4011/Tmp/flowtype-selftest-6F67B7FE-DF5E-40CF-BA12-B5BA0027057F/flowtype.config.corrupt-1793718659.json and reset to default
+[2026-11-03T15:10:59.515Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:59.521Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] endRecording called, withPolish=true
+[2026-11-03T15:10:59.533Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=polishing(preview: "must stay private")
+[2026-11-03T15:10:59.533Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.533Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:59.540Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:59.546Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] endRecording called, withPolish=true
+[2026-11-03T15:10:59.553Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=processing(provider: "识别中")
+[2026-11-03T15:10:59.553Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.553Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 2 no longer active, ignoring stage result
+[2026-11-03T15:10:59.559Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:10:59.566Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] endRecording called, withPolish=true
+[2026-11-03T15:10:59.572Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] cancel called, state=processing(provider: "识别中")
+[2026-11-03T15:10:59.572Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.579Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 3 no longer active, ignoring stage result
+[2026-11-03T15:10:59.585Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] startRecording requested
+[2026-11-03T15:10:59.596Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] startRecording requested
+[2026-11-03T15:10:59.602Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] Stage returned notice: unrelated legacy text
+[2026-11-03T15:10:59.614Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] startRecording requested
+[2026-11-03T15:10:59.621Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] Stage returned notice: 已复制，按 ⌘V 粘贴
+[2026-11-03T15:10:59.626Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:10:59.626Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.626Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] startRecording requested
+[2026-11-03T15:10:59.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] cancel called, state=error("已发送，但无法确认是否插入；可复制结果")
+[2026-11-03T15:10:59.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.689Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:10:59.696Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] endRecording called, withPolish=true
+[2026-11-03T15:10:59.696Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=processing(provider: "识别中")
+[2026-11-03T15:10:59.696Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.696Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:10:59.702Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:10:59.709Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:10:59.709Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.709Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:10:59.709Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:10:59.709Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 2 no longer active, ignoring stage result
+[2026-11-03T15:13:48.936Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] Timer fired, tapTimes.count=1
+[2026-11-03T15:13:55.689Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.689Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.691Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.695Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.695Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.696Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.696Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.697Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.698Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.698Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.699Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.699Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.700Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#729] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.701Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#730] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:13:55.806Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#733] engine=local transport=realtime fallback=timeout
+[2026-11-03T15:13:55.832Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#735] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:14:00.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#736] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:00.865Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#737] Degraded to complete processed text: timedOut
+[2026-11-03T15:14:00.896Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#738] Degraded to complete processed text: timedOut
+[2026-11-03T15:14:00.899Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [CloudASR] Transcription complete: 10 chars
+[2026-11-03T15:14:00.901Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [CloudASR] HTTP 500
+[2026-11-03T15:14:02.021Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#904] Degraded to complete processed text: damagedLiterals
+[2026-11-03T15:14:03.250Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] Single tap, timer started (window: 0.35s)
+[2026-11-03T15:14:03.250Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] DOUBLE-TAP detected
+[2026-11-03T15:14:04.058Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] Single tap, timer started (window: 0.35s)
+[2026-11-03T15:14:05.271Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [TapDetector] Single tap, timer started (window: 0.35s)
+[2026-11-03T15:14:05.860Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("synthetic completion")
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] endRecording called, withPolish=true
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] stop during preparation — capture cancelled
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:05.864Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:05.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:05.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:05.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:05.868Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:05.868Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:05.868Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:05.868Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:06.561Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.567Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:06.567Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.567Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:06.567Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("没有可用的语音识别引擎")
+[2026-11-03T15:14:06.568Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.568Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:06.568Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("没有可用的语音识别引擎")
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:06.675Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:14:06.676Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.676Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:06.676Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 2 no longer active, ignoring stage result
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] startRecording requested
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] startRecording requested
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] cancel called, state=preparing
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 5 no longer active, ignoring stage result
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:06.678Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=processing(provider: "test")
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=polishing(preview: "")
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:06.679Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.680Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:06.693Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:06.693Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:06.718Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:06.718Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:12.274Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:12.281Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:12.281Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:12.282Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#1] Degraded to complete processed text: invalidResponse
+[2026-11-03T15:14:12.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:12.294Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:12.295Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Trying provider Completion test (attempt 1/1)
+[2026-11-03T15:14:12.298Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Provider Completion test failed: incompleteResponse
+[2026-11-03T15:14:12.298Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Content already delivered — not failing over (a retry would duplicate text)
+[2026-11-03T15:14:12.298Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#330] Degraded to complete processed text: incompleteResponse
+[2026-11-03T15:14:12.299Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Trying provider Completion test (attempt 1/1)
+[2026-11-03T15:14:12.300Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] SSE decode failures: 1, yieldedAny=true
+[2026-11-03T15:14:12.300Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Provider Completion test failed: streamDecodingError
+[2026-11-03T15:14:12.300Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Content already delivered — not failing over (a retry would duplicate text)
+[2026-11-03T15:14:12.300Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#330] Degraded to complete processed text: streamDecodingError
+[2026-11-03T15:14:12.301Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Trying provider Completion test (attempt 1/1)
+[2026-11-03T15:14:12.302Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Provider Completion test failed: streamDecodingError
+[2026-11-03T15:14:12.302Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Content already delivered — not failing over (a retry would duplicate text)
+[2026-11-03T15:14:12.302Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#330] Degraded to complete processed text: streamDecodingError
+[2026-11-03T15:14:12.303Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Trying provider Completion test (attempt 1/1)
+[2026-11-03T15:14:12.304Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Provider Completion test failed: incompleteResponse
+[2026-11-03T15:14:12.304Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Content already delivered — not failing over (a retry would duplicate text)
+[2026-11-03T15:14:12.304Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#330] Degraded to complete processed text: incompleteResponse
+[2026-11-03T15:14:12.305Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Trying provider Completion test (attempt 1/1)
+[2026-11-03T15:14:12.308Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Trying provider Completion test (attempt 1/1)
+[2026-11-03T15:14:12.310Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [LLMService] Trying provider Test (attempt 1/1)
+[2026-11-03T15:14:12.415Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#320] Degraded to complete processed text: timedOut
+[2026-11-03T15:14:12.450Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#301] Degraded to complete processed text: damagedLiterals
+[2026-11-03T15:14:12.461Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PolishStage#302] Degraded to complete processed text: apiError("offline")
+[2026-11-03T15:14:12.658Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:12.671Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:12.671Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:12.671Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:12.682Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:12.683Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:12.683Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:15.114Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("")
+[2026-11-03T15:14:15.114Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:15.114Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] startRecording requested
+[2026-11-03T15:14:15.127Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] cancel called, state=error("已发送，但无法确认是否插入；可复制结果")
+[2026-11-03T15:14:15.128Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:15.128Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] startRecording requested
+[2026-11-03T15:14:15.128Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:14:15.140Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:14:15.140Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:15.140Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] startRecording requested
+[2026-11-03T15:14:15.141Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] cancel called, state=preparing
+[2026-11-03T15:14:15.141Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:15.141Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] startRecording requested
+[2026-11-03T15:14:15.141Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 6 no longer active, ignoring stage result
+[2026-11-03T15:14:15.153Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#8] startRecording requested
+[2026-11-03T15:14:17.587Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#9] startRecording requested
+[2026-11-03T15:14:17.587Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#9] cancel called, state=preparing
+[2026-11-03T15:14:17.588Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.588Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.588Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.588Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 9 no longer active, ignoring stage result
+[2026-11-03T15:14:17.601Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#10] startRecording requested
+[2026-11-03T15:14:17.602Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#10] cancel called, state=preparing
+[2026-11-03T15:14:17.602Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.603Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 10 no longer active, ignoring stage result
+[2026-11-03T15:14:17.611Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.611Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.613Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.614Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.615Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 12 chars in 0.00s
+[2026-11-03T15:14:17.615Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 7 chars in 0.00s
+[2026-11-03T15:14:17.616Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.617Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.618Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 12 chars in 0.00s
+[2026-11-03T15:14:17.619Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 7 chars in 0.00s
+[2026-11-03T15:14:17.620Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.620Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.621Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 12 chars in 0.00s
+[2026-11-03T15:14:17.622Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 7 chars in 0.00s
+[2026-11-03T15:14:17.622Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.623Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.624Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 12 chars in 0.00s
+[2026-11-03T15:14:17.625Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 7 chars in 0.00s
+[2026-11-03T15:14:17.627Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.628Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.629Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 12 chars in 0.00s
+[2026-11-03T15:14:17.630Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 7 chars in 0.00s
+[2026-11-03T15:14:17.630Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.631Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.632Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 12 chars in 0.00s
+[2026-11-03T15:14:17.633Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 7 chars in 0.00s
+[2026-11-03T15:14:17.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.635Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.635Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.636Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.636Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:17.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:17.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:17.638Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:17.650Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:17.663Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:17.663Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.663Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:17.664Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:17.664Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.664Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.664Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.665Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:17.665Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:17.677Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:17.689Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:17.689Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.689Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:17.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:17.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:17.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:17.703Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:17.715Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:17.715Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.716Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:17.716Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:17.716Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.716Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.716Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.717Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:17.717Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:17.730Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:17.744Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:17.744Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.744Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:17.745Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 143 chars in 0.00s
+[2026-11-03T15:14:17.746Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:17.746Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.746Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.746Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.746Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:17.747Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:17.760Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:17.773Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:17.773Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.773Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:17.774Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:17.774Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.774Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:17.774Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:17.774Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:17.774Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:17.786Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:17.798Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:17.798Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.263Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#911] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:18.277Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#911] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:18.367Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#911] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:18.464Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#911] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:18.690Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.691Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#1] Started
+[2026-11-03T15:14:18.694Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#1] Completed in 0.00s: 23 chars
+[2026-11-03T15:14:18.697Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:18.697Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.697Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:18.716Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:14:18.717Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:14:18.717Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.718Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:18.724Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] cancel called, state=error("录音数据异常，请重新录音")
+[2026-11-03T15:14:18.724Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.724Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] startRecording requested
+[2026-11-03T15:14:18.731Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] cancel called, state=preparing
+[2026-11-03T15:14:18.731Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.731Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] startRecording requested
+[2026-11-03T15:14:18.731Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 4 no longer active, ignoring stage result
+[2026-11-03T15:14:18.737Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] startRecording requested
+[2026-11-03T15:14:18.738Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#6] Started
+[2026-11-03T15:14:18.739Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#6] Completed in 0.00s: 23 chars
+[2026-11-03T15:14:18.743Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:18.743Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.743Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.744Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#1] Started
+[2026-11-03T15:14:18.745Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#1] Completed in 0.00s: 23 chars
+[2026-11-03T15:14:18.749Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:18.749Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.749Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:18.764Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:14:18.769Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:14:18.770Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.770Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:18.776Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] cancel called, state=error("录音数据异常，请重新录音")
+[2026-11-03T15:14:18.776Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.776Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] startRecording requested
+[2026-11-03T15:14:18.782Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] cancel called, state=preparing
+[2026-11-03T15:14:18.783Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.783Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] startRecording requested
+[2026-11-03T15:14:18.783Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 4 no longer active, ignoring stage result
+[2026-11-03T15:14:18.789Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] startRecording requested
+[2026-11-03T15:14:18.789Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#6] Started
+[2026-11-03T15:14:18.790Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#6] Completed in 0.00s: 23 chars
+[2026-11-03T15:14:18.796Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:18.796Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.796Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.796Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=realtime fallback=timeout
+[2026-11-03T15:14:18.804Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#1] Started
+[2026-11-03T15:14:18.805Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#1] Completed in 0.00s: 19 chars
+[2026-11-03T15:14:18.810Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("已复制，按 ⌘V 粘贴")
+[2026-11-03T15:14:18.810Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.825Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.840Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:14:18.844Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:14:18.846Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.858Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.858Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未录到音频，请重试
+[2026-11-03T15:14:18.865Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未录到音频，请重试")
+[2026-11-03T15:14:18.865Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.879Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.893Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:14:18.898Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:14:18.898Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.913Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.913Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未录到音频，请重试
+[2026-11-03T15:14:18.919Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未录到音频，请重试")
+[2026-11-03T15:14:18.920Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.933Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.947Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未检测到声音，请重试
+[2026-11-03T15:14:18.952Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未检测到声音，请重试")
+[2026-11-03T15:14:18.952Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:18.966Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:18.966Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Stage returned notice: 未录到音频，请重试
+[2026-11-03T15:14:18.971Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=notice("未录到音频，请重试")
+[2026-11-03T15:14:18.971Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:19.357Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#940] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:19.357Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#940] engine=cloud transport=batch fallback=network
+[2026-11-03T15:14:19.358Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#940] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:19.358Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#940] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:14:19.358Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#940] engine=cloud transport=realtime fallback=network
+[2026-11-03T15:14:19.358Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#940] engine=cloud transport=realtime fallback=error
+[2026-11-03T15:14:19.360Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#941] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:19.360Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#941] engine=local transport=batch fallback=network
+[2026-11-03T15:14:19.360Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#941] engine=cloud transport=batch fallback=network
+[2026-11-03T15:14:19.360Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#941] engine=local transport=batch fallback=error
+[2026-11-03T15:14:20.382Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#942] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:20.382Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#943] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:20.385Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#980] Recording phase started
+[2026-11-03T15:14:20.389Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#980] AudioRecorder started
+[2026-11-03T15:14:20.389Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#980] Recording cancelled
+[2026-11-03T15:14:20.389Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#980] Raw samples: 160 (0.0s)
+[2026-11-03T15:14:20.389Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#980] Recording phase ended (duration: 0.0s)
+[2026-11-03T15:14:20.389Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#981] Recording phase started
+[2026-11-03T15:14:20.389Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#981] AudioRecorder started
+[2026-11-03T15:14:20.389Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#981] Recording cancelled
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#981] Recording phase ended (duration: 0.0s)
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#982] Recording phase started
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#982] AudioRecorder started
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#982] AppleSpeech preview started
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#982] Recording in progress
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#982] Audio spectrum stream ended
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#982] Recording interrupted (device froze/disconnected)
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#982] Recording phase ended (duration: 0.0s)
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#983] Recording phase started
+[2026-11-03T15:14:20.390Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#983] AudioRecorder started
+[2026-11-03T15:14:20.391Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#983] Recording cancelled
+[2026-11-03T15:14:20.391Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#983] Recording interrupted (device froze/disconnected)
+[2026-11-03T15:14:20.391Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [RecordingStage#983] Recording phase ended (duration: 0.0s)
+[2026-11-03T15:14:20.597Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#951] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:20.602Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#946] engine=local transport=batch fallback=error
+[2026-11-03T15:14:20.603Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#946] engine=local transport=batch fallback=error
+[2026-11-03T15:14:20.603Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#946] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:20.604Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#946] engine=cloud transport=batch fallback=unavailable
+[2026-11-03T15:14:20.604Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#947] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:20.604Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#949] Started
+[2026-11-03T15:14:20.605Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [PostProcessStage#949] Unexpected payload: empty, expected .transcript
+[2026-11-03T15:14:20.607Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.620Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("录音中断，请检查麦克风后重新录音")
+[2026-11-03T15:14:20.621Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.621Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("录音数据异常，请重新录音")
+[2026-11-03T15:14:20.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.635Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.648Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("语音识别未完成，请重新录音")
+[2026-11-03T15:14:20.648Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.648Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.661Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.673Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("辅助功能权限未开启")
+[2026-11-03T15:14:20.673Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.673Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.685Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.698Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("麦克风权限未开启")
+[2026-11-03T15:14:20.699Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.699Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.712Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.723Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("语音识别权限未开启")
+[2026-11-03T15:14:20.724Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.724Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.734Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.746Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("ASR 密钥无效或未配置，请检查设置后重新录音")
+[2026-11-03T15:14:20.747Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.747Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.760Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.772Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("文本处理未完成，请重新录音")
+[2026-11-03T15:14:20.773Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.773Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.785Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.798Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("未发送文本，可复制结果")
+[2026-11-03T15:14:20.799Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.799Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.812Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.824Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("语音识别未完成，请重新录音")
+[2026-11-03T15:14:20.831Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.831Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.831Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:20.831Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:20.831Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:20.831Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.843Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:20.843Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:20.843Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#4] startRecording requested
+[2026-11-03T15:14:20.855Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] startRecording requested
+[2026-11-03T15:14:20.855Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#5] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:20.855Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#6] startRecording requested
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] startRecording requested
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#7] cancel called, state=error("没有可用的语音识别引擎")
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#8] startRecording requested
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#8] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#9] startRecording requested
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#9] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#9] cancel called, state=error("麦克风权限未开启")
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.867Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.880Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:20.882Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.882Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.894Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:20.894Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.894Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.906Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:20.906Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.906Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.906Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:20.918Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:20.930Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.931Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#2] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:20.942Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("语音识别未完成，可重试原录音")
+[2026-11-03T15:14:20.942Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.942Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.944Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:20.956Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:20.957Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#2] engine=cloud transport=batch fallback=error
+[2026-11-03T15:14:20.968Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("ASR 密钥无效或未配置，请检查设置后重新录音")
+[2026-11-03T15:14:20.968Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.968Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.969Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:20.980Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:20.995Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:14:20.995Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:20.996Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:21.007Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=batch fallback=timeout
+[2026-11-03T15:14:21.018Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("语音识别未完成，可重试原录音")
+[2026-11-03T15:14:21.018Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.018Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.019Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 600 chars in 0.00s
+[2026-11-03T15:14:21.031Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.032Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [KeyboardInjector] Unicode dispatch attempt for 600 chars in 0.00s
+[2026-11-03T15:14:21.044Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("已发送，但无法确认是否插入；可复制结果")
+[2026-11-03T15:14:21.044Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.045Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.045Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.045Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.057Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.068Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("已发送，但无法确认是否插入；可复制结果")
+[2026-11-03T15:14:21.069Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.069Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.069Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.069Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.081Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.095Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("未发送文本，可复制结果")
+[2026-11-03T15:14:21.095Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.095Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.095Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.095Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.096Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.096Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.096Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:21.107Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.107Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.107Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.107Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.108Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.110Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=realtime fallback=timeout
+[2026-11-03T15:14:21.120Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=cloud transport=realtime fallback=timeout
+[2026-11-03T15:14:21.133Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("语音识别未完成，可重试原录音")
+[2026-11-03T15:14:21.133Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.134Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.134Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=synthetic transport=batch fallback=timeout
+[2026-11-03T15:14:21.146Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [ASRStage#1] engine=synthetic transport=batch fallback=timeout
+[2026-11-03T15:14:21.157Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=error("语音识别未完成，可重试原录音")
+[2026-11-03T15:14:21.157Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.157Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.160Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.160Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.160Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.169Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:21.170Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("没有可用的语音识别引擎")
+[2026-11-03T15:14:21.170Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.170Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.170Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.170Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.170Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.171Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.172Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:21.181Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:21.194Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:21.194Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] cancel called, state=error("没有可用的语音识别引擎")
+[2026-11-03T15:14:21.194Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.194Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.195Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.195Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.196Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.196Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.207Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:21.208Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=error("没有可用的语音识别引擎")
+[2026-11-03T15:14:21.208Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.208Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.208Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.208Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.209Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.210Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.210Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.210Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.210Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 1 no longer active, ignoring stage result
+[2026-11-03T15:14:21.221Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] startRecording requested
+[2026-11-03T15:14:21.222Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.222Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:21.223Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#3] cancel called, state=error("没有可用的语音识别引擎")
+[2026-11-03T15:14:21.223Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.223Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.223Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.223Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.223Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.226Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.227Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.228Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.230Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.230Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.230Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.230Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] Readiness preflight blocked reason=noEngine
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] Readiness preflight blocked reason=microphoneDenied
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=injecting
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.231Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] startRecording requested
+[2026-11-03T15:14:21.244Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#2] cancel called, state=recording(elapsedSeconds: 0)
+[2026-11-03T15:14:21.244Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.244Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.244Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.244Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:21.245Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:21.245Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:21.245Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Session 2 no longer active, ignoring stage result
+[2026-11-03T15:14:23.633Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=processing(provider: "replacement")
+[2026-11-03T15:14:23.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:23.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] startRecording requested
+[2026-11-03T15:14:23.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#1] cancel called, state=preparing
+[2026-11-03T15:14:23.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:23.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController#0] cancel called, state=idle
+[2026-11-03T15:14:23.634Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] [SessionController] Cancelled — session reset to idle
+[2026-11-03T15:14:23.636Z] role=selfTest runID=7F57E4F4-24DC-4C9B-B15A-BCA1F4F68606 [SelfTest] === self-test: 25555 passed, 0 failed ===
