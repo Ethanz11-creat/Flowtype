@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlowType · 波形节奏研究</title>
+<style>
+:root{color-scheme:light;--ink:#29272f;--muted:#77727d;--line:#ddd9e2;--paper:#f5f4f0}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);font:14px/1.6 "Avenir Next","PingFang SC",sans-serif;color:var(--ink)}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid #805cd1;outline-offset:4px}header{height:70px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 36px}.brand{font-size:17px;font-weight:650;letter-spacing:-.4px}.brand span{color:#855cff;margin-right:10px}header small{color:var(--muted)}main{max-width:1260px;margin:auto;padding:36px}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--muted)}h1{font-size:30px;font-weight:550;letter-spacing:-1px;margin:7px 0 9px}.intro{color:var(--muted);font-size:13px;max-width:760px}.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:22px 0;margin:18px 0 0;border-top:1px solid var(--line)}.toolbar button{background:transparent;border:1px solid transparent;border-radius:6px;padding:7px 12px;font-size:12px}.toolbar button[aria-pressed=true]{background:#e9e3f5;color:#6342ab;border-color:#d7cbea}.toolbar #play{border-color:#c6c0cd;background:#faf9fc;margin-right:16px;min-width:92px}.toolbar label{font-size:12px;color:#69616f;margin-left:auto;display:flex;gap:7px;align-items:center}input{accent-color:#805cd1}.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.card{min-width:0;border-top:2px solid #c4beca}.card.recommended{border-color:#9477d4}.card-heading{display:flex;justify-content:space-between;align-items:center;margin:14px 0;font-size:13px}.card-heading b{font-weight:600}.card-heading small{color:#79717f;font-size:10px}.desk{height:215px;border:1px solid #d5d1de;border-radius:10px;position:relative;overflow:hidden;background:#dddde5}.desk:before{content:"";position:absolute;left:16px;right:16px;top:17px;height:109px;border-radius:6px;background:#f8f8fa;box-shadow:0 9px 19px #30253a10}.paper-lines{position:absolute;left:38px;top:35px;width:66%;color:#9d97a5;font:12px/2 "Songti SC",serif}.paper-lines i{display:block;height:4px;background:#e4e0e8;margin-top:9px;border-radius:5px}.pill{position:absolute;bottom:27px;left:50%;transform:translateX(-50%);width:216px;height:54px;border-radius:27px;display:flex;align-items:center;gap:14px;padding:0 20px;color:#fff;background:radial-gradient(ellipse,#804cfd40,#804cfd0d 70%,transparent),#24212ee8;box-shadow:0 0 15px #804cfd55,0 0 28px #804cfd22;border:1px solid #b89cef80;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}.wave{width:40px;height:24px;display:flex;align-items:center;justify-content:center;gap:2px;flex-shrink:0}.wave i{height:3px;width:3px;background:linear-gradient(#b49aff,#628eff);border-radius:9px;flex-shrink:0;will-change:height}.reference .wave i,.recommended .wave i{width:2px}.reference .wave i{background:#fff}.recommended .wave i{background:linear-gradient(#b4a0ff,#78a3ff)}.copy{min-width:0;flex:1}.title{font-weight:600;font-size:13px;white-space:nowrap;line-height:18px}.subtitle{color:#b49ae1;font-size:11px;white-space:nowrap;line-height:16px;margin-top:3px}.time{font-variant-numeric:tabular-nums;color:#d4c5ef;margin-right:7px}.caption{font-size:12px;color:var(--muted);margin:14px 0 0;min-height:68px;line-height:1.9}.caption strong{color:#4e4659;font-weight:550}.input{margin-top:29px;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);display:grid;grid-template-columns:130px 1fr 140px;align-items:center;gap:20px}.input label{font-size:12px}.meter{height:6px;background:#e1dce6;border-radius:10px;overflow:hidden}.meter span{display:block;height:100%;width:0;background:#9979d8}.input output{color:#74657e;font-size:12px;text-align:right}.note{font-size:12px;color:#7c7482;line-height:1.9;margin-top:17px;max-width:960px}.note b{font-weight:550;color:#574f61}.details{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:25px}.details h2{font-size:14px;font-weight:600}.details p{font-size:12px;line-height:1.95;color:#79717f}.enlarged .pill{transform:translateX(-50%) scale(1.35);transform-origin:center bottom}.enlarged .desk{height:235px}@media(max-width:960px){main{padding:24px}.cards{grid-template-columns:1fr}.desk{height:180px}.card{margin-bottom:10px}.caption{min-height:0}.details{grid-template-columns:1fr}.toolbar label{margin-left:0}.input{grid-template-columns:80px 1fr}.input output{grid-column:2}header{padding:0 24px}header small{max-width:150px;font-size:10px;text-align:right}}@media(prefers-reduced-motion:reduce){.wave i{will-change:auto}}
+</style>
+</head>
+<body>
+<header><div class="brand"><span>ııııı</span>FlowType <small style="font-weight:400;margin-left:12px">波形观察台</small></div><small>动态设计研究 · 未应用到客户端</small></header>
+<main>
+<div class="eyebrow">WAVEFORM STUDY / 03</div><h1>声音有起落，波形有余韵。</h1>
+<p class="intro">固定 216 × 54 的胶囊、同一组输入，只比较波形。先看正常说话，再看停顿与轻声；不是越活跃就越好。</p>
+<div class="toolbar" aria-label="合成输入与播放控制"><button id="play" aria-pressed="true">暂停演示</button><button data-profile="normal" aria-pressed="true">说话与停顿</button><button data-profile="quiet" aria-pressed="false">轻声</button><button data-profile="burst" aria-pressed="false">短促词</button><button data-profile="silence" aria-pressed="false">静音</button><label><input type="checkbox" id="enlarge">1.35× 看细节</label></div>
+<section class="cards" aria-label="三种波形机制对比">
+<article class="card"><div class="card-heading"><b>01 / 现有频谱</b><small>源码机制近似</small></div><div class="desk"><div class="paper-lines">给下一次迭代留一点空间。<i></i><i style="width:75%"></i></div><div class="pill"><div class="wave" id="current" aria-hidden="true"></div><div class="copy"><div class="title">Listening...</div><div class="subtitle"><span class="time">00:12</span>正在听写…</div></div></div></div><p class="caption"><strong>9 根 / 宽 3 / 高 3–22。</strong><br>各频段各自变化，再乘固定中高边低的轮廓。颜色亮度也跟随能量。</p></article>
+<article class="card reference"><div class="card-heading"><b>02 / Typeless 扩散机制</b><small>简化机制示意</small></div><div class="desk"><div class="paper-lines">给下一次迭代留一点空间。<i></i><i style="width:75%"></i></div><div class="pill"><div class="wave" id="reference" aria-hidden="true"></div><div class="copy"><div class="title">Listening...</div><div class="subtitle"><span class="time">00:12</span>正在听写…</div></div></div></div><p class="caption"><strong>10 根 / 宽 2 / 常态 2。</strong><br>整体能量触发中心附近脉冲，向两侧延时扩散、随机微扰和衰减，不是十个独立频段。</p></article>
+<article class="card recommended"><div class="card-heading"><b>03 / FlowType 提案</b><small>细柱 · 蓝紫 · 克制扩散</small></div><div class="desk"><div class="paper-lines">给下一次迭代留一点空间。<i></i><i style="width:75%"></i></div><div class="pill"><div class="wave" id="proposal" aria-hidden="true"></div><div class="copy"><div class="title">Listening...</div><div class="subtitle"><span class="time">00:12</span>正在听写…</div></div></div></div><p class="caption"><strong>10 根 / 宽 2 / 高 2–18。</strong><br>保留自己的蓝紫，使用有方向的细微错拍。音量决定幅度，停顿回落，不靠无声乱跳制造活跃。</p></article>
+</section>
+<div class="input"><label>同一组合成输入</label><div class="meter"><span id="level"></span></div><output id="phase" aria-live="off">准备演示</output></div>
+<p class="note"><b>这是合成信号演示，不读取麦克风、不播放声音。</b>“现有”使用合成频段近似当前公式；“Typeless”只示意读到的扩散机制，简化了音频分析、概率与衰减，不是其原生运行录像。第三列是待讨论的设计，尚未做真机轻声或噪声校准。系统开启减少动态效果时默认暂停。</p>
+<section class="details"><div><h2>值得学的是波动之间的关系。</h2><p>Typeless 从若干频率桶平均出整体能量，经过噪声底跟随和短窗口平滑，才驱动中心脉冲。两侧并非同时等高跳动，余波也不会立刻消失。纤细尺寸与这种时间关系共同形成更柔和的观感。</p></div><div><h2>留住声音，不复制皮肤。</h2><p>FlowType 保留已经选定的蓝紫与雾面，收窄音柱，降低峰值，并限制装饰扰动。真实接入时，需要使用有幅度含义的音量输入；当前自适应归一化频谱不能直接当成真实响度。</p></div></section>
+</main>
+<script>
+const bars={};for(const [id,count] of [['current',9],['reference',10],['proposal',10]]){const node=document.getElementById(id);for(let i=0;i<count;i++)node.append(document.createElement('i'));bars[id]=[...node.children];}
+let profile='normal',playing=!matchMedia('(prefers-reduced-motion: reduce)').matches,time=0,last=null,tick=0,seed=7127;
+let currentBands=Array(9).fill(0),refBars=Array(10).fill(2),ownBars=Array(10).fill(2),pending=[],noiseFloor=0,refSmooth=3,energyHistory=[];
+const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const beats=[[.4,.45],[.68,.85],[.97,.6],[1.3,.94],[1.63,.55],[2.1,.8],[2.43,.6],[4,.55],[4.35,.78],[4.8,.6],[5.14,.95],[5.52,.7],[6.05,.45],[8.1,.65],[8.45,.95],[8.8,.5],[9.2,.8]];
+function input(t){if(profile==='silence')return 0;let v=0;for(const [at,a] of beats){let width=profile==='burst'?.045:.09;v+=a*Math.exp(-(((t%12-at)/width)**2));}return clamp(v)*(profile==='quiet'?.16:1);}
+function reset(){time=0;tick=0;seed=7127;currentBands.fill(0);refBars.fill(2);ownBars.fill(2);pending=[];energyHistory=[];noiseFloor=0;refSmooth=3;draw();}
+function setBars(id,heights){heights.forEach((h,i)=>bars[id][i].style.height=h.toFixed(2)+'px');}
+function updateReference(t,level){
+  const raw=level*.64;noiseFloor+=(raw-noiseFloor)*(raw<=noiseFloor+.01?.06:.002);
+  const energy=Math.max(0,raw-Math.min(.35,noiseFloor)-.006);
+  const response=energy<.03?.12+energy/.03*.18:energy<.1?.36+(energy-.03)/.07*.42:.55+.4*Math.pow(clamp((energy-.1)/.9),.25);
+  refSmooth=refSmooth*.15+clamp(2+Math.round(16*response),2,18)*.85;
+  if(energy>.07&&random()<Math.min(.8,energy*2)){
+    const center=5+Math.floor((random()-.5)*1.5),peak=clamp(refSmooth*(.9+random()*.2),2,20);
+    for(let i=0;i<10;i++){const dist=Math.abs(i-center),span=i<center?center:9-center;const height=dist===0?peak:Math.max(2,peak*Math.max(.12,1-dist/Math.max(span,1)*(.65+random()*.08))*(.9+random()*.2));pending.push({due:t+.08+dist*(.012+random()*.004)+random()*.015,index:i,height});}
+  }
+}
+function draw(){setBars('reference',refBars);setBars('proposal',ownBars);const heights=currentBands.map((detail,i)=>{const env=.5-.5*Math.cos(2*Math.PI*i/8),loud=Math.max(...currentBands);const value=(.22+.78*env)*(.5+.5*detail)*(.3+.85*Math.min(1,loud*1.5));return 3+19*clamp(value,.04,1);});setBars('current',heights);heights.forEach((h,i)=>bars.current[i].style.opacity=(.45+.55*Math.min(((h-3)/19)/.6,1)).toFixed(2));}
+function frame(now){const dt=Math.min(.05,last===null?0:(now-last)/1000);last=now;
+  if(playing){time+=dt;const level=input(time);energyHistory.push([time,level]);while(energyHistory.length&&energyHistory[0][0]<time-.6)energyHistory.shift();
+    tick+=dt;if(tick>=.05){tick%=.05;updateReference(time,level);for(let i=0;i<9;i++){const shape=.18+.82*(.5+.5*Math.sin(time*11+i*1.9));const target=level>.006?shape:0;currentBands[i]+=(target-currentBands[i])*(target>currentBands[i]?.7:.3);}}
+    refBars=refBars.map(h=>Math.max(2,2+(h-2)*Math.exp(-dt/ .16)));const waiting=[];for(const e of pending){if(e.due<=time)refBars[e.index]=Math.max(refBars[e.index],e.height);else waiting.push(e);}pending=waiting;
+    for(let i=0;i<10;i++){const center=4.5+.28*Math.sin(time*1.2),dist=Math.abs(i-center),lag=dist*.021;let delayed=0;for(let j=energyHistory.length-1;j>=0;j--){if(energyHistory[j][0]<=time-lag){delayed=energyHistory[j][1];break;}}const amplitude=delayed>.006?Math.pow(delayed,.62):0;const weight=clamp(1-dist/5.5*.76,.18,1);const target=2+16*amplitude*weight;ownBars[i]+=(target-ownBars[i])*(1-Math.exp(-dt/(target>ownBars[i]?.035:.13)));ownBars[i]=clamp(ownBars[i],2,18);}
+    document.getElementById('level').style.width=(level*100).toFixed(1)+'%';document.getElementById('phase').textContent=profile==='silence'?'静音':level>.02?(profile==='quiet'?'轻声片段':'发声片段'):'句间停顿';draw();
+  }
+  requestAnimationFrame(frame);
+}
+function playbackLabel(){const b=document.getElementById('play');b.textContent=playing?'暂停演示':'播放演示';b.setAttribute('aria-pressed',playing);}
+document.getElementById('play').onclick=()=>{playing=!playing;playbackLabel();};
+document.querySelectorAll('[data-profile]').forEach(b=>b.onclick=()=>{profile=b.dataset.profile;document.querySelectorAll('[data-profile]').forEach(n=>n.setAttribute('aria-pressed',n===b));reset();});
+document.getElementById('enlarge').onchange=e=>document.body.classList.toggle('enlarged',e.target.checked);
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',e=>{if(e.matches){playing=false;playbackLabel();}});
+playbackLabel();reset();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
