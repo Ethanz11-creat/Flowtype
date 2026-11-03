@@ -8,8 +8,7 @@ enum Brand {
 
     /// Single desaturated accent — the ONLY accent in window UI (active row, primary button,
     /// live dot). Adapts: a touch deeper in light mode, lighter in dark. Gradient stays on the capsule.
-    static let accent = Color(light: Color(red: 0.557, green: 0.490, blue: 0.961), // #8E7DF5
-                              dark:  Color(red: 0.663, green: 0.608, blue: 1.0))   // #A99BFF
+    static let accent = Theme.accent
 
     /// Hero gradient (diagonal) for anchor elements: progress ring, active strokes.
     static let gradient = LinearGradient(

@@ -8,7 +8,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     convenience init(initialTab: AppTab = .overview) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
+            contentRect: NSRect(x: 0, y: 0, width: StatsConfig.initialWindowWidth, height: StatsConfig.initialWindowHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -20,8 +20,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.styleMask.insert(.fullSizeContentView)
-        window.isOpaque = false
-        window.backgroundColor = .clear
+        window.isOpaque = true
+        window.backgroundColor = NSColor(Theme.pageBackground)
 
         self.init(window: window)
         navigation.requestedTab = initialTab
@@ -30,7 +30,11 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func selectTab(_ tab: AppTab) {
-        navigation.requestedTab = tab
+        open(destination: .tab(tab))
+    }
+
+    func open(destination: ClientDestination) {
+        navigation.navigate(to: destination)
     }
 
     func windowWillClose(_ notification: Notification) {

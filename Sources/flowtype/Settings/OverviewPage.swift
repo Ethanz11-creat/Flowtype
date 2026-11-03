@@ -22,9 +22,9 @@ struct OverviewPage: View {
                 }
                 footerLine(s: s)
             }
-            .frame(maxWidth: StatsConfig.contentMaxWidth)   // ① cap (780)
-            .frame(maxWidth: .infinity)                     // ② center; gutters absorb extra width
-            .padding(.horizontal, 32)
+            .frame(maxWidth: StatsConfig.contentMaxWidth)
+            .padding(.horizontal, StatsConfig.contentHorizontalPadding)
+            .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
         }
         // Force a refresh when the Overview appears or FlowType regains focus. The @Published stats
@@ -64,7 +64,7 @@ struct PageHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 22, weight: .bold))
+            Text(title).font(Theme.Typography.pageTitle)
             Text(subtitle).font(.system(size: 12)).foregroundColor(.secondary)
         }
     }

@@ -22,7 +22,7 @@ struct SettingsPage: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("设置")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(Theme.Typography.pageTitle)
                         Text("配置语音识别与文本润色服务")
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
@@ -48,9 +48,12 @@ struct SettingsPage: View {
 
                 Spacer(minLength: 20)
             }
-            .padding(24)
+            .frame(maxWidth: StatsConfig.contentMaxWidth)
+            .padding(.horizontal, StatsConfig.contentHorizontalPadding)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity)
         }
-        .frame(minWidth: 520, maxWidth: 580, minHeight: 600, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             hasAccessibility = PermissionHelper.checkAccessibility()
         }

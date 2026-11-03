@@ -289,6 +289,11 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--native-client-only") {
+            NativeClientSelfTests.run(r)
+            print("=== Native client self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--m5-artifact-contract-only") {
             await M5ArtifactSelfTests.run(r)
             AppLogger.log("=== M5 artifact contract self-test: \(r.passed) passed, \(r.failed) failed ===")
@@ -394,6 +399,7 @@ enum SelfTest {
             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
+        NativeClientSelfTests.run(r)
         await M5RuntimeSelfTests.run(r)
         await M5IsolationSelfTests.run(r)
         await M5BuildInfoSelfTests.run(r)

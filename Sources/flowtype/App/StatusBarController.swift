@@ -242,17 +242,21 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     func openSettings(tab: AppTab = .settings) {
+        openSettings(destination: .tab(tab))
+    }
+
+    func openSettings(destination: ClientDestination) {
         guard actionGate.allow(.menuWindow) else { return }
         if let actionEffects { actionEffects(.menuWindow); return }
         guard ValidationEffects.live.allow(.window) else { return }
         if settingsWindowController == nil {
-            let controller = SettingsWindowController(initialTab: tab)
+            let controller = SettingsWindowController(initialTab: destination.tab)
             controller.onClose = { [weak self] in
                 self?.settingsWindowController = nil
             }
             settingsWindowController = controller
         }
-        settingsWindowController?.selectTab(tab)
+        settingsWindowController?.open(destination: destination)
         settingsWindowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }

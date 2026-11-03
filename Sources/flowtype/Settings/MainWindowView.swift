@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum AppTab: String, CaseIterable, Identifiable {
+enum AppTab: String, CaseIterable, Identifiable, Sendable {
     case overview
     case history
     case vocab
@@ -33,14 +33,29 @@ enum AppTab: String, CaseIterable, Identifiable {
 /// External navigation requests also reach a window that is already showing.
 @MainActor
 final class SettingsNavigation: ObservableObject {
-    @Published var requestedTab: AppTab
+    @Published var requestedTab: AppTab {
+        didSet {
+            guard !isUpdatingDestination else { return }
+            navigate(to: .tab(requestedTab))
+        }
+    }
+    @Published private(set) var request: NavigationRequest?
+    private var isUpdatingDestination = false
 
     init(initialTab: AppTab = .overview) {
         requestedTab = initialTab
     }
+
+    func navigate(to destination: ClientDestination) {
+        isUpdatingDestination = true
+        if requestedTab != destination.tab { requestedTab = destination.tab }
+        isUpdatingDestination = false
+        request = NavigationRequest(id: UUID(), destination: destination)
+    }
 }
 
 struct MainWindowView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selectedTab: AppTab
     @ObservedObject private var navigation: SettingsNavigation
 
@@ -53,37 +68,43 @@ struct MainWindowView: View {
         HStack(spacing: 0) {
             sidebar
                 .background(Theme.sidebarBackground)
-            Divider().overlay(Color.white.opacity(0.06))
+            Divider()
             detail
+                .environment(\.clientNavigationRequest, navigation.request)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.pageBackground)
         }
-        // Fully solid window per the prototype — no vibrancy/frost (that was the "发灰发糊" root).
         .background(Theme.pageBackground)
-        .tint(Brand.accent)
+        .tint(Theme.accent)
+        .font(Theme.Typography.body)
         .frame(minWidth: StatsConfig.minWindowWidth, minHeight: StatsConfig.minWindowHeight)
-        .onReceive(navigation.$requestedTab) { selectedTab = $0 }
+        .onReceive(navigation.$request) { request in
+            guard let request else { return }
+            selectedTab = request.destination.tab
+        }
+        .transaction { transaction in
+            if reduceMotion { transaction.disablesAnimations = true }
+        }
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 3) {
             ForEach(AppTab.allCases.filter { $0 != .settings }) { tab in
                 SidebarRow(tab: tab, selected: selectedTab == tab) {
-                    selectedTab = tab
+                    navigation.navigate(to: .tab(tab))
                 }
             }
             Spacer()
-            // §7: 设置 pinned to the bottom-left, separated by a thin divider.
-            Divider().overlay(Color.white.opacity(0.06))
+            Divider()
             SidebarRow(tab: .settings, selected: selectedTab == .settings) {
-                selectedTab = .settings
+                navigation.navigate(to: .tab(.settings))
             }
             .padding(.top, 6)
         }
         .padding(.horizontal, 10)
         .padding(.top, 36)   // clear the traffic-light buttons over the transparent titlebar
         .padding(.bottom, 12)
-        .frame(width: 176)
+        .frame(width: StatsConfig.sidebarWidth)
     }
 
     @ViewBuilder private var detail: some View {
@@ -97,7 +118,7 @@ struct MainWindowView: View {
     }
 }
 
-/// A single frosted-window sidebar row: transparent over the window frost, accent-tinted when selected.
+/// Native button focus remains visible over the solid sidebar, with a restrained selected tint.
 private struct SidebarRow: View {
     let tab: AppTab
     let selected: Bool
@@ -123,5 +144,6 @@ private struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

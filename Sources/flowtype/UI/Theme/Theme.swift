@@ -11,9 +11,7 @@ extension Color {
     }
 }
 
-/// Solid (opaque) content theme — values transcribed from `docs/files/overview-prototype.html`
-/// (dark = prototype-exact). The whole window is solid (no vibrancy/frost); light is a clean
-/// solid variant so the appearance switch still works.
+/// Opaque neutral surfaces and appearance-adaptive accents for the native client.
 enum Theme {
     static let pageBackground    = Color(light: Color(hex: 0xF5F5F7), dark: Color(hex: 0x0C0C0F))
     static let sidebarBackground = Color(light: Color(hex: 0xECECEE), dark: Color(hex: 0x101013))
@@ -29,4 +27,11 @@ enum Theme {
     static let cardRadius: CGFloat = 12
     static let cardPadding: CGFloat = 14
     static let sectionSpacing: CGFloat = 18
+
+    enum Typography {
+        static let pageTitle = Font.system(size: 18, weight: .semibold)
+        static let sectionTitle = Font.system(size: 13, weight: .semibold)
+        static let body = Font.system(size: 13)
+        static let description = Font.system(size: 12)
+    }
 }
