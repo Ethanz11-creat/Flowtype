@@ -576,6 +576,7 @@ extension M3SpeechPreflightSelfTests {
     @MainActor private static func controllerRacesAndRetry(_ r: SelfTest.Reporter, configuration: ConfigurationStore) async {
         for late: SpeechPreflightDecision in [.clearlySilent, .possiblySpeech] {
             let ledger = Ledger(), provider = Provider(Ledger()), plan = CapturePlan(), gate = Gate()
+            let resources = SessionResourceCoordinator()
             let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } }, providerForID: { _ in provider },
                 speechPreflight: { samples, rate in
                     if samples.first == 0.123 {
@@ -592,7 +593,7 @@ extension M3SpeechPreflightSelfTests {
             }
             let controller = SessionController(pipeline: [capture, ObservedASR(stage: stage, ledger: ledger)] + tail(ledger), observers: [],
                 effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in ledger.update { $0.history += 1 } }),
-                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
+                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: resources)
             defer { controller.cancel() }
             controller.startRecording()
             await waitFor { ledger.snapshot.history == 1 }
@@ -633,24 +634,42 @@ extension M3SpeechPreflightSelfTests {
             let obsolete = plan.contexts.last!
             controller.cancel()
             r.check(obsolete.isCancelled, "M3 late: old context invalidated")
+            let drainingOwner = resources.owner
+            let captures = plan.contexts.count
+            let health = ledger.snapshot.health
+            let calls = provider.ledger.snapshot.requests.count
+            let completed = ledger.snapshot.completedASRAttempts
+            r.check(drainingOwner != nil, "M3 late \(late): cancelled preflight retains resource")
             plan.samples = [0.6]; plan.preview = ""
+            controller.startRecording()
+            r.check(controller.resourceBusyNotice != nil, "M3 late \(late): competing start blocked during compute drain")
+            r.eq(resources.owner, drainingOwner, "M3 late \(late): competing start preserves old owner")
+            r.eq(plan.contexts.count, captures, "M3 late \(late): competing start captures nothing")
+            r.eq(ledger.snapshot.history, 1, "M3 late \(late): competing start saves nothing")
+            r.eq(ledger.snapshot.deliveries, 1, "M3 late \(late): competing start delivers nothing")
+            await gate.release()
+            await waitFor { ledger.snapshot.completedASRAttempts == completed + 1 && resources.owner == nil }
+            r.eq(ledger.snapshot.completedASRAttempts, completed + 1, "M3 late \(late): obsolete ASR actually returned before assertions")
+            r.eq(resources.owner, nil, "M3 late \(late): actual preflight return releases resource")
+            r.eq(plan.contexts.count, captures, "M3 late \(late): drain cannot queue another capture")
+            r.eq(controller.lastDeliverySummary, previous, "M3 late \(late): cancelled old result preserves prior summary")
+            r.eq(ledger.snapshot.history, 1, "M3 late \(late): old return saves no history")
+            r.eq(ledger.snapshot.deliveries, 1, "M3 late \(late): old return delivers nothing")
+            r.eq(ledger.snapshot.health, health, "M3 late \(late): no old health")
+            r.eq(provider.ledger.snapshot.requests.count, calls, "M3 late \(late): no old provider")
+            r.eq(obsolete.rawTranscript, "", "M3 late \(late): no old transcript")
             controller.startRecording()
             await waitFor { ledger.snapshot.history == 2 }
             let newer = controller.lastDeliverySummary
             let state = controller.sessionState
-            let health = ledger.snapshot.health
-            let calls = provider.ledger.snapshot.requests.count
-            let completed = ledger.snapshot.completedASRAttempts
-            await gate.release()
-            await waitFor { ledger.snapshot.completedASRAttempts == completed + 1 }
-            r.eq(ledger.snapshot.completedASRAttempts, completed + 1, "M3 late \(late): obsolete ASR actually returned before assertions")
+            r.check(newer != nil && newer?.sessionID != obsolete.sessionID,
+                    "M3 late \(late): explicit restart after drain completes new session")
+            obsolete.markReady()
+            obsolete.statePublisher.send(.injecting)
             r.eq(controller.lastDeliverySummary, newer, "M3 late \(late): cannot overwrite new summary")
             r.eq(controller.sessionState, state, "M3 late \(late): cannot overwrite new UI")
             r.eq(ledger.snapshot.history, 2, "M3 late \(late): no old history")
             r.eq(ledger.snapshot.deliveries, 2, "M3 late \(late): no old delivery")
-            r.eq(ledger.snapshot.health, health, "M3 late \(late): no old health")
-            r.eq(provider.ledger.snapshot.requests.count, calls, "M3 late \(late): no old provider")
-            r.eq(obsolete.rawTranscript, "", "M3 late \(late): no old transcript")
         }
 
         let ledger = Ledger(), plan = CapturePlan(), failedLive = Live(fail: true), freshLive = Live()

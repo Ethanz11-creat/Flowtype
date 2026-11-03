@@ -508,13 +508,14 @@ extension M3DeliverySelfTests {
         var saved: [UInt64] = []
         var summaries: [LastDeliverySummary] = []
         let configuration: ConfigurationStore
+        let resources = SessionResourceCoordinator()
         lazy var session = SessionController(pipeline: [PresentationStage { [weak self] context in
             guard let self else { return .complete }
             contexts.append(context)
             return await action(context)
         }], observers: [], effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
             saveHistory: { [weak self] context in self?.saved.append(context.sessionID) }),
-            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
+            configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: resources)
 
         init(configuration: ConfigurationStore) { self.configuration = configuration }
 
@@ -585,7 +586,7 @@ extension M3DeliverySelfTests {
         r.eq(fixture.saved.count, previousCount, "M3 presentation: silence notice saves no history")
         session.cancel()
 
-        // A blocked old stage is released only after the newer session finishes.
+        // A cancelled, blocked stage must drain before an explicit new session can start.
         let entered = Signal(), release = Signal(), returned = Signal()
         fixture.action = { context in
             entered.signal()
@@ -599,13 +600,30 @@ extension M3DeliverySelfTests {
         session.cancel()
         r.eq(session.lastDeliverySummary, previous, "M3 presentation: pre-event cancel retains previous summary")
         r.eq(fixture.saved.count, previousCount, "M3 presentation: pre-event cancel saves no history")
+        let drainingOwner = fixture.resources.owner
+        let captures = fixture.contexts.count
+        r.check(drainingOwner != nil, "M3 presentation: cancelled stage retains exact resource owner")
         fixture.action = { context in fixture.deliver(.clipboard, context: context); return .complete }
+        session.startRecording()
+        r.check(session.resourceBusyNotice != nil, "M3 presentation: competing start is blocked while old stage drains")
+        r.eq(fixture.resources.owner, drainingOwner, "M3 presentation: competing start preserves old resource owner")
+        r.eq(fixture.contexts.count, captures, "M3 presentation: competing start runs no new stage")
+        r.eq(fixture.saved.count, previousCount, "M3 presentation: competing start saves nothing")
+        r.eq(fixture.summaries.count, previousCount, "M3 presentation: competing start publishes nothing")
+        release.signal()
+        await returned.wait()
+        await awaitPresentation { fixture.resources.owner == nil }
+        r.eq(fixture.resources.owner, nil, "M3 presentation: actual old stage return releases resource")
+        r.eq(fixture.contexts.count, captures, "M3 presentation: resource drain never queues restart")
+        r.eq(session.lastDeliverySummary, previous, "M3 presentation: cancelled late terminal cannot overwrite prior summary")
+        r.eq(fixture.saved.count, previousCount, "M3 presentation: cancelled late terminal cannot save history")
+        r.eq(fixture.summaries.count, previousCount, "M3 presentation: cancelled late terminal cannot publish summary")
         session.startRecording()
         await awaitPresentation { fixture.saved.count == previousCount + 1 && session.sessionState == .idle }
         let newer = session.lastDeliverySummary
-        release.signal()
-        await returned.wait()
-        await Task.yield()
+        r.check(newer?.sessionID != fixture.contexts[captures - 1].sessionID && newer != nil,
+                "M3 presentation: explicit restart after drain completes a new session")
+        fixture.contexts[captures - 1].statePublisher.send(.injecting)
         r.eq(session.lastDeliverySummary, newer, "M3 presentation: late old terminal cannot overwrite newer summary")
         r.eq(fixture.saved.count, previousCount + 1, "M3 presentation: late old terminal cannot save history")
         r.eq(fixture.summaries.count, previousCount + 1, "M3 presentation: late old terminal cannot publish summary")
@@ -631,7 +649,8 @@ extension M3DeliverySelfTests {
         session.cancel()
         uncertainRelease.signal()
         await uncertainReturned.wait()
-        await Task.yield()
+        await awaitPresentation { fixture.resources.owner == nil }
+        r.eq(fixture.resources.owner, nil, "M3 presentation: uncertain cancellation fully drains")
         r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: late uncertain completion never saves twice")
         r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: late uncertain completion never publishes twice")
 
@@ -652,7 +671,8 @@ extension M3DeliverySelfTests {
         session.cancel()
         preparedRelease.signal()
         await preparedReturned.wait()
-        await Task.yield()
+        await awaitPresentation { fixture.resources.owner == nil }
+        r.eq(fixture.resources.owner, nil, "M3 presentation: cancelled clipboard preparation fully drains")
         r.eq(session.lastDeliverySummary, beforePrepared, "M3 presentation: cancelled clipboard preparation retains summary")
         r.eq(fixture.saved.count, previousCount + 2, "M3 presentation: cancelled clipboard preparation saves no history")
         r.eq(fixture.summaries.count, previousCount + 2, "M3 presentation: cancelled clipboard preparation publishes nothing")

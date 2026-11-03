@@ -298,6 +298,7 @@ enum SelfTest {
         #endif
         if CommandLine.arguments.contains("--native-client-only") {
             await NativeClientSelfTests.run(r)
+            await testReadinessPreflight(r)
             print("=== Native client self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -2054,11 +2055,12 @@ enum SelfTest {
     static func testReadinessPreflight(_ r: Reporter) async {
         let probe = ReadinessPreflightProbe()
         let rendezvous = StageRendezvous()
+        let resources = SessionResourceCoordinator()
         let effects = SessionEffects(prepare: { probe.preparationCalls += 1 },
                                      showWindow: { probe.windowShows += 1 }, hideWindow: {},
                                      saveHistory: { _ in probe.historySaves += 1 })
         let session = SessionController(pipeline: [SuspensibleStage(rendezvous: rendezvous, suspend: true)],
-                                        observers: [probe], effects: effects, readinessLevel: { probe.level }, resources: SessionResourceCoordinator())
+                                        observers: [probe], effects: effects, readinessLevel: { probe.level }, resources: resources)
         defer { session.cancel() }
         session.startRecording()
         r.eq(session.sessionState, .error("没有可用的语音识别引擎"),
@@ -2094,14 +2096,24 @@ enum SelfTest {
         session.cancel()
         r.check(captureContext?.isCancelled == true, "preflight: cancellation owns the active capture context")
 
-        // A late stage completion must not replace a subsequent blocked error.
+        // The cancelled stage still owns the resource until its actual return.
+        let drainingOwner = resources.owner
+        r.check(drainingOwner != nil, "preflight: cancelled capture retains resource until drain")
         probe.level = .blocked(.microphoneDenied)
         session.startRecording()
-        r.eq(session.sessionState, .error("麦克风权限未开启"), "preflight: fresh readiness is read on each start")
+        r.eq(resources.owner, drainingOwner, "preflight: competing start cannot replace draining owner")
+        r.check(session.resourceBusyNotice != nil, "preflight: competing start explains resource drain")
+        r.eq(await rendezvous.invocationCount, 1, "preflight: competing start cannot invoke another stage")
+        r.eq(probe.historySaves, 0, "preflight: competing start has no delivery history")
+        await rendezvous.release()
+        for _ in 0..<200 where resources.owner != nil { await Task.yield() }
+        r.eq(resources.owner, nil, "preflight: actual stage return releases resource")
+        r.eq(await rendezvous.invocationCount, 1, "preflight: drain does not queue another start")
+        r.check(session.resourceBusyNotice != nil, "preflight: drain waits for explicit user restart")
+        session.startRecording()
+        r.eq(session.sessionState, .error("麦克风权限未开启"), "preflight: explicit restart after drain reads fresh readiness")
         r.eq(session.errorActions, [.openMicrophoneSettings, .recheckReadiness, .dismiss],
              "preflight: microphone blocker offers its repair actions")
-        await rendezvous.release()
-        for _ in 0..<10 { await Task.yield() }
         captureContext?.markReady()
         captureContext?.statePublisher.send(.injecting)
         r.eq(session.sessionState, .error("麦克风权限未开启"), "preflight: late prior work cannot replace the blocked session")

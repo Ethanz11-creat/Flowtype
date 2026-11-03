@@ -75,6 +75,7 @@ enum M3FinalFixSelfTests {
         var summaries: [LastDeliverySummary] = []
         var returnedIDs: [UInt64] = []
         var configuration: ConfigurationStore!
+        let resources = SessionResourceCoordinator()
         lazy var stage = InjectionStage(settle: {}, accessibilityTrusted: { self.trusted }, currentTarget: {
             await self.readTarget()
         }, typingEvents: .init(prepare: { [pairs, preparationFails] pair in
@@ -103,7 +104,7 @@ enum M3FinalFixSelfTests {
                 })
             ], observers: [], effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
                 saveHistory: { self.histories.append(($0.sessionID, $0.deliveryOutcome, $0.finalText)) }),
-                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: SessionResourceCoordinator())
+                configurationStore: configuration, refreshReadiness: { .ready }, readinessLevel: { .ready }, resources: resources)
         }
         func readTarget() async -> DeliveryTargetSnapshot {
             reads += 1
@@ -243,6 +244,9 @@ enum M3FinalFixSelfTests {
             let session = f.session
             let subscription = session.$lastDeliverySummary.sink { if let summary = $0 { f.summaries.append(summary) } }
             if kind == "effect-only" {
+                // Hold the entered boundary after the real cancelled stage returns,
+                // so its lease drain is deterministic rather than scheduler-dependent.
+                f.afterStage = { _ in await release.wait() }
                 f.board.afterWriteRead = { session.cancel(); entered.signal() }
             }
             session.startRecording()
@@ -267,23 +271,37 @@ enum M3FinalFixSelfTests {
                 r.eq(session.lastDeliverySummary, nil, "\(label): no event means no summary")
             }
             session.cancel()
-            // Complete a newer session while old paste cleanup / typing / produced
-            // result is still suspended. Its clipboard recovery bypasses the busy
-            // transaction and typing lock without bypassing InjectionStage.
+            // Task7 retains the recording/pipeline owner through actual cleanup.
+            // A competing explicit start is rejected; draining never queues it.
+            let drainingOwner = f.resources.owner
+            let cancelledSummary = session.lastDeliverySummary
+            let savedCount = f.histories.count, summaryCount = f.summaries.count
+            r.check(drainingOwner != nil, "\(label): cancelled boundary retains resource until return")
             f.trusted = false
             f.afterStage = nil
             session.startRecording()
-            await waitUntil { f.contexts.count == 2 && session.lastDeliverySummary?.outcome == .clipboard }
-            let newer = session.lastDeliverySummary
-            r.check(newer?.sessionID != old.sessionID && newer != nil, "\(label): newer real stage completed before old cleanup")
-            let savedCount = f.histories.count, summaryCount = f.summaries.count
+            r.check(session.resourceBusyNotice != nil, "\(label): competing start blocked during cleanup")
+            r.eq(f.resources.owner, drainingOwner, "\(label): competing start preserves draining owner")
+            r.eq(f.contexts.count, 1, "\(label): no new capture before cleanup")
+            r.eq(f.copies, 0, "\(label): competing start cannot copy")
+            r.eq(f.histories.count, savedCount, "\(label): competing start cannot save history")
+            r.eq(f.summaries.count, summaryCount, "\(label): competing start cannot publish summary")
             release.signal()
-            await waitUntil { f.returnedIDs.contains(old.sessionID) }
+            await waitUntil { f.returnedIDs.contains(old.sessionID) && f.resources.owner == nil }
             r.check(f.returnedIDs.contains(old.sessionID), "\(label): old real stage exited after cleanup")
-            for _ in 0..<10 { await Task.yield() }
-            r.eq(session.lastDeliverySummary, newer, "\(label): stale result cannot replace newer summary")
+            r.eq(f.resources.owner, nil, "\(label): old boundary return releases resource")
+            r.eq(f.contexts.count, 1, "\(label): cleanup cannot queue a new session")
+            r.eq(session.lastDeliverySummary, cancelledSummary, "\(label): late cleanup preserves cancelled summary")
             r.eq(f.histories.count, savedCount, "\(label): once-only history after late cleanup")
             r.eq(f.summaries.count, summaryCount, "\(label): once-only summary after late cleanup")
+            session.startRecording()
+            await waitUntil { f.contexts.count == 2 && session.lastDeliverySummary?.outcome == .clipboard }
+            let newer = session.lastDeliverySummary
+            r.check(newer?.sessionID != old.sessionID && newer != nil, "\(label): explicit restart completes after actual cleanup")
+            r.eq(f.histories.count, savedCount + 1, "\(label): explicit new delivery saves history once")
+            r.eq(f.summaries.count, summaryCount + 1, "\(label): explicit new delivery publishes summary once")
+            old.statePublisher.send(.injecting)
+            r.eq(session.lastDeliverySummary, newer, "\(label): stale old callback cannot replace newer summary")
             r.eq(f.pastes, 1, "\(label): no paste retry")
             r.eq(f.copies, 1, "\(label): only newer session copies")
             if kind == "paste-user-copy" {
