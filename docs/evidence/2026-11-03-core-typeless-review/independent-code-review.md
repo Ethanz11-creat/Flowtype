@@ -1,5 +1,7 @@
 # Independent whole-core code review — 2026-11-03
 
+Follow-up on 2026-11-04: CORE-01–04 were repaired and independently rereviewed; full self-tests passed 25,920/0 and all 24 technical gate phases passed. See the [repair evidence and remaining manual acceptance](../2026-11-03-core-review-fixes/README.md). This report retains its original reviewed baseline and findings.
+
 Reviewed checkout: `2fff1c7e55c793a39d5e8efb1926e0b75ee20882`; historical comparison base: `6aa27fba88fc2dbeb4b41db1ec1088a5220fe5ad`. This is a review of current production call chains, not approval based on the latest capsule diff or previous passing counts. Product source, index and HEAD were not changed. Only this report was authored.
 
 **Result: changes required. Four Important findings; no Critical finding established.** Two affect all relevant text/Unicode paths; two affect the real capture/Apple-preview lifecycle. These are existing core defects, not missing Typeless parity features. Fix and focused regression coverage are needed before treating this candidate as core-ready. Real microphone, provider and application acceptance remain separate Pending evidence.
