@@ -96,6 +96,13 @@ func packagingSnapshot(repo: URL, logs: URL) throws -> String {
           try packagingGit(["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"], repo: repo, logs: logs).isEmpty else { throw PackagingFailure.sourceInvalid }
     return try packagingGit(["rev-parse", "HEAD"], repo: repo, logs: logs)
 }
+func packagingCandidateInUse(_ app: URL, _ logs: URL) throws -> Bool {
+    let binary = app.appendingPathComponent("Contents/MacOS/FlowType")
+    guard FileManager.default.fileExists(atPath: binary.path) else { return false }
+    let (result, _) = try packagingCommand("/usr/sbin/lsof", ["-t", binary.path], cwd: app.deletingLastPathComponent(), logs: logs)
+    guard result.termination == .normal, result.exitCode == 0 || result.exitCode == 1 else { throw PackagingFailure.inUse }
+    return result.exitCode == 0
+}
 func canonicalExisting(_ url: URL) throws -> URL {
     guard let value = realpath(url.path, nil) else { throw PackagingFailure.restoreFailed }
     defer { free(value) }
@@ -164,6 +171,14 @@ struct ArtifactPackager {
     var publicationURL: URL { build.appendingPathComponent(".m5-publication.json") }
     var hidingURL: URL { build.appendingPathComponent(".m5-resources.json") }
     private let fm = FileManager.default
+    /// Recovery reuses this exact journal/lock implementation. No build/sign/artifact adapter can run.
+    static func recoverOwned(repository: URL) throws {
+        let adapters = PackagingAdapters(releaseBuild: { _, _ in throw PackagingFailure.toolFailed }, releaseDirectory: { _, _ in throw PackagingFailure.toolFailed },
+            generateIdentity: { _, _, _, _ in throw PackagingFailure.toolFailed }, writeManifest: { _, _, _ in throw PackagingFailure.toolFailed },
+            sign: { _, _ in throw PackagingFailure.toolFailed }, verify: { _, _ in throw PackagingFailure.toolFailed },
+            inUse: packagingCandidateInUse, artifact: { _, _, _, _ in throw PackagingFailure.toolFailed })
+        try ArtifactPackager(repo: repository, adapters: adapters).recover()
+    }
     func write<T: Encodable>(_ value: T, to url: URL) throws { try JSONEncoder().encode(value).write(to: url, options: .atomic) }
     func exists(_ url: URL) -> Bool { fm.fileExists(atPath: url.path) || (try? fm.destinationOfSymbolicLink(atPath: url.path)) != nil }
     func stage(_ token: String) -> URL { build.appendingPathComponent(".m5-stage-" + token) }
@@ -188,6 +203,12 @@ struct ArtifactPackager {
         let app = build.appendingPathComponent("FlowType.app"), manifest = build.appendingPathComponent("FlowType.manifest.json")
         let backupApp = build.appendingPathComponent(".m5-backup-\(j.token).app")
         let backupManifest = build.appendingPathComponent(".m5-backup-\(j.token).manifest.json")
+        // Recovery can run before buildApp's ordinary in-use guard. Preserve any active candidate/backup.
+        let recoveryLogs = build.appendingPathComponent("recovery-\(UUID())")
+        try fm.createDirectory(at: recoveryLogs, withIntermediateDirectories: false)
+        for candidate in [app, backupApp] where exists(candidate) {
+            guard try !adapters.inUse(candidate, recoveryLogs) else { throw PackagingFailure.inUse }
+        }
         func hash(_ url: URL) throws -> String { try packagingFingerprint(url) }
         func restore(_ current: URL, _ backup: URL, old: String?, new: String) throws {
             func retainNew() throws {
