@@ -155,14 +155,13 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                     }
                 }
 
-                // 4. Consume spectrum stream and update spectrum in real time
+                // 4. Consume the single ordered visualization stream.
                 AppLogger.log("[RecordingStage#\(sessionID)] Recording in progress")
-                for await spectrum in output.spectrum {
+                for await frame in output.visualizationFrames {
                     try Task.checkCancellation()
                     await MainActor.run {
                         guard !context.isCancelled else { return }
-                        context.currentSpectrum = spectrum
-                        context.spectrumPublisher.send(spectrum)
+                        context.publishVisualization(frame)
                     }
                 }
                 AppLogger.log("[RecordingStage#\(sessionID)] Audio spectrum stream ended")

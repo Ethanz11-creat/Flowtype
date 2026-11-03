@@ -18,13 +18,13 @@ import os
 ///    (`.idle → .recording → .processing → ...`). These are coarse-grained,
 ///    stage-driven transitions observed by both `SessionController` and `SessionObserver`s.
 ///
-/// 2. **Continuous real-time data** — `spectrumPublisher`
+/// 2. **Continuous real-time data** — `visualizationPublisher`
 ///    streams high-frequency updates directly from `RecordingStage` to `SessionController`.
 ///    This bypasses the 1-second timer polling that was used in the initial refactor,
 ///    providing responsive spectrum visualization at the
 ///    native frequency of the audio buffer callbacks.
 ///
-/// Stages write real-time data to both the stored property (`currentSpectrum`)
+/// Stages write real-time data to both the stored properties (`currentVisualizationFrame` / `currentSpectrum`)
 /// and the corresponding publisher, so the values remain inspectable for debugging
 /// while the publisher drives immediate UI updates.
 @MainActor
@@ -297,6 +297,19 @@ final class SessionContext {
 
     // MARK: - Real-time Recording State
 
+    private(set) var currentVisualizationFrame = AudioVisualizationFrame.silence
+    let visualizationPublisher = PassthroughSubject<AudioVisualizationFrame, Never>()
+
+    /// Main-actor publication rejects queued callbacks after cancellation.
+    func publishVisualization(_ frame: AudioVisualizationFrame) {
+        guard !isCancelled else { return }
+        currentVisualizationFrame = frame
+        currentSpectrum = frame.spectrum
+        visualizationPublisher.send(frame)
+        guard !isCancelled else { return }
+        spectrumPublisher.send(frame.spectrum)
+    }
+
     /// Current frequency spectrum (updated by RecordingStage during recording).
     var currentSpectrum: [Float] = []
 
@@ -337,6 +350,8 @@ final class SessionContext {
             deliveryOutcome = .uncertain
         }
         isCancelled = true
+        currentVisualizationFrame = .silence
+        currentSpectrum = []
         cancelForegroundCollection()
         deliveryTargetTask?.cancel()
         deliveryTargetTask = nil

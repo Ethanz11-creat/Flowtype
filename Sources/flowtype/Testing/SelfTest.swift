@@ -289,6 +289,11 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--capsule-waveform-only") {
+            await CapsuleWaveformSelfTests.run(r)
+            print("=== Capsule waveform self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         #if DEBUG
         if CommandLine.arguments.contains("--native-client-previews-only") {
             await NativeClientPreviewSelfTests.run(r)
@@ -422,6 +427,7 @@ enum SelfTest {
         testInjectionEdgeCases(r) // injection edge cases: emoji/newlines/config/continuation
         testInjectionSegmentation(r) // injection helpers
         testASRWiring(r)         // ASR language + context
+        await CapsuleWaveformSelfTests.run(r)
         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
         testFFTPeak(r)           // SpectrumAnalyzer FFT correctness
         testSpectrumProcess(r)   // SpectrumAnalyzer.process smoothed bands

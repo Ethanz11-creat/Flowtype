@@ -114,6 +114,10 @@ final class SessionController: ObservableObject {
         }.map(\.card).removeDuplicates().eraseToAnyPublisher()
     }
     @Published private(set) var spectrum: [Float] = []
+    // Guard explicit publication before assigning: @Published willSet can restore
+    // stale energy after a synchronous subscriber cancels or starts another session.
+    private var visualizationValue = AudioVisualizationFrame.silence
+    var visualizationFrame: AudioVisualizationFrame { visualizationValue }
     var lastErrorRawText: String? { recoveryState.copyText }
     var recoveryCard: RecoveryCard? { recoveryState.card }
     var errorActions: [ErrorAction] { recoveryState.card?.presentation.actions ?? [] }
@@ -259,6 +263,7 @@ final class SessionController: ObservableObject {
         guard ownsActiveContext(context), presentationGeneration == generation else { return }
 
         // Reset state
+        visualizationValue = .silence
         spectrum = []
         guard ownsActiveContext(context), presentationGeneration == generation else { return }
 
@@ -296,14 +301,20 @@ final class SessionController: ObservableObject {
                 self.startRecordingTimer(sessionID: newID, context: ctx)
             }
 
-        // Subscribe to real-time spectrum publisher (avoids 1Hz timer polling)
-        spectrumCancellable = context.spectrumPublisher
-            .sink { [weak self] spec in
+        // The same ordered frame updates absolute energy and legacy spectrum together.
+        spectrumCancellable = context.visualizationPublisher
+            .sink { [weak self] frame in
                 guard let self,
                       Self.shouldAcceptEvent(activeSessionID: self.activeSessionID,
                                              eventSessionID: newID,
                                              isCancelled: context.isCancelled) else { return }
-                self.spectrum = spec
+                guard self.sessionState.isRecordingIndicator else { return }
+                let generation = self.presentationGeneration
+                self.objectWillChange.send()
+                guard self.ownsActiveContext(context), self.presentationGeneration == generation,
+                      self.sessionState.isRecordingIndicator else { return }
+                self.visualizationValue = frame
+                self.spectrum = frame.spectrum
             }
         // 录音中不再向 UI 推送预览文字（预览仅作 ASR 失败时的内部兜底）。
 
@@ -602,6 +613,7 @@ final class SessionController: ObservableObject {
             spectrumCancellable?.cancel(); spectrumCancellable = nil
             readinessCancellable?.cancel(); readinessCancellable = nil
             stopRecordingTimer()
+            visualizationValue = .silence
             spectrum = []
             guard activeSessionID == context.sessionID, presentationGeneration == generation else { return }
             clearSuspension()
@@ -622,6 +634,11 @@ final class SessionController: ObservableObject {
         stateValue = newState
         presentationGeneration &+= 1
         let generation = presentationGeneration
+        if !newState.isRecordingIndicator {
+            visualizationValue = .silence
+            spectrum = []
+            guard presentationGeneration == generation else { return false }
+        }
         switch newState {
         case .idle, .notice, .error: endResourceOwnership()
         default: break
@@ -923,6 +940,7 @@ final class SessionController: ObservableObject {
         guard presentationGeneration == generation else { return }
         preparationNotice = nil
         guard presentationGeneration == generation else { return }
+        visualizationValue = .silence
         spectrum = []
         guard presentationGeneration == generation else { return }
         effects.hideWindow()

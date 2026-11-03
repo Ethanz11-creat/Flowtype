@@ -7,10 +7,25 @@ enum AudioRecorderError: Error, Equatable {
     case formatCreationFailed
 }
 
-/// Output streams from a recording session.
-struct RecordingOutput: @unchecked Sendable {
-    /// Per-buffer frequency-band energies (0...1) for the visualizer.
-    let spectrum: AsyncStream<[Float]>
+/// A single ordered visualization source; spectrum access remains source compatible.
+struct RecordingOutput: Sendable {
+    let visualizationFrames: RecordingVisualizationSequence
+
+    init(spectrum: AsyncStream<[Float]>) {
+        visualizationFrames = .init(frames: nil, legacySpectrum: spectrum)
+    }
+
+    init(visualizationFrames: AsyncStream<AudioVisualizationFrame>) {
+        self.visualizationFrames = .init(frames: visualizationFrames, legacySpectrum: nil)
+    }
+
+    static func makeVisualizationStream() -> (stream: AsyncStream<AudioVisualizationFrame>, continuation: AsyncStream<AudioVisualizationFrame>.Continuation) {
+        AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
+    }
+
+    var spectrum: AsyncMapSequence<RecordingVisualizationSequence, [Float]> {
+        visualizationFrames.map { $0.spectrum }
+    }
 }
 
 final class AudioRecorder: @unchecked Sendable {
@@ -18,9 +33,7 @@ final class AudioRecorder: @unchecked Sendable {
     private static let maxRawSamples = 28_800_000 // 16000 Hz * 60 s/min * 30 min
 
     private var engine: AVAudioEngine?
-    // 9 bands — one per bar in the compact capsule visualizer.
-    private let spectrumAnalyzer = SpectrumAnalyzer(bandCount: 9)
-    private nonisolated(unsafe) var spectrumContinuation: AsyncStream<[Float]>.Continuation?
+    private nonisolated(unsafe) var visualizationContinuation: AsyncStream<AudioVisualizationFrame>.Continuation?
 
     // Raw sample accumulator for batch ASR (Qwen3-ASR)
     private var rawSamples: [Float] = []
@@ -106,10 +119,9 @@ final class AudioRecorder: @unchecked Sendable {
         try Task.checkCancellation()
         guard isOwner(ownerID) else { throw CancellationError() }
 
-        // Fresh visualizer state per session. Relies on start/stop being serial (the same
-        // assumption the engine reuse makes): after this, only the audio tap touches the
-        // analyzer, one buffer at a time.
-        spectrumAnalyzer.reset()
+        // A tap owns its analyzer and continuation. Late old-session work cannot
+        // contaminate a new session, even while the old callback finishes unwinding.
+        let spectrumAnalyzer = SpectrumAnalyzer(bandCount: 10)
 
         let freshEngine = AVAudioEngine()
         guard isOwner(ownerID) else { throw CancellationError() }
@@ -234,80 +246,78 @@ final class AudioRecorder: @unchecked Sendable {
                 // finish() is idempotent, so a later stopRecording() is safe.
                 guard self.isOwner(ownerID) else { return }
                 self.onRecordingFrozen?()
-                self.spectrumContinuation?.finish()
+                self.visualizationContinuation?.finish()
             }
         }
 
         let pcmSink = onPCMSamples
-        let spectrumStream = AsyncStream<[Float]> { continuation in
-            guard self.isOwner(ownerID) else {
-                continuation.finish()
+        let (visualizationStream, continuation) = RecordingOutput.makeVisualizationStream()
+        guard self.isOwner(ownerID) else {
+            continuation.finish()
+            throw CancellationError()
+        }
+        self.visualizationContinuation = continuation
+
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
+            guard let self = self else { return }
+            guard self.isOwner(ownerID) else { return }
+            guard self.isRecording || self.isStopping else { return }
+
+            self.heartbeatLock.withLock { $0.tapCallCount += 1 }
+
+            guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: buffer.frameCapacity) else {
                 return
             }
-            self.spectrumContinuation = continuation
-
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
-                guard let self = self else { return }
-                guard self.isOwner(ownerID) else { return }
-                guard self.isRecording || self.isStopping else { return }
-
-                self.heartbeatLock.withLock { $0.tapCallCount += 1 }
-
-                guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: buffer.frameCapacity) else {
-                    return
+            var error: NSError?
+            let inputBuffer = buffer
+            var inputConsumed = false
+            converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+                if !inputConsumed {
+                    inputConsumed = true
+                    outStatus.pointee = .haveData
+                    return inputBuffer
                 }
-                var error: NSError?
-                let inputBuffer = buffer
-                var inputConsumed = false
-                converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-                    if !inputConsumed {
-                        inputConsumed = true
-                        outStatus.pointee = .haveData
-                        return inputBuffer
-                    }
-                    outStatus.pointee = .noDataNow
-                    return nil
-                }
-
-                // Forward to streaming recognizer (AppleSpeech preview)
-                guard self.isOwner(ownerID) else { return }
-                guard error == nil,
-                      Self.isValidPCM(frameCount: Int(convertedBuffer.frameLength),
-                                      hasFloatChannel: convertedBuffer.floatChannelData != nil) else { return }
-                self.onAudioBuffer?(convertedBuffer)
-
-                // Accumulate raw samples for batch ASR
-                if let data = convertedBuffer.floatChannelData?[0] {
-                    let frames = Int(convertedBuffer.frameLength)
-                    let samplesArray = Array(UnsafeBufferPointer(start: data, count: frames))
-                    self.sampleLock.withLock {
-                        guard self.isRecording || self.isStopping else { return }
-                        let remaining = Self.maxRawSamples - self.rawSamples.count
-                        if remaining > 0 {
-                            let accepted = Array(samplesArray.prefix(remaining))
-                            self.rawSamples.append(contentsOf: accepted)
-                            pcmSink?(accepted)
-                        }
-                    }
-
-                    // Yield the frequency spectrum for the visualizer.
-                    let spectrum = self.spectrumAnalyzer.process(samplesArray)
-                    if self.isOwner(ownerID) {
-                        self.spectrumContinuation?.yield(spectrum)
-                    }
-                }
+                outStatus.pointee = .noDataNow
+                return nil
             }
 
-            RecordingEngineStartup.run(prepare: { freshEngine.prepare() }, start: {
-                try freshEngine.start()
-                AppLogger.log("[AudioRecorder] Engine prepared and started successfully")
-            }, onFailure: {
-                AppLogger.log("[AudioRecorder] Engine start failed")
-                onRecordingFrozen?()
-            }, finish: { continuation.finish() })
+            // Forward to streaming recognizer (AppleSpeech preview)
+            guard self.isOwner(ownerID) else { return }
+            guard error == nil,
+                  Self.isValidPCM(frameCount: Int(convertedBuffer.frameLength),
+                                  hasFloatChannel: convertedBuffer.floatChannelData != nil) else { return }
+            self.onAudioBuffer?(convertedBuffer)
+
+            // Accumulate raw samples for batch ASR
+            if let data = convertedBuffer.floatChannelData?[0] {
+                let frames = Int(convertedBuffer.frameLength)
+                let samplesArray = Array(UnsafeBufferPointer(start: data, count: frames))
+                self.sampleLock.withLock {
+                    guard self.isRecording || self.isStopping else { return }
+                    let remaining = Self.maxRawSamples - self.rawSamples.count
+                    if remaining > 0 {
+                        let accepted = Array(samplesArray.prefix(remaining))
+                        self.rawSamples.append(contentsOf: accepted)
+                        pcmSink?(accepted)
+                    }
+                }
+
+                // PCM loudness and frequency detail travel in one bounded ordered frame.
+                let spectrum = spectrumAnalyzer.process(samplesArray)
+                if self.isOwner(ownerID) {
+                    continuation.yield(AudioVisualizationFrame(samples: samplesArray, spectrum: spectrum))
+                }
+            }
         }
 
-        return RecordingOutput(spectrum: spectrumStream)
+        RecordingEngineStartup.run(prepare: { freshEngine.prepare() }, start: {
+            try freshEngine.start()
+            AppLogger.log("[AudioRecorder] Engine prepared and started successfully")
+        }, onFailure: {
+            AppLogger.log("[AudioRecorder] Engine start failed")
+            onRecordingFrozen?()
+        }, finish: { continuation.finish() })
+        return RecordingOutput(visualizationFrames: visualizationStream)
     }
 
     nonisolated func stopRecording() {
@@ -344,8 +354,8 @@ final class AudioRecorder: @unchecked Sendable {
 
         heartbeatTimer.cancel()
         heartbeatLock.withLock { $0.lastTapTimestamp = nil }
-        spectrumContinuation?.finish()
-        spectrumContinuation = nil
+        visualizationContinuation?.finish()
+        visualizationContinuation = nil
 
         // Stop engine
         engine?.stop()
