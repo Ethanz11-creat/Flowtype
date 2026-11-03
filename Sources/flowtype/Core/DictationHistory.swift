@@ -116,6 +116,8 @@ final class HistoryStore: ObservableObject {
     private var publishingSessions = false
     private var readGeneration = 0
     @Published private(set) var readState: HistoryReadState = .loading
+    private var committedReadState: HistoryReadState = .loading
+    private var publishingReadState = false
     private let db: AppDatabase
     private let readSessions: @MainActor () throws -> [DictationSession]
     private let refreshStats: @MainActor () -> Void
@@ -140,7 +142,7 @@ final class HistoryStore: ObservableObject {
     func reload() {
         readGeneration += 1
         let generation = readGeneration
-        readState = .loading
+        replaceReadState(.loading)
         guard generation == readGeneration else { return }
         do {
             let updated = try readSessions()
@@ -148,12 +150,12 @@ final class HistoryStore: ObservableObject {
             replaceSessions(updated)
             // A publication subscriber may have committed a mutation and reloaded.
             guard generation == readGeneration else { return }
-            readState = .loaded
+            replaceReadState(.loaded)
         } catch {
             guard generation == readGeneration else { return }
             AppLogger.log("[History] reload failed: \(error)")
             // Keep the latest committed snapshot, including successful privacy mutations.
-            readState = .failed(error.localizedDescription)
+            replaceReadState(.failed(error.localizedDescription))
         }
     }
 
@@ -214,6 +216,16 @@ final class HistoryStore: ObservableObject {
         reload()
         refreshStats()
         return true
+    }
+
+    private func replaceReadState(_ updated: HistoryReadState) {
+        committedReadState = updated
+        guard !publishingReadState else { return }
+        publishingReadState = true
+        // A subscriber may start a newer reload during willSet. Reconcile the
+        // presentation after the older assignment resumes, including failure details.
+        repeat { readState = committedReadState } while readState != committedReadState
+        publishingReadState = false
     }
 
     private func replaceSessions(_ updated: [DictationSession]) {

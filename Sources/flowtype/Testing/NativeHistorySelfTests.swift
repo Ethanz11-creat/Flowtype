@@ -3,7 +3,10 @@ import Combine
 import GRDB
 
 enum NativeHistorySelfTests {
-    @MainActor private final class ReadControl { var shouldFail = false }
+    @MainActor private final class ReadControl {
+        var shouldFail = false
+        var failureMessage: String?
+    }
     @MainActor
     static func run(_ r: SelfTest.Reporter) {
         print("--- NativeHistorySelfTests.historyReadFailureAndTextlessActions ---")
@@ -16,6 +19,8 @@ enum NativeHistorySelfTests {
         historyFailedWritesPreserveCache(r)
         print("--- NativeHistorySelfTests.historyReentrantMutationKeepsLatestState ---")
         historyReentrantMutationKeepsLatestState(r)
+        print("--- NativeHistorySelfTests.historyReadStatePublicationKeepsLatestFailure ---")
+        historyReadStatePublicationKeepsLatestFailure(r)
     }
 
     private static func database() throws -> (AppDatabase, URL) {
@@ -398,6 +403,71 @@ enum NativeHistorySelfTests {
             r.eq(try readRows(db).first?.finalText, "", "history reentrant: database privacy write committed")
             withExtendedLifetime(observer) {}
         } catch { r.check(false, "history reentrant fixture: \(error)") }
+    }
+
+
+    @MainActor
+    private static func historyReadStatePublicationKeepsLatestFailure(_ r: SelfTest.Reporter) {
+        let outerFailure = "outer history read failure"
+        let nestedFailure = "latest mutation read failure"
+        for target in [HistoryReadState.loading, .loaded, .failed(outerFailure)] {
+            do {
+                let (db, dir) = try database()
+                defer { try? FileManager.default.removeItem(at: dir) }
+                let effects = ValidationEffects.live.snapshot
+                let original = fixture(raw: "original secret", final: "read-state erased secret")
+                var record = SessionRecord(from: original)
+                try db.dbQueue.write { try record.insert($0) }
+                let control = ReadControl()
+                let store = HistoryStore(database: db, readSessions: {
+                    if let message = control.failureMessage {
+                        throw NSError(domain: "history-publication", code: 1,
+                                      userInfo: [NSLocalizedDescriptionKey: message])
+                    }
+                    return try readRows(db)
+                }, refreshStats: {})
+                var copies: [String] = [], exports: [HistoryExport] = []
+                let model = HistoryPageModel(store: store, copy: { copies.append($0) }, export: { exports.append($0) })
+                model.selectedID = original.id
+                var mutated = false
+                var events: [HistoryReadState] = []
+                if case .failed = target { control.failureMessage = outerFailure }
+                // Each actual store publication case gets its own deterministic one-shot
+                // subscriber. Mutation and nested failed read run inside the outer willSet.
+                let observer = store.$readState.dropFirst().sink { state in
+                    events.append(state)
+                    guard !mutated, state == target else { return }
+                    mutated = true
+                    control.failureMessage = nestedFailure
+                    store.clearTranscripts()
+                    model.copy(original)
+                    model.exportText(original)
+                    model.exportCSV()
+                }
+                store.reload()
+                let prefix = "history read-state publication \(target)"
+                r.check(mutated, "\(prefix): subscriber committed its one-shot mutation")
+                r.eq(store.readState, .failed(nestedFailure), "\(prefix): latest failure survives outer assignment")
+                r.eq(events.last, .failed(nestedFailure), "\(prefix): observers receive the latest failure")
+                r.eq(store.sessions.first?.finalText, "", "\(prefix): displayed final text stays sanitized")
+                r.eq(store.sessions.first?.rawTranscript, "", "\(prefix): displayed raw text stays sanitized")
+                r.eq(model.selectedSession?.finalText, "", "\(prefix): selected committed text stays sanitized")
+                model.copy(original)
+                model.exportText(original)
+                model.exportJSON()
+                r.check(copies.isEmpty, "\(prefix): stale detail cannot copy erased text")
+                r.check(!exports.contains { if case .text = $0 { true } else { false } }, "\(prefix): stale detail cannot export text")
+                let payloads = try exports.map { String(decoding: try $0.data(), as: UTF8.self) }
+                r.check(!payloads.isEmpty && payloads.allSatisfy { !$0.contains(original.finalText) && !$0.contains(original.rawTranscript) },
+                        "\(prefix): bulk exports contain metadata without erased text")
+                let persisted = try db.dbQueue.read { try SessionRecord.fetchAll($0) }
+                r.check(persisted.count == 1 && persisted[0].finalText == nil && persisted[0].rawTranscript == nil,
+                        "\(prefix): actual database clear committed")
+                r.eq(ValidationEffects.live.snapshot.blocked, effects.blocked, "\(prefix): no attempted live effects")
+                r.eq(ValidationEffects.live.snapshot.permitted, effects.permitted, "\(prefix): no live effects")
+                withExtendedLifetime(observer) {}
+            } catch { r.check(false, "history read-state publication \(target): fixture failed: \(error)") }
+        }
     }
 
 }
