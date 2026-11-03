@@ -331,11 +331,18 @@ This logic is fully covered by the built-in self-test suite.
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/build-app.sh` | Builds release binary, creates `.app` bundle, copies `mlx.metallib`, generates `Info.plist`, ad-hoc signs |
+| `scripts/build-app.sh` | Builds a clean release candidate in owned staging, generates matching identity/plist, copies resource bundles and explicit shader, verifies strict ad-hoc signing before publication |
+| `scripts/check-app.sh` | Verifies the candidate after moving it outside the checkout, hides/restores owned developer resources, and checks actual Metal/MLX operation |
+| `scripts/verify.sh` | Defaults to bounded code build/full self-test; artifact and release lanes add fixed-candidate signature/resources/ten smoke checks |
+| `scripts/export-ci-evidence.sh` | Exports only allowlisted evidence from the one reported run, including safe failure/partial reports |
 | `scripts/build-dmg.sh` | Creates distributable DMG from built `.app` with `/Applications` symlink |
 | `scripts/generate-build-info.swift` | Generates matching `FlowTypeBuild.json` and `Info.plist` from a clean, nonshallow Git checkout |
 
-Run the identity tool with `swift scripts/generate-build-info.swift --repo /path/to/checkout --output /path/to/empty/directory [--version 1.2.3]`. The version defaults to `1.0.0`; SHA, commit count, Sources tree and UTC time come from the tool. Its `--self-test` creates and removes independent temporary Git repositories without changing global Git configuration. Packaging integration is a separate step; the existing build script does not yet consume these generated files. Runtime development builds show `development` with unknown SHA/time, and malformed app identity stays `invalid`. The About menu and diagnostics use the same loaded identity.
+Run the identity tool with `swift scripts/generate-build-info.swift --repo /path/to/checkout --output /path/to/empty/directory [--version 1.2.3]`. The version defaults to `1.0.0`; SHA, commit count, Sources tree and UTC time come from the tool. Its `--self-test` creates independent temporary Git repositories without changing global Git configuration. `build-app.sh` consumes this identity before signing. Supply an existing shader explicitly through `MLX_METALLIB_PATH`; packaging does not install Python, download shaders/models, or search user model caches. The shader lives at `Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib`, alongside copied SwiftPM resource bundles. Runtime development builds show `development` with unknown SHA/time, and malformed app identity stays `invalid`. The About menu and diagnostics use the same loaded identity.
+
+`scripts/verify.sh --lane code` needs macOS15+/arm64/Swift6.2+ and runs build followed by the original full self-test in isolated roots. It does not package an app or use GPU/models. `--lane artifact` requires a clean nonshallow checkout, the explicit shader and a graphical session; `--lane release` runs code and artifact once each and checks matching manual/remote CI reports. Reports live under `build/verification/<UUID>/`. Fail exits1, Pending/Skip exits2, and only every required Pass exits0. Local strict ad-hoc signing is not Developer ID/notarization acceptance.
+
+Generate a new all-Pending manual template with `scripts/verify.sh --write-manual-template /absolute/new/file.json`; this refuses overwrite and performs no validation run. The [M5 acceptance ledger](docs/evidence/2026-11-03-m5-validation.md) defines all41 required leaves, fixed candidate identity and evidence fields. Actual final release, remote CI and real app/device/model acceptance remain Pending until separately recorded.
 
 ## Continuing development on another machine
 

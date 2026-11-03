@@ -1,33 +1,45 @@
-# M5 验证台账（规划态）
+# M5 验证与剩余验收台账
 
-日期2026-11-03。当前只有[设计](../superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](../superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)实施计划，尚未实施。所有下表Pending表示未执行，不是已确认产品故障。
+日期2026-11-03。按[设计](../superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](../superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)实施。A/B及C1/C2源码与任务审查已通过；C3源码/文档/fixture提交后等待C3及全M5源码审查。最终release技术门禁、远端CI、全部41个人工叶子仍Pending。Pending表示未执行或缺证据，不是已确认产品故障。[开发证据索引](2026-11-03-m5-development/README.md)区分历史检查点与最终候选。
 
-规划基线HEAD `b00b0a50d9c6913a91ef01c6a8c8944688add31e`；现有产品源码 `5dc1693`，Sources tree `872e9038b8def8ed720d9cc6370c57ed12d76794`。M4历史自测23872/0、旧app二进制 `ceded28e359918d8d66f8ed1090107fb4a8bffb46aa1b8b9e0278c94a5ccc250` 仅是[旧证据](2026-11-02-m4-development/README.md)，不算M5验证。旧strict/deep签名失败仍未被本轮修复。
+历史规划基线HEAD `b00b0a50d9c6913a91ef01c6a8c8944688add31e`，当时产品源码 `5dc1693`、Sources tree `872e9038b8def8ed720d9cc6370c57ed12d76794`。M4历史自测23872/0、旧app二进制 `ceded28e359918d8d66f8ed1090107fb4a8bffb46aa1b8b9e0278c94a5ccc250` 仍为[旧证据](2026-11-02-m4-development/README.md)。B3已在新检查点修复该旧strict/deep限制；不改写M4日志，也不把B3检查点当最终C验收。
 
 ## 技术门禁
 
 | 项目 | 所属任务/证明要求 | 状态 |
 | --- | --- | --- |
-| 进程role/路径/配置域隔离 | A1/A2；含legacy Keychain、DB迁移、无隐式模型/设备动作 | Pending |
-| 构建身份/日志/关于菜单 | A3；metadata/plist一致，role/runID，flush/轮转；GUI另验 | Pending |
-| 新源码顺序build/full | A/B各有意义变更后；本次实际计数、退出码和源码身份 | Pending |
-| watchdog异常进程 | B1；主线程卡死、signal、子孙清理、非本run不受影响 | Pending |
-| smoke 10/10 | B1/C1；每次≥6s、实际probe/健康tick≥1、独立根、固定候选 | Pending |
-| standard Resources/完整签名 | B2/B3；codesign strict/deep exit0，不用ignore-resources | Pending |
-| 仓库外资源/Metal/真实MLX | B2/B3；无开发bundle救场，独立三项，不加载ASR模型 | Pending |
-| 本地verify聚合/失败保留 | C1；code/artifact/release、exit1/2/64准确 | Pending |
-| CI配置/安全上传 | C2；arm64/Swift6.2预检，仅白名单 | Pending |
+| 进程role/路径/配置域隔离 | A1/A2；legacy Keychain/DB迁移与副作用预算，aea7dc9/ffd4ba4 | 源码/审查Pass |
+| 构建身份/日志/关于菜单 | A3 d6aaace；metadata/plist、role/runID、flush/轮转 | 源码Pass；菜单GUI Pending |
+| 新源码顺序build/full | B2 full24334/0；C1唯一实际code run全7阶段Pass/full24334/0 | 历史检查点Pass；最终C release Pending |
+| watchdog异常进程 | B1 7488553；主线程卡死、signal、子孙归属与真实timer | 源码/任务审查Pass |
+| 最终候选smoke 10/10 | C3最终clean源码；每次≥6s、实际probe/健康tick≥1 | Pending；尚未执行 |
+| standard Resources/完整签名 | B3 c21cb25；strict/deep exit0 | B3检查点Pass；最终C候选Pending |
+| 仓库外资源/Metal/真实MLX | B3移位check exit0，四项资源/Metal/MLX/inside均true | B3检查点Pass；无ASR模型推理 |
+| 本地verify聚合/失败保留 | C1 653ecb8；fixture71/0，实际code24334/0，恢复fixture128/0 | 源码/任务审查Pass |
+| CI配置/安全上传 | C2 66f1e78；fixture105/0，arm64/Swift6.2预检/白名单/partial/安全bootstrap | 源码/任务审查Pass；远端Pending |
 | 远端CI实际运行 | C2/C3；最终gitSHA/sourceTree匹配的code报告；本会话不push | Pending |
-| 人工schema/主线矩阵 | C3；每叶子required、身份匹配、证据存在 | Pending |
+| 人工schema/主线矩阵 | C3；41叶子、固定预期路径/source、CI独立、Pending模板 | 已实现；源码审查Pending；人工全Pending |
 | 全M5源码审查与修复复审 | 任务审查后一次全量、同一修复波次与限定复审 | Pending |
+
+Watchdog仅控制handshake确认的自有进程组及仍在组内的后代。Foundation Process另建的独立后代组不受全局清理保证；packaging恢复另查marker/live owner/inner group及资源指纹，仍活跃或冲突就Fail并保留证据，不能把外层timeout当作安全恢复证明。
 
 ## 最终候选身份
 
-尚无M5候选。实施后填写gitSHA、sourceTree、version/buildNumber、builtAt、binarySHA256、buildInfoSHA256、shaderSHA256、architecture、固定appPath及manifest/verify-report引用。先签名再取二进制hash；任何二进制变更均使旧人工Pass不能自动沿用。后续仅文档提交需同时保留“被测源码身份”和“归档提交”，不能把新HEAD冒充当时构建SHA。
+最终C候选尚未构建；在C3/全M5源码审查后另行运行一次release并填写其gitSHA、sourceTree、version/buildNumber、builtAt、binary/buildInfo/shader hash、architecture、固定appPath及manifest/verify-report。先签名再取hash；二进制变化使旧人工Pass失效。归档提交与被测源码身份分列，不能把后续HEAD冒充被测SHA。
+
+B3历史检查点为 `c21cb25e4d37249d3d932939a6157b946b64a243`，Sources tree `953608b60a0349dfcd2acfc4ddeef6f6d6b39288`，version1.0.0/build350，arm64；binary `c59eb53b8aaec14421ef19e2c884e67cbb94f46a31ec069092051e66a38ac85f`，metadata `9ff060d015a4a3fefffb63b1378bd9e55545f7da17203cd985d5e73b42b6afc8`，shader `f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f`。固定路径为本checkout `build/FlowType.app`；shader在 `Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib`。这份候选证明B3打包，不是C最终十次smoke或人工通过。
 
 ## required 真机验收
 
-Pass需日期、测试人、环境、确切四身份字段、具体观察与证据；子项均通过才能聚合父项。实际JSON模板由C3生成，规划本轮不创建任何伪Pass记录。此表的详细字段合同见C3。
+Pass需日期、测试人、环境、确切四身份字段、具体观察与证据；子项均通过才能聚合父项。[实际模板](2026-11-03-m5-manual-template.json)含41个Pending和空候选，未创建任何真实Pass。
+
+schemaVersion=1，candidate为gitSHA/sourceTree/binarySHA256/appPath四个字符串。空候选加Pending叶子合法；非空身份必须完全匹配最终manifest、独立sourceIdentity及调用方明确指定的 `repo/build/FlowType.app`。不能从人工报告自己的路径或evidenceRoot推导预期app路径。每个Pass叶子重复这四字段，并包含：`testedAt` UTC `YYYY-MM-DDTHH:MM:SS[.SSS]Z`、非空`tester`、`environment`对象（macOS/hardware/target，target记录目标app版本、设备或服务标识）、`observation`对象（非空actions/result、整数count/durationMs）。R1 count≥10，R2 count≥20，其他count≥1且durationMs>0。观察必须描述实际动作/结果；结构校验不能辨别观察真假，需人工审阅。
+
+`evidence`是非空相对文件数组，根严格为所提供manual JSON的父目录；文件必须存在且无链接/逃逸。父ID仅允许R1–R6/V1–V5的可选聚合行，其状态必须等于叶子聚合；不能代替缺失叶子。未知/重复ID、坏schema、错身份、伪Pass或坏引用Fail；缺required叶子Pending，release报告始终列出41叶子的状态和闭合issue。人工JSON/截图不会进入自动上传白名单。
+
+CI JSON独立于artifact成功与否按预期gitSHA/sourceTree校验：schemaVersion1、lane code、status、精确身份、`runURL=https://github.com/OWNER/REPO/actions/runs/NUMBER`、非空evidence数组（同一run的 `.../artifacts/NUMBER` URL）。只校验已提供记录的结构/身份，不访问网络或证明服务端结果；缺报告Pending，本地日志或旧身份不能当远端Pass。全空Pending CI模板可保留Pending。没有push/远端执行授权时不能填Pass。
+
+R3.axRecovery须记录设置授权完成与首次真实热键恢复/角标消失时间差，≤5s而非目测；R2每次记录结果、idle、麦克风释放和重复次数；R4两预置及两类导入必须真实推理；V2各应用覆盖中英/多行/emoji，V3/V4分别记录零事件和已发事件的证据。需要GUI/网络/配置/设备授权的动作尚未执行。
 
 | 叶子case ID | 操作与通过要求 | 状态 |
 | --- | --- | --- |
@@ -77,4 +89,4 @@ Pass需日期、测试人、环境、确切四身份字段、具体观察与证�
 
 A/B/C源码完成、产物技术门禁通过、真实验收通过、远端CI通过分别记录。缺任一required真实项/CI时release仍Pending，不因full自测或正常使用反馈改成Pass。旧UI/统计/SQLite迁移人工项仍在原审计中追踪，不随M5规划自动关闭。
 
-本轮仅写Markdown计划并检查文档一致性；没有新构建、自测、smoke、GUI、模型、权限、网络或发布结果。
+历史规划轮只写Markdown，无当时测试结果。后续A/B/C1/C2实施结果如上；C3本次只做源码/文档/合成fixture，最终release及大证据归档等待后续明确调度，不在此提前声称完成。

@@ -10,10 +10,16 @@
 
 **Spec:** [M5设计 §5–6](../specs/2026-11-03-m5-release-guardrails-design.md)；前置：[M5-A](2026-11-03-m5-a-build-identity-and-isolation.md)完成并审查。
 
+## 执行状态（2026-11-03更新）
+
+B1–B3实现与任务审查通过（7488553 / df63cd2 / c21cb25）。B3一次真实build/check已证明strict/deep、移位资源、Metal及实际MLX；最终C候选十次smoke未执行。步骤勾选表示B源码和该检查点，不扩展为最终发布。
+
+- [ ] 后续独立归档B原始安全证据；等待controller调度，不修改历史日志。
+
 ## Global Constraints
 
 - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。
-- 用户本轮仅要求计划；产品源码、现有构建产物与系统配置保持原状。不把规划写成已实施或验收通过。
+- 历史规划轮仅要求计划；其基线与原约束保留。后续已授权逐任务实施，当前状态见本页执行记录；未执行的真实验收仍Pending。
 - 后续开发使用合成数据、假服务/剪贴板/输入事件和独立运行目录；不读取真实配置/词典/DB/Keychain/模型缓存，不触发授权弹窗、录音、热键输入或外部ASR/LLM请求。
 - 普通app仍使用原用户配置/目录/启动行为；验证模式必须在任何shared/logger/AppKit初始化前确定，初始化失败退出，禁止回退到生产路径。
 - 保留M1–M4 readiness降级、captured route/lease、原音频重试、新20s预算、新实时句柄、单次交付、剪贴板与取消/回调所有权保护；不借M5改写这些合同。
@@ -48,12 +54,12 @@ JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smo
 - `BoundedProcess.dispatchChildIfNeeded(arguments: [String]) throws` 在每个消费该runner的CLI入口首先调用：普通模式返回，受控子模式握手后exec成功不返回；失败抛错并退出。ProcessCLI、PackagingSelfTests以及C的VerificationCLI均实现同一内部子模式，避免“runner仅在某个主程序下可用”。
 - `ProcessCLI --self-test`调用ProcessRunnerSelfTests，仅生成自己的短命fixture；新增FlowType focused `--m5-smoke-contract-only` → `M5SmokeSelfTests.run(_:)`。
 
-- [ ] **RED：** `testTimeoutCrashAndDescendants` 启动fixture的主线程阻塞、signal退出、子孙忽略TERM、超长stdout，断言timeout=true/退出非0、子孙已终止、另一个独立fixture仍存活、输出完整，无无限wait。`testTimerOwnershipAndEvidence` 注入两个router，触发一个真实定时源，只有该实例计数/refresh增加；纯等待而callback未执行不能通过；重复start只一timer。focused可用短注入间隔，正式smoke仍1s/5s。
-- [ ] **RED：** `testValidationActionGuards` 用spies覆盖tap安装/repair、热键处理、菜单录音/修复/授权及正常app门控分支。非app均无实际副作用；不能只关闭button而漏掉selector直接调用。`testSmokeReport`覆盖缺引擎/无权限仍可ok、缺任一tick必Fail、已判定无WindowServer才69，普通异常不得Skip。
-- [ ] **RED 验证：** 接focused后 `swift build` → `.build/debug/FlowType --self-test --m5-smoke-contract-only`，先观察断言失败。编译 `swiftc -parse-as-library scripts/verification/BoundedProcess.swift scripts/verification/ProcessCLI.swift scripts/verification/ProcessRunnerSelfTests.swift -o build/m5-process`，运行 `build/m5-process --self-test`，先确认超时/归属负例失败。
-- [ ] **GREEN：** 实现watchdog、报告和smoke。按spec顺序创建NSApplication accessory、配置/session/router/隐藏panel/statusbar/readiness；不进入AppDelegate。状态栏保持真实setup但禁全部可启动录音/授权/配置修改动作；6s最小观察，缺tick等至10s失败，Task.sleep不阻塞MainActor。禁外网probe、模型、引导及录音，退出flush并清理自身对象。
-- [ ] **验证：** 两个focused退出0；顺序build/full self-test一次。通过runner分别验证重复主模式/未知M5选项/非法root参数的usage64；只在全部非app守卫已接好后运行，不给任何负例机会落入普通app。再用 `build/m5-process` 以15s timeout启动 `.build/debug/FlowType --smoke-test` 一次，核查stdout恰一JSON、durationMs≥6000、两tick≥1、tap禁用、development身份可见。未具备WindowServer明确记录Skip，不伪造Pass；最终十次留给C。不运行普通app。
-- [ ] **提交：** scoped stage/diff check，提交 `feat: add bounded startup smoke with real timer evidence`。
+- [x] **RED：** `testTimeoutCrashAndDescendants` 启动fixture的主线程阻塞、signal退出、子孙忽略TERM、超长stdout，断言timeout=true/退出非0、仍在handshake自有组的子孙已终止（不保证另建独立组的后代）、另一个独立fixture仍存活、输出完整，无无限wait。`testTimerOwnershipAndEvidence` 注入两个router，触发一个真实定时源，只有该实例计数/refresh增加；纯等待而callback未执行不能通过；重复start只一timer。focused可用短注入间隔，正式smoke仍1s/5s。
+- [x] **RED：** `testValidationActionGuards` 用spies覆盖tap安装/repair、热键处理、菜单录音/修复/授权及正常app门控分支。非app均无实际副作用；不能只关闭button而漏掉selector直接调用。`testSmokeReport`覆盖缺引擎/无权限仍可ok、缺任一tick必Fail、已判定无WindowServer才69，普通异常不得Skip。
+- [x] **RED 验证：** 接focused后 `swift build` → `.build/debug/FlowType --self-test --m5-smoke-contract-only`，先观察断言失败。编译 `swiftc -parse-as-library scripts/verification/BoundedProcess.swift scripts/verification/ProcessCLI.swift scripts/verification/ProcessRunnerSelfTests.swift -o build/m5-process`，运行 `build/m5-process --self-test`，先确认超时/归属负例失败。
+- [x] **GREEN：** 实现watchdog、报告和smoke。按spec顺序创建NSApplication accessory、配置/session/router/隐藏panel/statusbar/readiness；不进入AppDelegate。状态栏保持真实setup但禁全部可启动录音/授权/配置修改动作；6s最小观察，缺tick等至10s失败，Task.sleep不阻塞MainActor。禁外网probe、模型、引导及录音，退出flush并清理自身对象。
+- [x] **验证：** 两个focused退出0；顺序build/full self-test一次。通过runner分别验证重复主模式/未知M5选项/非法root参数的usage64；只在全部非app守卫已接好后运行，不给任何负例机会落入普通app。再用 `build/m5-process` 以15s timeout启动 `.build/debug/FlowType --smoke-test` 一次，核查stdout恰一JSON、durationMs≥6000、两tick≥1、tap禁用、development身份可见。未具备WindowServer明确记录Skip，不伪造Pass；最终十次留给C。不运行普通app。
+- [x] **提交：** scoped stage/diff check，提交 `feat: add bounded startup smoke with real timer evidence`。
 
 ### Task 2: B2 — 独立资源入口和无模型artifact-check
 
@@ -66,11 +72,11 @@ JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smo
 - 内部 `ArtifactCheckDependencies` 注入资源解析、Metal库加载、MLX微运算三个闭包供合成负例；live闭包读取app内两JSON/图标，Metal用实际 `makeLibrary(URL:)`，MLX显式GPU计算 `[1,2]+1`、eval并取回 `[2,3]`，不可CPU回退或只加载Metal却跳过MLX。
 - 新focused `--m5-artifact-contract-only` → `M5ArtifactSelfTests.run(_:)`。新增package声明仅允许既有 mlx-swift exact0.31.3/revision61b9e011e09a62b489f6bd647958f1555bdf2896及MLX product；Package.resolved必须无diff。
 
-- [ ] **RED：** `testNoDeveloperResourceFallback` 在合成.app中移除词库，即使开发Bundle.module可用也必须resourceMissing；symlink逃出app必resourceOutsideBundle；坏JSON/空词库/缺图标分别失败。`testArtifactStageTruth` 注入Metal通过/MLX失败、无GPU、错误结果和invalid身份，断言对应failureCode且ok=false；未运行步骤不报true，依赖闭包不触发模型工作。
-- [ ] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-artifact-contract-only`，先确认上述失败，不调用真实GPU作为单元fixture。
-- [ ] **GREEN：** 接共同AppResources及artifact入口，报告无绝对用户路径；实际Metal/MLX调用只存在于artifact live路径，不被code lane full自测执行。显式GPU微计算不能因默认设备选择而悄悄用CPU通过。
-- [ ] **验证：** focused通过后顺序build/full一次，确认Package.resolved无改动。真实打包/MLX默认搜索验证留B3，不把fixture成功当真实GPU通过。
-- [ ] **提交：** scoped stage/diff check，提交 `feat: validate bundled resources and MLX artifact runtime`。
+- [x] **RED：** `testNoDeveloperResourceFallback` 在合成.app中移除词库，即使开发Bundle.module可用也必须resourceMissing；symlink逃出app必resourceOutsideBundle；坏JSON/空词库/缺图标分别失败。`testArtifactStageTruth` 注入Metal通过/MLX失败、无GPU、错误结果和invalid身份，断言对应failureCode且ok=false；未运行步骤不报true，依赖闭包不触发模型工作。
+- [x] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-artifact-contract-only`，先确认上述失败，不调用真实GPU作为单元fixture。
+- [x] **GREEN：** 接共同AppResources及artifact入口，报告无绝对用户路径；实际Metal/MLX调用只存在于artifact live路径，不被code lane full自测执行。显式GPU微计算不能因默认设备选择而悄悄用CPU通过。
+- [x] **验证：** focused通过后顺序build/full一次，确认Package.resolved无改动。真实打包/MLX默认搜索验证留B3，不把fixture成功当真实GPU通过。
+- [x] **提交：** scoped stage/diff check，提交 `feat: validate bundled resources and MLX artifact runtime`。
 
 ### Task 3: B3 — 可迁移bundle、staging签名与独立路径验证
 
@@ -87,11 +93,11 @@ JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smo
 - 资源隐藏有独占锁/恢复marker，恢复者在内层watchdog之外；trap覆盖正常/TERM/INT退出，SIGKILL/断电后的下一次调用先按marker核实原路径并恢复或明确失败，绝不覆盖未知目录。不得隐藏其他worktree/依赖cache，也不得因并发构建误搬资源。
 - build-dmg只改为读取候选plist版本及匹配身份，移除暗示自动发布的提示；本任务不执行DMG创建。
 
-- [ ] **RED：** PackagingSelfTests用合成git仓库/小fixture工具运行真实脚本控制流，以显式注入的测试依赖替代swift/codesign（入口只存在测试driver，不接受release绕过变量）。`testStagingFailurePreservesCandidate` 覆盖缺/截断shader、build/sign失败、HEAD变化、空格路径；旧候选/hash保持。`testRestoreOnArtifactFailure`覆盖artifact失败/超时和恢复marker残留，确保只恢复自有文件。验证manifest对真实复制后的hash，不能仅断言文件存在。
-- [ ] **RED 验证：** 编译独立 `ArtifactPackagingSelfTests.swift`（自身@main，仅Foundation/Process，复用BoundedProcess）到 `build/m5-packaging-tests`；先运行看到负例失败。`bash -n scripts/build-app.sh scripts/build-dmg.sh scripts/check-app.sh`验证语法。
-- [ ] **GREEN：** 实现staging/标准资源封装/manifest/移位检查和安全恢复；任何shader定位都不调用Python/安装/下载。如果所选MLX布局实际加载失败，保留Fail并定位，不篡改依赖或降级门禁。
-- [ ] **验证：** fixture与语法通过，提交全部源码/脚本使checkout clean后，再运行一次真实build-app→check-app（runner watchdog分别900s/30s）。严格签名、移位资源、真实GPU微计算全有证据才artifact Pass；无法取得已有shader则该项Pending/Fail，不安装补齐。签名完成后不改bundle任何资源。此任务源码若仅shell改动不重复未变full；若改了B2源码，先focused再full。
-- [ ] **提交与证据：** scoped stage/diff check，提交 `build: package portable resources with strict signing`；真实门禁证据在独立后续docs提交归档，报告准确记录被测源码commit和binary hash。不运行现有正在使用的正常app。
+- [x] **RED：** PackagingSelfTests用合成git仓库/小fixture工具运行真实脚本控制流，以显式注入的测试依赖替代swift/codesign（入口只存在测试driver，不接受release绕过变量）。`testStagingFailurePreservesCandidate` 覆盖缺/截断shader、build/sign失败、HEAD变化、空格路径；旧候选/hash保持。`testRestoreOnArtifactFailure`覆盖artifact失败/超时和恢复marker残留，确保只恢复自有文件。验证manifest对真实复制后的hash，不能仅断言文件存在。
+- [x] **RED 验证：** 编译独立 `ArtifactPackagingSelfTests.swift`（自身@main，仅Foundation/Process，复用BoundedProcess）到 `build/m5-packaging-tests`；先运行看到负例失败。`bash -n scripts/build-app.sh scripts/build-dmg.sh scripts/check-app.sh`验证语法。
+- [x] **GREEN：** 实现staging/标准资源封装/manifest/移位检查和安全恢复；任何shader定位都不调用Python/安装/下载。如果所选MLX布局实际加载失败，保留Fail并定位，不篡改依赖或降级门禁。
+- [x] **验证：** fixture与语法通过，提交全部源码/脚本使checkout clean后，再运行一次真实build-app→check-app（runner watchdog分别900s/30s）。严格签名、移位资源、真实GPU微计算全有证据才artifact Pass；无法取得已有shader则该项Pending/Fail，不安装补齐。签名完成后不改bundle任何资源。此任务源码若仅shell改动不重复未变full；若改了B2源码，先focused再full。
+- [x] **源码提交：** scoped stage/diff check，提交 `build: package portable resources with strict signing`；真实门禁证据已在当前执行记录中审阅，最终独立docs归档仍待后续调度；报告准确记录被测源码commit和binary hash。不运行现有正在使用的正常app。
 
 ## 包级完成条件与交接
 

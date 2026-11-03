@@ -36,13 +36,16 @@ struct VerificationReport: Codable {
     let schemaVersion: Int; let runID: String; let lane: VerificationLane
     var status: VerificationStatus; var sourceIdentity: SourceIdentity?; var artifactIdentity: ArtifactManifest?
     var phases: [VerificationPhase]; var manualStatus: VerificationStatus; var ciStatus: VerificationStatus
+    var manualCases: [ManualCaseResult]? = nil
+    var manualIssues: [ManualValidationIssue]? = nil
     var exitCode: Int32 { status == .pass ? 0 : status == .fail ? 1 : 2 }
-    enum CodingKeys: String, CodingKey { case schemaVersion, runID, lane, status, sourceIdentity, artifactIdentity, phases, manualStatus, ciStatus }
+    enum CodingKeys: String, CodingKey { case schemaVersion, runID, lane, status, sourceIdentity, artifactIdentity, phases, manualStatus, ciStatus, manualCases, manualIssues }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(runID, forKey: .runID); try c.encode(lane, forKey: .lane)
         try c.encode(status, forKey: .status); try c.encode(sourceIdentity, forKey: .sourceIdentity); try c.encode(artifactIdentity, forKey: .artifactIdentity)
         try c.encode(phases, forKey: .phases); try c.encode(manualStatus, forKey: .manualStatus); try c.encode(ciStatus, forKey: .ciStatus)
+        try c.encode(manualCases, forKey: .manualCases); try c.encode(manualIssues, forKey: .manualIssues)
     }
 }
 struct VerificationCommand {
@@ -487,8 +490,9 @@ enum VerificationRunner {
             let end = try dependencies.snapshot(repository, logs)
             guard let start, end == start else { throw VerificationFailure.sourceChanged }
         }
-        let statuses = ManualValidation.evaluate(manualReport: manualReport, ciReport: ciReport, artifact: report.artifactIdentity)
-        report.manualStatus = statuses.0; report.ciStatus = statuses.1
+        let statuses = ManualValidation.evaluate(manualReport: manualReport, ciReport: ciReport, artifact: report.artifactIdentity,
+            expectedSourceIdentity: report.sourceIdentity, expectedAppPath: repository.appendingPathComponent("build/FlowType.app"))
+        report.manualStatus = statuses.0.status; report.manualCases = statuses.0.cases; report.manualIssues = statuses.0.issues; report.ciStatus = statuses.1
         try persist(); return report
     }
 }

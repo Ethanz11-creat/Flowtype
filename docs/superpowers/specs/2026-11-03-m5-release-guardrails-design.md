@@ -1,6 +1,8 @@
 # M5 构建身份、隔离验证与发布护栏设计
 
-日期2026-11-03；规划基线b00b0a5，产品源码5dc1693/M4完整自测23872/0。用户本轮要求“先对M5做计划”，只产出设计/实施计划/验收台账；未授权本轮实施、安装、修改权限或发布。沿用后续子智能体逐项开发与独立审查偏好，开发尚未开始。
+历史规划记录：日期2026-11-03；规划基线b00b0a5，产品源码5dc1693/M4完整自测23872/0。用户该轮要求“先对M5做计划”，只产出设计/实施计划/验收台账；未授权该轮实施、安装、修改权限或发布。沿用后续子智能体逐项开发与独立审查偏好，当时开发尚未开始。
+
+执行更新（后续授权，2026-11-03）：以上为保留的历史规划轮，不是当前源码状态。A/B及C1/C2实现与任务独立审查通过；C3源码/文档/fixture待审，全M5源码审查和最终release技术门禁待后续调度。B3历史候选strict/deep、移位资源与实际Metal/MLX已Pass；远端CI、最终候选十次smoke及41个人工required叶子仍Pending。[执行索引](../../evidence/2026-11-03-m5-development/README.md)分列源码、产物、CI和人工，不更改M1–M4历史记录。
 
 ## 1. 意图、方案与边界
 
@@ -15,7 +17,7 @@
 ## 2. 全局约束
 
 - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。
-- 用户本轮仅要求计划；产品源码、现有构建产物与系统配置保持原状。不把规划写成已实施或验收通过。
+- 历史规划轮仅要求计划；后续逐任务实施已获授权。源码工作完成和真实验收通过分列，当前状态见执行更新；安装、权限修改与发布未获本轮授权。
 - 后续开发使用合成数据、假服务/剪贴板/输入事件和独立运行目录；不读取真实配置/词典/DB/Keychain/模型缓存，不触发授权弹窗、录音、热键输入或外部ASR/LLM请求。
 - 普通app仍使用原用户配置/目录/启动行为；验证模式必须在任何shared/logger/AppKit初始化前确定，初始化失败退出，禁止回退到生产路径。
 - 保留M1–M4 readiness降级、captured route/lease、原音频重试、新20s预算、新实时句柄、单次交付、剪贴板与取消/回调所有权保护；不借M5改写这些合同。
@@ -69,7 +71,7 @@ artifact-check显式加载bundle内Metal library，并执行无模型的实际ML
 
 ## 6. 可迁移app与签名（B）
 
-build-app不调用Python，不安装任何内容。输入MLX_METALLIB_PATH是显式本地已存在shader文件；未设置可保留已存在cache候选只读查找，但不得导入Python或扫描模型目录。缺失/小于1MiB/无法Metal加载即不能通过artifact门禁；来源SHA256与目标SHA256写manifest。CI默认code lane不需要该文件，不能发布无shader的“成功app”。
+build-app不调用Python，不安装任何内容。当前实现要求MLX_METALLIB_PATH显式指向本地已存在shader；缺失即失败，不查用户模型/cache、不下载补齐。缺失/小于1MiB/无法Metal加载即不能通过artifact门禁；来源SHA256与目标SHA256写manifest。CI默认code lane不需要该文件，不能发布无shader的“成功app”。
 
 在build下私有staging构造完整候选，复制实际release .bundle并写身份/manifest；只签真正code，资源在标准Resources。先验证strict/deep签名，再将候选移至最终build/FlowType.app；失败保留既有最终app，staging用于诊断。不得在运行中安装、启动正常app或清quarantine来伪装签名通过。若标准资源封装不能解决，记录artifact Fail和最小原因，不能退回ignore-resources当Pass。
 
@@ -79,7 +81,7 @@ build-app不调用Python，不安装任何内容。输入MLX_METALLIB_PATH是显
 
 ## 7. 双门禁、本地脚本与CI（C）
 
-`scripts/verify.sh`显式 `--lane code|artifact|release`，默认code，输出build/verification/<runID>/。外部进程runner使用Swift Foundation Process及Darwin进程组（不用Python/依赖timeout命令）控制超时/退出；受控子包装进程先建立独立进程组再exec目标，父级接收启动握手，只终止本次所有的进程组/子进程，不killall、不触及既有app。先TERM，2s后仍存活再KILL；启动握手失败亦失败。每个验证子进程新run根，suite不复用。stdin关闭，stdout/stderr分存，异常/超时均失败。code lane: platform/toolchain检查→swift build→完整self-test，单次full watchdog900s。artifact lane: clean identity→build-app→strict/deep→移位artifact-check→10次独立smoke（每次观察6s，watchdog15s）；首次发布候选执行10次，任务迭代仅改动相关focused，避免每项重复10次。packaging watchdog900s、artifact30s。
+`scripts/verify.sh`显式 `--lane code|artifact|release`，默认code，输出build/verification/<runID>/。外部进程runner使用Swift Foundation Process及Darwin进程组（不用Python/依赖timeout命令）控制超时/退出；受控子包装进程先建立独立进程组再exec目标，父级接收启动握手，只终止该handshake确认归属的进程组（及仍在此组的后代），不killall、不触及既有app。先TERM，2s后仍存活再KILL；启动握手失败亦失败。Foundation Process可能创建独立后代进程组，runner不承诺全局终止它们；packaging的marker/live owner/inner group检查会拒绝不安全恢复并Fail，不能因外层已超时就假定全部内层结束。每个验证子进程新run根，suite不复用。stdin关闭，stdout/stderr分存，异常/超时均失败。code lane: platform/toolchain检查→swift build→完整self-test，单次full watchdog900s。artifact lane: clean identity→build-app→strict/deep→移位artifact-check→10次独立smoke（每次观察6s，watchdog15s）；首次发布候选执行10次，任务迭代仅改动相关focused，避免每项重复10次。packaging watchdog900s、artifact30s。
 
 release lane运行上述两个lane一次，并消费人工验收JSON及可选 `--ci-report FILE`；任何required项Pending/Fail/未匹配最终身份返回非0（Pending为exit2），不是“代码绿所以可发布”。原总设计要求的远端CI绿继续是最终治理完成条件：ci-report须提供最终gitSHA/sourceTree对应的code lane成功与运行链接/证据；没有push或远端执行时保持Pending。每阶段phase/status/exitCode/timeout/failureCode写verify-report.json，部分成功/Skip保留，不覆盖成总绿；代码错误exit1、参数错误64。如果人工或CI报告缺失，release仍先完成有授权且可执行的code/artifact工作，再汇总Pending，不能伪造人工/CI Pass。
 
@@ -91,6 +93,10 @@ CI `.github/workflows/ci.yml`采用macOS15+ AppleSilicon/Swift6.2可用runner，
 
 M5代码完成与“稳定性治理/发布完成”分开：A/B/C实现及源码审查、自测、候选身份可单独通过；发布需最终身份全部required人工项Pass。固定schemaVersion=1 manual-validation.json，每项id/status(Pending/Pass/Fail)、testedAt/tester/environment、gitSHA/sourceTree/binarySHA256/appPath、evidence；Pass必须有具体测试观察和证据，缺字段不能被验证器接受，不接收只勾选无身份的旧结论。旧SHA证据仍有历史价值，但不自动迁移到新二进制。验证器能检查格式/身份和路径引用，不能证明观察真实，需人工审阅。
 
+C3 API澄清：manual validator额外接收独立expectedSourceIdentity和明确expectedAppPath（调用方固定repo/build/FlowType.app），manifest可空以保留空Pending模板；manifest没有路径，不能用报告路径/evidenceRoot自证预期候选。CI无论artifact是否成功都对独立source身份校验。release可选扩展manualCases/manualIssues，不破坏历史schema1报告解码/导出。41叶子逐项显示；可选父ID仅R1–R6/V1–V5且必须等于叶子聚合，不能代替缺失叶子。
+
+Pass细节：environment为macOS/hardware/target对象；observation为actions/result/count/durationMs对象，R1≥10、R2≥20次，其余≥1次且耗时>0。UTC时间为秒或三位毫秒Z格式；evidence相对人工JSON父目录，存在且无链接/逃逸。CI只消费已有schema1 code结果，runURL为GitHub Actions运行URL、evidence为同run artifact URL；本地结果、错身份或不全Pass不得接受。人工文件不自动上传。完整字段和执行方法见[台账](../../evidence/2026-11-03-m5-validation.md)。
+
 required：R1普通app冷启动10次（smoke10次另算），R2连续20次成功/取消/重新录音，R3真实权限拒绝与≤5s恢复/readiness多个blocker，R4模型修复/0.6B/1.7B及两类导入真实推理，R5静音/轻声/短词/噪声校准，V1真实云端弱网/断网/坏key→正确恢复，V2五应用中文/英文/多行/emoji与安全目标交付，V3多格式剪贴板和并发复制，V4各阶段取消/迟到结果/发键后uncertain无重发，V5拔麦/蓝牙断开→新录音恢复，R6恢复卡长文案/按钮/焦点/多显示器GUI。每项可细分subcases，required子项全部Pass才聚合Pass，不用一次正常使用覆盖所有变体。
 
 自动流程不会为完成这些项修改全局网络、权限、真实配置、外设或收费服务。后续执行在具备环境/授权的范围做可执行部分，需要真实key/物理操作时说明前提，Pending不妨碍先交付完整源码/产物报告。最终矩阵引用M1–M4现有证据并更新失效文案（M4卡380×156、权限常驻、按事件证据区分uncertain），不改历史日志为新结果。
@@ -99,4 +105,4 @@ required：R1普通app冷启动10次（smoke10次另算），R2连续20次成功
 
 设计自检：所有旧M5目标有A/B/C owner；3s/5s矛盾已解决，suite并发、legacy Keychain、shared.prepare模型加载、真实tap触发、资源fallback、CI缺shader、完整签名和人工Pending均有明确合同。签名布局为依赖静态支持的选定实现，成功须运行证明，不虚记可行性已证实。
 
-本轮状态：Planning only。实施计划：[M5-A](../plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../plans/2026-11-03-m5-c-verification-and-acceptance.md)，后续沿用子智能体逐项开发与独立审查。用户可直接审阅完整文档，尚未开始开发。没有本轮新构建或测试结果。
+历史规划状态为Planning only；原始基线和调研保持原样。当前[M5-A](../plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../plans/2026-11-03-m5-c-verification-and-acceptance.md)执行状态与checkbox已分别更新。C3/全M5源码审查、最终技术release和归档尚未完成，不把B3历史检查点或工具fixture当作最终通过。

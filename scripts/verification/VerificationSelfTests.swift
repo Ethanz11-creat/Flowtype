@@ -362,6 +362,100 @@ enum VerificationSelfTests {
             }
         }
     }
+    static func manualObject(app: URL) -> [String: Any] {
+        let identity: [String: Any] = ["gitSHA": metadata.gitSHA, "sourceTree": metadata.sourceTree, "binarySHA256": manifest.binarySHA256, "appPath": app.path]
+        let rows = ManualCaseID.allCases.map { id -> [String: Any] in
+            var row = identity
+            row.merge(["id": id.rawValue, "status": "Pass", "testedAt": "2026-11-03T01:02:03Z", "tester": "Synthetic fixture only",
+                "environment": ["macOS": "15.8.2", "hardware": "synthetic arm64", "target": "synthetic app1.0"],
+                "observation": ["actions": "Synthetic action fixture", "result": "Synthetic expected result", "count": id == .sessions20 ? 20 : 10, "durationMs": 6000], "evidence": ["observation.txt"]]) { _, value in value }
+            return row
+        }
+        return ["schemaVersion": 1, "candidate": identity, "cases": rows]
+    }
+    static func testManualIdentityAndRequiredCases() throws {
+        let fm = FileManager.default, evidence = root.appendingPathComponent("manual fixture")
+        try fm.createDirectory(at: evidence, withIntermediateDirectories: false)
+        try Data("synthetic observation only".utf8).write(to: evidence.appendingPathComponent("observation.txt"))
+        let app = root.appendingPathComponent("fixed/FlowType.app"), source = SourceIdentity(gitSHA: metadata.gitSHA, sourceTree: metadata.sourceTree, dirty: false)
+        let good = manualObject(app: app)
+        func evaluate(_ object: [String: Any]) -> ManualValidationResult {
+            ManualValidation.evaluate(data: try! JSONSerialization.data(withJSONObject: object), manifest: manifest, expectedSourceIdentity: source, expectedAppPath: app, evidenceRoot: evidence)
+        }
+        check(ManualCaseID.allCases.count == 41, "manual contract contains exactly41 required leaves")
+        check(evaluate(good).status == .pass, "synthetic complete manual structure passes only fixture validation")
+        let rows = good["cases"] as! [[String: Any]]
+        for index in rows.indices {
+            var changed = good; var missing = rows; missing.remove(at: index); changed["cases"] = missing
+            let result = evaluate(changed)
+            check(result.status == .pending && result.cases.contains(where: { $0.id.rawValue == rows[index]["id"] as? String && $0.status == .pending }), "missing required leaf remains visible Pending")
+        }
+        for key in ["gitSHA", "sourceTree", "binarySHA256", "appPath"] {
+            var changed = good, candidate = good["candidate"] as! [String: Any]; candidate[key] = "wrong"; changed["candidate"] = candidate
+            check(evaluate(changed).status == .fail, "wrong top candidate identity fails")
+            var leaves = rows; leaves[0][key] = "wrong"; changed = good; changed["cases"] = leaves
+            check(evaluate(changed).status == .fail, "wrong leaf identity fails")
+        }
+        for key in ["testedAt", "tester", "environment", "observation", "evidence"] {
+            var changed = good, leaves = rows; leaves[0].removeValue(forKey: key); changed["cases"] = leaves
+            check(evaluate(changed).status == .fail, "Pass without required details fails")
+        }
+        for (name, value) in [("testedAt", "2026-11-03T01:02:03+08:00" as Any), ("testedAt", "2026-02-30T00:00:00Z"), ("environment", ["macOS": "", "hardware": "synthetic", "target": "fixture"]), ("observation", ["actions": "", "result": "ok", "count": 1, "durationMs": 1]), ("evidence", ["../observation.txt"]), ("evidence", ["/tmp/outside"]), ("evidence", ["missing.txt"])] {
+            var changed = good, leaves = rows; leaves[0][name] = value; changed["cases"] = leaves
+            check(evaluate(changed).status == .fail, "malformed Pass detail or escaped evidence fails")
+        }
+        let linked = evidence.appendingPathComponent("linked.txt"); try fm.createSymbolicLink(at: linked, withDestinationURL: evidence.appendingPathComponent("observation.txt"))
+        var changed = good, leaves = rows; leaves[0]["evidence"] = ["linked.txt"]; changed["cases"] = leaves
+        check(evaluate(changed).status == .fail, "linked manual evidence fails")
+        changed = good; changed["cases"] = rows + [rows[0]]; check(evaluate(changed).status == .fail, "duplicate manual ID fails")
+        changed = good; leaves = rows; leaves[0]["id"] = "R1.unknown"; changed["cases"] = leaves; check(evaluate(changed).status == .fail, "unknown manual ID fails")
+        changed = good; changed["schemaVersion"] = 0; check(evaluate(changed).status == .fail, "old manual schema fails")
+        changed = good; changed["cases"] = [["id": "R1", "status": "Pass"]]; check(evaluate(changed).status == .fail, "parent Pass cannot replace missing leaves")
+        for status in ["Fail", "Pending"] {
+            changed = good; leaves = rows; leaves[0]["status"] = status; changed["cases"] = leaves
+            check(evaluate(changed).status == (status == "Fail" ? .fail : .pending), "any required Fail or Pending prevents Pass")
+        }
+        let template = try ManualValidation.templateData()
+        let pending = ManualValidation.evaluate(data: template, manifest: manifest, expectedSourceIdentity: source, expectedAppPath: app, evidenceRoot: evidence)
+        check(pending.status == .pending && pending.cases.count == 41 && pending.cases.allSatisfy { $0.status == .pending }, "empty candidate template remains all41 Pending")
+        let decoded = try JSONSerialization.jsonObject(with: template) as? [String: Any]
+        check((decoded?["cases"] as? [[String: Any]])?.count == 41 && (decoded?["cases"] as? [[String: Any]])?.allSatisfy { $0["status"] as? String == "Pending" } == true, "written template contains41 actual Pending rows")
+        let templateFile = evidence.appendingPathComponent("template.json"); try ManualValidation.writeTemplate(to: templateFile)
+        do { try ManualValidation.writeTemplate(to: templateFile); check(false, "manual template refuses existing file") } catch { check(true, "manual template refuses existing file") }
+        let ci: [String: Any] = ["schemaVersion": 1, "status": "Pass", "gitSHA": metadata.gitSHA, "sourceTree": metadata.sourceTree, "lane": "code",
+            "runURL": "https://github.com/synthetic/repo/actions/runs/123", "evidence": ["https://github.com/synthetic/repo/actions/runs/123/artifacts/456"]]
+        func ciStatus(_ object: [String: Any]) -> VerificationStatus { CIValidation.evaluate(data: try! JSONSerialization.data(withJSONObject: object), expectedGitSHA: metadata.gitSHA, expectedSourceTree: metadata.sourceTree) }
+        check(ciStatus(ci) == .pass, "synthetic matching remote CI structure passes")
+        for (key, value) in [("gitSHA", "old" as Any), ("sourceTree", "old"), ("schemaVersion", 0), ("lane", "artifact"), ("runURL", "file:///tmp/local"), ("evidence", ["local-selftest.stdout"]), ("evidence", [] as [String])] {
+            var changed = ci; changed[key] = value; check(ciStatus(changed) == .fail, "old or local CI evidence cannot attest remote Pass")
+        }
+        check(CIValidation.evaluate(data: nil, expectedGitSHA: metadata.gitSHA, expectedSourceTree: metadata.sourceTree) == .pending, "missing remote CI remains Pending")
+        for (index, count) in [(0, 9), (1, 19)] {
+            var changed = good, leaves = rows, observation = rows[index]["observation"] as! [String: Any]
+            observation["count"] = count; leaves[index]["observation"] = observation; changed["cases"] = leaves
+            check(evaluate(changed).status == .fail, "launch/session minimum repeat counts are required")
+        }
+        check(ManualValidation.evaluate(data: template, manifest: nil, expectedSourceIdentity: source, expectedAppPath: app, evidenceRoot: evidence).status == .pending, "empty Pending template needs no artifact")
+        let ciFile = evidence.appendingPathComponent("ci.json"); try JSONSerialization.data(withJSONObject: ci).write(to: ciFile)
+        let independent = ManualValidation.evaluate(manualReport: nil, ciReport: ciFile, artifact: nil, expectedSourceIdentity: source, expectedAppPath: app)
+        check(independent.0.status == .pending && independent.1 == .pass, "CI identity validation remains independent of artifact availability")
+        let repo = root.appendingPathComponent("manual-release-repo")
+        try fm.createDirectory(at: repo, withIntermediateDirectories: false)
+        let manualFile = repo.appendingPathComponent("manual.json"), remoteFile = repo.appendingPathComponent("ci.json")
+        try Data("synthetic release observation".utf8).write(to: repo.appendingPathComponent("observation.txt"))
+        try JSONSerialization.data(withJSONObject: manualObject(app: repo.appendingPathComponent("build/FlowType.app"))).write(to: manualFile)
+        try JSONSerialization.data(withJSONObject: ci).write(to: remoteFile)
+        let output = try VerificationPaths.prepare(repository: repo).appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: output, withIntermediateDirectories: false)
+        let release = try VerificationRunner.run(lane: .release, repository: repo, output: output, manualReport: manualFile, ciReport: remoteFile, dependencies: dependencies("good"))
+        check(release.status == .pass && release.manualStatus == .pass && release.ciStatus == .pass && release.manualCases?.count == 41, "synthetic release requires all technical/manual/CI stages")
+        let (oldRoot, oldOut, oldReport, _) = try evidenceFixture()
+        var historical = try JSONSerialization.jsonObject(with: JSONEncoder().encode(oldReport)) as! [String: Any]
+        historical.removeValue(forKey: "manualCases"); historical.removeValue(forKey: "manualIssues")
+        try JSONSerialization.data(withJSONObject: historical).write(to: oldRoot.appendingPathComponent("verify-report.json"))
+        do { let files = try VerificationEvidence.exportRun(runRoot: oldRoot, destination: oldOut); check(files.contains("verify-report.json"), "historical schema1 reports without manual detail remain exportable") }
+        catch { check(false, "historical schema1 reports without manual detail remain exportable") }
+    }
     static func run() -> Int32 {
         let fm = FileManager.default
         root = fm.temporaryDirectory.appendingPathComponent("flowtype-verification-\(UUID())")
@@ -374,7 +468,7 @@ enum VerificationSelfTests {
             let compiled = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/usr/bin/swiftc"), arguments: ["-parse-as-library", source.path, "-o", fixture.path], workingDirectory: root,
                 environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("compile.stdout"), stderrURL: root.appendingPathComponent("compile.stderr"), timeoutSeconds: 30))
             guard compiled.cliExitCode == 0 else { throw VerificationFailure.toolFailed }
-            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks] {
+            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks, testManualIdentityAndRequiredCases] {
                 do { try test() } catch { failed += 1; print("FAIL: fixture \((error as? VerificationFailure)?.rawValue ?? String((error as NSError).code))") }
             }
             testFullRunnerRequired()

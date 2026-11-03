@@ -16,11 +16,11 @@ readiness=ready / AX=granted / mic=granted。没有把这次认可扩展成所�
 M2-A 下载恢复已完成阶段修复与审查（eb840f8，1619/0）；M2-B 云端厂商接入已完成阶段修复与审查（6fc1973，2034/0）。
 M2-C 已实现 Qwen3-ASR MLX / WhisperKit Core ML 检测、严格离线运行库、统一生命周期和模型库 UI；C3 检查点 63db2e9 为 2263/0。
 C4 检查点后全 M2 审查发现三项 Important（普通重试意图、Whisper图合同、Qwen完整词表）；同一修复波次及掩码类型收紧已完成，限定范围复审确认三项 Important 和两项相关 Minor 关闭。此前源码门禁为 3a34a51、2430/0。2026-11-02 追加独立审查又确认两项 P2（Whisper 源包缺少编译衔接、Qwen 复检阻塞主线程），已在 e69d688 修复；最终顺序构建与自测 2507/0，新的独立限定复审确认两项关闭、无新增 Critical／Important。[最新证据](evidence/2026-11-02-m2-review-fixes/README.md)取代旧检查点，不能从源码通过推导真机验收通过。
-真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3/M4 源码已完成（见下），M5 尚待实施；真实验收分列保留。
+真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3/M4 源码已完成；M5 A/B/C1/C2已实施并通过任务审查，C3源码/文档待审；最终技术候选、远端CI和真实验收分列保留。
 [已批准设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)及[决策归档](evidence/2026-11-01-m2-rulings.md)是当前依据。
-下表 M2/M3/M4 行更新为当前源码状态；M5 更新为2026-11-03规划状态，不代表已实施或重新验收。
+下表分列当前源码与真实验收状态，不把规划、fixture、产物检查或正常使用互相替代。
 
-M5 更新（2026-11-03）：已有[独立设计](superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A 构建身份/隔离](superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B 启动/资源/签名](superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C verify/CI/验收](superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)三份实施计划，尚未开发。[规划证据](evidence/2026-11-03-m5-planning/README.md)记录3s观察不足以覆盖5s健康timer、资源bundle遗漏及shader完整签名限制；[M5台账](evidence/2026-11-03-m5-validation.md)将技术门禁、远端CI与required真机项分列Pending，V1–V5继续作为主线。
+M5 更新（2026-11-03）：按[独立设计](superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)推进。A隔离/身份、B真实timer/资源/签名、C1本地门禁和C2安全CI配置已审查通过；C3严格人工/CI schema和矩阵已实现待审。B3旧检查点strict/deep、移位资源及实际Metal/MLX已Pass；C1唯一实际code gate full24334/0，C2工具105/0；最终C源码release十次smoke还未执行。远端CI和41叶子人工全Pending；[台账](evidence/2026-11-03-m5-validation.md)与[开发索引](evidence/2026-11-03-m5-development/README.md)保留确切身份。[规划证据](evidence/2026-11-03-m5-planning/README.md)仍是历史调研，不改为执行日志。
 
 M3 更新（2026-11-02）：已按 [M3 设计](superpowers/specs/2026-11-02-m3-delivery-and-silence-design.md)、[M3-A](superpowers/plans/2026-11-02-m3-a-automatic-delivery.md) → [M3-B](superpowers/plans/2026-11-02-m3-b-silence-preflight.md) 完成五项子智能体开发及任务审查。全 M3 审查的两项 Important（回退分块后目标复检、发键后取消的 uncertain 保存）已在 `f7554ee` 修复，限定复审全部关闭，无新增阻塞；顺序构建与完整自测 **4124/0**。静音是无模型的保守声音存在检查，候选阈值仍需真机校准。源码与固定产物状态见 [M3 验证清单](evidence/2026-11-02-m3-validation.md)，真实验收与 V1–V5 继续保留 Pending。
 
@@ -30,11 +30,11 @@ M3 更新（2026-11-02）：已按 [M3 设计](superpowers/specs/2026-11-02-m3-d
 | **M3 自动交付** | 源码完成、全 M3 修复复审通过；跨五应用、剪贴板及取消真机验收 Pending。 | 默认 automatic，显式旧值保留；真实事件 latch 与临时写板分离，严格安全回退逐键对复检；取消按事件同步保存 uncertain，最近交付摘要只含元数据。 |
 | **M3 无语音预检** | 源码完成、审查通过；静音/轻声/短词/噪声与设备校准 Pending。 | 完整原始 PCM 可取消后台扫描，ASR 直接/重试入口均经过；静音/空音频不 finalize、预览兜底、后处理、交付或历史。实时录音中可能已有上传，不能声称零请求/计费。 |
 | **M4 统一失败分级** | 源码完成5dc1693，顺序build/full23872/0；三项任务审查、全M4修复与限定复审通过。固定app已构建；真实验收Pending。 | 纯typed分类/安全文案、保留原始原因、当前卡动作门禁、正确刷新blocker、完整原音频显式重试与重新录音、常驻恢复、发键证据区分及同步回调归属保护；[验证清单](evidence/2026-11-02-m4-validation.md)分列源码、产物、V1–V5及已有签名限制。 |
-| **M5 发布护栏** | 已规划A→B→C，未实施：最早role/路径与Keychain隔离、BuildInfo/日志；6s真实tick smoke、仓库外资源/Metal/MLX与strict/deep；verify/CI及required真机矩阵。 | 现有入口仍只有self-test，版本/build仍写死，共用diagnostic.log，无workflow/verify/smoke；规划没有改变这些源码事实。代码门禁与发布验收分开，V1–V5/真实模型/GUI/远端CI未执行均Pending。 |
+| **M5 发布护栏** | A/B/C1/C2源码与任务审查Pass；C3源码/fixture/文档待审，全M5源码审查与最终release技术门禁Pending。B3历史候选strict/deep/移位Metal/MLX Pass，不能代替最终C候选。 | 角色/路径/Keychain隔离、BuildInfo/角色日志、6s真实tick smoke、Resources/MLX、bounded code/artifact/release及白名单CI已接入。41required人工与远端CI全Pending；本地全绿不等于可发布。 |
 
 M5 的分支远端备份也是原设计的一项，但本会话约束仍是**不 push、不 merge**，
 不能因文档列出就擅自执行。Developer ID / 公证、自动更新另属分发决策；现有
-`mlx.metallib`完整签名失败已明确纳入M5-B本地产物护栏计划，尚未修复；不扩展为重做发布体系。
+历史`mlx.metallib`完整签名限制已由M5-B3标准Resources布局的真实检查关闭；仍不等于Developer ID/公证或最终C发布完成，不扩展为重做发布体系。
 
 ## 2. 主线 V：真实环境验收（Owner 已要求纳入）
 

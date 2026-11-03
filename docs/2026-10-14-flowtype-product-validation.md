@@ -10,6 +10,12 @@ read/write was performed for this task. Automated checks exercise production log
 through injected effects and transport fixtures; they are not evidence of live UI,
 hardware latency, model accuracy or real provider interoperability.
 
+Current acceptance overlay (2026-11-03): M4 recovery and M5 validation contracts
+below supersede outdated expectations while preserving the historical row IDs and
+past notes. The [M5 ledger](evidence/2026-11-03-m5-validation.md) and its41 dotted
+leaf IDs are the required release matrix; old R1–R6 rows are session scenarios,
+not substitutes for `R1.launch10` through `R6.displays`. No manual result is promoted.
+
 ## Reproduction record
 
 For each run, record date/tester, commit (`git rev-parse HEAD`), macOS version,
@@ -58,9 +64,12 @@ promise that ASR plus delivery completes in 3 seconds.
   or `整理超时 · 已保留识别结果`. Notices have no action buttons and dismiss after
   about 2.2 seconds. Actionable errors persist beyond 5 seconds until explicit
   recovery/dismissal/new recording; retry labels describe the failed stage.
-- Normal panel size is 240×70 points; actionable error size is 320×94. The panel
+- Normal panel size is 240×70 points; current actionable error size is380×156. The panel
   remains nonactivating, preserves its horizontal center when resized, and its
-  visible capsule mask matches its click area.
+  visible capsule mask matches its click area. The historical actionable size
+  320×94 is superseded by M4's current **380×156** recovery card; normal is240×70.
+  Missing permissions/no engine use persistent current-blocker recovery. Granting
+  one permission refreshes remaining blockers without dismissing a different fault.
 
 ## Manual matrix
 
@@ -82,9 +91,9 @@ For failures, record the first unexpected event and retain the diagnostic sessio
 | C1 | Escape separately during preparing, recording, ASR processing and polish streaming. Wait longer than provider response/deadline. | Each cancelled session returns idle and produces no final text, clipboard fallback or history entry; resources stop, late events stay ignored. | Pending |
 | C2 | Cancel a slow session, start another, then allow the old ASR/LLM response to arrive. | Only the new session can update timer/state or deliver; old readiness/spectrum/results cannot overwrite it. | Pending |
 | C3 | With a long synthetic final result, Escape while delivery is posting keyboard events; record the cancellation boundary. | No new event pair begins after cancellation is observed; an already posted pair stays balanced, no held Shift/key; no clipboard fallback or continued suffix. Already typed text may remain. | Pending |
-| F1 | Start in scratch field A; switch to scratch field B while recording and again while processing. | Panel never steals focus; destination follows the existing delivery-time focus policy; complete result once. Record focused control at delivery, not just at start. | Pending |
+| F1 | Start in scratch field A; switch to scratch field B while recording and again while processing. | Panel never steals focus; capture the stop target and recheck PID/focus before events. An initially changed/unsafe target safely completes via clipboard fallback; no-event cancellation remains cancelled. A failed unsafe/notDispatched attempt with fallback disallowed may suspend as deliveryBlocked. Only genuine prior events plus unverifiable/cancelled insertion retain uncertain evidence, with no automatic repeat. Record stop/dispatch targets and actual event boundary. | Pending |
 | F2 | During processing focus a tester-owned nontext button, then a synthetic secure field in a separate run. | Existing policy copies complete result instead of typing into those controls; no automatic paste. Inspect only the tester's scratch clipboard; later delivery-plan cases will extend this coverage. | Pending |
-| P1 | Deny microphone permission in a dedicated test app identity/profile; attempt start, then grant in System Settings and retry a new session. | No recording/start cue or delivery on denial; understandable permission notice, no unusable retry/copy buttons. Granted permission allows a new session. Current recording denial is a nonactionable notice, not a permission-settings button. | Pending |
+| P1 | Deny microphone permission in a dedicated test app identity/profile; attempt start, then grant in System Settings and recheck/start a new session. | No recording/start cue or delivery on denial; persistent permission recovery exposes settings/recheck actions with current ownership. Repair updates remaining blockers; a new session works. Record actual recovery timing and restore the test profile. | Pending |
 | P2 | Deny Speech Recognition permission while microphone is allowed; repeat with permission granted. | Record Apple preview availability; configured final ASR remains usable where supported; no preview appears on panel or stale callback after cancel. | Pending |
 | P3 | Deny/revoke Accessibility in a dedicated test identity, attempt trigger/delivery; grant and relaunch as needed. | Record actual permission guidance and event-tap availability; no silent loss presented as successful typing. Restore permission and confirm a new scratch session works. | Pending |
 | L1 | Select localOnly with provisioned Qwen model, quit/relaunch and run short reference without a prior dictation (cold app/model load). | Readiness truthfully reflects capture; local model remains usable; no cloud audio/context request. Record model-load time separately from capture readiness. | Pending |
@@ -92,7 +101,7 @@ For failures, record the first unexpected event and retain the diagnostic sessio
 | L3 | Select localOnly with missing/unavailable model; start/stop; make model available and start again. | No accidental cloud request; understandable failure/notice, usable recovery only when offered; restored local model permits a fresh session. | Pending |
 | E1 | Use a tester-controlled failing ASR service (with all configured fallback ASR paths made unavailable) to get a retryable ASR error. Wait at least 6 seconds, repair service and click retry with auto polish off. | Error persists; `重试识别` reruns preserved input with original polish opt-out, succeeds once; does not say retry polish. New recording/dismiss clears prior actions and payload. | Pending |
 | E2 | Produce an actionable error with available raw text; click `复制原文`, inspect synthetic clipboard, then `忽略`. | Full available text copied; recovery remains actionable until explicitly dismissed; dismissal clears it and hides panel. | Pending |
-| E3 | Enter E1/E2 error from recording; click every available button near its edge, drag panel, retry/dismiss; repeat on another display/scale/Space. | Panel grows 240×70 → 320×94 and shrinks afterward; actions uncut/clickable, mask matches bounds, horizontal center preserved; drag and actions do not activate/steal target focus. | Pending |
+| E3 | Enter E1/E2 error from recording; click every available button near its edge, drag panel, retry/dismiss; repeat on another display/scale/Space. | Current M4 panel grows240×70 → 380×156 and shrinks afterward; long copy and buttons remain visible/clickable, old cards cannot act on a new session, horizontal center and target focus remain intact. The old320×94 expectation is historical. | Pending |
 | S1 | Tester-controlled SSE sends multiple content deltas then `data: [DONE]`; repeat with `finish_reason: "stop"` plus EOF and no `[DONE]`. | Both supported completion forms deliver full assembled polished text once, with no degradation notice or intermediate UI. | Pending |
 | S2 | Send valid content then EOF without completion; repeat with malformed frame then `[DONE]`, and with `finish_reason: "length"` then `[DONE]`. | Each rejects incomplete polished draft; complete processed ASR text delivered once, failure notice only after delivery, history marked raw. | Pending |
 | S3 | Send partial tokens then stall longer than 3 seconds; repeat with a stream that has only heartbeats. | Whole polish budget ends around 3 seconds from polish start; transport/producer cancels, full processed fallback delivered once, timeout notice afterward. Observe actual timing; no partial draft. | Pending |
@@ -215,3 +224,20 @@ continuous 20 rounds and V1–V5 remain **Pending**. No synthetic waveform prove
 human-speech accuracy, real target insertion, or zero prior realtime upload/cost.
 
 M3 最终源码更新：`f7554ee`，完整自测4124/0、全 M3 修复限定复审通过；automatic 分块回退逐键对复检，真实发键后取消同步保存 uncertain。最终 app 已构建，但严格整体签名仍受既有 unsigned mlx.metallib 限制；[证据与产物身份](evidence/2026-11-02-m3-development/README.md)。全部实际应用/剪贴板/声音校准与 V1–V5 未覆盖项仍 Pending。
+
+2026-11-03 update: the preceding M3 signature note describes that historical
+candidate. M5-B3 at `c21cb25` proved a new Resources shader layout, strict/deep
+signature, moved resources, actual Metal and MLX micro-operation. It does not
+prove ASR inference or the final C candidate. C1 code validation passed24334/0;
+C2 added a code-only CI workflow, with remote execution still Pending. C3 source
+and its all-Pending manual template are awaiting review; final technical ten smoke
+and every real R/V leaf remain Pending.
+
+For every current delivery test, record whether an event actually left the process.
+Temporary clipboard staging alone is not dispatch. An initially changed/unsafe
+target completes via safe clipboard fallback; cancellation before any event is
+cancelled. `deliveryBlocked` describes a suspended delivery failure, such as an
+unsafe/notDispatched paste when fallback is disallowed or a failure that must
+preserve the existing clipboard. Only after a genuine event can unverifiable or
+cancelled insertion be `deliveryUncertain`, with explicit copy/history recovery
+and no automatic retransmission. V3/V4 must record these distinct outcomes.

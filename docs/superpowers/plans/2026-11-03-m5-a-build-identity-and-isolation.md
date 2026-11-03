@@ -10,10 +10,14 @@
 
 **Spec:** [M5 设计 §2–4](../specs/2026-11-03-m5-release-guardrails-design.md)。基线 `b00b0a5`，Sources `5dc1693`；M4 的23872/0仅为历史证据。
 
+## 执行状态（2026-11-03更新）
+
+A1–A3实现与任务审查通过，提交aea7dc9 / ffd4ba4 / d6aaace；以下步骤按已完成源码任务勾选。原规划基线与历史命令保持记录，当前执行索引见[开发证据](../../evidence/2026-11-03-m5-development/README.md)。A完成不等于M5发布或GUI通过。
+
 ## Global Constraints
 
 - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。
-- 用户本轮仅要求计划；产品源码、现有构建产物与系统配置保持原状。不把规划写成已实施或验收通过。
+- 历史规划轮仅要求计划；其基线与原约束保留。后续已授权逐任务实施，当前状态见本页执行记录；未执行的真实验收仍Pending。
 - 后续开发使用合成数据、假服务/剪贴板/输入事件和独立运行目录；不读取真实配置/词典/DB/Keychain/模型缓存，不触发授权弹窗、录音、热键输入或外部ASR/LLM请求。
 - 普通app仍使用原用户配置/目录/启动行为；验证模式必须在任何shared/logger/AppKit初始化前确定，初始化失败退出，禁止回退到生产路径。
 - 保留M1–M4 readiness降级、captured route/lease、原音频重试、新20s预算、新实时句柄、单次交付、剪贴板与取消/回调所有权保护；不借M5改写这些合同。
@@ -46,11 +50,11 @@
 - `RuntimeEnvironment.defaults: UserDefaults` 用受保护的一次构造保持同一 suite；`finishValidation()` 只清本 run 的 suite。实例测试工厂不重置真正 current。
 - 主选项互斥：`--self-test|--smoke-test|--artifact-check`；验证根选项 `--validation-root ABSOLUTE_PATH`。保留已存在的 self-test filters，新增 `--m5-runtime-only`，filter 仅与 self-test 配对；未知/重复/冲突 M5 参数 usage64。app 的 LaunchServices 参数须维持现有可启动行为，不能把系统 `-psn_…` 当用户验证选项。
 
-- [ ] **RED：** 在 `M5RuntimeSelfTests.run(_ r: SelfTest.Reporter)` 添加 `testCanonicalTempAndExplicitSymlink`、`testRootOwnershipAndUsage`、`testAppPathCompatibility`：合成 temp 的可信别名可规范化；显式根/祖先 symlink、相对路径、home/Library及生产子目录、非空根均拒绝；普通 workspace/build 子目录可用；同根独占创建只一成功；失败不删除原文件。比较大小写和旧路径公式。用 fixture 目录与注入 home，不读取真实内容。
-- [ ] **RED 验证：** 先接 focused 分支，`swift build` 因缺接口失败并保存编译错误；接口具备后先让上述行为断言失败。此前不运行旧完整 self-test（尚未接好全部隔离）。
-- [ ] **GREEN：** 实现路径/参数/独占 marker；启动第一步解析，错误只写安全 stderr 并退出64/1。非 app 的 config/ApplicationSupport/Caches/Logs/Tmp 在根下；现有AppLogger的logDir/logPath先按当前role路由至隔离根，避免A2迁移测试日志仍写production。未实现的 smoke/artifact 暂以明确 unsupported 退出1，不落入普通 app。app 仍交给原 FlowTypeApp。
-- [ ] **验证：** `swift build` 后运行 `.build/debug/FlowType --self-test --m5-runtime-only`，退出0；冲突/未知参数先用纯解析器及launch spy验证usage64，无 AppDelegate 调用。真实负例进程留B1有watchdog与全部副作用守卫后验证；不能为跑RED意外启动普通app。本任务 focused 只调用新测试，完整 runner 留给 A2。
-- [ ] **提交：** 仅 stage 本任务文件，`git diff --cached --check`，提交 `feat: bootstrap isolated validation runtime`。
+- [x] **RED：** 在 `M5RuntimeSelfTests.run(_ r: SelfTest.Reporter)` 添加 `testCanonicalTempAndExplicitSymlink`、`testRootOwnershipAndUsage`、`testAppPathCompatibility`：合成 temp 的可信别名可规范化；显式根/祖先 symlink、相对路径、home/Library及生产子目录、非空根均拒绝；普通 workspace/build 子目录可用；同根独占创建只一成功；失败不删除原文件。比较大小写和旧路径公式。用 fixture 目录与注入 home，不读取真实内容。
+- [x] **RED 验证：** 先接 focused 分支，`swift build` 因缺接口失败并保存编译错误；接口具备后先让上述行为断言失败。此前不运行旧完整 self-test（尚未接好全部隔离）。
+- [x] **GREEN：** 实现路径/参数/独占 marker；启动第一步解析，错误只写安全 stderr 并退出64/1。非 app 的 config/ApplicationSupport/Caches/Logs/Tmp 在根下；现有AppLogger的logDir/logPath先按当前role路由至隔离根，避免A2迁移测试日志仍写production。未实现的 smoke/artifact 暂以明确 unsupported 退出1，不落入普通 app。app 仍交给原 FlowTypeApp。
+- [x] **验证：** `swift build` 后运行 `.build/debug/FlowType --self-test --m5-runtime-only`，退出0；冲突/未知参数先用纯解析器及launch spy验证usage64，无 AppDelegate 调用。真实负例进程留B1有watchdog与全部副作用守卫后验证；不能为跑RED意外启动普通app。本任务 focused 只调用新测试，完整 runner 留给 A2。
+- [x] **提交：** 仅 stage 本任务文件，`git diff --cached --check`，提交 `feat: bootstrap isolated validation runtime`。
 
 ### Task 2: A2 — 接通所有自动验证可达的持久化与副作用边界
 
@@ -58,11 +62,11 @@
 
 **Interfaces:** 消费 A1 的 current/paths/defaults；`KeychainHelper.save(key:value:) -> Bool`、`load(key:) -> String?`、`delete(key:)` 保持签名，非 app 路由至锁保护的内存实现。`ConfigurationStore.shared` 显式传当前 defaults/backupDirectory，普通注入 init 保留。`SessionEffects.live.prepare` 在非 app 禁自动模型工作；smoke 的真实 probe 启动留给 B1。新增 `--m5-isolation-only` 对应 `M5IsolationSelfTests.run(_:)`。
 
-- [ ] **RED：** 先在显式fixture依赖的实例上写 `testLegacyMigrationBoundaries`：旧版含合成 key 的配置及损坏字节迁移、备份、JSON→SQLite rename，fake Keychain内容正确、SecItem边界调用数0、所有改动位于fixture/run根，真实存储spy为0。RED阶段所有OS/网络边界先换deny/spy，未接通隔离前禁止构造会读取真实数据的shared；缺路径注入可先以编译失败证明缺口。`testSingletonSideEffectBudget`的实际shared集成断言在GREEN接完边界后才启用：排空任务队列，网络请求、模型扫描/下载/加载、音频设备改动、授权请求、剪贴板与输入事件均0。不以“没有观察到日志”代替spy。
-- [ ] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-isolation-only`；应因未接通的生产路径/副作用断言失败。spy 与 fixture 从测试创建，不读取真实环境作为 baseline。
-- [ ] **GREEN：** shared 使用 RuntimePaths/defaults，EnvMigration 非 app 在读 .env/环境前返回，Keychain 先分流后构造 SecItem query。ModelLocator 非 app 不枚举用户 cache/HF refs；测试需显式合成参数。禁止自动模型 prepare、设备 sentinel 恢复和权限引导；路由 self-test 不启真实监控。将任何旧测试对系统剪贴板/热键/模型缓存的依赖换注入，不能删掉对应语义断言。普通 app 的路径与准备动作保持。
-- [ ] **验证：** focused退出0后，顺序 `swift build` → `.build/debug/FlowType --self-test`，完整报告0 failed；检查本 run 的数据库/备份证据。最终硬件副作用由注入计数证明，不运行普通 app 去试权限。新增后完整自测数应实际记录，不写死23872。
-- [ ] **提交：** scoped stage/`git diff --cached --check`，提交 `fix: isolate self-test persistence and startup effects`。
+- [x] **RED：** 先在显式fixture依赖的实例上写 `testLegacyMigrationBoundaries`：旧版含合成 key 的配置及损坏字节迁移、备份、JSON→SQLite rename，fake Keychain内容正确、SecItem边界调用数0、所有改动位于fixture/run根，真实存储spy为0。RED阶段所有OS/网络边界先换deny/spy，未接通隔离前禁止构造会读取真实数据的shared；缺路径注入可先以编译失败证明缺口。`testSingletonSideEffectBudget`的实际shared集成断言在GREEN接完边界后才启用：排空任务队列，网络请求、模型扫描/下载/加载、音频设备改动、授权请求、剪贴板与输入事件均0。不以“没有观察到日志”代替spy。
+- [x] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-isolation-only`；应因未接通的生产路径/副作用断言失败。spy 与 fixture 从测试创建，不读取真实环境作为 baseline。
+- [x] **GREEN：** shared 使用 RuntimePaths/defaults，EnvMigration 非 app 在读 .env/环境前返回，Keychain 先分流后构造 SecItem query。ModelLocator 非 app 不枚举用户 cache/HF refs；测试需显式合成参数。禁止自动模型 prepare、设备 sentinel 恢复和权限引导；路由 self-test 不启真实监控。将任何旧测试对系统剪贴板/热键/模型缓存的依赖换注入，不能删掉对应语义断言。普通 app 的路径与准备动作保持。
+- [x] **验证：** focused退出0后，顺序 `swift build` → `.build/debug/FlowType --self-test`，完整报告0 failed；检查本 run 的数据库/备份证据。最终硬件副作用由注入计数证明，不运行普通 app 去试权限。新增后完整自测数应实际记录，不写死23872。
+- [x] **提交：** scoped stage/`git diff --cached --check`，提交 `fix: isolate self-test persistence and startup effects`。
 
 ### Task 3: A3 — 构建身份、每 run 日志与关于菜单
 
@@ -76,11 +80,11 @@
 - `AppLogger.configure(context: RuntimeContext, identity: BuildIdentity) throws`；`log(_:)`、`logFileURL`、`openLogInFinder()`兼容；新增同步 `flush()`。`DiagnosticLogWriter` 接收显式fileURL、role、runID、identity和可注入轮转阈值，提供 `log(_:)`/`flush()`；实际10MiB/3个轮转。启动header同步成功后才初始化shared；正常app终止与所有self-test退出均flush。
 - 新 `--m5-buildinfo-only` → `M5BuildInfoSelfTests.run(_:)`。日志路径按spec；每行role/runID/UTC，自测[SelfTest]；关于菜单只展示同一identity，不查询git。
 
-- [ ] **RED：** `testMetadataValidation` 覆盖坏JSON、缺字段、非40hex、非UTC、version/plist不一致、dirty以及开发运行；bad app不能伪装development。工具 fixture `testCleanGitIdentity` 覆盖版本注入字符/浅历史/脏树/含空格repo路径；浅历史拒绝生成release身份。`testIdentityAndConcurrentFlush` 用低阈值writer并发写与立即flush，检查每run首条header、末条sentinel、四文件上限、各行角色、不同run不串文件，队列内flush不死锁。
-- [ ] **RED 验证：** 接 focused 后 `swift build` → `.build/debug/FlowType --self-test --m5-buildinfo-only`，先确认预期失败；`swift scripts/generate-build-info.swift --self-test` 先确认生成器负例失败。
-- [ ] **GREEN：** 实现上述校验/工具/logger与菜单；日志无初始化前的生产路径默认值，启动失败不写旧production日志。保持现有自测汇总stdout，汇总前flush；本任务不把所有历史自由文本日志宣称为已全面脱敏，自动模式必须只运行合成输入。
-- [ ] **验证：** 两个focused命令退出0；顺序构建/full self-test一次，stdout零失败、退出0、独立日志有header和末尾汇总。无普通app/GUI启动；菜单外观仍Pending。
-- [ ] **提交：** scoped stage/diff check，提交 `feat: add build identity and role-scoped diagnostics`。
+- [x] **RED：** `testMetadataValidation` 覆盖坏JSON、缺字段、非40hex、非UTC、version/plist不一致、dirty以及开发运行；bad app不能伪装development。工具 fixture `testCleanGitIdentity` 覆盖版本注入字符/浅历史/脏树/含空格repo路径；浅历史拒绝生成release身份。`testIdentityAndConcurrentFlush` 用低阈值writer并发写与立即flush，检查每run首条header、末条sentinel、四文件上限、各行角色、不同run不串文件，队列内flush不死锁。
+- [x] **RED 验证：** 接 focused 后 `swift build` → `.build/debug/FlowType --self-test --m5-buildinfo-only`，先确认预期失败；`swift scripts/generate-build-info.swift --self-test` 先确认生成器负例失败。
+- [x] **GREEN：** 实现上述校验/工具/logger与菜单；日志无初始化前的生产路径默认值，启动失败不写旧production日志。保持现有自测汇总stdout，汇总前flush；本任务不把所有历史自由文本日志宣称为已全面脱敏，自动模式必须只运行合成输入。
+- [x] **验证：** 两个focused命令退出0；顺序构建/full self-test一次，stdout零失败、退出0、独立日志有header和末尾汇总。无普通app/GUI启动；菜单外观仍Pending。
+- [x] **提交：** scoped stage/diff check，提交 `feat: add build identity and role-scoped diagnostics`。
 
 ## 包级完成条件与交接
 

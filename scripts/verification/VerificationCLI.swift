@@ -41,6 +41,12 @@ struct VerificationExportOptions {
         catch { FileHandle.standardError.write(Data("FlowType verification: child control failed\n".utf8)); exit(125) }
         if arguments == ["--self-test"] { exit(VerificationSelfTests.run()) }
         do {
+            if arguments.first == "--write-manual-template" {
+                guard arguments.count == 2, !arguments[1].isEmpty, !arguments[1].hasPrefix("--") else { throw VerificationFailure.usage }
+                try ManualValidation.writeTemplate(to: URL(fileURLWithPath: arguments[1]))
+                print("Manual template: 41 Pending")
+                exit(0)
+            }
             if arguments.first == "--export-evidence" {
                 let options = try VerificationExportOptions.parse(arguments)
                 let files = try VerificationEvidence.exportRun(runRoot: options.root, destination: options.output)

@@ -1,0 +1,175 @@
+{
+  "candidate" : {
+    "appPath" : "",
+    "binarySHA256" : "",
+    "gitSHA" : "",
+    "sourceTree" : ""
+  },
+  "cases" : [
+    {
+      "id" : "R1.launch10",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R2.sessions20",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R3.axRecovery",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R3.micRecovery",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R3.noEngine",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R3.multipleBlockers",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.metadata",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.switchSource",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.retry",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.autoFallback",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.manualSelection",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.builtin06",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.builtin17",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.importQwen",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R4.importWhisper",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R5.silence",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R5.quiet",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R5.short",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R5.noise",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R6.layout",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R6.focus",
+      "status" : "Pending"
+    },
+    {
+      "id" : "R6.displays",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V1.weak",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V1.offline",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V1.badKey",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V2.textEdit",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V2.vscode",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V2.chrome",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V2.terminal",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V2.cursor",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V2.safeTargets",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V3.formats",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V3.concurrentCopy",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V4.preparing",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V4.recording",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V4.asr",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V4.polish",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V4.injection",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V4.postEvent",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V5.unplug",
+      "status" : "Pending"
+    },
+    {
+      "id" : "V5.bluetooth",
+      "status" : "Pending"
+    }
+  ],
+  "schemaVersion" : 1
+}
