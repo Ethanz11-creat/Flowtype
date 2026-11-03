@@ -408,8 +408,8 @@ final class SessionController: ObservableObject {
         case .openAccessibilitySettings: recoveryEffects.openAccessibilitySettings()
         case .openMicrophoneSettings: recoveryEffects.openMicrophoneSettings()
         case .openSpeechRecognitionSettings: recoveryEffects.openSpeechRecognitionSettings()
-        case .openASRSettings: recoveryEffects.openASRSettings()
-        case .viewHistory: recoveryEffects.openHistory()
+        case .openASRSettings: recoveryEffects.navigate(to: recoveryState.destination)
+        case .viewHistory: recoveryEffects.navigate(to: .history())
         case .rerecord: startRecording()
         case .dismiss: resetToIdle()
         case .recheckReadiness: refreshRecoveryReadiness(cardID: cardID)
@@ -468,7 +468,8 @@ final class SessionController: ObservableObject {
     private func presentRecovery(_ presentation: FailurePresentation, copyText: String?, context: SessionContext) {
         guard activeSessionID == context.sessionID else { return }
         let card = RecoveryCard(id: UUID(), sessionID: context.sessionID, presentation: presentation)
-        recoveryState = SessionRecoveryState(card: card, copyText: copyText)
+        recoveryState = SessionRecoveryState(card: card, copyText: copyText,
+            destination: suspendedContext?.destination ?? .settings(.speech))
         transition(to: .error(presentation.message), context: context)
     }
 

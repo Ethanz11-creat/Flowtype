@@ -27,6 +27,7 @@ struct LocalModelPicker: View {
     }
 
     private var currentTier: HardwareTier { HardwareProfiler.currentTier() }
+    var recommendedPreset: ModelPreset { ModelPreset.recommendedModel(for: currentTier) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -57,7 +58,7 @@ struct LocalModelPicker: View {
     private func presetRow(_ preset: ModelPreset) -> some View {
         let isPreparing = selectionPresentation.isBusy && selectionPresentation.targetID == preset.id
         let isDownloaded = downloader.isModelDownloaded(preset)
-        let isRecommended = preset.recommendedTiers.contains(currentTier)
+        let isRecommended = recommendedPreset.id == preset.id
 
         return VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 12) {

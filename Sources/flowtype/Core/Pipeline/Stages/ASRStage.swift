@@ -83,6 +83,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         let ids = route.candidateIDs
         var firstFailure: Error?
         var firstFailureKind: FailureKind?
+        var firstFailureDestination: ClientDestination?
         var finalResult: ASRResult?
         var finalProviderID: String?
         var usedFallback = false
@@ -154,6 +155,11 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                 if firstFailure == nil {
                     firstFailure = error
                     firstFailureKind = kind
+                    if case .configuration = kind {
+                        firstFailureDestination = id == ASRProviderID.local
+                            ? .settings(.speech, .localModels)
+                            : route.cloudConfiguration.map { .settings(.speech, .provider($0.provider.id)) }
+                    }
                 }
                 usedFallback = true
                 await healthRecorder(id, nil, route)
@@ -183,11 +189,13 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             return .continue(.transcript(preview))
         }
         if samples.isEmpty, firstFailure == nil { return .complete }
-        return .suspend(ErrorRecoveryContext(failedStage: name,
+        var recovery = ErrorRecoveryContext(failedStage: name,
             error: (firstFailure as? RealtimeASRConfigurationError).map { $0 as Error } ?? ASRStageError.transcriptionFailed(message: budget.isExpired ? "识别超时，请重试" :
                 ids.isEmpty ? "语音识别未就绪，请配置云端 API Key 或加载本地模型" : "语音识别失败，请重试"),
             rawText: nil, retryable: true,
-            failureKind: firstFailureKind ?? (ids.isEmpty ? .readiness(.noEngine) : budget.isExpired ? .transientASR : .internalFailure)))
+            failureKind: firstFailureKind ?? (ids.isEmpty ? .readiness(.noEngine) : budget.isExpired ? .transientASR : .internalFailure))
+        recovery.destination = firstFailureDestination
+        return .suspend(recovery)
     }
 
     private func cancelled() -> StageResult {

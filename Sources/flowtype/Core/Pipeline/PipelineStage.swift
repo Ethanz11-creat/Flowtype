@@ -42,6 +42,7 @@ struct ErrorRecoveryContext {
     let retryable: Bool
     let failureKind: FailureKind
     let textKind: RecoveryTextKind
+    var destination: ClientDestination? = nil
 
     init(failedStage: String, error: Error, rawText: String?, retryable: Bool,
          failureKind: FailureKind? = nil, textKind: RecoveryTextKind? = nil) {

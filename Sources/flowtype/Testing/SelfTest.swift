@@ -289,6 +289,13 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        #if DEBUG
+        if CommandLine.arguments.contains("--native-client-previews-only") {
+            await NativeClientPreviewSelfTests.run(r)
+            print("=== Native preview self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
+        #endif
         if CommandLine.arguments.contains("--native-client-only") {
             await NativeClientSelfTests.run(r)
             print("=== Native client self-test: \(r.passed) passed, \(r.failed) failed ===")

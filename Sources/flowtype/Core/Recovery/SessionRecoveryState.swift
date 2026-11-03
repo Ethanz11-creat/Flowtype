@@ -4,4 +4,5 @@ import Foundation
 struct SessionRecoveryState {
     var card: RecoveryCard?
     var copyText: String?
+    var destination: ClientDestination = .settings(.speech)
 }

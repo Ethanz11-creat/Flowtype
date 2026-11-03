@@ -15,6 +15,13 @@ enum ProviderDraftCommitError: LocalizedError, Equatable {
 }
 
 enum ProviderDraftCommit {
+    static func normalizedLLMProfile(_ value: LLMProvider) -> LLMProvider {
+        var profile = value
+        profile.name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        profile.model = profile.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        profile.baseURL = normalizeBaseURL(profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines))
+        return profile
+    }
     static func apply(_ draft: ASRProviderDraft, to config: inout Configuration) throws {
         var latest = config
         let index = try targetIndex(draft.target, ids: latest.cloudASRConfig.providers.map(\.id))
@@ -50,10 +57,7 @@ enum ProviderDraftCommit {
         var latest = config
         let index = try targetIndex(draft.target, ids: latest.llmProviders.map(\.id))
         guard draft.profile.id == draft.target.id else { throw ProviderDraftCommitError.invalid("服务标识不匹配") }
-        var profile = draft.profile
-        profile.name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        profile.model = profile.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        profile.baseURL = normalizeBaseURL(profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines))
+        var profile = normalizedLLMProfile(draft.profile)
         if let error = validateProvider(profile, existingProviders: latest.llmProviders) {
             throw ProviderDraftCommitError.invalid(error.localizedDescription)
         }

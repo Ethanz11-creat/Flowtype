@@ -315,7 +315,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
         case .blocked(.microphoneDenied):
             PermissionHelper.openMicrophoneSettings()
         case .blocked(.noEngine):
-            openSettings(tab: .settings)
+            openSettings(destination: .settings(.speech))
         case .degraded(.accessibilityMissing):
             PermissionHelper.openAccessibilitySettings()
             monitor.startPermissionWatchIfNeeded()

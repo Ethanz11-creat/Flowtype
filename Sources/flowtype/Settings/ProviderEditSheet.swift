@@ -317,7 +317,7 @@ struct ProviderEditSheet: View {
         invalidateTest()
         let revision = testRevision
         let testedDraft = draft
-        let profile = draft.profile
+        let profile = ProviderDraftCommit.normalizedLLMProfile(draft.profile)
         testStatus = .testing
         testTask = Task { @MainActor in
             guard !Task.isCancelled, testRevision == revision, draft == testedDraft else { return }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsPage: View {
     let navigation: SettingsNavigation?
+    private var devices: () -> [AudioDevice] = { AudioRecorder.availableInputDevices() }
     @ObservedObject var store: ConfigurationStore
     @ObservedObject var styleStore: StylePackStore
     @ObservedObject var monitor: ReadinessMonitor
@@ -33,8 +34,10 @@ struct SettingsPage: View {
     init(navigation: SettingsNavigation? = nil, store: ConfigurationStore, styleStore: StylePackStore,
          monitor: ReadinessMonitor, modelState: QwenModelState, downloader: ModelDownloader,
          importedActions: ImportedASRModelActions, trialPresenter: TrialSessionPresenter,
-         checks: CloudASRConnectionCheck? = nil, draftChecks: CloudASRConnectionCheck? = nil) {
+         checks: CloudASRConnectionCheck? = nil, draftChecks: CloudASRConnectionCheck? = nil,
+         devices: @escaping () -> [AudioDevice] = { AudioRecorder.availableInputDevices() }) {
         self.navigation = navigation
+        self.devices = devices
         self.store = store
         self.styleStore = styleStore
         self.monitor = monitor
@@ -155,7 +158,7 @@ struct SettingsPage: View {
             ASRSettingsContent(store: store, monitor: monitor, modelState: modelState,
                                downloader: downloader, importedActions: importedActions, navigation: navigation,
                                checks: checks, draftChecks: draftChecks, target: location.target,
-                               requestID: location.requestID)
+                               requestID: location.requestID, devices: devices)
         case .text: llmSection
         case .general:
             appearanceSection

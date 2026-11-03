@@ -99,6 +99,9 @@ struct ActivityHeatmap: View {
 struct HourDistributionChart: View {
     let summary: StatsSummary
     private var maximum: Int { summary.hourHistogram.max() ?? 0 }
+    static func midpointLabel(maximum: Int) -> String {
+        maximum.isMultiple(of: 2) ? String(maximum / 2) : "\(maximum / 2).5"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -113,7 +116,7 @@ struct HourDistributionChart: View {
                 VStack(alignment: .leading) {
                     Text("\(maximum)")
                     Spacer()
-                    Text("\(maximum / 2)")
+                    Text(Self.midpointLabel(maximum: maximum))
                     Spacer()
                     Text("0")
                 }.font(.system(size: 10)).foregroundStyle(Theme.textSecondary)

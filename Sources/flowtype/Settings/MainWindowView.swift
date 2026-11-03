@@ -77,11 +77,13 @@ final class SettingsNavigation: ObservableObject {
 
 struct MainWindowView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selectedTab: AppTab
+    @State private(set) var selectedTab: AppTab
     @ObservedObject private var navigation: SettingsNavigation
+    private var injectedPage: ((AppTab) -> AnyView)?
 
-    init(initialTab: AppTab = .overview, navigation: SettingsNavigation? = nil) {
-        _selectedTab = State(initialValue: initialTab)
+    init(initialTab: AppTab = .overview, navigation: SettingsNavigation? = nil, page: ((AppTab) -> AnyView)? = nil) {
+        _selectedTab = State(initialValue: navigation?.requestedTab ?? initialTab)
+        injectedPage = page
         self.navigation = navigation ?? SettingsNavigation(initialTab: initialTab)
     }
 
@@ -129,12 +131,16 @@ struct MainWindowView: View {
     }
 
     @ViewBuilder private var detail: some View {
-        switch selectedTab {
-        case .overview: OverviewPage(navigation: navigation)
-        case .history:  HistoryPage()
-        case .vocab:    VocabPage()
-        case .style:    StylePage()
-        case .settings: SettingsPage(navigation: navigation)
+        if let injectedPage {
+            injectedPage(selectedTab)
+        } else {
+            switch selectedTab {
+            case .overview: OverviewPage(navigation: navigation)
+            case .history:  HistoryPage()
+            case .vocab:    VocabPage()
+            case .style:    StylePage()
+            case .settings: SettingsPage(navigation: navigation)
+            }
         }
     }
 }

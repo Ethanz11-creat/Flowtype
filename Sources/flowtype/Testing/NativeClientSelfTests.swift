@@ -4,6 +4,7 @@ import Foundation
 enum NativeClientSelfTests {
     @MainActor
     static func run(_ r: SelfTest.Reporter) async {
+        await NativeRecoveryNavigationSelfTests.run(r)
         await OnboardingFlowSelfTests.run(r)
         await TrialSessionSelfTests.run(r)
         await SelfTest.testOnboardingDemoDelivery(r)
