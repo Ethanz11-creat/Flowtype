@@ -63,7 +63,8 @@ enum BoundedProcess {
     }
 
     /// Synchronous, external process watchdog. No target actor/run loop participates in its deadline.
-    static func run(_ command: BoundedCommand, runnerExecutableURL: URL? = nil) throws -> BoundedResult {
+    static func run(_ command: BoundedCommand, runnerExecutableURL: URL? = nil,
+                    shouldCancel: () -> Bool = { false }, onLaunch: (Int32) throws -> Void = { _ in }) throws -> BoundedResult {
         guard command.timeoutSeconds.isFinite, command.timeoutSeconds > 0,
               command.stdoutURL.standardizedFileURL != command.stderrURL.standardizedFileURL,
               !([command.executable.path] + command.arguments).contains(where: { $0.utf8.contains(0) }) else {
@@ -112,10 +113,13 @@ enum BoundedProcess {
             while elapsed() < reap && (process.isRunning || (ownGroup && groupExists())) { Thread.sleep(forTimeInterval: 0.01) }
             return !process.isRunning && (!ownGroup || !groupExists())
         }
+        do { try onLaunch(pid) }
+        catch { _ = stopOwned(); throw error }
         var received = Data()
         var execConfirmed = false
         let handshakeLimit = min(command.timeoutSeconds, 5)
         while elapsed() < handshakeLimit {
+            if shouldCancel() { let clean = stopOwned(); return result(.signal, clean ? .childSignaled : .cleanupFailed) }
             var buffer = [UInt8](repeating: 0, count: 256)
             let count = Darwin.read(parent, &buffer, buffer.count)
             if count > 0 {
@@ -133,7 +137,8 @@ enum BoundedProcess {
             let clean = stopOwned()
             return result(.launchFailure, !clean ? .cleanupFailed : String(decoding: received, as: UTF8.self).contains("EXECFAIL") ? .launchFailed : .handshakeFailed)
         }
-        while process.isRunning && elapsed() < command.timeoutSeconds { Thread.sleep(forTimeInterval: 0.01) }
+        while process.isRunning && elapsed() < command.timeoutSeconds && !shouldCancel() { Thread.sleep(forTimeInterval: 0.01) }
+        if shouldCancel() { let clean = stopOwned(); return result(.signal, clean ? .childSignaled : .cleanupFailed) }
         if process.isRunning {
             let clean = stopOwned()
             return result(.timeout, clean ? .deadlineExceeded : .cleanupFailed)
