@@ -9,6 +9,7 @@ enum NativeClientSelfTests {
         await SelfTest.testOnboardingDemoDelivery(r)
         await SelfTest.testOnboardingDeliveryCancellation(r)
         await SelfTest.testOnboardingDemoTeardown(r)
+        NativeHistorySelfTests.run(r)
         ProviderDraftSelfTests.run(r)
         await ProviderDraftCheckSelfTests.run(r)
         NativeNavigationSelfTests.run(r)

@@ -44,6 +44,8 @@ struct DictationSession: Codable, Identifiable {
     var stopToInjectMs: Int?
     var deliveryOutcome: DeliveryOutcome?
     var stopToDeliveryMs: Int?
+    /// Persisted count survives transcript removal; populated by HistoryStore reads.
+    var storedCharacterCount: Int?
 
     init(rawTranscript: String, finalText: String, polishMode: PolishMode,
          durationMs: UInt64?, recordingMs: UInt64? = nil,
@@ -100,19 +102,47 @@ func detectLanguageTag(_ text: String) -> String? {
     return "mixed"
 }
 
+enum HistoryReadState: Equatable {
+    case loading, loaded, failed(String)
+}
+
 @MainActor
 final class HistoryStore: ObservableObject {
-    static let shared = HistoryStore()
+    static let shared = HistoryStore(database: AppDatabaseProvider.shared,
+                                     refreshStats: { DailyStatsStore.shared.refresh() })
     @Published private(set) var sessions: [DictationSession] = []
-    private let db = AppDatabaseProvider.shared
+    @Published private(set) var readState: HistoryReadState = .loading
+    private let db: AppDatabase
+    private let readSessions: @MainActor () throws -> [DictationSession]
+    private let refreshStats: @MainActor () -> Void
 
-    private init() { reload() }
+    init(database: AppDatabase,
+         readSessions: (@MainActor () throws -> [DictationSession])? = nil,
+         refreshStats: @escaping @MainActor () -> Void) {
+        db = database
+        self.refreshStats = refreshStats
+        self.readSessions = readSessions ?? {
+            try database.dbQueue.read {
+                try SessionRecord.order(Column("startedAt").desc).fetchAll($0).map { record in
+                    var session = record.toDictationSession()
+                    session.storedCharacterCount = record.charCount
+                    return session
+                }
+            }
+        }
+        reload()
+    }
 
     func reload() {
+        readState = .loading
         do {
-            let recs = try db.dbQueue.read { try SessionRecord.order(Column("startedAt").desc).fetchAll($0) }
-            sessions = recs.map { $0.toDictationSession() }
-        } catch { AppLogger.log("[History] reload failed: \(error)"); sessions = [] }
+            sessions = try readSessions()
+            readState = .loaded
+        } catch {
+            AppLogger.log("[History] reload failed: \(error)")
+            // Keep the last successful snapshot available for selection, copying and export.
+            readState = .failed(error.localizedDescription)
+        }
     }
 
     /// Insert one session. `charCount` is computed before nulling text, so stats survive privacy-off.
@@ -120,12 +150,12 @@ final class HistoryStore: ObservableObject {
         var rec = SessionRecord(from: session, storeText: storeText)
         do { try db.dbQueue.write { try rec.insert($0) } } catch { AppLogger.log("[History] insert failed: \(error)") }
         reload()
-        DailyStatsStore.shared.refresh()
+        refreshStats()
     }
 
     func delete(id: String) {
         try? db.dbQueue.write { _ = try SessionRecord.deleteOne($0, key: id) }
-        reload(); DailyStatsStore.shared.refresh()
+        reload(); refreshStats()
     }
 
     /// 清空历史 (privacy): erase transcripts, keep metadata rows → stats/streaks survive.
@@ -140,6 +170,6 @@ final class HistoryStore: ObservableObject {
             try d.execute(sql: "DELETE FROM session")
             try d.execute(sql: "DELETE FROM daily_legacy")
         }
-        reload(); DailyStatsStore.shared.refresh()
+        reload(); refreshStats()
     }
 }
