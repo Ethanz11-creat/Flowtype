@@ -68,19 +68,10 @@ import Darwin
             case "build":
                 guard args.count == 2 else { throw PackagingFailure.usage }
                 let environment = ProcessInfo.processInfo.environment
-                // Explicit existing input wins. Only the legacy shader-cache roots are fallback candidates; no Python/tool installation.
-                var shader: URL?
-                if let explicit = environment["MLX_METALLIB_PATH"] { shader = URL(fileURLWithPath: explicit) }
-                else {
-                    for relative in [".cache/uv/archive-v0", ".cache/pip"] where shader == nil {
-                        let cache = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(relative)
-                        for directory in (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? [] {
-                            let candidate = directory.appendingPathComponent("mlx/lib/mlx.metallib")
-                            if FileManager.default.fileExists(atPath: candidate.path) { shader = candidate; break }
-                        }
-                    }
+                guard let explicit = environment["MLX_METALLIB_PATH"], !explicit.isEmpty else {
+                    throw PackagingFailure.shaderInvalid
                 }
-                try packager.buildApp(shader: shader, version: environment["VERSION"] ?? "1.0.0")
+                try packager.buildApp(shader: URL(fileURLWithPath: explicit), version: environment["VERSION"] ?? "1.0.0")
                 print("FlowType candidate and manifest staged, signed, and published")
             case "check":
                 guard args.count == 6, args[2] == "--app", args[3].hasPrefix("/"), args[4] == "--output", args[5].hasPrefix("/") else { throw PackagingFailure.usage }
