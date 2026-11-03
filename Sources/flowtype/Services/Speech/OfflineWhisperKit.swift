@@ -178,6 +178,7 @@ actor WhisperKitBackend: OfflineWhisperBackend {
     }
 
     static func load(_ options: WhisperOfflineLoadOptions) async throws -> WhisperKitBackend {
+        guard ValidationEffects.live.allow(.modelLoad) else { throw OfflineWhisperError.invalidLocalDirectory }
         try WhisperGraphContract.validateRuntimeABI()
         // Fail on local tokenizer errors before compiling or allocating model memory.
         _ = try await OfflineWhisperKit.localTokenizer(at: options.tokenizerDirectory)

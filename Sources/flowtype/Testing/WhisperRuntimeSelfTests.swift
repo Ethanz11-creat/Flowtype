@@ -153,7 +153,7 @@ enum WhisperRuntimeSelfTests {
             r.eq(replacement.wordTokens.flatMap { $0 }, [171, 123, 121, 32], "Whisper replacement split retains tokens")
         } catch { r.check(false, "Whisper tokenizer fixture: \(error)") }
 
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-whisper-\(UUID())")
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-whisper-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
         _ = URLProtocol.registerClass(WhisperNetworkTrap.self)
         defer { URLProtocol.unregisterClass(WhisperNetworkTrap.self) }

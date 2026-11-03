@@ -74,6 +74,7 @@ final class AudioRecorder: @unchecked Sendable {
     }
 
     func requestPermission() async -> Bool {
+        guard ValidationEffects.live.allow(.permissionRequest) else { return false }
         let status = AVAudioApplication.shared.recordPermission
         AppLogger.log("AudioRecorder: mic status = \(status) (undetermined/denied/granted)")
         guard status == .undetermined else {
@@ -101,6 +102,7 @@ final class AudioRecorder: @unchecked Sendable {
     }
 
     private func startEngine(deviceID: String?, ownerID: UInt64) throws -> RecordingOutput {
+        guard ValidationEffects.live.allow(.audioDevice) else { throw AudioRecorderError.permissionDenied }
         try Task.checkCancellation()
         guard isOwner(ownerID) else { throw CancellationError() }
 
@@ -142,7 +144,7 @@ final class AudioRecorder: @unchecked Sendable {
                 // AudioObjectID — numeric IDs are not stable across launches.
                 if originalDeviceID != kAudioObjectUnknown {
                     if let originalUID = AudioDeviceEnumerator.deviceUID(for: originalDeviceID) {
-                        UserDefaults.standard.set(originalUID, forKey: Self.pendingRestoreKey)
+                        RuntimeEnvironment.defaults.set(originalUID, forKey: Self.pendingRestoreKey)
                         AppLogger.log("[AudioRecorder] Persisted device-restore sentinel (uid=\(originalUID))")
                     } else {
                         AppLogger.log("[AudioRecorder] Could not resolve original device UID; crash-restore sentinel not written")
@@ -163,7 +165,7 @@ final class AudioRecorder: @unchecked Sendable {
                     AppLogger.log("[AudioRecorder] Failed to set default input device: \(setResult), falling back")
                     originalDeviceID = kAudioObjectUnknown
                     // The system default was never changed — no restore owed.
-                    UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
+                    RuntimeEnvironment.defaults.removeObject(forKey: Self.pendingRestoreKey)
                 }
             } else {
                 AppLogger.log("[AudioRecorder] Requested device \(requestedDeviceID) not found, using default")
@@ -407,7 +409,7 @@ final class AudioRecorder: @unchecked Sendable {
             AppLogger.log("[AudioRecorder] Failed to restore original input device: \(restoreResult)")
         } else {
             AppLogger.log("[AudioRecorder] Restored original input device")
-            UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
+            RuntimeEnvironment.defaults.removeObject(forKey: Self.pendingRestoreKey)
         }
         originalDeviceID = kAudioObjectUnknown
     }
@@ -418,8 +420,9 @@ final class AudioRecorder: @unchecked Sendable {
     /// the original device may have been unplugged, and a stale sentinel must not
     /// clobber a default the user has since chosen by hand.
     static func restorePendingDeviceIfNeeded() {
-        guard let uid = UserDefaults.standard.string(forKey: pendingRestoreKey) else { return }
-        defer { UserDefaults.standard.removeObject(forKey: pendingRestoreKey) }
+        guard RuntimeEnvironment.current.role == .app else { return }
+        guard let uid = RuntimeEnvironment.defaults.string(forKey: pendingRestoreKey) else { return }
+        defer { RuntimeEnvironment.defaults.removeObject(forKey: pendingRestoreKey) }
         AppLogger.log("[AudioRecorder] Pending input-device restore found (uid=\(uid))")
         guard let deviceID = AudioDeviceEnumerator.findDeviceID(uid: uid) else {
             AppLogger.log("[AudioRecorder] Pending restore: device not found (unplugged?); clearing sentinel")
@@ -435,6 +438,7 @@ final class AudioRecorder: @unchecked Sendable {
 
     /// Sets the system-wide default input device. Returns the CoreAudio status.
     private static func setSystemDefaultInputDevice(_ deviceID: AudioObjectID) -> OSStatus {
+        guard ValidationEffects.live.allow(.audioDevice) else { return -1 }
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDefaultInputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,

@@ -46,11 +46,13 @@ enum PermissionHelper {
     }
 
     static func openMicrophoneSettings() {
+        guard ValidationEffects.live.allow(.permissionRequest) else { return }
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") else { return }
         NSWorkspace.shared.open(url)
     }
 
     static func openSpeechRecognitionSettings() {
+        guard ValidationEffects.live.allow(.permissionRequest) else { return }
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") else { return }
         NSWorkspace.shared.open(url)
     }
@@ -61,6 +63,7 @@ enum PermissionHelper {
         if AXIsProcessTrusted() {
             return true
         }
+        guard ValidationEffects.live.allow(.inputEvent) else { return false }
 
         // Functional test: try to create a temporary event tap
         // This is more reliable for unsigned apps
@@ -86,12 +89,14 @@ enum PermissionHelper {
     }
 
     static func openAccessibilitySettings() {
+        guard ValidationEffects.live.allow(.permissionRequest) else { return }
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
         NSWorkspace.shared.open(url)
     }
 
     @MainActor
     static func showPermissionGuide() {
+        guard ValidationEffects.live.allow(.permissionRequest) else { return }
         let alert = NSAlert()
         alert.messageText = "需要辅助功能权限"
         alert.informativeText = "Flowtype 需要监听全局按键来触发语音输入。请前往「系统设置 → 隐私与安全性 → 辅助功能」，将 Flowtype 添加到列表中并勾选。"
@@ -105,7 +110,7 @@ enum PermissionHelper {
             openAccessibilitySettings()
         } else if response == .alertSecondButtonReturn {
             // User claims they already enabled it - mark as handled
-            UserDefaults.standard.set(true, forKey: "flowtype.hasShownPermissionGuide")
+            RuntimeEnvironment.defaults.set(true, forKey: "flowtype.hasShownPermissionGuide")
         }
     }
 

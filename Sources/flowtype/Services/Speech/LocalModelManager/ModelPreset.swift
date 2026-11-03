@@ -12,8 +12,7 @@ struct ModelPreset: Identifiable, Hashable {
 
     static let modelsDirectory: URL = {
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = appSupport.appendingPathComponent("Flowtype/models", isDirectory: true)
+        let dir = RuntimeEnvironment.current.paths.modelsDirectory
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()

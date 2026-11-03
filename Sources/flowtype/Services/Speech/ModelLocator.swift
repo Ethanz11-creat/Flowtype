@@ -35,6 +35,7 @@ enum ModelLocator {
     }
 
     static func knownCacheDirs() -> [URL] {
+        guard ValidationEffects.live.allow(.modelScan) else { return [] }
         let fm = FileManager.default
         let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first
         let home = fm.homeDirectoryForCurrentUser
@@ -103,7 +104,8 @@ enum ModelLocator {
     /// Resolves the active model directory and matching modelId from Configuration.
     /// Identity is established from a known preset path or exact repository metadata, never size.
     static func resolveActiveModel(config: Configuration) -> ResolvedModel? {
-        resolveActiveModel(config: config, knownCacheDirectories: knownCacheDirs(), presetDirectory: { $0.localDirectory() })
+        guard ValidationEffects.live.allow(.modelScan) else { return nil }
+        return resolveActiveModel(config: config, knownCacheDirectories: knownCacheDirs(), presetDirectory: { $0.localDirectory() })
     }
 
     static func resolveActiveModel(config: Configuration, knownCacheDirectories: [URL],

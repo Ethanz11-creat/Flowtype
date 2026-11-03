@@ -7,7 +7,7 @@ enum M2ReviewFixSelfTests {
     static let names = ["MelSpectrogram", "AudioEncoder", "TextDecoder", "TextDecoderContextPrefill"]
 
     static func packages(_ r: SelfTest.Reporter) async {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-preparation-test-\(UUID())")
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preparation-test-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -188,7 +188,7 @@ private final class ReviewRuntimePaths: @unchecked Sendable {
 extension M2ReviewFixSelfTests {
     static func packageFailures(_ r: SelfTest.Reporter) async {
         let fm = FileManager.default
-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-preparation-failures-\(UUID())")
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preparation-failures-\(UUID())")
         defer { try? fm.removeItem(at: root) }
         do {
             try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -247,7 +247,7 @@ extension M2ReviewFixSelfTests {
     @MainActor
     static func compilationLifecycle(_ r: SelfTest.Reporter) async {
         let fm = FileManager.default
-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-compilation-lifecycle-\(UUID())")
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-compilation-lifecycle-\(UUID())")
         defer { try? fm.removeItem(at: root) }
         do {
             try fm.createDirectory(at: root, withIntermediateDirectories: true)

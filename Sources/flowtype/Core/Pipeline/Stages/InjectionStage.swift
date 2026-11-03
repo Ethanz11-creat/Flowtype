@@ -31,8 +31,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
              }
          },
          copy: @escaping @MainActor @Sendable (String) -> Void = { text in
-             NSPasteboard.general.clearContents()
-             NSPasteboard.general.setString(text, forType: .string)
+             KeyboardInjector.copyText(text)
              SoundFeedback.playCopiedToClipboard()
          }) {
         self.settle = settle

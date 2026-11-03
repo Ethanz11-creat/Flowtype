@@ -11,12 +11,11 @@ struct PersistentStore<T: Codable> {
     let fileURL: URL
 
     private static var appSupportDir: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("FlowType", isDirectory: true)
+        RuntimeEnvironment.current.paths.applicationSupportDirectory
     }
 
-    init(filename: String) {
-        self.fileURL = Self.appSupportDir.appendingPathComponent(filename)
+    init(filename: String, directory: URL? = nil) {
+        self.fileURL = (directory ?? Self.appSupportDir).appendingPathComponent(filename)
     }
 
     func load() -> T? {

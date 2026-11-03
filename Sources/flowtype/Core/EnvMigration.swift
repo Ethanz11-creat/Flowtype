@@ -8,8 +8,9 @@ enum EnvMigration {
     }
 
     static func migrateIfNeeded() {
+        guard ValidationEffects.live.allow(.environment) else { return }
         let hasMigratedKey = "flowtype.didMigrateEnv"
-        guard !UserDefaults.standard.bool(forKey: hasMigratedKey) else { return }
+        guard !RuntimeEnvironment.defaults.bool(forKey: hasMigratedKey) else { return }
 
         var config = ConfigurationStore.shared.current
         var didMigrate = false
@@ -43,7 +44,7 @@ enum EnvMigration {
         }
 
         // Migrate from old flat config format if present
-        if let oldData = UserDefaults.standard.data(forKey: "flowtype.config"),
+        if let oldData = RuntimeEnvironment.defaults.data(forKey: "flowtype.config"),
            let oldConfig = migrateOldConfiguration(from: oldData, into: config) {
             config = oldConfig
             didMigrate = true
@@ -54,7 +55,7 @@ enum EnvMigration {
             AppLogger.log("[EnvMigration] Migrated config to new format")
         }
 
-        UserDefaults.standard.set(true, forKey: hasMigratedKey)
+        RuntimeEnvironment.defaults.set(true, forKey: hasMigratedKey)
     }
 
     /// Attempt to decode old flat configuration and map to new nested structure

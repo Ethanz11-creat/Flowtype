@@ -2,7 +2,8 @@ import Foundation
 import Combine
 
 class ConfigurationStore: ObservableObject, @unchecked Sendable {
-    static let shared = ConfigurationStore()
+    static let shared = ConfigurationStore(defaults: RuntimeEnvironment.defaults,
+                                            backupDirectory: RuntimeEnvironment.current.paths.logsDirectory)
 
     @Published var current: Configuration
 
@@ -14,7 +15,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
     private let defaults: UserDefaults
     private let backupDirectory: URL?
 
-    init(defaults: UserDefaults = .standard, backupDirectory: URL? = nil) {
+    init(defaults: UserDefaults = RuntimeEnvironment.defaults, backupDirectory: URL? = nil, keychain: KeychainAccess = .helper) {
         self.defaults = defaults
         self.backupDirectory = backupDirectory
 
@@ -50,7 +51,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
             // Migration 2: move API key from UserDefaults JSON to Keychain
             if storedVersion < 2 {
                 if !config.llmApiKey.isEmpty {
-                    _ = KeychainHelper.save(key: "llmApiKey", value: config.llmApiKey)
+                    _ = keychain.save("llmApiKey", config.llmApiKey)
                     AppLogger.log("[ConfigurationStore] Migrated API key to Keychain")
                 }
                 needsSave = true
@@ -67,9 +68,9 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
                         model: config.llmModel,
                         isActive: true
                     )
-                    if let legacyApiKey = KeychainHelper.load(key: "llmApiKey"), !legacyApiKey.isEmpty {
+                    if let legacyApiKey = keychain.load("llmApiKey"), !legacyApiKey.isEmpty {
                         let providerKey = "\(self.keychainServicePrefix)\(oldProvider.id.uuidString)"
-                        _ = KeychainHelper.save(key: providerKey, value: legacyApiKey)
+                        _ = keychain.save(providerKey, legacyApiKey)
                         AppLogger.log("[ConfigurationStore] Migrated legacy API key to provider \(oldProvider.id)")
                     }
                     config.llmProviders = [oldProvider]
@@ -108,8 +109,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
     /// Persists a copy of an undecodable config blob so the user's settings are
     /// recoverable for diagnosis, instead of being silently discarded.
     private static func backupCorruptConfig(_ data: Data, error: Error, directory: URL?) {
-        let dir = directory ?? URL(fileURLWithPath:
-            (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/flowtype"))
+        let dir = directory ?? RuntimeEnvironment.current.paths.logsDirectory
         let stamp = Int(Date().timeIntervalSince1970)
         let backupURL = dir.appendingPathComponent("flowtype.config.corrupt-\(stamp).json")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

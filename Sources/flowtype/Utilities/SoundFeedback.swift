@@ -5,7 +5,8 @@ import AudioToolbox
 enum SoundFeedback {
 
     static var isEnabled: Bool {
-        ConfigurationStore.shared.current.enableAudioFeedback
+        guard RuntimeEnvironment.current.role == .app else { return false }
+        return ConfigurationStore.shared.current.enableAudioFeedback && ValidationEffects.live.allow(.sound)
     }
 
     static func playRecordingStart() {

@@ -90,9 +90,11 @@ private final class CloudASRRedirectPolicy: NSObject, URLSessionTaskDelegate, Se
 
 actor CloudASRProvider: ASRProvider {
     private let session: URLSession
+    private let injectedSession: Bool
     private let logger: @Sendable (String) -> Void
-    init(session: URLSession = .shared, logger: @escaping @Sendable (String) -> Void = { AppLogger.log($0) }) {
-        self.session = session
+    init(session: URLSession? = nil, logger: @escaping @Sendable (String) -> Void = { AppLogger.log($0) }) {
+        self.session = session ?? .shared
+        self.injectedSession = session != nil
         self.logger = logger
     }
     nonisolated let id = ASRProviderID.cloud
@@ -182,6 +184,7 @@ actor CloudASRProvider: ASRProvider {
     }
 
     private func executeTranscriptionRequest(request: URLRequest, logPrefix: String) async throws -> String {
+        guard injectedSession || ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
         do {
             try Task.checkCancellation()
             let (data, response) = try await session.data(for: request, delegate: CloudASRRedirectPolicy())

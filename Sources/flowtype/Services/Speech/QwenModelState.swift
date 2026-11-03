@@ -34,7 +34,11 @@ private enum ProvisionGate {
 struct ModelProvisionEnvironment: Sendable {
     let read: @Sendable () -> String?
     let write: @Sendable (String?) -> Void
-    static let process = Self(read: { getenv("HF_ENDPOINT").map { String(cString: $0) } }, write: {
+    static let process = Self(read: {
+        guard ValidationEffects.live.allow(.environment) else { return nil }
+        return getenv("HF_ENDPOINT").map { String(cString: $0) }
+    }, write: {
+        guard ValidationEffects.live.allow(.environment) else { return }
         if let value = $0 { setenv("HF_ENDPOINT", value, 1) } else { unsetenv("HF_ENDPOINT") }
     })
 }
@@ -94,6 +98,7 @@ final class QwenModelState: ObservableObject {
 
     init(
         preflight: @escaping @Sendable (ModelPreset, DownloadSource) async throws -> Void = { preset, source in
+            guard ValidationEffects.live.allow(.modelDownload) else { throw ModelProvisionError.loadFailed() }
             _ = try await ModelMetadataPreflight().check(repoID: preset.repoId,
                 endpoint: source.validatedEndpoint(isChina: DownloadSource.systemIsLikelyChina()))
         },
@@ -111,7 +116,10 @@ final class QwenModelState: ObservableObject {
             return (try? FileManager.default.attributesOfFileSystem(forPath: existing.path)[.systemFreeSize] as? NSNumber)?.int64Value
         },
         environment: ModelProvisionEnvironment = .process,
-        inspect: @escaping @Sendable (URL) throws -> ImportedASRModel = { try ASRModelInspector.inspect(directory: $0) },
+        inspect: @escaping @Sendable (URL) throws -> ImportedASRModel = {
+            guard ValidationEffects.live.allow(.modelScan) else { throw ModelProvisionError.incompleteLocal() }
+            return try ASRModelInspector.inspect(directory: $0)
+        },
         assessHardware: @escaping @Sendable (ImportedASRModel, UInt64?) -> LocalModelHardwareAssessment = {
             LocalModelHardwareAssessment.current(model: $0, activeModelBytes: $1)
         },
@@ -123,6 +131,7 @@ final class QwenModelState: ObservableObject {
         self.availableDisk = availableDisk; self.environment = environment; self.commit = commit
         self.inspect = inspect; self.assessHardware = assessHardware; self.saveConfiguration = saveConfiguration
         self.load = load ?? { target, offline, progress in
+            guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
             let directory: URL
             let repo: String
             let identity: LocalModelIdentity

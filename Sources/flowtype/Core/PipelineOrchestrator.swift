@@ -56,13 +56,20 @@ struct SessionEffects {
     var saveHistory: (@MainActor @Sendable (SessionContext) -> Void)? = nil
 
     static let live = SessionEffects(prepare: {
+        guard RuntimeEnvironment.current.role == .app else { return }
         Task { @MainActor in
             ASRRouter.shared.startProbing()
             let cfg = ConfigurationStore.shared.current
             guard cfg.asrRoutingPolicy != .cloudOnly else { return }
             await QwenModelState.shared.loadModel()
         }
-    }, showWindow: { WindowManager.shared.showWindow() }, hideWindow: { WindowManager.shared.hide() })
+    }, showWindow: {
+        guard ValidationEffects.live.allow(.window) else { return }
+        WindowManager.shared.showWindow()
+    }, hideWindow: {
+        guard ValidationEffects.live.allow(.window) else { return }
+        WindowManager.shared.hide()
+    })
 }
 
 // MARK: - Session Controller

@@ -51,9 +51,11 @@ enum LLMError: Error {
 actor LLMService {
 
     private let makeSession: @Sendable () -> URLSession
+    private let injectedSession: Bool
 
-    init(makeSession: @escaping @Sendable () -> URLSession = { URLSession(configuration: .ephemeral) }) {
-        self.makeSession = makeSession
+    init(makeSession: (@Sendable () -> URLSession)? = nil) {
+        self.makeSession = makeSession ?? { URLSession(configuration: .ephemeral) }
+        self.injectedSession = makeSession != nil
     }
 
     static func shouldPolish(_ text: String) -> String? {
@@ -201,6 +203,7 @@ actor LLMService {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = requestBody
 
+            guard ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
@@ -233,6 +236,9 @@ actor LLMService {
         foregroundContext: ForegroundContext?
     ) -> AsyncThrowingStream<String, Error> {
         let temperature = config.temperature
+        guard injectedSession || ValidationEffects.live.allow(.network) else {
+            return AsyncThrowingStream { $0.finish(throwing: URLError(.notConnectedToInternet)) }
+        }
 
         let session = makeSession()
         let budget = CompletionBudget(seconds: timeoutSeconds)

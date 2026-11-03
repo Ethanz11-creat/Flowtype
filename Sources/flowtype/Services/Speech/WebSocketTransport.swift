@@ -30,6 +30,7 @@ actor URLSessionWebSocketTransport: WebSocketTransport {
         guard let url = request.url, isValidRealtimeEndpoint(url.absoluteString) else {
             throw RealtimeASRConfigurationError.invalidEndpoint
         }
+        guard ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
         let session = URLSession(configuration: .ephemeral)
         let socket = session.webSocketTask(with: request)
         self.session = session

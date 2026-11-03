@@ -9,7 +9,7 @@ enum LocalModelImportSelfTests {
             URLProtocol.unregisterClass(InspectionNetworkProbe.self)
             r.eq(InspectionNetworkProbe.calls, 0, "import: inspection performs no URL loading")
         }
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-import-\(UUID())")
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-import-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

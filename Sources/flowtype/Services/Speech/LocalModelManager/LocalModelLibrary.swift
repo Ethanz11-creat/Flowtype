@@ -45,7 +45,14 @@ enum LocalModelLibrary {
     static func inspectLegacyCandidate(in configuration: Configuration) throws -> ImportedASRModel? {
         guard let path = [configuration.customLocalModelPath, configuration.localModelPath]
             .compactMap({ $0 }).first(where: { !$0.isEmpty }) else { return nil }
-        return try ASRModelInspector.inspect(directory: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+        let directory = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        if RuntimeEnvironment.current.role != .app {
+            let root = RuntimeEnvironment.current.paths.validationRoot!.resolvingSymlinksInPath().path
+            guard directory.resolvingSymlinksInPath().path.hasPrefix(root + "/") else {
+                throw ModelProvisionError.incompleteLocal()
+            }
+        }
+        return try ASRModelInspector.inspect(directory: directory)
     }
 
     private static func canonical(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path }

@@ -168,6 +168,7 @@ class WindowManager: ObservableObject {
     }
 
     func setupGlobalHotkey() {
+        guard ValidationEffects.live.allow(.inputEvent) else { return }
         AppLogger.log("[WindowManager] setupGlobalHotkey called")
         let accessibilityEnabled = PermissionHelper.checkAccessibility()
         if !accessibilityEnabled {
@@ -184,6 +185,7 @@ class WindowManager: ObservableObject {
     }
 
     func reloadHotkey() {
+        guard ValidationEffects.live.allow(.inputEvent) else { return }
         AppLogger.log("[WindowManager] Queuing debounced hotkey reload...")
         reloadWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
@@ -220,6 +222,7 @@ class WindowManager: ObservableObject {
     }
 
     func repairEventTap() {
+        guard ValidationEffects.live.allow(.inputEvent) else { return }
         // An installed tap is stronger evidence than a trust query for unsigned
         // apps. Only probe permission when there is no tap to repair.
         let trusted = eventTapPort != nil || PermissionHelper.checkAccessibility()
@@ -257,6 +260,7 @@ class WindowManager: ObservableObject {
 
     @discardableResult
     func installEventTap() -> Bool {
+        guard ValidationEffects.live.allow(.inputEvent) else { return false }
         guard eventTapPort == nil else { return true }
         let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
                       | CGEventMask(1 << CGEventType.keyDown.rawValue)
@@ -471,6 +475,7 @@ class WindowManager: ObservableObject {
     private static let slideOffset: CGFloat = 60
 
     func showWindow() {
+        guard ValidationEffects.live.allow(.window) else { return }
         logPanelPresentation("show-request")
         guard let panel = panel else { return }
         panel.setCapsuleSize(SessionController.shared.sessionState.capsuleSize)
@@ -533,6 +538,7 @@ class WindowManager: ObservableObject {
     }
 
     func hide() {
+        guard ValidationEffects.live.allow(.window) else { return }
         // Don't hide the panel during text injection — user needs to see progress
         guard SessionController.shared.sessionState != .injecting else { return }
         guard let panel = panel, panel.isVisible else {

@@ -215,6 +215,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     func openSettings(tab: AppTab = .settings) {
+        guard ValidationEffects.live.allow(.window) else { return }
         if settingsWindowController == nil {
             let controller = SettingsWindowController(initialTab: tab)
             controller.onClose = { [weak self] in
@@ -270,7 +271,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
 
     @objc private func reloadConfiguration() {
         let defaultsKey = "flowtype.config"
-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
+        if let data = RuntimeEnvironment.defaults.data(forKey: defaultsKey),
            let config = try? JSONDecoder().decode(Configuration.self, from: data) {
             ConfigurationStore.shared.current = config
         }

@@ -4,10 +4,12 @@ import Foundation
 /// Redirects are inspected here so no GET, CDN request, or credential forwarding can occur.
 final class ModelMetadataPreflight: Sendable {
     private let session: URLSession
+    private let injectedSession: Bool
 
-    init(session: URLSession = URLSession(configuration: .ephemeral)) {
+    init(session: URLSession? = nil) {
+        injectedSession = session != nil
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = session.configuration.protocolClasses
+        configuration.protocolClasses = session?.configuration.protocolClasses
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCredentialStorage = nil
@@ -36,6 +38,7 @@ final class ModelMetadataPreflight: Sendable {
             request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
             let response: URLResponse
             do {
+                guard injectedSession || ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
                 (_, response) = try await session.data(for: request, delegate: StopRedirects())
             } catch {
                 if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled {

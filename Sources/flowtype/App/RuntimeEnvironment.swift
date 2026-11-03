@@ -24,7 +24,7 @@ struct RuntimeOptions: Sendable {
     var role: ProcessRole {
         switch mode { case .app: .app; case .selfTest: .selfTest; case .smoke, .artifact: .smokeTest }
     }
-    static let selfTestFilters = ["--m5-runtime-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
+    static let selfTestFilters = ["--m5-runtime-only", "--m5-isolation-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
                                   "--m3-silence-only", "--m3-asr-regression-only", "--m3-delivery-only",
                                   "--m2-review-inspection-only", "--m2-review-packages-only", "--m2-fix-only"]
 

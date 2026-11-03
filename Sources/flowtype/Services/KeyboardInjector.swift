@@ -72,6 +72,7 @@ struct KeyboardInjector {
         let driver: TypingEvents
         if let events { driver = events }
         else {
+            guard ValidationEffects.live.allow(.inputEvent) else { throw InjectionError.eventSourceCreationFailed }
             let source = try UnicodeSource()
             driver = TypingEvents(prepare: { pair in
                 switch pair {
@@ -186,6 +187,9 @@ struct KeyboardInjector {
     /// Capture the frontmost PID before awaiting AX. All synchronous AX IPC runs
     /// off the main actor; total waiting is bounded even for an unresponsive app.
     static func currentDeliveryTarget() async -> DeliveryTargetSnapshot {
+        guard ValidationEffects.live.allow(.foregroundContext) else {
+            return DeliveryTargetSnapshot(pid: nil, signals: FocusSignals(secureInputActive: false, focus: .blindOrUnknown))
+        }
         let pid = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
         let snapshot = await deliveryTarget(pid: pid)
         // Invalidate a sample taken across an app switch, even if the new app
@@ -200,6 +204,9 @@ struct KeyboardInjector {
     }
 
     static func deliveryTarget(pid: Int32?) async -> DeliveryTargetSnapshot {
+        guard ValidationEffects.live.allow(.foregroundContext) else {
+            return DeliveryTargetSnapshot(pid: pid, signals: FocusSignals(secureInputActive: false, focus: .blindOrUnknown))
+        }
         let fallback = DeliveryTargetSnapshot(pid: pid, signals: FocusSignals(secureInputActive: IsSecureEventInputEnabled(), focus: .blindOrUnknown))
         return (try? await withAsyncDeadline(seconds: 0.5) {
             let worker = Task.detached(priority: .utility) { collectDeliveryTarget(pid: pid) }
@@ -266,9 +273,13 @@ struct PasteboardWriteReceipt {
 }
 
 @MainActor final class SystemDeliveryPasteboard: DeliveryPasteboard {
-    private let board = NSPasteboard.general
-    var changeCount: Int { board.changeCount }
+    private var board: NSPasteboard? {
+        guard ValidationEffects.live.allow(.clipboard) else { return nil }
+        return NSPasteboard.general
+    }
+    var changeCount: Int { board?.changeCount ?? 0 }
     func contents() -> PasteboardContents? {
+        guard let board else { return nil }
         guard let items = board.pasteboardItems else { return board.types?.isEmpty != false ? [] : nil }
         var result: PasteboardContents = []
         for item in items {
@@ -282,6 +293,7 @@ struct PasteboardWriteReceipt {
         return result
     }
     func write(_ contents: PasteboardContents) -> PasteboardWriteReceipt? {
+        guard let board else { return nil }
         // Build all items before clearing the shared pasteboard.
         var items: [NSPasteboardItem] = []
         for representations in contents {
@@ -381,7 +393,13 @@ enum PasteTransactionResult: Equatable {
 }
 
 extension KeyboardInjector {
+    @MainActor static func copyText(_ text: String) {
+        guard ValidationEffects.live.allow(.clipboard) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
     @MainActor static func preparePasteDispatch() throws -> (@MainActor () -> Void) {
+        guard ValidationEffects.live.allow(.inputEvent) else { throw InjectionError.eventSourceCreationFailed }
         guard let source = CGEventSource(stateID: .hidSystemState) else { throw InjectionError.eventSourceCreationFailed }
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {

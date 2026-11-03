@@ -9,6 +9,7 @@ final class AXContextProvider: ContextProvider, @unchecked Sendable {
     static let totalTimeout: TimeInterval = 0.5
 
     func collect() async -> ForegroundContext? {
+        guard ValidationEffects.live.allow(.foregroundContext) else { return nil }
         let identity = await MainActor.run {
             let app = NSWorkspace.shared.frontmostApplication
             return (app?.processIdentifier, app?.localizedName)

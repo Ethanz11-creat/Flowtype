@@ -46,7 +46,7 @@ enum WhisperModelPreparation {
         guard components.contains(where: { $0.source.pathExtension == "mlpackage" }) else {
             return PreparedWhisperModels(directory: directory)
         }
-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-whisper-runtime-" + UUID().uuidString)
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-whisper-runtime-" + UUID().uuidString)
         try fm.createDirectory(at: root, withIntermediateDirectories: false)
         let prepared = PreparedWhisperModels(directory: root, ownedDirectory: root)
         for component in components {
@@ -65,6 +65,7 @@ enum WhisperModelPreparation {
     }
 
     static func compilePackage(_ source: URL, _ destination: URL) throws {
+        guard ValidationEffects.live.allow(.modelLoad) else { throw OfflineWhisperError.invalidLocalDirectory }
         let compiled = try MLModel.compileModel(at: source)
         defer { try? FileManager.default.removeItem(at: compiled) }
         try FileManager.default.moveItem(at: compiled, to: destination)

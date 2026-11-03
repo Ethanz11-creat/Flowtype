@@ -246,7 +246,7 @@ func routingInputs(from snapshot: RouterHealthSnapshot,
 
 /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
 final class ASRRouter: @unchecked Sendable {
-    static let shared = ASRRouter()
+    static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
 
     private let health = OSAllocatedUnfairLock(initialState: RouterHealthSnapshot())
     private let monitor = NWPathMonitor()
@@ -277,7 +277,7 @@ final class ASRRouter: @unchecked Sendable {
         self.localLease = localLease
         self.uptimeNanoseconds = uptimeNanoseconds
         self.measureProbe = measureProbe
-        guard startMonitoring else { return }
+        guard startMonitoring, ValidationEffects.live.allow(.pathMonitor) else { return }
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
             let current = Self.signature(for: path)
@@ -323,6 +323,7 @@ final class ASRRouter: @unchecked Sendable {
     /// `@MainActor`：`probeTimer` 的 check-and-set 因此串行化（唯一调用点本就在 MainActor 上）。
     @MainActor
     func startProbing() {
+        guard RuntimeEnvironment.current.role == .app else { return }
         guard probeTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: probeQueue)
         timer.schedule(deadline: .now() + ASRRouterProbeConfig.firstDelay,

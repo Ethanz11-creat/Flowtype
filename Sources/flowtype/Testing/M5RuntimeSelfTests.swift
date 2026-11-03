@@ -26,7 +26,7 @@ enum M5RuntimeSelfTests {
     }
 
     private static func fixtureTemporaryDirectory() throws -> URL {
-        guard let resolved = realpath(FileManager.default.temporaryDirectory.path, nil) else {
+        guard let resolved = realpath(RuntimeEnvironment.current.paths.temporaryDirectory.path, nil) else {
             throw RuntimeBootstrapError.rootPreparation
         }
         defer { free(resolved) }

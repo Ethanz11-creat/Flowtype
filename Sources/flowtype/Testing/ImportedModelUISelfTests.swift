@@ -4,7 +4,7 @@ import Foundation
 enum ImportedModelUISelfTests {
     @MainActor
     static func run(_ r: SelfTest.Reporter) async {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-import-ui-\(UUID())")
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-import-ui-\(UUID())")
         let suite = "flowtype-import-ui-\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.set(5, forKey: "flowtype.migrationVersion")

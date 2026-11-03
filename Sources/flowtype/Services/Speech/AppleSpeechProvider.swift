@@ -63,6 +63,7 @@ final class AppleSpeechProvider: @unchecked Sendable {
     /// Encodes them to a WAV container, writes to a temp file, then uses
     /// `SFSpeechURLRecognitionRequest` with on-device recognition.
     func transcribe(audioData: Data, timeout: TimeInterval = 20) async throws -> String {
+        guard ValidationEffects.live.allow(.modelLoad) else { throw SpeechProviderError.notAvailable }
         refreshRecognizerIfNeeded()
         guard let recognizer = recognizer,
               recognizer.isAvailable,
@@ -79,7 +80,7 @@ final class AppleSpeechProvider: @unchecked Sendable {
             throw SpeechProviderError.transcriptionFailed("空音频数据")
         }
 
-        let tmpDir = FileManager.default.temporaryDirectory
+        let tmpDir = RuntimeEnvironment.current.paths.temporaryDirectory
         let tmpFile = tmpDir.appendingPathComponent("flowtype_apple_speech_\(UUID().uuidString).wav")
         try wavData.write(to: tmpFile)
         // §10 audio-never-persists: this is the ONLY audio FlowType ever writes to disk. The defer fires on
@@ -127,6 +128,7 @@ final class AppleSpeechProvider: @unchecked Sendable {
     // MARK: - Real-time Streaming Recognition (for preview during recording)
 
     func startStreamingRecognition() async -> AsyncStream<String> {
+        guard ValidationEffects.live.allow(.permissionRequest) else { return AsyncStream { $0.finish() } }
         refreshRecognizerIfNeeded()
         stateLock.withLock { $0.finalResult = "" }
 

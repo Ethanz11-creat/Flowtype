@@ -105,9 +105,7 @@ final class AppDatabase: @unchecked Sendable {
 
 /// App-wide singleton: opens the on-disk DB and runs the one-time JSON migration before any store reads.
 enum AppDatabaseProvider {
-    static let dir: URL = FileManager.default
-        .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        .appendingPathComponent("FlowType", isDirectory: true)
+    static let dir: URL = RuntimeEnvironment.current.paths.applicationSupportDirectory
 
     static let shared: AppDatabase = {
         let db = AppDatabase.make(at: dir)

@@ -154,7 +154,7 @@ enum ModelProvisionSelfTests {
 
     private static func testIdentity(_ r: SelfTest.Reporter) {
         let fm = FileManager.default
-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-preflight-\(UUID())")
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preflight-\(UUID())")
         defer { try? fm.removeItem(at: root) }
         let legacy = root.appendingPathComponent("qwen3-speech/aufklarer_Qwen3-ASR-0.6B-MLX-4bit")
         do {

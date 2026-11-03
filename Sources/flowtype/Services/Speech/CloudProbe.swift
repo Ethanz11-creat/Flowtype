@@ -19,7 +19,8 @@ enum CloudProbe {
 
     /// 对主机做一次 TLS 握手计时（毫秒）。超时或失败返回 nil。
     static func measureLatency(host: String, port: UInt16, timeout: TimeInterval = 2.0) async -> Double? {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Double?, Never>) in
+        guard ValidationEffects.live.allow(.network) else { return nil }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Double?, Never>) in
             let box = SingleResumeBox<Double?>()
             box.setContinuation(continuation)
 

@@ -16,15 +16,16 @@ import GRDB
 /// System/hardware/visible UI behaviours are verified manually, not here.
 enum SelfTest {
 
-    final class Reporter {
-        private(set) var passed = 0
-        private(set) var failed = 0
+    final class Reporter: Sendable {
+        private let counts = OSAllocatedUnfairLock(initialState: (passed: 0, failed: 0))
+        var passed: Int { counts.withLock { $0.passed } }
+        var failed: Int { counts.withLock { $0.failed } }
 
         func check(_ cond: Bool, _ msg: String) {
             if cond {
-                passed += 1
+                counts.withLock { $0.passed += 1 }
             } else {
-                failed += 1
+                counts.withLock { $0.failed += 1 }
                 FileHandle.standardError.write(Data("  ✗ FAIL: \(msg)\n".utf8))
             }
         }
@@ -32,6 +33,12 @@ enum SelfTest {
         func eq<T: Equatable>(_ got: T, _ want: T, _ msg: String) {
             check(got == want, "\(msg) — got \(String(describing: got)), want \(String(describing: want))")
         }
+    }
+
+    @MainActor
+    private static func finish(_ r: Reporter) -> Never {
+        RuntimeEnvironment.finishValidation()
+        exit(r.failed == 0 ? 0 : 1)
     }
 
     // MARK: - PolishMode: 2 modes (raw/polish) + legacy-record migration
@@ -151,7 +158,7 @@ enum SelfTest {
 
     static func testModelLocator(_ r: Reporter) {
         let fm = FileManager.default
-        let dir = fm.temporaryDirectory.appendingPathComponent("flowtype-modeltest-\(UUID().uuidString)")
+        let dir = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-modeltest-\(UUID().uuidString)")
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: dir) }
         func write(_ name: String, _ bytes: Int) {
@@ -281,37 +288,41 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m5-isolation-only") {
+            await M5IsolationSelfTests.run(r)
+            print("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--m5-runtime-only") {
             await M5RuntimeSelfTests.run(r)
-            RuntimeEnvironment.finishValidation()
             print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m4-recovery-only") {
             M4RecoveryPolicySelfTests.run(r)
             await M4StageFailureSelfTests.run(r)
             await M4RecoveryControllerSelfTests.run(r)
             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
             await M3SpeechPreflightSelfTests.benchmark(r)
             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m3-silence-only") {
             M3SpeechPreflightSelfTests.pure(r)
             await M3SpeechPreflightSelfTests.background(r)
             await M3SpeechPreflightSelfTests.integration(r)
             print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m3-asr-regression-only") {
             await testRealtimePipelineIntegration(r)
             await ImportedLifecycleSelfTests.run(r)
             await ModelProvisionSelfTests.runPresentationAndRouting(r)
             print("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m3-delivery-only") {
             M3DeliverySelfTests.policy(r)
@@ -319,18 +330,18 @@ enum SelfTest {
             await M3DeliverySelfTests.presentation(r)
             await M3FinalFixSelfTests.run(r)
             print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m2-review-inspection-only") {
             await M2ReviewFixSelfTests.inspection(r)
             print("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m2-review-packages-only") {
             await M2ReviewFixSelfTests.packages(r)
             await M2ReviewFixSelfTests.compilationLifecycle(r)
             print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
         if CommandLine.arguments.contains("--m2-fix-only") {
             LocalModelImportSelfTests.runInspection(r)
@@ -338,8 +349,10 @@ enum SelfTest {
             await WholeM2FixSelfTests.runRetry(r)
             await WholeM2FixSelfTests.runGraphAdmission(r)
             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
-            exit(r.failed == 0 ? 0 : 1)
+            finish(r)
         }
+        await M5RuntimeSelfTests.run(r)
+        await M5IsolationSelfTests.run(r)
         testLLMURL(r)            // B1
         testSSEParse(r)          // B8
         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
@@ -468,8 +481,9 @@ enum SelfTest {
         M4RecoveryPolicySelfTests.run(r)
         await M4StageFailureSelfTests.run(r)
         await M4RecoveryControllerSelfTests.run(r)
+        M5IsolationSelfTests.checkEffectBudget(r)
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
-        exit(r.failed == 0 ? 0 : 1)
+        finish(r)
     }
 
     private final class DeliveryLog: @unchecked Sendable {
@@ -2281,7 +2295,7 @@ enum SelfTest {
     // MARK: - B9: corrupt persisted config is backed up, not silently discarded
 
     static func testConfigCorrupt(_ r: Reporter) {
-        let tmp = FileManager.default.temporaryDirectory
+        let tmp = RuntimeEnvironment.current.paths.temporaryDirectory
             .appendingPathComponent("flowtype-selftest-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
@@ -2303,7 +2317,7 @@ enum SelfTest {
 
         // First launch (no data) -> default, and NO spurious backup.
         let suite2 = "FlowTypeSelfTest.\(UUID().uuidString)"
-        let tmp2 = FileManager.default.temporaryDirectory
+        let tmp2 = RuntimeEnvironment.current.paths.temporaryDirectory
             .appendingPathComponent("flowtype-selftest-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: tmp2, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp2) }
@@ -3576,7 +3590,7 @@ enum SelfTest {
 
     static func testCustomModelScanner(_ r: Reporter) {
         let fm = FileManager.default
-        let base = fm.temporaryDirectory.appendingPathComponent("flowtype-scannertest-\(UUID().uuidString)", isDirectory: true)
+        let base = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-scannertest-\(UUID().uuidString)", isDirectory: true)
         try? fm.createDirectory(at: base, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: base) }
 

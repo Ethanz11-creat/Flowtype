@@ -18,8 +18,5 @@ struct RecoveryEffects {
         openSpeechRecognitionSettings: { PermissionHelper.openSpeechRecognitionSettings() },
         openASRSettings: { StatusBarController.shared.openSettings(tab: .settings) },
         openHistory: { StatusBarController.shared.openSettings(tab: .history) },
-        copyText: {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString($0, forType: .string)
-        })
+        copyText: { KeyboardInjector.copyText($0) })
 }

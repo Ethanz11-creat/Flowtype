@@ -3,6 +3,12 @@ import Security
 
 enum KeychainHelper {
     private static let service = "com.flowtype.app"
+    private static let access = KeychainAccess.guarded(role: RuntimeEnvironment.current.role,
+        system: KeychainAccess(save: systemSave, load: systemLoad, delete: systemDelete), effects: .live)
+
+    static func save(key: String, value: String) -> Bool { access.save(key, value) }
+    static func load(key: String) -> String? { access.load(key) }
+    static func delete(key: String) { access.delete(key) }
 
     /// Traditional (file-based) keychain. We deliberately do NOT set kSecUseDataProtectionKeychain:
     /// the data-protection keychain needs a keychain-access entitlement we don't have when distributing
@@ -15,7 +21,7 @@ enum KeychainHelper {
         ]
     }
 
-    static func save(key: String, value: String) -> Bool {
+    private static func systemSave(key: String, value: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
 
         var deleteQuery = baseQuery
@@ -35,7 +41,7 @@ enum KeychainHelper {
         return status == errSecSuccess
     }
 
-    static func load(key: String) -> String? {
+    private static func systemLoad(key: String) -> String? {
         var query = baseQuery
         query[kSecAttrAccount as String] = key
         query[kSecReturnData as String] = true
@@ -50,7 +56,7 @@ enum KeychainHelper {
         return String(data: data, encoding: .utf8)
     }
 
-    static func delete(key: String) {
+    private static func systemDelete(key: String) {
         var query = baseQuery
         query[kSecAttrAccount as String] = key
         SecItemDelete(query as CFDictionary)

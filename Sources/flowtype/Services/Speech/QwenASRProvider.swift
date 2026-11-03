@@ -91,6 +91,7 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
         offlineMode: Bool = false,
         progressHandler: ((Double, String) -> Void)? = nil
     ) async throws {
+        guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
         AppLogger.log("[QwenASR] Loading model: \(modelId) offline=\(offlineMode) cacheDir=\(cacheDir?.path ?? "default")")
         let loaded = try await Self.withProvisionErrors {
             try await Qwen3ASRModel.fromPretrained(
