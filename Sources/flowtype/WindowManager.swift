@@ -88,14 +88,17 @@ class WindowManager: ObservableObject {
     private var eventTapPort: CFMachPort?
     private var eventTapRunLoopSource: CFRunLoopSource?
     private var eventTapFailureCount = 0
-    private var healthTimerStarted = false
+    private(set) var windowHealthTicks = 0
+    private var healthGeneration: UUID?
+    private let actionGate: ValidationActionGate
+    private let actionEffects: ((ValidationAction) -> Void)?
     private var lastHealthAction: EventTapHealthAction = .none
     private var reloadWorkItem: DispatchWorkItem?
     private var lastPanelPresentationLogs: [String: String] = [:]
 
     /// Periodic timer to ensure the CGEvent tap stays enabled after system events.
-    private var eventTapHealthTimer = CancellableTimer()
-    private let eventTapHealthInterval: TimeInterval = 5.0
+    private var eventTapHealthTimer: DispatchSourceTimer?
+    private let eventTapHealthInterval: TimeInterval
 
     /// Current trigger key from configuration
     private var triggerKey: TriggerKey { ConfigurationStore.shared.current.triggerKey }
@@ -140,7 +143,9 @@ class WindowManager: ObservableObject {
         }
     }
 
-    init() {
+    init(eventTapHealthInterval: TimeInterval = 5, panelFactory: (() -> FloatingPanel?)? = nil, actionGate: ValidationActionGate = .live, actionEffects: ((ValidationAction) -> Void)? = nil) {
+        self.eventTapHealthInterval = eventTapHealthInterval; self.actionGate = actionGate; self.actionEffects = actionEffects
+        if let panelFactory { panel = panelFactory(); return }
         let view = AnyView(
             CapsuleView()
                 .environmentObject(SessionController.shared)
@@ -168,6 +173,8 @@ class WindowManager: ObservableObject {
     }
 
     func setupGlobalHotkey() {
+        guard actionGate.allow(.tapInstall) else { return }
+        if let actionEffects { actionEffects(.tapInstall); return }
         guard ValidationEffects.live.allow(.inputEvent) else { return }
         AppLogger.log("[WindowManager] setupGlobalHotkey called")
         let accessibilityEnabled = PermissionHelper.checkAccessibility()
@@ -185,6 +192,8 @@ class WindowManager: ObservableObject {
     }
 
     func reloadHotkey() {
+        guard actionGate.allow(.configuration) else { return }
+        if let actionEffects { actionEffects(.configuration); return }
         guard ValidationEffects.live.allow(.inputEvent) else { return }
         AppLogger.log("[WindowManager] Queuing debounced hotkey reload...")
         reloadWorkItem?.cancel()
@@ -208,20 +217,45 @@ class WindowManager: ObservableObject {
     }
 
     private func startEventTapHealthCheck() {
-        guard !healthTimerStarted else { return }
-        healthTimerStarted = true
-        eventTapHealthTimer.schedule(
-            withTimeInterval: eventTapHealthInterval,
-            repeats: true
-        ) { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
+        guard eventTapHealthTimer == nil else { return }
+        let generation = UUID()
+        healthGeneration = generation
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + eventTapHealthInterval, repeating: eventTapHealthInterval)
+        timer.setEventHandler { @Sendable [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.healthGeneration == generation else { return }
+                self.windowHealthTicks += 1
                 self.repairEventTap()
             }
         }
+        eventTapHealthTimer = timer
+        timer.resume()
+    }
+
+    func startValidationHealthCheck() {
+        guard RuntimeEnvironment.current.role != .app else { return }
+        startEventTapHealthCheck()
+    }
+
+    func stopValidationHealthCheck() {
+        healthGeneration = nil
+        eventTapHealthTimer?.setEventHandler {}
+        eventTapHealthTimer?.cancel()
+        eventTapHealthTimer = nil
+    }
+
+    func finishValidation() {
+        guard RuntimeEnvironment.current.role != .app else { return }
+        stopValidationHealthCheck()
+        reloadWorkItem?.cancel()
+        OptionTapDetector.shared.cancelPendingTaps()
+        panel?.close(); panel = nil
     }
 
     func repairEventTap() {
+        guard actionGate.allow(.tapRepair) else { return }
+        if let actionEffects { actionEffects(.tapRepair); return }
         guard ValidationEffects.live.allow(.inputEvent) else { return }
         // An installed tap is stronger evidence than a trust query for unsigned
         // apps. Only probe permission when there is no tap to repair.
@@ -260,6 +294,8 @@ class WindowManager: ObservableObject {
 
     @discardableResult
     func installEventTap() -> Bool {
+        guard actionGate.allow(.tapInstall) else { return false }
+        if let actionEffects { actionEffects(.tapInstall); return true }
         guard ValidationEffects.live.allow(.inputEvent) else { return false }
         guard eventTapPort == nil else { return true }
         let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
@@ -302,6 +338,7 @@ class WindowManager: ObservableObject {
     /// CGEventTap callback — runs on the main thread since source is added to main RunLoop.
     /// MainActor.assumeIsolated routes session actions synchronously on this main-runloop callback.
     private static let eventTapCallback: CGEventTapCallBack = { proxy, type, event, refcon in
+        guard RuntimeEnvironment.current.role == .app else { return Unmanaged.passUnretained(event) }
         // Security: enforce that callback runs on main thread (all cached values are main-thread-only)
         dispatchPrecondition(condition: .onQueue(.main))
 
@@ -445,7 +482,9 @@ class WindowManager: ObservableObject {
 
     // MARK: - Tap Handlers
 
-    private func handleDoubleTap() {
+    func handleDoubleTap() {
+        guard actionGate.allow(.hotkey) else { return }
+        if let actionEffects { actionEffects(.hotkey); return }
         let controller = SessionController.shared
         // Double-tap belongs exclusively to idle start detection. An active release
         // already stopped synchronously and cannot change the polish policy.
@@ -455,7 +494,9 @@ class WindowManager: ObservableObject {
         }
     }
 
-    private func handleSingleTap() {
+    func handleSingleTap() {
+        guard actionGate.allow(.hotkey) else { return }
+        if let actionEffects { actionEffects(.hotkey); return }
         let controller = SessionController.shared
         switch controller.sessionState {
         case .preparing, .recording:

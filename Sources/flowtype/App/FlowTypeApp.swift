@@ -19,7 +19,23 @@ enum FlowTypeMain {
                 switch context.mode {
                 case .selfTest:
                     await SelfTest.runAndExit()
-                case .smoke, .artifact:
+                case .smoke:
+                    let report = await StartupSmoke.run(context: context)
+                    do {
+                        let data = try JSONEncoder().encode(report)
+                        AppLogger.log(String(decoding: data, as: UTF8.self))
+                        RuntimeEnvironment.finishValidation()
+                        AppLogger.flush()
+                        FileHandle.standardOutput.write(data + Data("\n".utf8))
+                        exit(report.exitCode)
+                    } catch {
+                        RuntimeEnvironment.finishValidation()
+                        AppLogger.flush()
+                        FileHandle.standardError.write(Data("FlowType: validation report encoding failed\n".utf8))
+                        exit(1)
+                    }
+                case .artifact:
+
                     RuntimeEnvironment.finishValidation()
                     AppLogger.flush()
                     FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))

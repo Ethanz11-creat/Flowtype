@@ -252,6 +252,12 @@ final class ASRRouter: @unchecked Sendable {
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "flowtype.asr-router.path")
 
+    private struct TimerEvidence { var ticks = 0; var generation: UUID? }
+    private let timerEvidence = OSAllocatedUnfairLock(initialState: TimerEvidence())
+    var probeTimerTicks: Int { timerEvidence.withLock { $0.ticks } }
+    private let probeFirstDelay: TimeInterval
+    private let probeInterval: TimeInterval
+    private let role: ProcessRole
     private var probeTimer: DispatchSourceTimer?
     private let probeQueue = DispatchQueue(label: "flowtype.asr-router.probe")
     /// 探测是否正在进行，防止链路抖动时重叠刷新。
@@ -269,9 +275,12 @@ final class ASRRouter: @unchecked Sendable {
          localAvailable: @escaping @MainActor @Sendable () -> Bool = { QwenModelState.shared.activeLease != nil },
          localLease: @escaping @MainActor @Sendable () -> LocalASRLease? = { QwenModelState.shared.activeLease },
          uptimeNanoseconds: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
+         probeFirstDelay: TimeInterval = ASRRouterProbeConfig.firstDelay,
+         probeInterval: TimeInterval = ASRRouterProbeConfig.interval, role: ProcessRole = RuntimeEnvironment.current.role,
          measureProbe: @escaping @Sendable (String, UInt16, TimeInterval) async -> Double? = {
              await CloudProbe.measureLatency(host: $0, port: $1, timeout: $2)
          }) {
+        self.probeFirstDelay = probeFirstDelay; self.probeInterval = probeInterval; self.role = role
         self.configuration = configuration
         self.localAvailable = localAvailable
         self.localLease = localLease
@@ -323,21 +332,43 @@ final class ASRRouter: @unchecked Sendable {
     /// `@MainActor`：`probeTimer` 的 check-and-set 因此串行化（唯一调用点本就在 MainActor 上）。
     @MainActor
     func startProbing() {
-        guard RuntimeEnvironment.current.role == .app else { return }
+        guard role != .selfTest else { return }
         guard probeTimer == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: probeQueue)
-        timer.schedule(deadline: .now() + ASRRouterProbeConfig.firstDelay,
-                       repeating: ASRRouterProbeConfig.interval)
+        timer.schedule(deadline: .now() + probeFirstDelay,
+                       repeating: probeInterval)
         // Must be explicitly `@Sendable`: an unannotated closure formed in this `@MainActor`
         // method would inherit MainActor isolation, then the first tick on `probeQueue`
         // trips Swift 6's executor assertion (dispatch_assert_queue_fail → SIGTRAP).
-        timer.setEventHandler { @Sendable in
-            Task { await ASRRouter.shared.refreshProbeIfNeeded() }
+        let generation = UUID()
+        timerEvidence.withLock { $0.generation = generation }
+        timer.setEventHandler { @Sendable [weak self] in
+            guard let self else { return }
+            let active = self.timerEvidence.withLock { state in
+                guard state.generation == generation else { return false }
+                state.ticks += 1
+                return true
+            }
+            guard active else { return }
+            Task { [weak self] in
+                guard let self, self.timerEvidence.withLock({ $0.generation == generation }) else { return }
+                await self.refreshProbeIfNeeded()
+            }
         }
         timer.resume()
         probeTimer = timer
         AppLogger.log("[ASRRouter] cloud probe started (interval \(Int(ASRRouterProbeConfig.interval))s)")
     }
+
+    @MainActor
+    func stopProbing() {
+        timerEvidence.withLock { $0.generation = nil }
+        probeTimer?.setEventHandler {}
+        probeTimer?.cancel()
+        probeTimer = nil
+    }
+
+    deinit { probeTimer?.cancel(); monitor.cancel() }
 
     /// 按需刷新探测样本。仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
     func refreshProbeIfNeeded(force: Bool = false) async {

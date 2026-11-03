@@ -9,10 +9,11 @@ final class DictationMenuController: NSObject {
 
     let item: NSMenuItem
     private let session: SessionController
+    private let actionGate: ValidationActionGate
     private var sessionCancellable: AnyCancellable?
 
-    init(session: SessionController) {
-        self.session = session
+    init(session: SessionController, actionGate: ValidationActionGate = .live) {
+        self.session = session; self.actionGate = actionGate
         item = NSMenuItem(title: "", action: #selector(activate(_:)), keyEquivalent: "")
         super.init()
         item.target = self
@@ -26,7 +27,7 @@ final class DictationMenuController: NSObject {
 
     func refresh(for state: SessionState) {
         item.title = StatusBarController.dictationMenuTitle(for: state)
-        item.isEnabled = StatusBarController.dictationMenuEnabled(for: state)
+        item.isEnabled = actionGate.isApp && StatusBarController.dictationMenuEnabled(for: state)
         switch state {
         case .preparing, .recording: item.tag = Command.stop.rawValue
         case .idle, .notice, .error: item.tag = Command.start.rawValue
@@ -35,6 +36,7 @@ final class DictationMenuController: NSObject {
     }
 
     @objc private func activate(_ sender: NSMenuItem) {
+        guard actionGate.allow(.dictation) else { return }
         guard sender.isEnabled, let command = Command(rawValue: sender.tag) else { return }
         // Dispatch the presented command, then validate against the live session.
         // A queued Stop selection must never turn into Start after capture ends.
@@ -60,11 +62,17 @@ class StatusBarController: NSObject, NSMenuDelegate {
     private var lastDeliveryMenuController: LastDeliveryMenuController?
     private var originalStatusImage: NSImage?
 
-    private override init() {
+    var isConfigured: Bool { statusItem?.button != nil && statusItem?.menu != nil }
+
+    private let actionGate: ValidationActionGate
+    private let actionEffects: ((ValidationAction) -> Void)?
+    init(actionGate: ValidationActionGate = .live, actionEffects: ((ValidationAction) -> Void)? = nil) {
+        self.actionGate = actionGate; self.actionEffects = actionEffects
         super.init()
     }
 
     func setup() {
+        guard statusItem == nil else { return }
         let statusBar = NSStatusBar.system
         statusItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -206,19 +214,35 @@ class StatusBarController: NSObject, NSMenuDelegate {
         quitItem.target = self
         menu.addItem(quitItem)
 
+        if !actionGate.isApp { for item in menu.items where item.action != nil { item.isEnabled = false } }
         statusItem?.menu = menu
     }
 
+    func finishValidation() {
+        guard RuntimeEnvironment.current.role != .app else { return }
+        sessionCancellable = nil; readinessCancellable = nil
+        dictationMenuController = nil; lastDeliveryMenuController = nil
+        statusItem?.menu?.delegate = nil
+        if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+        statusItem = nil
+    }
+
     @objc private func showMenu() {
+        guard actionGate.allow(.menuWindow) else { return }
+        if let actionEffects { actionEffects(.menuWindow); return }
         guard let button = statusItem?.button else { return }
         statusItem?.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
     }
 
     @objc private func showSettings() {
+        guard actionGate.allow(.menuWindow) else { return }
+        if let actionEffects { actionEffects(.menuWindow); return }
         openSettings(tab: .settings)
     }
 
     func openSettings(tab: AppTab = .settings) {
+        guard actionGate.allow(.menuWindow) else { return }
+        if let actionEffects { actionEffects(.menuWindow); return }
         guard ValidationEffects.live.allow(.window) else { return }
         if settingsWindowController == nil {
             let controller = SettingsWindowController(initialTab: tab)
@@ -233,6 +257,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func showAbout() {
+        guard actionGate.allow(.menuWindow) else { return }
+        if let actionEffects { actionEffects(.menuWindow); return }
         guard RuntimeEnvironment.current.role == .app else { return }
         let alert = NSAlert()
         alert.messageText = "关于 FlowType"
@@ -242,6 +268,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func openLogs() {
+        guard actionGate.allow(.menuWindow) else { return }
+        if let actionEffects { actionEffects(.menuWindow); return }
         AppLogger.openLogInFinder()
     }
 
@@ -258,7 +286,7 @@ class StatusBarController: NSObject, NSMenuDelegate {
         let monitor = ReadinessMonitor.shared
         statusMenuItem?.title = readinessMenuTitle(monitor.snapshot)
         switch monitor.rawLevel {
-        case .blocked, .degraded(.accessibilityMissing): statusMenuItem?.isEnabled = true
+        case .blocked, .degraded(.accessibilityMissing): statusMenuItem?.isEnabled = actionGate.isApp
         default: statusMenuItem?.isEnabled = false
         }
         let state = SessionController.shared.sessionState
@@ -267,6 +295,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func repairReadiness() {
+        guard actionGate.allow(.repair) else { return }
+        if let actionEffects { actionEffects(.repair); return }
         let monitor = ReadinessMonitor.shared
         monitor.refresh()
         switch monitor.rawLevel {
@@ -283,6 +313,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func reloadConfiguration() {
+        guard actionGate.allow(.configuration) else { return }
+        if let actionEffects { actionEffects(.configuration); return }
         let defaultsKey = "flowtype.config"
         if let data = RuntimeEnvironment.defaults.data(forKey: defaultsKey),
            let config = try? JSONDecoder().decode(Configuration.self, from: data) {
@@ -300,6 +332,8 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func checkPermissions() {
+        guard actionGate.allow(.permission) else { return }
+        if let actionEffects { actionEffects(.permission); return }
         let monitor = ReadinessMonitor.shared
         monitor.refresh()
         WindowManager.shared.repairEventTap()
@@ -308,10 +342,14 @@ class StatusBarController: NSObject, NSMenuDelegate {
     }
 
     @objc private func quit() {
+        guard actionGate.allow(.quit) else { return }
+        if let actionEffects { actionEffects(.quit); return }
         NSApp.terminate(nil)
     }
 
     @objc private func showOnboarding() {
+        guard actionGate.allow(.menuWindow) else { return }
+        if let actionEffects { actionEffects(.menuWindow); return }
         if onboardingWindowController == nil {
             let controller = OnboardingWindowController()
             controller.onClose = { [weak self] in

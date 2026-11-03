@@ -289,7 +289,15 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m5-smoke-contract-only") {
+            await M5SmokeSelfTests.run(r)
+            AppLogger.log("=== M5 smoke contract self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
+            print("=== M5 smoke contract self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--m5-buildinfo-only") {
+
             await M5BuildInfoSelfTests.run(r)
             AppLogger.log("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
             AppLogger.flush()
@@ -382,6 +390,7 @@ enum SelfTest {
         await M5RuntimeSelfTests.run(r)
         await M5IsolationSelfTests.run(r)
         await M5BuildInfoSelfTests.run(r)
+        await M5SmokeSelfTests.run(r)
         testLLMURL(r)            // B1
         testSSEParse(r)          // B8
         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
@@ -1897,7 +1906,7 @@ enum SelfTest {
                                         observers: [probe],
                                         effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
                                         readinessLevel: { .ready })
-        let menu = DictationMenuController(session: session)
+        let menu = DictationMenuController(session: session, actionGate: ValidationActionGate(role: .app))
         let staleStart = menu.item.copy() as! NSMenuItem
         click(menu.item)
         r.eq(session.sessionState, .preparing, "menu dispatch: displayed Start begins capture preparation")
@@ -1930,7 +1939,7 @@ enum SelfTest {
         let second = SessionController(pipeline: [SuspensibleStage(rendezvous: secondStage, suspend: true)], observers: [],
                                        effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}),
                                        readinessLevel: { .ready })
-        let secondMenu = DictationMenuController(session: second)
+        let secondMenu = DictationMenuController(session: second, actionGate: ValidationActionGate(role: .app))
         second.startRecording()
         await secondStage.waitForInvocation()
         // Keep the original item's target/action, but dispatch against this session.
