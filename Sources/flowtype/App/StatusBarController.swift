@@ -176,6 +176,10 @@ class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        let aboutItem = NSMenuItem(title: "关于 FlowType", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+
         let viewLogsItem = NSMenuItem(title: "查看日志...", action: #selector(openLogs), keyEquivalent: "")
         viewLogsItem.target = self
         menu.addItem(viewLogsItem)
@@ -226,6 +230,15 @@ class StatusBarController: NSObject, NSMenuDelegate {
         settingsWindowController?.selectTab(tab)
         settingsWindowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func showAbout() {
+        guard RuntimeEnvironment.current.role == .app else { return }
+        let alert = NSAlert()
+        alert.messageText = "关于 FlowType"
+        alert.informativeText = AppLogger.identity.aboutDescription
+        alert.addButton(withTitle: "好")
+        alert.runModal()
     }
 
     @objc private func openLogs() {

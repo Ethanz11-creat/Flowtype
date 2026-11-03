@@ -37,6 +37,7 @@ enum SelfTest {
 
     @MainActor
     private static func finish(_ r: Reporter) -> Never {
+        AppLogger.flush()
         RuntimeEnvironment.finishValidation()
         exit(r.failed == 0 ? 0 : 1)
     }
@@ -288,13 +289,24 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m5-buildinfo-only") {
+            await M5BuildInfoSelfTests.run(r)
+            AppLogger.log("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
+            print("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--m5-isolation-only") {
             await M5IsolationSelfTests.run(r)
+            AppLogger.log("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
         if CommandLine.arguments.contains("--m5-runtime-only") {
             await M5RuntimeSelfTests.run(r)
+            AppLogger.log("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -302,11 +314,15 @@ enum SelfTest {
             M4RecoveryPolicySelfTests.run(r)
             await M4StageFailureSelfTests.run(r)
             await M4RecoveryControllerSelfTests.run(r)
+            AppLogger.log("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
             await M3SpeechPreflightSelfTests.benchmark(r)
+            AppLogger.log("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -314,6 +330,8 @@ enum SelfTest {
             M3SpeechPreflightSelfTests.pure(r)
             await M3SpeechPreflightSelfTests.background(r)
             await M3SpeechPreflightSelfTests.integration(r)
+            AppLogger.log("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -321,6 +339,8 @@ enum SelfTest {
             await testRealtimePipelineIntegration(r)
             await ImportedLifecycleSelfTests.run(r)
             await ModelProvisionSelfTests.runPresentationAndRouting(r)
+            AppLogger.log("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -329,17 +349,23 @@ enum SelfTest {
             await M3DeliverySelfTests.runtime(r)
             await M3DeliverySelfTests.presentation(r)
             await M3FinalFixSelfTests.run(r)
+            AppLogger.log("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
         if CommandLine.arguments.contains("--m2-review-inspection-only") {
             await M2ReviewFixSelfTests.inspection(r)
+            AppLogger.log("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
         if CommandLine.arguments.contains("--m2-review-packages-only") {
             await M2ReviewFixSelfTests.packages(r)
             await M2ReviewFixSelfTests.compilationLifecycle(r)
+            AppLogger.log("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -348,11 +374,14 @@ enum SelfTest {
             await WhisperRuntimeSelfTests.run(r)
             await WholeM2FixSelfTests.runRetry(r)
             await WholeM2FixSelfTests.runGraphAdmission(r)
+            AppLogger.log("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+            AppLogger.flush()
             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
         await M5RuntimeSelfTests.run(r)
         await M5IsolationSelfTests.run(r)
+        await M5BuildInfoSelfTests.run(r)
         testLLMURL(r)            // B1
         testSSEParse(r)          // B8
         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
@@ -482,6 +511,8 @@ enum SelfTest {
         await M4StageFailureSelfTests.run(r)
         await M4RecoveryControllerSelfTests.run(r)
         M5IsolationSelfTests.checkEffectBudget(r)
+        AppLogger.log("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
+        AppLogger.flush()
         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
         finish(r)
     }

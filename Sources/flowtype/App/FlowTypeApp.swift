@@ -9,11 +9,19 @@ enum FlowTypeMain {
         do {
             try await RuntimeEnvironment.run(arguments: CommandLine.arguments,
                                              temporaryDirectory: FileManager.default.temporaryDirectory) { context in
+                do { try AppLogger.configure(context: context, identity: BuildInfo.load(bundle: .main)) }
+                catch {
+                    RuntimeEnvironment.finishValidation()
+                    FileHandle.standardError.write(Data("FlowType: diagnostic logger configuration failed\n".utf8))
+                    AppLogger.flush()
+                    exit(1)
+                }
                 switch context.mode {
                 case .selfTest:
                     await SelfTest.runAndExit()
                 case .smoke, .artifact:
                     RuntimeEnvironment.finishValidation()
+                    AppLogger.flush()
                     FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))
                     exit(1)
                 case .app:
@@ -21,6 +29,7 @@ enum FlowTypeMain {
                 }
             }
         } catch {
+            AppLogger.flush()
             let failure = (error as? RuntimeBootstrapError) ?? .rootPreparation
             FileHandle.standardError.write(Data("FlowType: runtime bootstrap \(failure.rawValue)\n".utf8))
             exit(failure.exitCode)
@@ -109,6 +118,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // sentinel-based static restore covers it (no-op when nothing was overridden).
         AudioRecorder.restorePendingDeviceIfNeeded()
         AppLogger.log("[AppDelegate] App will terminate")
+        AppLogger.flush()
     }
 
     @MainActor

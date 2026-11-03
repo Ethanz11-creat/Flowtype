@@ -276,6 +276,8 @@ swift run FlowType --self-test
 
 This runs 25+ tests covering configuration migration, injection decisions, appearance, model config, download sources, model locator, stats engine, database schema, SSE parsing, spectrum math, and FFT correctness.
 
+Automatic tests use synthetic inputs and a separate run directory. Pass `--validation-root /absolute/empty/directory` to retain its evidence, or use `--m5-buildinfo-only` with `--self-test` for identity/logging checks. Each run writes `Logs/diagnostic-selftest.log` with a synchronous identity header, UTC timestamps, role/run ID, and a flushed summary. Effect counters verify guarded code boundaries; they are not an OS sandbox. Existing free-text diagnostics are not comprehensively redacted, so automated runs must keep using synthetic inputs.
+
 ## Configuration
 
 All settings are managed through the **Settings GUI** (click the status bar icon → Settings, or press `Cmd + ,`):
@@ -331,6 +333,9 @@ This logic is fully covered by the built-in self-test suite.
 |--------|---------|
 | `scripts/build-app.sh` | Builds release binary, creates `.app` bundle, copies `mlx.metallib`, generates `Info.plist`, ad-hoc signs |
 | `scripts/build-dmg.sh` | Creates distributable DMG from built `.app` with `/Applications` symlink |
+| `scripts/generate-build-info.swift` | Generates matching `FlowTypeBuild.json` and `Info.plist` from a clean, nonshallow Git checkout |
+
+Run the identity tool with `swift scripts/generate-build-info.swift --repo /path/to/checkout --output /path/to/empty/directory [--version 1.2.3]`. The version defaults to `1.0.0`; SHA, commit count, Sources tree and UTC time come from the tool. Its `--self-test` creates and removes independent temporary Git repositories without changing global Git configuration. Packaging integration is a separate step; the existing build script does not yet consume these generated files. Runtime development builds show `development` with unknown SHA/time, and malformed app identity stays `invalid`. The About menu and diagnostics use the same loaded identity.
 
 ## Continuing development on another machine
 
