@@ -80,8 +80,14 @@ struct MainWindowView: View {
     @State private(set) var selectedTab: AppTab
     @ObservedObject private var navigation: SettingsNavigation
     private var injectedPage: ((AppTab) -> AnyView)?
+    typealias SettingsPageFactory = @MainActor (SettingsNavigation, SettingsConnectionChecks) -> SettingsPage
+    private let connectionChecks: SettingsConnectionChecks?
+    private let settingsPageFactory: SettingsPageFactory?
 
-    init(initialTab: AppTab = .overview, navigation: SettingsNavigation? = nil, page: ((AppTab) -> AnyView)? = nil) {
+    init(initialTab: AppTab = .overview, navigation: SettingsNavigation? = nil, page: ((AppTab) -> AnyView)? = nil,
+         connectionChecks: SettingsConnectionChecks? = nil, settingsPage: SettingsPageFactory? = nil) {
+        self.connectionChecks = connectionChecks
+        settingsPageFactory = settingsPage
         _selectedTab = State(initialValue: navigation?.requestedTab ?? initialTab)
         injectedPage = page
         self.navigation = navigation ?? SettingsNavigation(initialTab: initialTab)
@@ -130,6 +136,14 @@ struct MainWindowView: View {
         .frame(width: StatsConfig.sidebarWidth)
     }
 
+    // Used by the real tab branch and isolated composition regressions. Resolve
+    // production services only when a production settings page is requested.
+    func makeSettingsPage() -> SettingsPage {
+        let owner = connectionChecks ?? .shared
+        if let settingsPageFactory { return settingsPageFactory(navigation, owner) }
+        return SettingsPage(navigation: navigation, connectionChecks: owner)
+    }
+
     @ViewBuilder private var detail: some View {
         if let injectedPage {
             injectedPage(selectedTab)
@@ -139,7 +153,7 @@ struct MainWindowView: View {
             case .history:  HistoryPage()
             case .vocab:    VocabPage()
             case .style:    StylePage()
-            case .settings: SettingsPage(navigation: navigation)
+            case .settings: makeSettingsPage()
             }
         }
     }

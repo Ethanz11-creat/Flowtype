@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import AVFoundation
 import os
+import GRDB
 
 /// Exercise the real controller with deterministic, cancellation-resistant stage drains.
 enum TrialSessionSelfTests {
@@ -79,6 +80,7 @@ enum TrialSessionSelfTests {
         await wait { resources.owner == nil }
         await trialHasNoLiveEffects(r, configuration)
         await presenterIsolation(r, configuration)
+        await terminalNotices(r, configuration)
         await lifetime(r, configuration)
         await recordingDrain(r, configuration)
         await resourceReentrancy(r, configuration)
@@ -333,5 +335,71 @@ extension TrialSessionSelfTests {
             ordinary.cancel()
             presenter.cancel()
         }
+    }
+}
+
+
+extension TrialSessionSelfTests {
+    @MainActor private static func terminalNotices(_ r: SelfTest.Reporter, _ config: ConfigurationStore) async {
+        let effects = ValidationEffects.live.snapshot
+        guard let historyCount = try? await AppDatabaseProvider.shared.dbQueue.read({ try SessionRecord.fetchCount($0) }) else {
+            r.check(false, "trial terminal: isolated database snapshot must be readable")
+            return
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let dictionaryBefore = try? encoder.encode(DictionaryStore.shared.entries)
+        for fixture in ["silent", "empty", "polish"] {
+            let resources = SessionResourceCoordinator()
+            var contexts: [SessionContext] = []
+            var copies: [String] = []
+            var value = Configuration.default
+            let provider = LLMProvider.defaultSiliconFlow(isActive: true)
+            value.llmProviders = [provider]
+            value.providerAPIKeys = [provider.id.uuidString: "fixture-key"]
+            let polishConfiguration = value
+            let asr = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
+                routeFactory: { .init(policy: .localOnly, selectedProviderID: "fixture", localAvailable: false,
+                                      cloudAvailable: false, cloudConfiguration: nil) },
+                speechPreflight: { _, _ in fixture == "silent" ? .clearlySilent : .emptyCapture }, phrases: { [] })
+            let polish = PolishStage(configuration: { polishConfiguration }, streamFactory: { _, _, _ in
+                AsyncThrowingStream { $0.finish(throwing: LLMError.apiError("fixture offline")) }
+            })
+            let presenter = TrialSessionPresenter(configuration: config, resources: resources,
+                refreshReadiness: { .ready }, readinessLevel: { .ready }, copy: { copies.append($0) },
+                makeStages: { callback in
+                    [Stage(run: { ctx in
+                        contexts.append(ctx)
+                        ctx.usePolish = true
+                        return fixture == "polish" ? .continue(.processed("完整识别结果。", raw: "原文"))
+                            : .continue(.audio(samples: fixture == "empty" ? [] : [0, 0], previewText: ""))
+                    }), fixture == "polish" ? polish as any PipelineStage : asr as any PipelineStage, DemoInjectionStage(onResult: callback)]
+                })
+            presenter.start()
+            await wait { !contexts.isEmpty && resources.owner == nil }
+            let expected = fixture == "polish" ? "整理失败 · 已保留识别结果" :
+                fixture == "silent" ? "未检测到声音，请重试" : "未录到音频，请重试"
+            r.eq(presenter.terminalNotice, expected, "trial terminal \(fixture): presenter exposes actual stage notice")
+            r.eq(presenter.result, fixture == "polish" ? "完整识别结果。" : nil,
+                 "trial terminal \(fixture): notice coexists with fallback result only")
+            r.eq(copies, [], "trial terminal \(fixture): no automatic copy")
+            r.eq(presenter.controller.lastDeliverySummary, nil, "trial terminal \(fixture): no formal delivery")
+            r.eq(try? await AppDatabaseProvider.shared.dbQueue.read { try SessionRecord.fetchCount($0) }, historyCount,
+                 "trial terminal \(fixture): no formal history write")
+            r.eq(try? encoder.encode(DictionaryStore.shared.entries), dictionaryBefore, "trial terminal \(fixture): no dictionary learning or hit changes")
+            if fixture == "polish" {
+                try? await Task.sleep(for: .milliseconds(2350))
+                r.eq(presenter.controller.sessionState, .idle, "trial terminal: capsule notice lifetime expires")
+                r.eq(presenter.terminalNotice, expected, "trial terminal: trial explanation survives capsule auto-dismiss")
+            }
+            presenter.start()
+            r.eq(presenter.terminalNotice, nil, "trial terminal \(fixture): next attempt immediately clears notice")
+            await wait { contexts.count == 2 && resources.owner == nil }
+            presenter.cancel()
+            r.eq(presenter.terminalNotice, nil, "trial terminal \(fixture): cancel clears notice")
+            r.eq(presenter.result, nil, "trial terminal \(fixture): cancel clears fallback")
+        }
+        r.eq(ValidationEffects.live.snapshot.blocked, effects.blocked, "trial terminal: no attempted live effects")
+        r.eq(ValidationEffects.live.snapshot.permitted, effects.permitted, "trial terminal: no live effects")
     }
 }

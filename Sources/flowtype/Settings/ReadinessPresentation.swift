@@ -21,6 +21,15 @@ struct ReadinessPresentation {
         if snapshot.accessibility != .granted {
             add(.accessibilityMissing, .settings(.privacy, .accessibility))
         }
+        // Reuse the domain classifier with only the already-reported permissions
+        // removed, so a primary microphone blocker cannot hide an engine issue.
+        let engines = ReadinessSnapshot(accessibility: .granted, microphone: .granted,
+            speechRecognition: snapshot.speechRecognition, localModel: snapshot.localModel,
+            cloudASR: snapshot.cloudASR, appleSpeech: snapshot.appleSpeech, computedAt: snapshot.computedAt)
+        switch classifyReadiness(engines) {
+        case .blocked(let issue), .degraded(let issue): add(issue, .settings(.speech, .localModels))
+        case .ready: break
+        }
         if let reason = level.reason, !details.contains(reason) {
             details.append(reason)
             destinations.append(.settings(.speech, .localModels))

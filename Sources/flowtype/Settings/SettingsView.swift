@@ -9,8 +9,9 @@ struct SettingsPage: View {
     @ObservedObject var modelState: QwenModelState
     @ObservedObject var downloader: ModelDownloader
     @StateObject var importedActions: ImportedASRModelActions
-    @StateObject var checks: CloudASRConnectionCheck
-    @StateObject var draftChecks: CloudASRConnectionCheck
+    let connectionChecks: SettingsConnectionChecks
+    @ObservedObject var checks: CloudASRConnectionCheck
+    @ObservedObject var draftChecks: CloudASRConnectionCheck
     @Environment(\.clientNavigationRequest) private var request
     @State private var location = SettingsLocation()
     @State private var showsTrial = false
@@ -18,7 +19,7 @@ struct SettingsPage: View {
     @State var providerDraft: LLMProviderDraft?
 
     /// Production composition boundary. Reusable constructors below resolve no singletons.
-    init(navigation: SettingsNavigation? = nil) {
+    init(navigation: SettingsNavigation? = nil, connectionChecks: SettingsConnectionChecks = .shared) {
         let store = ConfigurationStore.shared
         let coordinator = QwenModelState.shared
         let monitor = ReadinessMonitor.shared
@@ -28,13 +29,13 @@ struct SettingsPage: View {
                   trialPresenter: TrialSessionPresenter(configuration: store, resources: .shared,
                     refreshReadiness: { monitor.refresh(); return monitor.rawLevel },
                     readinessLevel: { monitor.refresh(); return monitor.rawLevel },
-                    copy: { KeyboardInjector.copyText($0) }))
+                    copy: { KeyboardInjector.copyText($0) }), connectionChecks: connectionChecks)
     }
 
     init(navigation: SettingsNavigation? = nil, store: ConfigurationStore, styleStore: StylePackStore,
          monitor: ReadinessMonitor, modelState: QwenModelState, downloader: ModelDownloader,
          importedActions: ImportedASRModelActions, trialPresenter: TrialSessionPresenter,
-         checks: CloudASRConnectionCheck? = nil, draftChecks: CloudASRConnectionCheck? = nil,
+         connectionChecks: SettingsConnectionChecks,
          devices: @escaping () -> [AudioDevice] = { AudioRecorder.availableInputDevices() }) {
         self.navigation = navigation
         self.devices = devices
@@ -45,8 +46,9 @@ struct SettingsPage: View {
         self.downloader = downloader
         _trialPresenter = StateObject(wrappedValue: trialPresenter)
         _importedActions = StateObject(wrappedValue: importedActions)
-        _checks = StateObject(wrappedValue: checks ?? CloudASRConnectionCheck())
-        _draftChecks = StateObject(wrappedValue: draftChecks ?? CloudASRConnectionCheck())
+        self.connectionChecks = connectionChecks
+        checks = connectionChecks.checks
+        draftChecks = connectionChecks.draftChecks
     }
 
     var body: some View {
@@ -81,10 +83,6 @@ struct SettingsPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: request, initial: true) { _, request in location.consume(request) }
-        .onChange(of: store.current.cloudASRConfig) { old, new in
-            checks.synchronize(old: old, new: new)
-            draftChecks.synchronize(old: old, new: new)
-        }
         .onAppear { monitor.refresh() }
         .onDisappear { trialPresenter.cancel() }
         .onChange(of: location.section) { _, _ in

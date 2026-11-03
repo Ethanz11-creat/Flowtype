@@ -25,8 +25,17 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         self.init(window: window)
         navigation.requestedTab = initialTab
-        window.contentView = NSHostingView(rootView: MainWindowView(initialTab: initialTab, navigation: navigation))
+        window.contentView = NSHostingView(rootView: Self.makeRootView(initialTab: initialTab, navigation: navigation))
         window.delegate = self
+    }
+
+    /// Window recreation uses the same app-lifetime check owner. Tests inject
+    /// isolated services through this exact handoff without creating an NSWindow.
+    static func makeRootView(initialTab: AppTab, navigation: SettingsNavigation,
+                             connectionChecks: SettingsConnectionChecks? = nil,
+                             settingsPage: MainWindowView.SettingsPageFactory? = nil) -> MainWindowView {
+        MainWindowView(initialTab: initialTab, navigation: navigation,
+                       connectionChecks: connectionChecks, settingsPage: settingsPage)
     }
 
     func selectTab(_ tab: AppTab) {

@@ -55,6 +55,17 @@ enum NativeContentSelfTests {
                 r.eq(heat.last?.date, "2027-01-02", "overview \(range): annual endpoint local today")
                 r.eq(heat.filter { $0.chars > 0 }.count, 4, "overview \(range): heatmap sparse without synthetic activity")
             }
+            let oldOnly = [day("2026-11-01", chars: 360, hour: 12)]
+            for range in [StatsRange.d7, .d30] {
+                r.check(StatsEngine.summarize(oldOnly, range: range, now: now, cal: cal).isEmpty,
+                        "overview empty range: selected range is empty")
+                r.eq(OverviewPage.emptyMessage(allStats: oldOnly), "所选时间范围内暂无口述记录",
+                     "overview empty range: older activity does not imply first use")
+                r.eq(StatsEngine.denseHeatmap(oldOnly, range: .all, now: now, cal: cal).filter { $0.chars > 0 }.count, 1,
+                     "overview empty range: older annual activity retained")
+            }
+            r.eq(OverviewPage.emptyMessage(allStats: []), "开始你的第一次口述，数据会出现在这里",
+                 "overview true first use: first dictation guidance")
             let legacy = DailyStats(date: "2027-01-02", totalDurationMs: 120_000, totalWordCount: 90, sessionCount: 1)
             r.eq(StatsEngine.summarize([legacy], range: .all, now: now, cal: cal).avgSpeedCPM, 45,
                  "overview legacy falls back to durationMs")

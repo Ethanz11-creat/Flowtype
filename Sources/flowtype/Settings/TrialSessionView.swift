@@ -82,6 +82,9 @@ struct TrialSessionView: View {
             if case .error(let message) = presenter.controller.sessionState {
                 Text(message).font(.caption).foregroundStyle(.secondary)
             }
+            if let notice = presenter.terminalNotice {
+                Text(notice).font(.caption).foregroundStyle(.secondary)
+            }
             if let result = presenter.result, !result.isEmpty {
                 Text(result).textSelection(.enabled)
                 Button("复制结果") { presenter.copyResult() }

@@ -63,6 +63,18 @@ enum HistoryExport {
 @MainActor
 final class HistoryPageModel: ObservableObject {
     enum ResetConfirmation { case none, first, final }
+    enum MutationFailure: String {
+        case delete, clear, reset
+        var message: String {
+            switch self {
+            case .delete: "删除记录失败，原有记录已保留。请重新选择删除以重试。"
+            case .clear: "清空历史文本失败，原有文本已保留。请重新选择清空历史文本以重试。"
+            case .reset: "重置全部统计失败，原有历史与统计已保留。请重新选择重置并确认以重试。"
+            }
+        }
+    }
+    @Published private(set) var mutationFailure: MutationFailure?
+    @Published private(set) var clearConfirmation = false
     @Published var selectedID: String?
     @Published var searchText = ""
     @Published var filterMode: PolishMode?
@@ -114,7 +126,16 @@ final class HistoryPageModel: ObservableObject {
     func exportCSV() { if !filteredSessions.isEmpty { export(.csv(filteredSessions)) } }
     func exportJSON() { if !filteredSessions.isEmpty { export(.json(filteredSessions)) } }
     func delete(_ session: DictationSession) {
-        if store.delete(id: session.id), selectedID == session.id { selectedID = nil }
+        guard store.delete(id: session.id) else { mutationFailure = .delete; return }
+        mutationFailure = nil
+        if selectedID == session.id { selectedID = nil }
+    }
+    func requestClear() { clearConfirmation = true }
+    func cancelClear() { clearConfirmation = false }
+    func confirmClear() {
+        guard clearConfirmation else { return }
+        clearConfirmation = false
+        mutationFailure = store.clearTranscripts() ? nil : .clear
     }
     func requestReset() { resetConfirmation = .first }
     func continueReset() { if resetConfirmation == .first { resetConfirmation = .final } }
@@ -122,6 +143,8 @@ final class HistoryPageModel: ObservableObject {
     func confirmReset() {
         guard resetConfirmation == .final else { return }
         resetConfirmation = .none
-        if store.resetAllStats() { selectedID = nil }
+        guard store.resetAllStats() else { mutationFailure = .reset; return }
+        mutationFailure = nil
+        selectedID = nil
     }
 }

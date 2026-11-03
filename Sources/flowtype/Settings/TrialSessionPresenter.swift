@@ -4,14 +4,19 @@ import Combine
 /// Owns only temporary trial state. Construction does not prepare services or UI.
 @MainActor
 final class TrialSessionPresenter: ObservableObject {
-    private final class ResultReceiver {
+    private final class ResultReceiver: SessionObserver, @unchecked Sendable {
         weak var presenter: TrialSessionPresenter?
+        func sessionDidTransition(from oldState: SessionState, to newState: SessionState, context: SessionContext) {
+            guard case .notice(let message) = newState else { return }
+            MainActor.assumeIsolated { presenter?.receiveNotice(sessionID: context.sessionID, message: message) }
+        }
     }
     let controller: SessionController
     private let resources: SessionResourceCoordinator
     var isResourceBusy: Bool { resources.owner != nil && !controller.ownsRecordingResource }
     private var resultValue: String?
     var result: String? { resultValue }
+    private(set) var terminalNotice: String?
     private var generation: UInt64 = 0
     private var acceptedSession: (generation: UInt64, sessionID: UInt64)?
     private let copy: @MainActor (String) -> Void
@@ -37,7 +42,7 @@ final class TrialSessionPresenter: ObservableObject {
         let receiver = ResultReceiver()
         controller = SessionController(pipeline: makeStages { [receiver] sessionID, text in
             receiver.presenter?.receive(sessionID: sessionID, text: text)
-        }, observers: [], effects: .init(prepare: {}, showWindow: {}, hideWindow: {}),
+        }, observers: [receiver], effects: .init(prepare: {}, showWindow: {}, hideWindow: {}),
         recoveryEffects: .init(openAccessibilitySettings: {}, openMicrophoneSettings: {},
             openSpeechRecognitionSettings: {}, openASRSettings: {}, openHistory: {}, copyText: { _ in }),
         configurationStore: configuration, refreshReadiness: refreshReadiness, readinessLevel: readinessLevel,
@@ -59,12 +64,21 @@ final class TrialSessionPresenter: ObservableObject {
         generation &+= 1
         acceptedSession = nil
         resultValue = nil
+        terminalNotice = nil
         controller.cancel()
         objectWillChange.send()
     }
     func copyResult() {
         guard let result, !result.isEmpty else { return }
         copy(result)
+    }
+    private func receiveNotice(sessionID: UInt64, message: String) {
+        guard let acceptedSession, acceptedSession.generation == generation,
+              acceptedSession.sessionID == sessionID, controller.currentSessionIdentifier == sessionID else { return }
+        // The capsule auto-dismisses notices; the trial keeps its explanation until
+        // the next explicit attempt/cancel, alongside any successfully delivered fallback.
+        terminalNotice = message
+        objectWillChange.send()
     }
     private func receive(sessionID: UInt64, text: String) {
         guard let acceptedSession, acceptedSession.generation == generation,

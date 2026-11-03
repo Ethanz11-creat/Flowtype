@@ -52,10 +52,14 @@ struct OverviewPage: View {
         }
     }
 
+    static func emptyMessage(allStats: [DailyStats]) -> String {
+        allStats.isEmpty ? "开始你的第一次口述，数据会出现在这里" : "所选时间范围内暂无口述记录"
+    }
+
     private var emptyGuideCard: some View {
         HStack {
             Spacer()
-            Text("开始你的第一次口述，数据会出现在这里")
+            Text(Self.emptyMessage(allStats: statsStore.stats))
                 .font(.system(size: 13)).foregroundColor(Theme.textSecondary)
                 .multilineTextAlignment(.center).padding(.vertical, 12)
             Spacer()

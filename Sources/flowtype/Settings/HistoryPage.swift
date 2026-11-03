@@ -5,7 +5,6 @@ struct HistoryPage: View {
     @ObservedObject private var historyStore: HistoryStore
     @StateObject private var model: HistoryPageModel
     @Environment(\.clientNavigationRequest) private var navigationRequest
-    @State private var showClearTranscriptsConfirm = false
     @State private var showRawTranscript = false
 
     init() {
@@ -27,6 +26,11 @@ struct HistoryPage: View {
             headerBar
             Divider()
             readStatus
+            if let failure = model.mutationFailure {
+                Label(failure.message, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 12)).frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                Divider()
+            }
             HSplitView {
                 sessionList.frame(minWidth: 230, idealWidth: 270)
                 detailPanel.frame(minWidth: 300)
@@ -35,9 +39,9 @@ struct HistoryPage: View {
         .onAppear { model.consume(navigationRequest) }
         .onChange(of: navigationRequest?.id) { _, _ in model.consume(navigationRequest) }
         .onChange(of: model.selectedID) { _, _ in showRawTranscript = false }
-        .alert("清空历史文本", isPresented: $showClearTranscriptsConfirm) {
-            Button("清空历史文本", role: .destructive) { historyStore.clearTranscripts() }
-            Button("取消", role: .cancel) {}
+        .alert("清空历史文本", isPresented: Binding(get: { model.clearConfirmation }, set: { _ in })) {
+            Button("清空历史文本", role: .destructive) { model.confirmClear() }
+            Button("取消", role: .cancel) { model.cancelClear() }
         } message: {
             Text("清空所有历史文本？时长、字数、连续打卡等统计会保留。")
         }
@@ -75,7 +79,7 @@ struct HistoryPage: View {
                 .fixedSize()
                 .disabled(model.filteredSessions.isEmpty)
                 Menu {
-                    Button("清空历史文本…", role: .destructive) { showClearTranscriptsConfirm = true }
+                    Button("清空历史文本…", role: .destructive) { model.requestClear() }
                     Divider()
                     Button("重置全部统计…", role: .destructive) { model.requestReset() }
                 } label: { Image(systemName: "ellipsis.circle").accessibilityLabel("历史与统计操作") }

@@ -133,3 +133,33 @@ final class CloudASRConnectionCheck: ObservableObject {
         }
     }
 }
+
+
+/// Application-lived settings owners. Result revisions remain independent for
+/// live profiles and drafts; neither a tab change nor window recreation drops
+/// a cancellation-resistant transport reservation.
+@MainActor
+final class SettingsConnectionChecks {
+    static let shared = SettingsConnectionChecks(configuration: .shared,
+        checks: CloudASRConnectionCheck(), draftChecks: CloudASRConnectionCheck())
+
+    let checks: CloudASRConnectionCheck
+    let draftChecks: CloudASRConnectionCheck
+    private var configurationObservation: AnyCancellable?
+    private var previous: CloudASRConfig
+
+    init(configuration: ConfigurationStore, checks: CloudASRConnectionCheck, draftChecks: CloudASRConnectionCheck) {
+        self.checks = checks
+        self.draftChecks = draftChecks
+        previous = configuration.current.cloudASRConfig
+        configurationObservation = configuration.$current.sink { [weak self] configuration in
+            guard let self else { return }
+            let old = previous
+            let new = configuration.cloudASRConfig
+            previous = new
+            // The owner observes edits even when no settings page is installed.
+            checks.synchronize(old: old, new: new)
+            draftChecks.synchronize(old: old, new: new)
+        }
+    }
+}

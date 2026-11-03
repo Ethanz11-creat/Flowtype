@@ -17,6 +17,7 @@ enum ProviderDraftCheckSelfTests {
         let effects = ValidationEffects.live.snapshot
         print("--- ProviderDraftCheckSelfTests.lateDraftCheckCannotPublish ---")
         await lateDraftCheckCannotPublish(r)
+        await recreatedSettingsCompositionRetainsTransport(r)
         print("--- ProviderDraftCheckSelfTests.checkDoesNotCommitOrActivate ---")
         await checkDoesNotCommitOrActivate(r)
         print("--- ProviderDraftCheckSelfTests.deletedDraftCheckCannotPublish ---")
@@ -180,4 +181,91 @@ enum ProviderDraftCheckSelfTests {
         r.eq(newer.draft.profile.model, "newer edit", "asrNavigation: keep editing retains draft")
         newer.detach()
     }
+    private static func recreatedSettingsCompositionRetainsTransport(_ r: SelfTest.Reporter) async {
+        let suite = "flowtype.recreated-settings.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ConfigurationStore(defaults: defaults)
+        let original = draft()
+        var configuration = store.current
+        configuration.cloudASRConfig = .init(providers: [original.profile])
+        store.current = configuration
+        let transport = Transport()
+        let owners = SettingsConnectionChecks(configuration: store,
+            checks: CloudASRConnectionCheck(recognitionTest: { profile, key in await transport.send(profile, key) }),
+            draftChecks: CloudASRConnectionCheck(recognitionTest: { profile, key in await transport.send(profile, key) }))
+        let snapshot = ReadinessSnapshot(accessibility: .granted, microphone: .granted,
+            speechRecognition: .denied, localModel: .ready, cloudASR: .unavailable(reason: "fixture"),
+            appleSpeech: .unavailable(reason: "fixture"), computedAt: Date())
+        let monitor = ReadinessMonitor(snapshot: snapshot, refresh: { snapshot })
+        let coordinator = LocalSettingsOwnershipSelfTests.coordinator(store: store)
+        let downloader = ModelDownloader(coordinator: coordinator, configuration: { store.current })
+        let actions = ImportedASRModelActions(coordinator: coordinator, configuration: { store.current })
+        let styles = StylePackStore(store: PersistentStore(filename: "recreated-settings-style.json",
+            directory: RuntimeEnvironment.current.paths.applicationSupportDirectory))
+        let buildPage: MainWindowView.SettingsPageFactory = { navigation, connectionChecks in
+            SettingsPage(navigation: navigation, store: store, styleStore: styles, monitor: monitor,
+                modelState: coordinator, downloader: downloader, importedActions: actions,
+                trialPresenter: TrialSessionPresenter(configuration: store, resources: SessionResourceCoordinator(),
+                    refreshReadiness: { .ready }, readinessLevel: { .ready }, copy: { _ in }),
+                connectionChecks: connectionChecks, devices: { [] })
+        }
+        // This is the same root constructor used by the production window. Only
+        // app-lifetime dependencies and leaf service construction are injected.
+        var root: MainWindowView? = SettingsWindowController.makeRootView(initialTab: .settings,
+            navigation: SettingsNavigation(initialTab: .settings), connectionChecks: owners, settingsPage: buildPage)
+        var page: SettingsPage? = root!.makeSettingsPage()
+        guard page!.checks === owners.checks, page!.draftChecks === owners.draftChecks else {
+            r.check(false, "settings recreation: production handoff must preserve explicit isolated dependencies")
+            return
+        }
+        var session: ASRProviderDraftSession? = ASRProviderDraftSession(draft: original, checks: page!.draftChecks)
+        let first = session!.testRecognition(storedKey: "fixture-key")
+        await settle()
+        r.eq(transport.snapshots.count, 1, "settings recreation: initial draft transport entered")
+        session!.discard()
+        session = nil
+        page = nil
+        let tabReturn = root!.makeSettingsPage()
+        r.check(tabReturn.draftChecks.isTesting(original.target.id), "settings recreation: tab return sees draining reservation")
+        r.check(tabReturn.draftChecks.testRecognition(provider: original.profile, apiKey: "fixture-key") == nil,
+                "settings recreation: tab return cannot duplicate old request")
+        root = nil
+        let reopenedRoot = SettingsWindowController.makeRootView(initialTab: .settings,
+            navigation: SettingsNavigation(initialTab: .settings), connectionChecks: owners, settingsPage: buildPage)
+        let reopenedPage = reopenedRoot.makeSettingsPage()
+        let reopened = ASRProviderDraftSession(draft: original, checks: reopenedPage.draftChecks)
+        r.check(reopened.testRecognition(storedKey: "fixture-key") == nil,
+                "settings recreation: recreated window cannot duplicate old request")
+        transport.finish()
+        await first?.value
+        r.eq(reopenedPage.draftChecks.state(for: original.target.id), .idle,
+             "settings recreation: late cancelled result cannot publish into new page")
+        r.eq(store.current, configuration, "settings recreation: late completion never saves or activates profile")
+        let second = reopened.testRecognition(storedKey: "fixture-key")
+        await settle()
+        r.eq(transport.snapshots.count, 2, "settings recreation: explicit test after drain enters transport")
+        transport.finish()
+        await second?.value
+        r.eq(reopenedPage.draftChecks.state(for: original.target.id), .connected,
+             "settings recreation: current explicit test publishes")
+        r.eq(reopenedPage.checks.state(for: original.target.id), .idle,
+             "settings recreation: draft success never changes live conclusion")
+        reopened.detach()
+        // Retained owners must invalidate even while no SettingsPage is observing
+        // configuration. A live and a draft conclusion keep separate revisions.
+        owners.checks.checkConfiguration(provider: original.profile, apiKey: "fixture-key")
+        let third = owners.draftChecks.testRecognition(provider: original.profile, apiKey: "fixture-key")
+        await settle()
+        store.current.cloudASRConfig.providers[0].model = "externally-edited-model"
+        r.eq(owners.checks.state(for: original.target.id), .idle, "settings recreation: absent-page edit invalidates live result")
+        r.eq(owners.draftChecks.state(for: original.target.id), .idle, "settings recreation: absent-page edit invalidates draft result")
+        r.check(owners.draftChecks.isTesting(original.target.id), "settings recreation: external edit does not free transport")
+        let editedConfiguration = store.current
+        transport.finish()
+        await third?.value
+        r.eq(owners.draftChecks.state(for: original.target.id), .idle, "settings recreation: externally stale result cannot publish")
+        r.eq(store.current, editedConfiguration, "settings recreation: late result cannot undo external configuration")
+    }
+
 }

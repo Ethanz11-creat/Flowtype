@@ -218,7 +218,7 @@ enum NativeHistorySelfTests {
     private static func mutate(_ mutation: Mutation, store: HistoryStore, model: HistoryPageModel,
                                selected: DictationSession) {
         switch mutation {
-        case .clear: store.clearTranscripts()
+        case .clear: model.requestClear(); model.confirmClear()
         case .delete: model.delete(selected)
         case .reset:
             model.requestReset()
@@ -351,11 +351,17 @@ enum NativeHistorySelfTests {
                     if mutation == .reset { try d.execute(sql: "INSERT INTO daily_legacy(date) VALUES('2001-01-01')") }
                     try d.execute(sql: "CREATE TRIGGER reject_write \(statement) BEGIN SELECT RAISE(ABORT, 'fixture write rejected'); END")
                 }
+                let statsEncoder = JSONEncoder()
+                statsEncoder.outputFormatting = [.sortedKeys]
+                let statsBefore = try statsEncoder.encode(StatsRepository(db: db).buildDailyStats())
                 control.shouldFail = true
                 mutate(mutation, store: store, model: model, selected: original)
                 let prefix = "history failed write \(mutation.rawValue)"
                 r.eq(try readRows(db).map(\.finalText), [original.finalText], "\(prefix): database retains text/rolls back reset")
                 r.eq(store.sessions.map(\.finalText), [original.finalText], "\(prefix): cache is not erased on write failure")
+                r.eq(store.currentSessions.map(\.rawTranscript), [original.rawTranscript], "\(prefix): authoritative raw text retained")
+                r.eq(try statsEncoder.encode(StatsRepository(db: db).buildDailyStats()), statsBefore,
+                     "\(prefix): failed write preserves authoritative statistics")
                 r.eq(model.selectedSession?.id, original.id, "\(prefix): selection is not erased on write failure")
                 model.copy(original)
                 model.exportText(original)
@@ -363,6 +369,26 @@ enum NativeHistorySelfTests {
                 r.eq(copies, [original.finalText], "\(prefix): unchanged record remains copyable")
                 r.eq(exports.count, 2, "\(prefix): unchanged record remains exportable")
                 r.eq(refreshes, 0, "\(prefix): failed write does not refresh unchanged statistics")
+                r.eq(model.mutationFailure?.rawValue, mutation.rawValue, "\(prefix): visible mutation failure identifies action")
+                r.check(model.mutationFailure?.message.contains("失败") == true, "\(prefix): visible failure explains retained content")
+                r.eq(store.readState, .loaded, "\(prefix): write failure is not a read failure")
+                r.eq(model.resetConfirmation, .none, "\(prefix): reset requires new confirmations")
+                r.check(!model.clearConfirmation, "\(prefix): clear requires new confirmation")
+                try db.dbQueue.write { try $0.execute(sql: "DROP TRIGGER reject_write") }
+                control.shouldFail = false
+                // Removing the failure must never implicitly retry a destructive action.
+                model.confirmClear()
+                model.confirmReset()
+                r.eq(try readRows(db).map(\.finalText), [original.finalText], "\(prefix): no implicit retry after repair")
+                if mutation == .reset {
+                    model.requestReset()
+                    model.confirmReset()
+                    r.eq(try readRows(db).count, 1, "\(prefix): retry still requires second reset confirmation")
+                    model.cancelReset()
+                }
+                mutate(mutation, store: store, model: model, selected: original)
+                r.check(model.mutationFailure == nil, "\(prefix): explicit successful retry clears mutation failure")
+                r.check(try readRows(db).allSatisfy { $0.finalText.isEmpty }, "\(prefix): confirmed retry commits")
             } catch { r.check(false, "history failed write \(mutation): fixture failed: \(error)") }
         }
     }

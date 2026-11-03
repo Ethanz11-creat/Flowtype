@@ -18,6 +18,21 @@ enum ReadinessPresentationSelfTests {
         r.eq(ValidationEffects.live.snapshot.blocked, effects.blocked, "multipleReadinessIssuesWithoutPrompt: zero attempted effects")
         r.eq(ValidationEffects.live.snapshot.permitted, effects.permitted, "multipleReadinessIssuesWithoutPrompt: zero live effects")
 
+        for ax in [PermissionState.granted, .denied] {
+            let unavailable = ReadinessSnapshot(accessibility: ax, microphone: .denied,
+                speechRecognition: .denied, localModel: .unavailable(reason: "fixture"),
+                cloudASR: .unavailable(reason: "fixture"), appleSpeech: .unavailable(reason: "fixture"), computedAt: Date())
+            let primary = classifyReadiness(unavailable)
+            let shown = ReadinessPresentation.make(snapshot: unavailable, level: primary)
+            r.eq(primary, .blocked(.microphoneDenied), "readiness simultaneous: primary classification unchanged")
+            r.check(shown.details.contains(ReadinessIssue.noEngine.reason), "readiness simultaneous: missing engine visible with denied mic")
+            r.check(shown.details.contains(ReadinessIssue.microphoneDenied.reason), "readiness simultaneous: denied mic visible")
+            r.eq(shown.details.contains(ReadinessIssue.accessibilityMissing.reason), ax == .denied,
+                 "readiness simultaneous: AX matches actual permission")
+            r.check(shown.destinations.contains(.settings(.speech, .localModels)), "readiness simultaneous: engine recovery destination")
+        }
+        r.eq(ValidationEffects.live.snapshot.blocked, effects.blocked, "readiness simultaneous: no permission attempts")
+
         print("--- ReadinessPresentationSelfTests.localASRWithCloudPolishDisclosure ---")
         var config = Configuration()
         config.asrRoutingPolicy = .localOnly
@@ -108,7 +123,7 @@ enum ReadinessPresentationSelfTests {
             modelState: coordinator, downloader: downloader, importedActions: importedActions,
             trialPresenter: TrialSessionPresenter(configuration: store, resources: SessionResourceCoordinator(),
                 refreshReadiness: { monitor.rawLevel }, readinessLevel: { monitor.rawLevel }, copy: { _ in }),
-            checks: checks, draftChecks: drafts)
+            connectionChecks: SettingsConnectionChecks(configuration: store, checks: checks, draftChecks: drafts))
         let asr = ASRSettingsContent(store: store, monitor: monitor, modelState: coordinator,
             downloader: downloader, importedActions: importedActions, navigation: navigation,
             checks: checks, draftChecks: drafts, devices: { [] })

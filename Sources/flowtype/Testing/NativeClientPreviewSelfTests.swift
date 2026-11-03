@@ -98,7 +98,8 @@ enum NativeClientPreviewSelfTests {
                                 modelState: coordinator, downloader: downloader, importedActions: actions,
                                 trialPresenter: TrialSessionPresenter(configuration: store, resources: SessionResourceCoordinator(),
                                     refreshReadiness: { monitor.rawLevel }, readinessLevel: { monitor.rawLevel }, copy: { _ in }),
-                                checks: checks, draftChecks: draftChecks, devices: { [] }))
+                                connectionChecks: SettingsConnectionChecks(configuration: store, checks: checks, draftChecks: draftChecks),
+                                devices: { [] }))
                             }
                         })
                         let prefix = "\(page)-\(size)-\(dark ? "dark" : "light")"
