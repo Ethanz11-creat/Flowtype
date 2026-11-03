@@ -3,16 +3,12 @@ import SwiftUI
 // MARK: - Settings View
 
 struct SettingsPage: View {
+    var navigation: SettingsNavigation? = nil
     @ObservedObject var store = ConfigurationStore.shared
     @State var hasAccessibility = false
     @State var availableDevices: [AudioDevice] = []
     @State var selectedDeviceUnavailable: Bool = false
-    // Provider sheet states
-    @State var showAddProvider = false
-    @State var editingProvider: LLMProvider? = nil
-    @State var draftProvider = LLMProvider(name: "", provider: "SiliconFlow", baseURL: "https://api.siliconflow.cn/v1", model: "", isActive: false)
-    @State var draftApiKey = ""
-    @State var editingHadStoredKey = false
+    @State var providerDraft: LLMProviderDraft?
 
     var body: some View {
         ScrollView {
@@ -65,61 +61,24 @@ struct SettingsPage: View {
                 hasAccessibility = PermissionHelper.checkAccessibility()
             }
         }
-        .sheet(isPresented: $showAddProvider) {
+        .sheet(item: $providerDraft) { draft in
             ProviderEditSheet(
-                provider: .init(
-                    get: { draftProvider },
-                    set: { draftProvider = $0 }
-                ),
-                apiKey: $draftApiKey,
-                existingProviders: store.current.llmProviders,
-                onSave: {
-                    let newProvider = LLMProvider(
-                        name: draftProvider.name,
-                        provider: draftProvider.provider,
-                        baseURL: draftProvider.baseURL,
-                        model: draftProvider.model,
-                        isActive: store.current.llmProviders.isEmpty
-                    )
-                    store.current.llmProviders.append(newProvider)
-                    if !draftApiKey.isEmpty {
-                        ConfigurationStore.shared.saveProviderAPIKey(draftApiKey, for: newProvider.id)
-                    }
-                    store.save(store.current)   // persist the provider list, not just the in-memory copy
-                    showAddProvider = false
+                draft: draft,
+                navigation: navigation,
+                hadStoredKey: !(store.current.providerAPIKeys[draft.id.uuidString] ?? "").isEmpty,
+                storedKey: { store.current.providerAPIKeys[draft.id.uuidString] ?? "" },
+                validate: { draft in
+                    var latest = store.current
+                    try ProviderDraftCommit.apply(draft, to: &latest)
                 },
-                onCancel: {
-                    showAddProvider = false
-                }
-            )
-        }
-        .sheet(item: $editingProvider) { provider in
-            ProviderEditSheet(
-                provider: $draftProvider,
-                apiKey: $draftApiKey,
-                existingProviders: store.current.llmProviders.filter { $0.id != provider.id },
-                hadStoredKey: editingHadStoredKey,
-                onSave: {
-                    if let idx = store.current.llmProviders.firstIndex(where: { $0.id == provider.id }) {
-                        store.current.llmProviders[idx] = draftProvider
-                    }
-                    if draftApiKey.isEmpty {
-                        ConfigurationStore.shared.deleteProviderAPIKey(provider.id)
-                    } else {
-                        ConfigurationStore.shared.saveProviderAPIKey(draftApiKey, for: provider.id)
-                    }
-                    store.save(store.current)
-                    editingProvider = nil
+                onSave: { draft in
+                    var latest = store.current
+                    try ProviderDraftCommit.apply(draft, to: &latest)
+                    store.save(latest)
+                    providerDraft = nil
                 },
-                onCancel: {
-                    editingProvider = nil
-                }
+                onCancel: { providerDraft = nil }
             )
-            .onAppear {
-                draftProvider = provider
-                draftApiKey = ConfigurationStore.shared.loadProviderAPIKey(provider.id) ?? ""
-                editingHadStoredKey = !draftApiKey.isEmpty
-            }
         }
     }
 }

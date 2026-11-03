@@ -38,15 +38,7 @@ extension SettingsPage {
             }
 
             Button {
-                draftProvider = LLMProvider(
-                    name: "",
-                    provider: "SiliconFlow",
-                    baseURL: "https://api.siliconflow.cn/v1",
-                    model: "",
-                    isActive: false
-                )
-                draftApiKey = ""
-                showAddProvider = true
+                startAddingProvider()
             } label: {
                 Label("添加 Provider", systemImage: "plus.circle")
                     .font(.system(size: 12))

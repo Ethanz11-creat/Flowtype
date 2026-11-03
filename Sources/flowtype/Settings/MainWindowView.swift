@@ -36,21 +36,42 @@ final class SettingsNavigation: ObservableObject {
     @Published var requestedTab: AppTab {
         didSet {
             guard !isUpdatingDestination else { return }
-            navigate(to: .tab(requestedTab))
+            let destination = requestedTab
+            // A public legacy assignment must not bypass the editor's navigation guard.
+            isUpdatingDestination = true
+            requestedTab = oldValue
+            isUpdatingDestination = false
+            navigate(to: .tab(destination))
         }
     }
     @Published private(set) var request: NavigationRequest?
     private var isUpdatingDestination = false
+    private var navigationGuard: (owner: UUID, permits: (NavigationRequest) -> Bool)?
 
     init(initialTab: AppTab = .overview) {
         requestedTab = initialTab
     }
 
     func navigate(to destination: ClientDestination) {
+        navigate(NavigationRequest(id: UUID(), destination: destination))
+    }
+
+    /// Continuing a deferred request keeps its identity and exact target.
+    func navigate(_ request: NavigationRequest) {
+        guard navigationGuard?.permits(request) ?? true else { return }
         isUpdatingDestination = true
-        if requestedTab != destination.tab { requestedTab = destination.tab }
+        if requestedTab != request.destination.tab { requestedTab = request.destination.tab }
         isUpdatingDestination = false
-        request = NavigationRequest(id: UUID(), destination: destination)
+        self.request = request
+    }
+
+    func installNavigationGuard(owner: UUID, permits: @escaping (NavigationRequest) -> Bool) {
+        navigationGuard = (owner, permits)
+    }
+
+    /// A late disappearance from an older editor cannot remove a newer editor's guard.
+    func removeNavigationGuard(owner: UUID) {
+        if navigationGuard?.owner == owner { navigationGuard = nil }
     }
 }
 
@@ -113,7 +134,7 @@ struct MainWindowView: View {
         case .history:  HistoryPage()
         case .vocab:    VocabPage()
         case .style:    StylePage()
-        case .settings: SettingsPage()
+        case .settings: SettingsPage(navigation: navigation)
         }
     }
 }

@@ -16,12 +16,13 @@ extension SettingsPage {
         }
     }
 
+    func startAddingProvider() {
+        let profile = LLMProvider.defaultSiliconFlow(isActive: false)
+        providerDraft = LLMProviderDraft(target: .new(profile.id), profile: profile)
+    }
+
     func startEditing(_ provider: LLMProvider) {
-        // Populate drafts before presenting so the sheet's first frame shows current values
-        draftProvider = provider
-        draftApiKey = ConfigurationStore.shared.loadProviderAPIKey(provider.id) ?? ""
-        editingHadStoredKey = !draftApiKey.isEmpty
-        editingProvider = provider
+        providerDraft = LLMProviderDraft(target: .existing(provider.id), profile: provider)
     }
 
     func deleteProvider(_ id: UUID) {

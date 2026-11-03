@@ -26,7 +26,7 @@ func validateProvider(_ provider: LLMProvider, existingProviders: [LLMProvider],
         return .emptyModel
     }
 
-    var baseURL = provider.baseURL.trimmingCharacters(in: .whitespaces)
+    let baseURL = provider.baseURL.trimmingCharacters(in: .whitespaces)
     if baseURL.isEmpty {
         return .invalidBaseURL("Base URL 不能为空")
     }
@@ -154,210 +154,180 @@ struct LLMModelPickerField: View {
 // MARK: - Provider Edit Sheet
 
 struct ProviderEditSheet: View {
-    @Binding var provider: LLMProvider
-    @Binding var apiKey: String
-    var existingProviders: [LLMProvider]
-    var hadStoredKey: Bool = false
-    var onSave: () -> Void
-    var onCancel: () -> Void
+    @StateObject private var session: LLMProviderDraftSession
+    private var draft: LLMProviderDraft { session.draft }
+    let navigation: SettingsNavigation?
+    let hadStoredKey: Bool
+    let storedKey: () -> String
+    let validate: (LLMProviderDraft) throws -> Void
+    let onSave: (LLMProviderDraft) throws -> Void
+    let onCancel: () -> Void
 
     @State private var testStatus: TestStatus = .idle
-    @State private var validationError: String? = nil
+    @State private var validationError: String?
+    @State private var testRevision = UUID()
+    @State private var testTask: Task<Void, Never>?
+
+    init(draft: LLMProviderDraft, navigation: SettingsNavigation? = nil, hadStoredKey: Bool, storedKey: @escaping () -> String,
+         validate: @escaping (LLMProviderDraft) throws -> Void,
+         onSave: @escaping (LLMProviderDraft) throws -> Void, onCancel: @escaping () -> Void) {
+        _session = StateObject(wrappedValue: LLMProviderDraftSession(draft: draft))
+        self.navigation = navigation
+        self.hadStoredKey = hadStoredKey
+        self.storedKey = storedKey
+        self.validate = validate
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
 
     enum TestStatus: Equatable {
         case idle, testing, success, failure(String)
     }
 
+    private var apiKeyInput: Binding<String> {
+        Binding(get: {
+            if case .replace(let value) = draft.keyEdit { return value }
+            return ""
+        }, set: { value in
+            session.draft.keyEdit = value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? .preserve : .replace(value)
+        })
+    }
+
+    private var effectiveKey: String {
+        switch draft.keyEdit {
+        case .preserve: return storedKey()
+        case .replace(let key): return key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? storedKey() : key
+        case .remove: return ""
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(provider.name.isEmpty ? "添加 Provider" : "编辑 Provider")
+            Text(isNew ? "添加整理服务" : "编辑整理服务")
                 .font(.system(size: 16, weight: .semibold))
 
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(provider.name.isEmpty ? "新 Provider" : provider.name)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("配置大语言模型服务商（需用户自行配置 API Key）")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("服务商", selection: Binding(get: { draft.profile.provider }, set: { session.draft.selectVendor($0) })) {
+                    ForEach(ProviderPreset.all) { preset in Text(preset.name).tag(preset.name) }
+                    if !ProviderPreset.all.contains(where: { $0.name == draft.profile.provider }) {
+                        Text(draft.profile.provider).tag(draft.profile.provider)
+                    }
                 }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("服务商")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                    ProviderPicker(provider: $provider.provider, baseURL: $provider.baseURL)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("名称")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                    TextField("例如：我的 SiliconFlow", text: $provider.name)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Base URL")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.secondary)
-                    TextField("https://api.siliconflow.cn/v1", text: $provider.baseURL)
-                        .textFieldStyle(.plain)
+                Button("使用厂商默认值") { session.draft.useVendorDefaults() }
+                    .font(.system(size: 12))
+                    .disabled(!ProviderPreset.all.contains(where: { $0.name == draft.profile.provider }))
+                LabeledContent("名称") { TextField("服务名称", text: $session.draft.profile.name) }
+                LabeledContent("Base URL") {
+                    TextField("https://…", text: $session.draft.profile.baseURL)
                         .font(.system(size: 12, design: .monospaced))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color(nsColor: .textBackgroundColor))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                        )
                 }
-
-                SecureKeyField(title: "API Key（需用户自行配置）", key: $apiKey)
-
-                LLMModelPickerField(
-                    title: "模型 ID",
-                    model: $provider.model,
-                    providerName: provider.provider,
-                    baseURL: provider.baseURL
-                )
+                SecureKeyField(title: hadStoredKey ? "替换 API Key（留空保留）" : "API Key", key: apiKeyInput)
+                if hadStoredKey || draft.keyEdit == .remove {
+                    HStack {
+                        Text(draft.keyEdit == .remove ? "保存时删除密钥" : "已保存密钥；留空保留")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button(draft.keyEdit == .remove ? "保留已存密钥" : "删除密钥") {
+                            session.draft.keyEdit = draft.keyEdit == .remove ? .preserve : .remove
+                        }
+                        .font(.system(size: 12))
+                    }
+                }
+                LLMModelPickerField(title: "模型 ID", model: $session.draft.profile.model,
+                                    providerName: draft.profile.provider, baseURL: draft.profile.baseURL)
+                    .id(draft.profile.provider)
             }
-            .padding(16)
-            .glassCard()
-
-            if hadStoredKey && apiKey.isEmpty {
-                Text("保存时将删除已保存的 API Key")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            .textFieldStyle(.roundedBorder)
 
             if let error = validationError {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.red)
-                    Text(error)
-                        .font(.system(size: 12))
-                        .foregroundColor(.red)
-                }
-                .padding(10)
-                .background(Color.red.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                Text(error).font(.system(size: 12)).foregroundStyle(.red)
             }
-
             switch testStatus {
-            case .idle:
-                EmptyView()
+            case .idle: EmptyView()
             case .testing:
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("正在测试连接...")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                }
-            case .success:
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.green)
-                    Text("连接成功")
-                        .font(.system(size: 12))
-                        .foregroundColor(.green)
-                }
-                .padding(10)
-                .background(Color.green.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            case .failure(let msg):
-                HStack(spacing: 6) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.red)
-                    Text(msg)
-                        .font(.system(size: 12))
-                        .foregroundColor(.red)
-                }
-                .padding(10)
-                .background(Color.red.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                HStack { ProgressView().controlSize(.small); Text("正在测试连接…") }
+            case .success: Text("连接成功").foregroundStyle(.green)
+            case .failure(let message): Text(message).foregroundStyle(.red)
             }
 
             HStack {
-                Button("测试连接") {
-                    Task { await testOnly() }
-                }
-                .buttonStyle(.bordered)
-                .disabled(testStatus == .testing || apiKey.isEmpty)
+                Button("测试连接") { beginTest() }
+                    .disabled(testStatus == .testing || effectiveKey.isEmpty)
                 Spacer()
-                Button("取消", action: onCancel)
-                    .buttonStyle(.plain)
-                Button("保存") {
-                    Task {
-                        await attemptSave()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(testStatus == .testing)
+                Button("取消", action: requestCancel)
+                Button("保存", action: attemptSave)
+                    .buttonStyle(.borderedProminent)
             }
         }
+        .font(.system(size: 13))
         .padding(20)
         .frame(width: 480)
+        .interactiveDismissDisabled(session.isModified)
+        .onExitCommand(perform: requestCancel)
+        .alert("放弃未保存的更改？", isPresented: $session.isConfirmingDiscard) {
+            Button("继续编辑", role: .cancel) { session.keepEditing() }
+            Button("放弃", role: .destructive, action: finishCancel)
+        }
+        .onChange(of: draft) { _, _ in
+            invalidateTest()
+            validationError = nil
+        }
+        .onAppear { session.attach(to: navigation, onClose: onCancel) }
+        .onDisappear { invalidateTest(); session.detach() }
     }
 
-    private func attemptSave() async {
-        validationError = nil
-
-        if let error = validateProvider(provider, existingProviders: existingProviders) {
-            validationError = error.localizedDescription
-            return
-        }
-
-        provider.baseURL = normalizeBaseURL(provider.baseURL)
-
-        if !apiKey.isEmpty {
-            testStatus = .testing
-            let service = LLMService()
-            let result = await service.testConnection(provider: provider, apiKey: apiKey)
-            switch result {
-            case .success:
-                testStatus = .success
-                try? await Task.sleep(nanoseconds: 300_000_000)
-            case .failure(let error):
-                let msg = error.userFriendlyMessage
-                testStatus = .failure(msg)
-                validationError = "连接测试失败: \(msg)"
-                return
-            }
-        }
-
-        onSave()
+    private var isNew: Bool {
+        if case .new = draft.target { return true }
+        return false
     }
 
-    private func testOnly() async {
-        validationError = nil
-        if let error = validateProvider(provider, existingProviders: existingProviders) {
+    private func requestCancel() {
+        session.requestCancel()
+    }
+
+    private func finishCancel() {
+        invalidateTest()
+        session.discard()
+    }
+
+    private func invalidateTest() {
+        testRevision = UUID()
+        testTask?.cancel()
+        testTask = nil
+        testStatus = .idle
+    }
+
+    /// Saving performs local validation and one transaction; network testing is a separate action.
+    private func attemptSave() {
+        do {
+            try onSave(draft)
+            session.detach()
+            invalidateTest()
+        } catch {
             validationError = error.localizedDescription
-            return
         }
-        provider.baseURL = normalizeBaseURL(provider.baseURL)
+    }
+
+    private func beginTest() {
+        do { try validate(draft) }
+        catch { validationError = error.localizedDescription; return }
+        let key = effectiveKey
+        guard !key.isEmpty else { return }
+        invalidateTest()
+        let revision = testRevision
+        let testedDraft = draft
+        let profile = draft.profile
         testStatus = .testing
-        let result = await LLMService().testConnection(provider: provider, apiKey: apiKey)
-        switch result {
-        case .success:
-            testStatus = .success
-        case .failure(let error):
-            testStatus = .failure(error.userFriendlyMessage)
+        testTask = Task { @MainActor in
+            guard !Task.isCancelled, testRevision == revision, draft == testedDraft else { return }
+            let result = await LLMService().testConnection(provider: profile, apiKey: key)
+            guard !Task.isCancelled, testRevision == revision, draft == testedDraft else { return }
+            switch result {
+            case .success: testStatus = .success
+            case .failure(let error): testStatus = .failure(error.userFriendlyMessage)
+            }
+            testTask = nil
         }
     }
 }
