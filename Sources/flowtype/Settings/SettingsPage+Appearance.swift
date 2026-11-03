@@ -8,7 +8,7 @@ extension SettingsPage {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Brand.accent)
                 Text("外观")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                 Spacer()
             }
 

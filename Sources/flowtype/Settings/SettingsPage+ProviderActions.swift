@@ -1,15 +1,6 @@
 import SwiftUI
 
 extension SettingsPage {
-    func refreshDevices() {
-        availableDevices = AudioRecorder.availableInputDevices()
-        if let selectedID = store.current.microphoneDeviceID {
-            selectedDeviceUnavailable = !availableDevices.contains(where: { $0.id == selectedID })
-        } else {
-            selectedDeviceUnavailable = false
-        }
-    }
-
     func setActiveProvider(_ id: UUID) {
         for i in store.current.llmProviders.indices {
             store.current.llmProviders[i].isActive = (store.current.llmProviders[i].id == id)
@@ -26,12 +17,14 @@ extension SettingsPage {
     }
 
     func deleteProvider(_ id: UUID) {
-        let wasActive = store.current.llmProviders.first(where: { $0.id == id })?.isActive ?? false
-        store.current.llmProviders.removeAll(where: { $0.id == id })
-        ConfigurationStore.shared.deleteProviderAPIKey(id)
+        var latest = store.current
+        let wasActive = latest.llmProviders.first(where: { $0.id == id })?.isActive ?? false
+        latest.llmProviders.removeAll(where: { $0.id == id })
+        latest.providerAPIKeys.removeValue(forKey: id.uuidString)
         // Auto-activate another provider if the active one was deleted
-        if wasActive, !store.current.llmProviders.isEmpty {
-            store.current.llmProviders[0].isActive = true
+        if wasActive, !latest.llmProviders.isEmpty {
+            latest.llmProviders[0].isActive = true
         }
+        store.save(latest)
     }
 }

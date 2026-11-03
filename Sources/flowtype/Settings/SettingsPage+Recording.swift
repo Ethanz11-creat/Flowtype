@@ -8,7 +8,7 @@ extension SettingsPage {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Brand.accent)
                 Text("录音设置")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                 Spacer()
             }
 
@@ -19,13 +19,6 @@ extension SettingsPage {
             }
             Text("自动模式优先粘贴，确认未发送且目标可编辑时尝试键入。旧版候选：TextEdit、VS Code、Cursor、Chrome、Safari、Edge；其他应用使用键入。候选目录不代表已完成真机验证。")
                 .font(.system(size: 11)).foregroundColor(.secondary)
-
-            Toggle("停止后自动整理", isOn: $store.current.polishOnStop)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-            Text("开启后，停止录音时自动整理识别结果；关闭后直接输入识别文本。")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack {

@@ -1,122 +1,109 @@
 import SwiftUI
+import AVFoundation
 
-extension SettingsPage {
-    var asrSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 8) {
-                Image(systemName: "waveform")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Brand.accent)
-                Text("语音转文字（ASR）")
-                    .font(.system(size: 15, weight: .semibold))
-                Spacer()
-            }
+/// Shared configuration surface. Callers own services and connection-check lifetimes.
+struct ASRSettingsContent: View {
+    @ObservedObject var store: ConfigurationStore
+    @ObservedObject var monitor: ReadinessMonitor
+    let navigation: SettingsNavigation?
+    @ObservedObject var checks: CloudASRConnectionCheck
+    @ObservedObject var draftChecks: CloudASRConnectionCheck
+    var target: SettingsTarget? = nil
+    var requestID: UUID? = nil
+    var devices: () -> [AudioDevice] = { AudioRecorder.availableInputDevices() }
+    @State private var availableDevices: [AudioDevice] = []
+    @State private var localExpanded = true
+    @State private var cloudExpanded = true
 
-            Text("Flowtype 同时支持本地（Qwen3-ASR MLX / Whisper Core ML，离线）与云端（硅基流动、OpenAI、自定义兼容接口 / Paraformer 实时）识别。自动模式下默认优先云端，网络不佳时无感切换到本地兜底；成功加载本地模型后，断网时可离线识别且音频不出设备。")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Picker("", selection: $store.current.asrRoutingPolicy) {
-                ForEach(ASRRoutingPolicy.allCases) { policy in
-                    Text(policy.displayName).tag(policy)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            switch store.current.asrRoutingPolicy {
-            case .localOnly:
+    var body: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            modeSection
+            DisclosureGroup(isExpanded: $localExpanded) {
                 LocalModelPicker()
-                ASRModelStatusCard()
-            case .cloudOnly:
-                CloudASRProviderList(navigation: navigation)
-                ASRModelStatusCard()
-            case .auto:
-                LocalModelPicker()
-                CloudASRProviderList(navigation: navigation)
-                ASRModelStatusCard()
+                QwenModelStatusCard()
+            } label: {
+                Text(store.current.asrRoutingPolicy == .cloudOnly ? "本地模型 · 此模式不使用" : "本地模型")
+                    .font(.system(size: 13, weight: .medium))
+            }.id(SettingsTarget.localModels)
+            Divider()
+            DisclosureGroup(isExpanded: $cloudExpanded) {
+                CloudASRProviderList(store: store, checks: checks, draftChecks: draftChecks, navigation: navigation)
+            } label: {
+                Text(store.current.asrRoutingPolicy == .localOnly ? "云端服务 · 此模式不使用" : "云端服务")
+                    .font(.system(size: 13, weight: .medium))
             }
-
-            // Language selector
-            HStack {
-                Text("识别语言")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Picker("", selection: $store.current.asrLanguage) {
-                    ForEach(WhisperLanguage.allCases, id: \.self) { lang in
-                        Text(lang.displayName).tag(lang)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 200)
-            }
-
-            // Microphone device selector
-            HStack {
-                Text("麦克风设备")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                Spacer()
-                HStack(spacing: 6) {
-                    if selectedDeviceUnavailable {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.orange)
-                    }
-                    Picker("", selection: $store.current.microphoneDeviceID) {
-                        Text("系统默认").tag(String?.none)
-                        ForEach(availableDevices) { device in
-                            Text(device.name).tag(Optional(device.id))
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 220)
-                }
-            }
-            .onAppear {
-                refreshDevices()
-            }
-
-            HStack {
-                Text("性能指标")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button("复制指标报告") {
-                    let report = SessionMetrics.report(HistoryStore.shared.sessions)
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(report, forType: .string)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-
-            HStack {
-                Text("云端发送上下文")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Toggle("", isOn: $store.current.cloudASRSendContext)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .disabled(store.current.asrRoutingPolicy == .localOnly)
-            }
-            HStack {
-                Text("云端整理使用上下文")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-                Spacer()
-                Toggle("", isOn: $store.current.cloudPolishSendContext)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .disabled(!store.current.cloudASRSendContext || store.current.asrRoutingPolicy == .localOnly)
-            }
-            Text("云端发送上下文是总开关：开启后，支持上下文的 HTTP 识别可携带前台文本；整理还需单独开启。Paraformer 实时识别不发送上下文。仅本地模式不向云端发送前台上下文；音频仅在云端识别时离开设备。")
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
+            Divider()
+            inputSection
+            Text("更改识别配置后，进行中的听写继续使用原配置。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 4)
+        .onAppear { resetExpansion(); refreshDevices() }
+        .onChange(of: store.current.asrRoutingPolicy) { _, _ in resetExpansion() }
+        .onChange(of: requestID, initial: true) { _, _ in revealTarget() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refreshDevices() }
+        .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasConnectedNotification)) { _ in refreshDevices() }
+        .onReceive(NotificationCenter.default.publisher(for: AVCaptureDevice.wasDisconnectedNotification)) { _ in refreshDevices() }
+    }
+
+    private var modeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("识别方式").font(.system(size: 13, weight: .semibold))
+            Picker("识别方式", selection: $store.current.asrRoutingPolicy) {
+                Text("仅本地").tag(ASRRoutingPolicy.localOnly)
+                Text("自动（推荐）").tag(ASRRoutingPolicy.auto)
+                Text("仅云端").tag(ASRRoutingPolicy.cloudOnly)
+            }
+            .labelsHidden().pickerStyle(.segmented)
+            .frame(width: 276, height: 40)
+            Text(modeDescription).font(.system(size: 12)).foregroundStyle(.secondary)
+            if let disclosure = SettingsPrivacyPresentation.make(config: store.current).localPolishDisclosure {
+                Text(disclosure).font(.system(size: 11)).foregroundStyle(.secondary)
+                Button("管理文本整理") { navigation?.navigate(to: .settings(.text)) }
+                    .buttonStyle(.link).font(.system(size: 11))
+            }
+        }
+    }
+
+    private var inputSection: some View {
+        VStack(spacing: 0) {
+            SettingsRow("识别语言") {
+                Picker("识别语言", selection: $store.current.asrLanguage) {
+                    ForEach(WhisperLanguage.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                }.labelsHidden().pickerStyle(.segmented).frame(width: 200)
+            }
+            Divider()
+            SettingsRow("麦克风设备", description: selectedDeviceUnavailable ? "所选设备不可用；已保留选择，请重新连接或手动选择其他设备。" : nil) {
+                Picker("麦克风设备", selection: $store.current.microphoneDeviceID) {
+                    Text("系统默认").tag(String?.none)
+                    if let id = store.current.microphoneDeviceID, selectedDeviceUnavailable {
+                        Text("所选设备（不可用）").tag(Optional(id))
+                    }
+                    ForEach(availableDevices) { Text($0.name).tag(Optional($0.id)) }
+                }.labelsHidden().pickerStyle(.menu).frame(width: 220)
+                Button("刷新") { refreshDevices() }.controlSize(.small)
+            }
+        }
+    }
+
+    private var selectedDeviceUnavailable: Bool {
+        guard let id = store.current.microphoneDeviceID else { return false }
+        return !availableDevices.contains { $0.id == id }
+    }
+    private func refreshDevices() { availableDevices = devices() }
+    private func resetExpansion() {
+        localExpanded = store.current.asrRoutingPolicy != .cloudOnly
+        cloudExpanded = store.current.asrRoutingPolicy != .localOnly
+        revealTarget()
+    }
+    private func revealTarget() {
+        if target == .localModels { localExpanded = true }
+        if case .provider = target { cloudExpanded = true }
+    }
+    private var modeDescription: String {
+        switch store.current.asrRoutingPolicy {
+        case .localOnly: "仅使用可用本地模型；识别录音不发送给云端 ASR。"
+        case .auto: "优先云端；网络较慢或服务异常时，尝试已加载的本地模型。"
+        case .cloudOnly: "仅使用配置的云端识别服务，不切换到本地 ASR。"
+        }
     }
 }

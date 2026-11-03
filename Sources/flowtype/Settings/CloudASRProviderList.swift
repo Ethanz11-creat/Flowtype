@@ -1,10 +1,10 @@
 import SwiftUI
 
 struct CloudASRProviderList: View {
-    @ObservedObject private var store = ConfigurationStore.shared
-    @StateObject private var checks = CloudASRConnectionCheck()
+    @ObservedObject var store: ConfigurationStore
+    @ObservedObject var checks: CloudASRConnectionCheck
     // This owner survives closing/reopening sheets, including the same profile UUID.
-    @StateObject private var draftChecks = CloudASRConnectionCheck()
+    @ObservedObject var draftChecks: CloudASRConnectionCheck
     @State private var editor: Editor?
     var navigation: SettingsNavigation? = nil
 
@@ -68,10 +68,6 @@ struct CloudASRProviderList: View {
                     store.current = latest
                     editor = nil
                 }, onCancel: { editor = nil })
-        }
-        .onChange(of: store.current.cloudASRConfig) { old, new in
-            checks.synchronize(old: old, new: new)
-            draftChecks.synchronize(old: old, new: new)
         }
         .onDisappear {
             if let editor { draftChecks.invalidate(profileID: editor.draft.target.id) }

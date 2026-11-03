@@ -140,6 +140,16 @@ final class ReadinessMonitor: ObservableObject {
     private var debounceTask: Task<Void, Never>?
     private var permissionWatchOwnership = PermissionWatchOwnership()
     private var permissionWatchTask: Task<Void, Never>?
+    private var snapshotProvider: (() -> ReadinessSnapshot)?
+
+    /// Explicit isolated source for previews/tests; never initializes shared services.
+    init(snapshot: ReadinessSnapshot, refresh: (() -> ReadinessSnapshot)? = nil) {
+        self.snapshot = snapshot
+        let level = classifyReadiness(snapshot)
+        self.level = level
+        debounce = ReadinessDebounce(level: level)
+        snapshotProvider = refresh ?? { snapshot }
+    }
 
     init() {
         let snapshot = Self.makeSnapshot()
@@ -170,7 +180,7 @@ final class ReadinessMonitor: ObservableObject {
 
     func refresh() {
         let oldAccessibility = snapshot.accessibility
-        snapshot = Self.makeSnapshot()
+        snapshot = snapshotProvider?() ?? Self.makeSnapshot()
         publishIfChanged(rawLevel)
         if oldAccessibility != .granted, snapshot.accessibility == .granted {
             stopPermissionWatch()

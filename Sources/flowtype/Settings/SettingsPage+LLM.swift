@@ -7,7 +7,7 @@ extension SettingsPage {
                 Image(systemName: "sparkles")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Brand.accent)
-                Text("文本润色（LLM）")
+                Text("文本整理")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer()
             }
@@ -17,6 +17,13 @@ extension SettingsPage {
                 .foregroundColor(.secondary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Toggle("停止后自动整理", isOn: $store.current.polishOnStop)
+                .toggleStyle(.switch).controlSize(.small)
+            Text("停止录音后将转写文字发送给已选整理服务；仅本地识别不关闭此功能。")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+
+            effectiveStyleSection
 
             // Provider list
             VStack(alignment: .leading, spacing: 8) {
@@ -61,7 +68,7 @@ extension SettingsPage {
                     .foregroundColor(Brand.accent)
                 }
 
-                Text("双击触发键结束录音时，使用此提示词对识别结果进行润色。")
+                Text("高级默认提示词仅在没有可用风格包时使用；修改这里不会覆盖当前生效风格。")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .lineLimit(nil)
@@ -80,5 +87,13 @@ extension SettingsPage {
             }
         }
         .padding(.horizontal, 4)
+    }
+
+    private var effectiveStyleSection: some View {
+        let pack = StylePackStore.shared.activePack
+        return SettingsRow("生效风格", description: pack.map { "来自风格包：\($0.name)。优先使用已启用的活动风格，否则使用内置 AI Prompt 模式。" }
+                           ?? "当前使用高级默认提示词。") {
+            Button("管理风格") { navigation?.navigate(to: .style(pack?.id)) }.controlSize(.small)
+        }
     }
 }
