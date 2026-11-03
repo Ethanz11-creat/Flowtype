@@ -3,6 +3,30 @@ import AppKit
 import AVFoundation
 import os
 
+/// Capture and preview boundaries keep the stage's cancellation/ownership logic
+/// independent of microphone and Speech framework side effects.
+protocol RecordingCapture: AnyObject, Sendable {
+    var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)? { get set }
+    var onPCMSamples: (@Sendable ([Float]) -> Void)? { get set }
+    var onRecordingFrozen: (() -> Void)? { get set }
+    func requestPermission() async -> Bool
+    func authorizationStatus() -> Int
+    func startRecording(deviceID: String?, ownerID: UInt64) async throws -> RecordingOutput
+    func stopRecording(ownerID: UInt64)
+    func owns(_ ownerID: UInt64) -> Bool
+    func clearCallbacks(ownerID: UInt64)
+    func takeAccumulatedSamples(ownerID: UInt64?) -> [Float]
+}
+
+protocol RecordingPreview: Sendable {
+    func startStreamingRecognition() async -> AsyncStream<String>
+    func appendAudioBuffer(_ buffer: AVAudioPCMBuffer)
+    func stopStreamingRecognition() -> String
+}
+
+extension AudioRecorder: RecordingCapture {}
+extension AppleSpeechProvider: RecordingPreview {}
+
 // MARK: - RecordingStage
 
 /// Pipeline stage that handles microphone capture and real-time AppleSpeech preview.
@@ -13,11 +37,32 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
     var name: String { "Recording" }
 
+    private let makeRecorder: @Sendable () -> any RecordingCapture
+    private let makePreview: @Sendable () -> any RecordingPreview
+    private let captureRoute: @Sendable () async -> ASRRouteSnapshot
+    private let contextProvider: any ContextProvider
+    private let realtimeFactory: RealtimeSessionFactory
+    private let microphoneDeviceID: @Sendable () -> String?
+
+    init(makeRecorder: @escaping @Sendable () -> any RecordingCapture = { AudioRecorder() },
+         makePreview: @escaping @Sendable () -> any RecordingPreview = { AppleSpeechProvider() },
+         captureRoute: @escaping @Sendable () async -> ASRRouteSnapshot = { await ASRRouter.shared.captureStartRoute() },
+         contextProvider: any ContextProvider = AXContextProvider(),
+         realtimeFactory: @escaping RealtimeSessionFactory = liveRealtimeSessionFactory,
+         microphoneDeviceID: @escaping @Sendable () -> String? = { ConfigurationStore.shared.current.microphoneDeviceID }) {
+        self.makeRecorder = makeRecorder
+        self.makePreview = makePreview
+        self.captureRoute = captureRoute
+        self.contextProvider = contextProvider
+        self.realtimeFactory = realtimeFactory
+        self.microphoneDeviceID = microphoneDeviceID
+    }
+
     func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
         let sessionID = context.sessionID
         // Capture and preview resources belong to this execution alone.
-        let audioRecorder = AudioRecorder()
-        let appleSpeechProvider = AppleSpeechProvider()
+        let audioRecorder = makeRecorder()
+        let appleSpeechProvider = makePreview()
         let frozen = OSAllocatedUnfairLock<Bool>(initialState: false)
         let realtimeBox = OSAllocatedUnfairLock<RealtimeASRSessionHandle?>(initialState: nil)
         AppLogger.log("[RecordingStage#\(sessionID)] Recording phase started")
@@ -63,10 +108,10 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
                 try Task.checkCancellation()
 
-                let route = await ASRRouter.shared.captureStartRoute()
+                let route = await captureRoute()
                 let handle = await MainActor.run {
-                    context.startForegroundCollection()
-                    context.prepareRealtime(route: route)
+                    context.startForegroundCollection(provider: contextProvider)
+                    context.prepareRealtime(route: route, factory: realtimeFactory)
                     return context.realtimeHandle
                 }
                 realtimeBox.withLock { $0 = handle }
@@ -79,7 +124,7 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
                 try Task.checkCancellation()
 
                 // 2. Start audio recording
-                let deviceID = ConfigurationStore.shared.current.microphoneDeviceID
+                let deviceID = microphoneDeviceID()
                 let output = try await audioRecorder.startRecording(deviceID: deviceID, ownerID: sessionID)
                 AppLogger.log("[RecordingStage#\(sessionID)] AudioRecorder started")
 
@@ -124,55 +169,14 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
                 // 5. Stop recording and collect results
                 previewTask?.cancel()
-                let ownsRecorder = audioRecorder.owns(sessionID)
-                cleanup(recorder: audioRecorder, ownerID: sessionID)
-                let rawSamples = audioRecorder.takeAccumulatedSamples(ownerID: sessionID)
-                let finalPreviewText = ownsRecorder ? appleSpeechProvider.stopStreamingRecognition() : ""
-                realtimeBox.withLock { $0 }?.ingress.seal()
-                AppLogger.log("[RecordingStage#\(sessionID)] AppleSpeech final preview: \(finalPreviewText.count) chars")
-
-                // If the spectrum stream ended because the mic froze (not because the user
-                // stopped — that path throws CancellationError), fail the session so it
-                // recovers to .idle instead of pushing a silent partial transcript.
-                if frozen.withLock({ $0 }) {
-                    if let handle = realtimeBox.withLock({ $0 }) { await handle.session.cancel() }
-                    AppLogger.log("[RecordingStage#\(sessionID)] Recording interrupted (device froze/disconnected)")
-                    return .suspend(ErrorRecoveryContext(
-                        failedStage: name,
-                        error: AudioRecorderError.engineStartFailed,
-                        rawText: nil,
-                        retryable: false
-                    ))
-                }
-
-                let audioDuration = Double(rawSamples.count) / 16000.0
-                AppLogger.log("[RecordingStage#\(sessionID)] Raw samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
-
-                await MainActor.run {
-                    guard !context.isCancelled else { return }
-                    context.recordingMs = UInt64(audioDuration * 1000)
-                }
-                return .continue(.audio(samples: rawSamples, previewText: finalPreviewText))
+                return await finishRecording(recorder: audioRecorder, preview: appleSpeechProvider,
+                    context: context, frozen: frozen, realtimeBox: realtimeBox)
 
             } catch is CancellationError {
                 AppLogger.log("[RecordingStage#\(sessionID)] Recording cancelled")
                 previewTask?.cancel()
-                let ownsRecorder = audioRecorder.owns(sessionID)
-                cleanup(recorder: audioRecorder, ownerID: sessionID)
-                let rawSamples = audioRecorder.takeAccumulatedSamples(ownerID: sessionID)
-                let finalPreviewText = ownsRecorder ? appleSpeechProvider.stopStreamingRecognition() : ""
-                if context.isCancellationRequested {
-                    if let handle = realtimeBox.withLock({ $0 }) { await handle.session.cancel() }
-                } else {
-                    realtimeBox.withLock { $0 }?.ingress.seal()
-                }
-                let audioDuration = Double(rawSamples.count) / 16000.0
-                AppLogger.log("[RecordingStage#\(sessionID)] Recording cancelled, samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
-                if await MainActor.run(body: { context.isCancelled }) {
-                    return .complete
-                }
-                await MainActor.run { context.recordingMs = UInt64(audioDuration * 1000) }
-                return .continue(.audio(samples: rawSamples, previewText: finalPreviewText))
+                return await finishRecording(recorder: audioRecorder, preview: appleSpeechProvider,
+                    context: context, frozen: frozen, realtimeBox: realtimeBox)
             } catch {
                 AppLogger.log("[RecordingStage#\(sessionID)] Recording failed: \(error)")
                 previewTask?.cancel()
@@ -201,7 +205,40 @@ final class RecordingStage: PipelineStage, @unchecked Sendable {
 
     // MARK: - Helpers
 
-    private func cleanup(recorder: AudioRecorder, ownerID: UInt64) {
+    /// Normal Stop cancels the recording task without cancelling its context.
+    /// A freeze already observed by either unwind path must never become audio.
+    private func finishRecording(recorder: any RecordingCapture, preview: any RecordingPreview,
+        context: SessionContext, frozen: OSAllocatedUnfairLock<Bool>,
+        realtimeBox: OSAllocatedUnfairLock<RealtimeASRSessionHandle?>) async -> StageResult {
+        let sessionID = context.sessionID
+        let ownsRecorder = recorder.owns(sessionID)
+        cleanup(recorder: recorder, ownerID: sessionID)
+        let rawSamples = recorder.takeAccumulatedSamples(ownerID: sessionID)
+        let finalPreviewText = ownsRecorder ? preview.stopStreamingRecognition() : ""
+        let realtime = realtimeBox.withLock { $0 }
+
+        if await MainActor.run(body: { context.isCancelled }) {
+            await realtime?.session.cancel()
+            return .complete
+        }
+        realtime?.ingress.seal()
+        if frozen.withLock({ $0 }) {
+            await realtime?.session.cancel()
+            AppLogger.log("[RecordingStage#\(sessionID)] Recording interrupted (device froze/disconnected)")
+            return .suspend(ErrorRecoveryContext(failedStage: name,
+                error: AudioRecorderError.engineStartFailed, rawText: nil, retryable: false))
+        }
+
+        let audioDuration = Double(rawSamples.count) / 16000.0
+        AppLogger.log("[RecordingStage#\(sessionID)] Raw samples: \(rawSamples.count) (\(String(format: "%.1f", audioDuration))s)")
+        return await MainActor.run {
+            guard !context.isCancelled else { return .complete }
+            context.recordingMs = UInt64(audioDuration * 1000)
+            return .continue(.audio(samples: rawSamples, previewText: finalPreviewText))
+        }
+    }
+
+    private func cleanup(recorder: any RecordingCapture, ownerID: UInt64) {
         recorder.stopRecording(ownerID: ownerID)
         recorder.clearCallbacks(ownerID: ownerID)
     }

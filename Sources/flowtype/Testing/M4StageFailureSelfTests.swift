@@ -121,6 +121,7 @@ enum M4StageFailureSelfTests {
                 routeValue.candidateIDs.isEmpty ? .readiness(.noEngine) : .transientASR, r, "no candidates or initial budget")
         }
         startup(r)
+        await RecordingStageTerminationSelfTests.run(r)
         await deadline(r)
         await cancellations(r)
         await localAndPreview(r)
