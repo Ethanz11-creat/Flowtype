@@ -56,6 +56,7 @@ enum M3FinalFixSelfTests {
             signals: .init(secureInputActive: false, focus: .editableText))
         lazy var current = target
         var trusted = true
+        var selectedMode: DeliveryMode = .automatic
         var reads = 0
         var onTargetRead: ((Int) async -> Void)?
         let board = Board()
@@ -81,7 +82,7 @@ enum M3FinalFixSelfTests {
         }, typingEvents: .init(prepare: { [pairs, preparationFails] pair in
             if preparationFails.withLock({ $0 }) { throw InjectionError.eventCreationFailed }
             return { pairs.withLock { $0.append(pair) } }
-        }, wait: { await self.waitForPair() }), mode: { .automatic }, bundleID: { _ in "synthetic.editor" },
+        }, wait: { await self.waitForPair() }), mode: { self.selectedMode }, bundleID: { _ in "synthetic.editor" },
         paste: { text, context, _ in
             self.pastes += 1
             return await self.transaction.paste(text, context: context, board: self.board,
@@ -123,8 +124,59 @@ enum M3FinalFixSelfTests {
 
     @MainActor static func run(_ r: SelfTest.Reporter) async {
         await targetChanges(r)
+        await primaryTypingTargetChanges(r)
         await loopBoundaries(r)
         await controllerCancellation(r)
+    }
+
+    @MainActor private static func primaryTypingTargetChanges(_ r: SelfTest.Reporter) async {
+        for mode: DeliveryMode in [.unicode, .pasteInSupportedApps] {
+            for change in ["pid", "identity", "secure", "permission", "nontext"] {
+                for boundary in ["first", "chunk", "before-newline", "after-newline"] {
+                    let f = Fixture()
+                    f.selectedMode = mode
+                    if boundary == "before-newline" { f.text = "first\nsecond" }
+                    if boundary == "after-newline" { f.text = "\nsecond" }
+                    if boundary == "first" {
+                        f.onTargetRead = { count in if count == 2 { Self.change(change, fixture: f) } }
+                    } else {
+                        f.waitAfterPair = { Self.change(change, fixture: f) }
+                    }
+                    let (_, context) = await f.execute()
+                    let sent = f.pairs.withLock { $0 }
+                    let label = "CORE02 \(mode) \(change)/\(boundary)"
+                    r.eq(sent.count, boundary == "first" ? 0 : 1, "\(label): no later event escapes")
+                    if boundary == "after-newline" { r.eq(sent.first, .newline, "\(label): checks after newline too") }
+                    r.eq(context.deliveryOutcome, boundary == "first" ? .clipboard : .uncertain,
+                         "\(label): outcome follows actual escaped events")
+                    r.eq(f.copies, boundary == "first" ? 1 : 0, "\(label): never duplicates partial typing")
+                    r.eq(f.pastes, 0, "\(label): no paste retry")
+                }
+            }
+            let blind = Fixture()
+            blind.selectedMode = mode
+            blind.current = .init(pid: 42, signals: .init(secureInputActive: false, focus: .blindOrUnknown))
+            let (_, context) = await blind.execute()
+            r.eq(context.deliveryOutcome, .typedDispatched, "CORE02: primary typing retains same-process unknown AX compatibility")
+            r.eq(blind.pairs.withLock { $0.count }, 5, "CORE02: unknown AX does not lose safe text")
+            for afterFirst in [false, true] {
+                let cancelled = Fixture()
+                cancelled.selectedMode = mode
+                cancelled.onTargetRead = { count in
+                    if count == (afterFirst ? 3 : 2) {
+                        await Task.yield()
+                        cancelled.directContext?.cancel()
+                    }
+                }
+                let (_, stopped) = await cancelled.execute()
+                r.eq(cancelled.pairs.withLock { $0.count }, afterFirst ? 1 : 0,
+                     "CORE02: cancellation during primary validator blocks the next pair")
+                r.eq(stopped.deliveryOutcome, afterFirst ? .uncertain : .cancelled,
+                     "CORE02: primary cancellation retains actual event evidence")
+                r.eq(cancelled.copies + cancelled.pastes, 0,
+                     "CORE02: cancellation never copies or resends text")
+            }
+        }
     }
 
     @MainActor private static func targetChanges(_ r: SelfTest.Reporter) async {

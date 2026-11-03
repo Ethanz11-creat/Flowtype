@@ -9,16 +9,12 @@ final class AppleSpeechProvider: @unchecked Sendable {
     let displayName = "Apple 语音预览"
 
     private var recognizer: SFSpeechRecognizer?
-    private let stateLock = OSAllocatedUnfairLock<SpeechState>(uncheckedState: SpeechState())
-    private var streamingTimeoutTimer = CancellableTimer()
-    private let streamingTimeout: TimeInterval = 30.0
-
-    private struct SpeechState {
-        var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-        var recognitionTask: SFSpeechRecognitionTask?
-        var previewContinuation: AsyncStream<String>.Continuation?
-        var finalResult: String = ""
+    private struct Preview {
+        let request: SFSpeechAudioBufferRecognitionRequest
+        let session: StreamingPreviewSession
     }
+    private let previewLock = OSAllocatedUnfairLock<Preview?>(uncheckedState: nil)
+    private let streamingTimeout: TimeInterval = 30.0
 
     private var recognizerLocaleID: String
 
@@ -128,9 +124,14 @@ final class AppleSpeechProvider: @unchecked Sendable {
     // MARK: - Real-time Streaming Recognition (for preview during recording)
 
     func startStreamingRecognition() async -> AsyncStream<String> {
+        let previous = previewLock.withLock { current in
+            let previous = current
+            current = nil
+            return previous
+        }
+        _ = previous?.session.finish()
         guard ValidationEffects.live.allow(.permissionRequest) else { return AsyncStream { $0.finish() } }
         refreshRecognizerIfNeeded()
-        stateLock.withLock { $0.finalResult = "" }
 
         // Check authorization and request if needed
         let authStatus = SFSpeechRecognizer.authorizationStatus()
@@ -167,81 +168,49 @@ final class AppleSpeechProvider: @unchecked Sendable {
         // pending. Never resurrect preview recognition for that old recording.
         guard !Task.isCancelled else { return AsyncStream { $0.finish() } }
         AppLogger.log("[AppleSpeechProvider] Starting real-time streaming recognition...")
-        return AsyncStream { continuation in
-            self.stateLock.withLock { $0.previewContinuation = continuation }
-
-            // Create recognition request
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-            request.requiresOnDeviceRecognition = true
-            self.stateLock.withLock { $0.recognitionRequest = request }
-
-            // Create recognition task
-            let task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                guard let self = self else { return }
-
-                if let error = error {
-                    AppLogger.log("[AppleSpeechProvider] Recognition error: \(error.localizedDescription)")
-                    self.streamingTimeoutTimer.cancel()
-                    self.stateLock.withLock { $0.previewContinuation?.finish() }
-                    return
-                }
-
-                guard let result = result else {
-                    AppLogger.log("[AppleSpeechProvider] Recognition result is nil")
-                    return
-                }
-
-                let transcript = result.bestTranscription.formattedString
-                self.stateLock.withLock { $0.finalResult = transcript }
-                AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
-                self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
-
-                if result.isFinal {
-                    AppLogger.log("[AppleSpeechProvider] Final result received")
-                    self.streamingTimeoutTimer.cancel()
-                    self.stateLock.withLock { $0.previewContinuation?.finish() }
-                }
-            }
-            self.stateLock.withLock { $0.recognitionTask = task }
-
-            // Timeout guard: if no final result within 30s, force-stop
-            self.streamingTimeoutTimer.schedule(
-                withTimeInterval: self.streamingTimeout,
-                repeats: false
-            ) { [weak self] in
-                guard let self = self else { return }
-                AppLogger.log("[AppleSpeechProvider] Streaming recognition timed out after \(self.streamingTimeout)s")
-                self.stateLock.withLock { $0.previewContinuation?.finish() }
-                self.stateLock.withLock { $0.recognitionTask?.cancel() }
-                self.stateLock.withLock { $0.recognitionRequest?.endAudio() }
-            }
-
-            continuation.onTermination = { [weak self] _ in
-                AppLogger.log("[AppleSpeechProvider] Stream terminated")
-                _ = self?.stopStreamingRecognition()
-            }
+        let pair = AsyncStream<String>.makeStream()
+        let session = StreamingPreviewSession(continuation: pair.continuation, timeout: streamingTimeout)
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = true
+        session.addCleanup { request.endAudio() }
+        let replaced = previewLock.withLock { current in
+            let previous = current
+            current = Preview(request: request, session: session)
+            return previous
         }
+        _ = replaced?.session.finish()
+
+        // Capture this attempt's owner, not mutable provider state. Error/final
+        // callbacks from an old attempt cannot finish or overwrite a new stream.
+        let task = recognizer.recognitionTask(with: request) { result, error in
+            if let error {
+                AppLogger.log("[AppleSpeechProvider] Recognition error: \(error.localizedDescription)")
+                session.finish()
+                return
+            }
+            guard let result else { return }
+            let transcript = result.bestTranscription.formattedString
+            AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+            session.receive(transcript, isFinal: result.isFinal)
+        }
+        // Task creation is allowed to callback synchronously. If it already
+        // completed/stopped, installation immediately cleans the returned task.
+        session.addCleanup { task.cancel() }
+        if Task.isCancelled { session.finish() }
+        return pair.stream
     }
 
     // Called by AudioRecorder's tap callback with raw audio buffers
     func appendAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard let request = stateLock.withLock({ $0.recognitionRequest }) else { return }
-        request.append(buffer)
+        guard let preview = previewLock.withLock({ $0 }), !preview.session.isFinished else { return }
+        preview.request.append(buffer)
     }
 
     func stopStreamingRecognition() -> String {
-        let finalResult = stateLock.withLock { $0.finalResult }
-        AppLogger.log("[AppleSpeechProvider] stopStreamingRecognition called, finalResult=\(finalResult.count) chars")
-        streamingTimeoutTimer.cancel()
-        stateLock.withLock { $0.recognitionRequest?.endAudio() }
-        stateLock.withLock { $0.recognitionTask?.cancel() }
-
-        stateLock.withLock {
-            $0.recognitionRequest = nil
-            $0.recognitionTask = nil
-        }
-
-        return stateLock.withLock { $0.finalResult }
+        // finish/endAudio/cancel may synchronously invoke termination callbacks.
+        // Both this provider's lock and the session's state lock are released.
+        let session = previewLock.withLock { $0?.session }
+        return session?.finish() ?? ""
     }
 }

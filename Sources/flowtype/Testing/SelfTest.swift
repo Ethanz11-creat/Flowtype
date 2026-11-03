@@ -389,6 +389,8 @@ enum SelfTest {
             finish(r)
         }
         if CommandLine.arguments.contains("--m3-delivery-only") {
+            await CoreTextFidelitySelfTests.run(r)
+            await CoreLifecycleRegressionSelfTests.run(r)
             M3DeliverySelfTests.policy(r)
             await M3DeliverySelfTests.runtime(r)
             await M3DeliverySelfTests.presentation(r)
@@ -549,6 +551,8 @@ enum SelfTest {
         await M3DeliverySelfTests.runtime(r)
         await M3DeliverySelfTests.presentation(r)
         await M3FinalFixSelfTests.run(r)
+        await CoreTextFidelitySelfTests.run(r)
+        await CoreLifecycleRegressionSelfTests.run(r)
         await testDeliveryModeStage(r)
         M3SpeechPreflightSelfTests.pure(r)
         await M3SpeechPreflightSelfTests.background(r)

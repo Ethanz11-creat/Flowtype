@@ -90,7 +90,8 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 }
                 await complete(.clipboard, context: context, start: start)
             case .type:
-                return await typeText(text, context: context, preserveClipboardOnFailure: false, start: start)
+                return await typeText(text, context: context, preserveClipboardOnFailure: false, start: start,
+                    validate: typingValidator(target: target, context: context, requiresEditable: false))
             case .paste:
                 let result = await paste(text, context, target)
                 switch result {
@@ -113,17 +114,8 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                             eventDispatched: context.deliveryEventStarted, target: target,
                             current: refreshed, accessibilityTrusted: trusted) {
                             return await typeText(text, context: context,
-                                preserveClipboardOnFailure: true, start: start, validate: {
-                                    try self.checkActive(context)
-                                    let fresh = await self.currentTarget()
-                                    try self.checkActive(context)
-                                    let permitted = await MainActor.run { self.accessibilityTrusted() }
-                                    try self.checkActive(context)
-                                    guard permitted, fresh.signals.focus == .editableText,
-                                          decideDelivery(target: target, current: fresh) == .inject else {
-                                        throw InjectionError.targetNoLongerSafe
-                                    }
-                                })
+                                preserveClipboardOnFailure: true, start: start,
+                                validate: typingValidator(target: target, context: context, requiresEditable: true))
                         }
                     }
                     return .suspend(ErrorRecoveryContext(failedStage: name,
@@ -145,7 +137,7 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
 
     private func typeText(_ text: String, context: SessionContext,
                           preserveClipboardOnFailure: Bool, start: Date,
-                          validate: @escaping @Sendable () async throws -> Void = {}) async -> StageResult {
+                          validate: @escaping @Sendable () async throws -> Void) async -> StageResult {
         do {
             try checkActive(context)
             if let inject { try await inject(text, context) }
@@ -183,6 +175,21 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
                 return .suspend(ErrorRecoveryContext(failedStage: name,
                     error: error, rawText: text, retryable: false,
                     failureKind: FailureClassifier.classify(error) == .cancelled ? .cancelled : .deliveryBlocked, textKind: .result))
+            }
+        }
+    }
+
+    private func typingValidator(target: DeliveryTargetSnapshot?, context: SessionContext,
+                                 requiresEditable: Bool) -> @Sendable () async throws -> Void {
+        { [self] in
+            try checkActive(context)
+            let fresh = await currentTarget()
+            try checkActive(context)
+            let permitted = await MainActor.run { accessibilityTrusted() }
+            try checkActive(context)
+            guard permitted, (!requiresEditable || fresh.signals.focus == .editableText),
+                  decideDelivery(target: target, current: fresh) == .inject else {
+                throw InjectionError.targetNoLongerSafe
             }
         }
     }

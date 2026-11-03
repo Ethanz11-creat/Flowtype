@@ -1,0 +1,3 @@
+CORE03 RED termination cleanup can acquire caller lock: false expected true
+
+exit:1

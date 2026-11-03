@@ -1,0 +1,8 @@
+FAIL: 金额是10000元 => 金额是100元
+FAIL: 编号是12121212 => 编号是12
+FAIL: 变量是 `aaaa` => 变量是 `aa`
+FAIL: 请打开这个地址 https://a.co/?x=1 => 请打开这个地址 https://a.co/？x=1
+FAIL: 请运行 foo() => 请运行 foo(）
+fidelity failures: 5
+
+exit: 1

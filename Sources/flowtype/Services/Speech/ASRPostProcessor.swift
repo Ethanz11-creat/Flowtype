@@ -16,16 +16,41 @@ struct ASRPostProcessor {
     /// Main entry point. Applies the full pipeline.
     static func process(_ text: String) -> String {
         let processor = shared
+        // Keep full-text boundaries for filler/punctuation decisions. A rule that
+        // damages explicit data/code is discarded rather than partially applied.
+        let matches = protectedLiterals?.matches(in: text, range: NSRange(text.startIndex..., in: text)) ?? []
+        let literals = matches.compactMap { Range($0.range, in: text).map { String(text[$0]) } }
         var result = text
-        result = processor.normalizeWhitespace(result)
-        result = processor.stripFillers(result)
-        result = processor.stripRepetitions(result)
-        result = processor.correctTechTerms(result)
-        result = processor.fixCommonASRErrors(result)
-        result = processor.convertPunctuationForChinese(result)
-        result = processor.normalizeWhitespace(result)
-        return result
+        for rule in [processor.normalizeWhitespace, processor.stripFillers,
+                     { processor.stripRepetitions($0) }, processor.correctTechTerms,
+                     processor.fixCommonASRErrors, processor.normalizeWhitespace] {
+            let candidate = rule(result)
+            var cursor = candidate.startIndex
+            let preserved = literals.allSatisfy { literal in
+                guard let range = candidate.range(of: literal, options: .literal, range: cursor..<candidate.endIndex) else { return false }
+                cursor = range.upperBound
+                return true
+            }
+            if preserved { result = candidate }
+        }
+        return processor.convertPunctuationForChinese(result)
     }
+
+    private static let protectedLiterals: NSRegularExpression? = {
+        let patterns = [
+            #"`+[^`]+`+"#,
+            #""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'"#,
+            // Apostrophes and Unicode query/path data are part of a URL. Keep an
+            // ambiguous trailing punctuation mark rather than corrupt its data.
+            #"https?://[^\s<>\"`]+"#,
+            #"(?<![\p{L}\p{M}\p{N}_:/])(?:~/|/|\.{1,2}/|[\p{L}\p{M}\p{N}_.-]+/)(?:(?!`)[\p{L}\p{M}\p{N}\p{S}_./~+@%:=#?&-])+"#,
+            #"(?<![A-Za-z0-9_-])--?[A-Za-z][A-Za-z0-9_-]*(?:=[A-Za-z0-9_./~:+@%=-]+)?"#,
+            #"[A-Za-z_][A-Za-z0-9_.]*\([^\n`]*\)"#,
+            #"\[[^\]\n`]*\]"#,
+            #"(?<![A-Za-z0-9_])v?\d+(?:\.\d+)*(?:[-+][A-Za-z0-9.-]+)?"#,
+        ]
+        return try? NSRegularExpression(pattern: patterns.joined(separator: "|"))
+    }()
 
     // MARK: - Pipeline steps
 
@@ -64,7 +89,7 @@ struct ASRPostProcessor {
                             break
                         }
                     }
-                    if count >= maxRepeat {
+                    if count >= maxRepeat, pat.allSatisfy(\.isChinese) {
                         out.append(contentsOf: pat)
                         i = j
                         continue
@@ -158,7 +183,7 @@ struct ASRPostProcessor {
             while i + runLength < chars.count && chars[i + runLength] == current {
                 runLength += 1
             }
-            if runLength >= 4 && !Self.legitimateReduplicationChars.contains(current) {
+            if runLength >= 4 && current.isChinese && !Self.legitimateReduplicationChars.contains(current) {
                 cleaned.append(current)
                 cleaned.append(current)
             } else {
@@ -195,11 +220,24 @@ struct ASRPostProcessor {
         // Precompute code-context map so each punctuation check is O(1)
         // instead of the old O(n) backward scan (which led to O(n²) overall).
         let codeContextMap = buildCodeContextMap(in: chars)
+        let protected = Self.protectedLiterals?.matches(in: text, range: NSRange(text.startIndex..., in: text)) ?? []
+        var literalIndex = 0
+        var utf16Offset = 0
 
         var result = ""
         var i = 0
         while i < chars.count {
             let ch = chars[i]
+            while literalIndex < protected.count, NSMaxRange(protected[literalIndex].range) <= utf16Offset {
+                literalIndex += 1
+            }
+            let isLiteral = literalIndex < protected.count && protected[literalIndex].range.location <= utf16Offset
+            utf16Offset += String(ch).utf16.count
+            if isLiteral {
+                result.append(ch)
+                i += 1
+                continue
+            }
 
             // Check if this char is an English punctuation we might convert.
             guard let conversion = chinesePunctuationMap[ch] else {

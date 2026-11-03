@@ -1,0 +1,131 @@
+  ✗ FAIL: CORE01 raw: preserve 金额是10000元 — got ["金额是100元"], want ["金额是10000元"]
+  ✗ FAIL: CORE01 echo: preserve 金额是10000元 — got ["金额是100元"], want ["金额是10000元"]
+  ✗ FAIL: CORE01 failed: preserve 金额是10000元 — got ["金额是100元"], want ["金额是10000元"]
+  ✗ FAIL: CORE01 raw: preserve 编号是12121212 — got ["编号是12"], want ["编号是12121212"]
+  ✗ FAIL: CORE01 echo: preserve 编号是12121212 — got ["编号是12"], want ["编号是12121212"]
+  ✗ FAIL: CORE01 failed: preserve 编号是12121212 — got ["编号是12"], want ["编号是12121212"]
+  ✗ FAIL: CORE01 raw: preserve 变量是 `aaaa` — got ["变量是 `aa`"], want ["变量是 `aaaa`"]
+  ✗ FAIL: CORE01 echo: preserve 变量是 `aaaa` — got ["变量是 `aa`"], want ["变量是 `aaaa`"]
+  ✗ FAIL: CORE01 failed: preserve 变量是 `aaaa` — got ["变量是 `aa`"], want ["变量是 `aaaa`"]
+  ✗ FAIL: CORE01 raw: preserve 请打开这个地址 https://a.co/?x=1 — got ["请打开这个地址 https://a.co/？x=1"], want ["请打开这个地址 https://a.co/?x=1"]
+  ✗ FAIL: CORE01 echo: preserve 请打开这个地址 https://a.co/?x=1 — got ["请打开这个地址 https://a.co/？x=1"], want ["请打开这个地址 https://a.co/?x=1"]
+  ✗ FAIL: CORE01 failed: preserve 请打开这个地址 https://a.co/?x=1 — got ["请打开这个地址 https://a.co/？x=1"], want ["请打开这个地址 https://a.co/?x=1"]
+  ✗ FAIL: CORE01 raw: preserve 请运行 foo() — got ["请运行 foo(）"], want ["请运行 foo()"]
+  ✗ FAIL: CORE01 echo: preserve 请运行 foo() — got ["请运行 foo(）"], want ["请运行 foo()"]
+  ✗ FAIL: CORE01 failed: preserve 请运行 foo() — got ["请运行 foo(）"], want ["请运行 foo()"]
+  ✗ FAIL: CORE01 raw: preserve 请调用 foo(a, b) — got ["请调用 foo(a, b）"], want ["请调用 foo(a, b)"]
+  ✗ FAIL: CORE01 echo: preserve 请调用 foo(a, b) — got ["请调用 foo(a, b）"], want ["请调用 foo(a, b)"]
+  ✗ FAIL: CORE01 failed: preserve 请调用 foo(a, b) — got ["请调用 foo(a, b）"], want ["请调用 foo(a, b)"]
+  ✗ FAIL: CORE01 raw: preserve 文件在 /tmp/aaaa.txt — got ["文件在 /tmp/aa.txt"], want ["文件在 /tmp/aaaa.txt"]
+  ✗ FAIL: CORE01 echo: preserve 文件在 /tmp/aaaa.txt — got ["文件在 /tmp/aa.txt"], want ["文件在 /tmp/aaaa.txt"]
+  ✗ FAIL: CORE01 failed: preserve 文件在 /tmp/aaaa.txt — got ["文件在 /tmp/aa.txt"], want ["文件在 /tmp/aaaa.txt"]
+  ✗ FAIL: CORE01 raw: preserve 版本是 v1.0.0000 — got ["版本是 v1.0.00"], want ["版本是 v1.0.0000"]
+  ✗ FAIL: CORE01 echo: preserve 版本是 v1.0.0000 — got ["版本是 v1.0.00"], want ["版本是 v1.0.0000"]
+  ✗ FAIL: CORE01 failed: preserve 版本是 v1.0.0000 — got ["版本是 v1.0.00"], want ["版本是 v1.0.0000"]
+  ✗ FAIL: CORE01 raw: preserve 参数是 --label=aaaa — got ["参数是 --label=aa"], want ["参数是 --label=aaaa"]
+  ✗ FAIL: CORE01 echo: preserve 参数是 --label=aaaa — got ["参数是 --label=aa"], want ["参数是 --label=aaaa"]
+  ✗ FAIL: CORE01 failed: preserve 参数是 --label=aaaa — got ["参数是 --label=aa"], want ["参数是 --label=aaaa"]
+  ✗ FAIL: CORE01 raw: preserve 代码是 `let aaaa = 10000;
+print(aaaa)` — got ["代码是 `let aa = 100; print(aa)`"], want ["代码是 `let aaaa = 10000;\nprint(aaaa)`"]
+  ✗ FAIL: CORE01 echo: preserve 代码是 `let aaaa = 10000;
+print(aaaa)` — got ["代码是 `let aa = 100; print(aa)`"], want ["代码是 `let aaaa = 10000;\nprint(aaaa)`"]
+  ✗ FAIL: CORE01 failed: preserve 代码是 `let aaaa = 10000;
+print(aaaa)` — got ["代码是 `let aa = 100; print(aa)`"], want ["代码是 `let aaaa = 10000;\nprint(aaaa)`"]
+  ✗ FAIL: CORE01 raw: preserve 名称为 aaaa — got ["名称为 aa"], want ["名称为 aaaa"]
+  ✗ FAIL: CORE01 echo: preserve 名称为 aaaa — got ["名称为 aa"], want ["名称为 aaaa"]
+  ✗ FAIL: CORE01 failed: preserve 名称为 aaaa — got ["名称为 aa"], want ["名称为 aaaa"]
+  ✗ FAIL: CORE01 raw: preserve 路径为 /tmp/然后然后然后.txt — got ["路径为 /tmp/然后.txt"], want ["路径为 /tmp/然后然后然后.txt"]
+  ✗ FAIL: CORE01 echo: preserve 路径为 /tmp/然后然后然后.txt — got ["路径为 /tmp/然后.txt"], want ["路径为 /tmp/然后然后然后.txt"]
+  ✗ FAIL: CORE01 failed: preserve 路径为 /tmp/然后然后然后.txt — got ["路径为 /tmp/然后.txt"], want ["路径为 /tmp/然后然后然后.txt"]
+  ✗ FAIL: CORE02 unicode pid/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 unicode pid/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 unicode pid/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 unicode pid/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 unicode pid/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode pid/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 unicode pid/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode pid/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 unicode pid/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode identity/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 unicode identity/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 unicode identity/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 unicode identity/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 unicode identity/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode identity/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 unicode identity/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode identity/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 unicode identity/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode secure/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 unicode secure/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 unicode secure/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 unicode secure/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 unicode secure/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode secure/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 unicode secure/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode secure/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 unicode secure/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode permission/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 unicode permission/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 unicode permission/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 unicode permission/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 unicode permission/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode permission/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 unicode permission/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode permission/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 unicode permission/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode nontext/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 unicode nontext/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 unicode nontext/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 unicode nontext/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 unicode nontext/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode nontext/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 unicode nontext/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 unicode nontext/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 unicode nontext/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps pid/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps identity/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps secure/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps permission/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/first: no later event escapes — got 5, want 0
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/first: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.clipboard)
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/first: never duplicates partial typing — got 0, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/chunk: no later event escapes — got 5, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/chunk: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/before-newline: no later event escapes — got 3, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/before-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/after-newline: no later event escapes — got 2, want 1
+  ✗ FAIL: CORE02 pasteInSupportedApps nontext/after-newline: outcome follows actual escaped events — got Optional(FlowType.DeliveryOutcome.typedDispatched), want Optional(FlowType.DeliveryOutcome.uncertain)
+=== FlowType --self-test ===
+=== M3 delivery self-test: 836 passed, 126 failed ===

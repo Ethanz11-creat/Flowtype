@@ -63,8 +63,6 @@ final class AudioRecorder: @unchecked Sendable {
     // Diagnostics
     private struct HeartbeatState {
         var tapCallCount = 0
-        var lastTapCallCount = 0
-        var lastTapTimestamp: Date?
     }
     private let heartbeatLock = OSAllocatedUnfairLock<HeartbeatState>(uncheckedState: HeartbeatState())
 
@@ -78,9 +76,7 @@ final class AudioRecorder: @unchecked Sendable {
     var onRecordingFrozen: (() -> Void)?
 
     // MARK: - Heartbeat detection
-    private var heartbeatTimer = CancellableTimer()
-    private let heartbeatInterval: TimeInterval = 2.0
-    private let heartbeatTimeout: TimeInterval = 5.0
+    private let heartbeat = RecordingHeartbeat()
 
     func authorizationStatus() -> Int {
         AVAudioApplication.shared.recordPermission.rawValue
@@ -218,38 +214,10 @@ final class AudioRecorder: @unchecked Sendable {
         }
         heartbeatLock.withLock { state in
             state.tapCallCount = 0
-            state.lastTapCallCount = 0
-            state.lastTapTimestamp = Date()
         }
         sampleLock.withLock {
             rawSamples.removeAll(keepingCapacity: true)
         }
-        heartbeatTimer.schedule(withTimeInterval: heartbeatInterval, repeats: true) { [weak self] in
-            guard let self = self else { return }
-            guard self.isOwner(ownerID) else { return }
-            guard self.isRecording && !self.isStopping else { return }
-            let (currentCount, lastCount, lastTimestamp) = self.heartbeatLock.withLock { state in
-                (state.tapCallCount, state.lastTapCallCount, state.lastTapTimestamp)
-            }
-            let now = Date()
-            if currentCount > lastCount {
-                self.heartbeatLock.withLock { state in
-                    state.lastTapCallCount = currentCount
-                    state.lastTapTimestamp = now
-                }
-            } else if let lastTap = lastTimestamp, now.timeIntervalSince(lastTap) > self.heartbeatTimeout {
-                guard self.isRecording && !self.isStopping else { return }
-                AppLogger.log("[AudioRecorder] HEARTBEAT FAILURE: No tap callbacks for \(self.heartbeatTimeout)s. Auto-stopping.")
-                self.heartbeatTimer.cancel()
-                // Notify first (sets the freeze flag), then end the spectrum stream so
-                // RecordingStage's `for await` returns instead of suspending forever.
-                // finish() is idempotent, so a later stopRecording() is safe.
-                guard self.isOwner(ownerID) else { return }
-                self.onRecordingFrozen?()
-                self.visualizationContinuation?.finish()
-            }
-        }
-
         let pcmSink = onPCMSamples
         let (visualizationStream, continuation) = RecordingOutput.makeVisualizationStream()
         guard self.isOwner(ownerID) else {
@@ -257,6 +225,15 @@ final class AudioRecorder: @unchecked Sendable {
             throw CancellationError()
         }
         self.visualizationContinuation = continuation
+        heartbeat.start(ownerID: ownerID, isActive: { [weak self] in
+            guard let self else { return false }
+            return self.isOwner(ownerID) && self.isRecording && !self.isStopping
+        }, onFrozen: { [weak self] in
+            guard let self, self.isOwner(ownerID) else { return }
+            AppLogger.log("[AudioRecorder] HEARTBEAT FAILURE: Audio callbacks stopped. Auto-stopping.")
+            self.onRecordingFrozen?()
+        }, finish: { continuation.finish() })
+
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, time in
             guard let self = self else { return }
@@ -264,6 +241,7 @@ final class AudioRecorder: @unchecked Sendable {
             guard self.isRecording || self.isStopping else { return }
 
             self.heartbeatLock.withLock { $0.tapCallCount += 1 }
+            self.heartbeat.recordTap(ownerID: ownerID)
 
             guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: buffer.frameCapacity) else {
                 return
@@ -352,8 +330,7 @@ final class AudioRecorder: @unchecked Sendable {
             AppLogger.log("[AudioRecorder] CRITICAL: No tap callbacks received.")
         }
 
-        heartbeatTimer.cancel()
-        heartbeatLock.withLock { $0.lastTapTimestamp = nil }
+        heartbeat.cancel(ownerID: ownerID)
         visualizationContinuation?.finish()
         visualizationContinuation = nil
 
