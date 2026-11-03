@@ -30,11 +30,11 @@ extension SettingsPage {
                 LocalModelPicker()
                 ASRModelStatusCard()
             case .cloudOnly:
-                CloudASRProviderList()
+                CloudASRProviderList(navigation: navigation)
                 ASRModelStatusCard()
             case .auto:
                 LocalModelPicker()
-                CloudASRProviderList()
+                CloudASRProviderList(navigation: navigation)
                 ASRModelStatusCard()
             }
 

@@ -18,9 +18,14 @@ final class CloudASRConnectionCheck: ObservableObject {
     @Published private var inFlight: [UUID: CloudASRCheckToken] = [:]
     private var revisions: [UUID: UUID] = [:]
     private let service: CloudASRProvider
+    private let recognitionTest: @MainActor (CloudASRProviderConfig, String) async -> Result<String, CloudASRError>
 
-    init(service: CloudASRProvider = CloudASRProvider()) {
+    init(service: CloudASRProvider = CloudASRProvider(),
+         recognitionTest: (@MainActor (CloudASRProviderConfig, String) async -> Result<String, CloudASRError>)? = nil) {
         self.service = service
+        self.recognitionTest = recognitionTest ?? { provider, key in
+            await service.testConnection(provider: provider, apiKey: key)
+        }
     }
 
     func begin(profileID: UUID) -> CloudASRCheckToken {
@@ -69,7 +74,7 @@ final class CloudASRConnectionCheck: ObservableObject {
             }
             // Editing before the queued task starts also suppresses the old upload.
             guard accepts(token) else { return }
-            let result = await service.testConnection(provider: provider, apiKey: apiKey)
+            let result = await recognitionTest(provider, apiKey)
             guard inFlight[provider.id] == token, accepts(token) else { return }
             switch result {
             case .success: states[provider.id] = .connected
