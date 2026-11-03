@@ -38,13 +38,13 @@
 - [ ] Add focused `--capsule-waveform-only` self-test entry. First test real PCM-derived quiet/loud order (including sustained signals), silence and empty/nonfinite samples; record a failing run before implementation.
 - [ ] Implement frame transport; use bounded newest buffering for visualization, finish/cancel cleanly, preserve recorder owner checks. Do not change ASR buffers/results. Keep legacy spectrum consumers/tests source-compatible.
 - [ ] Implement deterministic center-to-edge diffusion with stable slight asymmetry, time-based quick rise/slower decay and fixed 2…18 output. Assert finite 10-bar outputs, delayed outer response to a short pulse, quiet/loud separation, silence/stale decay to exact rest, and equivalent results for different render intervals within tolerance. Reset/session regression must cover late callback invalidation.
-- [ ] Render ten 2pt rounded bars at 2pt gaps in 40 × 24, blue-purple, no per-frame implicit animation stacking. Tick only while recording and reset on session changes; no fake activity under silence.
+- [ ] Render ten 2pt rounded bars at 2pt gaps in 40 × 24, blue-purple, no per-frame implicit animation stacking. Tick only while recording and reset on session changes; no fake activity under silence. Honor accessibilityReduceMotion with restrained amplitude response without travelling diffusion.
 - [ ] Run build + focused waveform tests and affected recording/recovery regressions; document commands, counts and any limitations in report. Full suite is reserved for final validation.
 - [ ] Self-review and commit `feat(capsule): add audio-driven diffusion waveform`.
 
 ### Task 2: Compact capsule and honest state presentation
 
-**Files:** Modify `Sources/flowtype/CapsuleView.swift`, `FloatingPanel.swift`, `Core/PipelineOrchestrator.swift`, `Core/Recovery/RecoveryPolicy.swift`, affected `Core/Pipeline/Stages/{InjectionStage,PolishStage}.swift` and context if needed; create focused `UI/CapsulePresentation.swift`, `Testing/CapsulePresentationSelfTests.swift`, extend debug native preview harness and `Testing/SelfTest.swift`.
+**Files:** Modify `Sources/flowtype/CapsuleView.swift`, `FloatingPanel.swift`, `Core/PipelineOrchestrator.swift`, `Core/Recovery/RecoveryPolicy.swift`, affected `Core/Pipeline/Stages/{ASRStage,InjectionStage,PolishStage}.swift` and context if needed; create focused `UI/CapsulePresentation.swift`, `Testing/CapsulePresentationSelfTests.swift`, extend debug native preview harness and `Testing/SelfTest.swift`.
 
 **Interfaces:** Consumes Task 1 `AudioVisualizer` and existing recovery/session outcomes. Produces testable `CapsulePresentation` title/subtitle/indicator/geometry derived from state and typed notice/operation metadata. Keep `.notice(String)` source compatibility where practical; source emission sets typed metadata rather than presentation guessing from string contents. One slow-progress operation timestamp/token at stop; invalidate on terminal/reset. Do not add enum cases just for presentation if a separate model suffices.
 
