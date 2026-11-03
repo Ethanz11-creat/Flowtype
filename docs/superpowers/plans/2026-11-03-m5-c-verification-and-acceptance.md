@@ -37,7 +37,7 @@
 
 工具独立编译，不import FlowType的@main：在VerificationReport.swift定义 `BuildMetadataRecord: Codable`（字段逐一对应A的磁盘BuildMetadata）、`ArtifactManifest: Codable`（字段逐一对应B3 manifest）与 `VerificationLane: String, Codable`。产品JSON里的BuildIdentity按origin/metadata/failureCode映射为工具自己的record，不能直接引用未编译进工具的产品类型。
 
-### C1：本地双门禁编排与可复核报告
+### Task 1: C1 — 本地双门禁编排与可复核报告
 
 **Files:** Create `scripts/verify.sh`及上述VerificationCLI/Report/SelfTests；消费B1 runner、B3 build-app/check-app/manifest。不改现有业务流水线。
 
@@ -57,7 +57,7 @@
 - [ ] **验证：** 工具fixture与`bash -n scripts/verify.sh`通过。执行一次真实 `scripts/verify.sh --lane code`（其内部就是build→full，不再外围重复）；核对当前run独立日志与报告。最终十次artifact执行留C3 clean候选，fixture不能填成10次真实Pass。
 - [ ] **提交：** scoped stage/diff check，提交 `build: add bounded code and artifact verification lanes`。
 
-### C2：CI默认代码门禁与安全证据上传
+### Task 2: C2 — CI默认代码门禁与安全证据上传
 
 **Files:** Create `.github/workflows/ci.yml`；Modify `scripts/verification/{VerificationReport,VerificationSelfTests,VerificationCLI}.swift`，扩展白名单证据导出；在规划证据目录记录runner选择依据（实施时核对，不猜SHA）。
 
@@ -73,7 +73,7 @@
 - [ ] **RED/GREEN验证：** 先运行工具self-test观察导出/预检失败，再实现导出和CI配置并运行同一self-test至通过。人工逐行核对workflow/Action引用及runner文档；无新依赖时不为yaml安装linter。不重复未改产品源码的full，不调用远端CI。
 - [ ] **提交：** scoped stage/diff check，提交 `ci: gate code validation and whitelist evidence`；远端结果明确Pending。
 
-### C3：人工schema、主线矩阵与最终交接
+### Task 3: C3 — 人工schema、主线矩阵与最终交接
 
 **Files:** Complete `scripts/verification/ManualValidation.swift`；Modify工具测试/CLI/报告、`docs/2026-10-14-flowtype-product-validation.md`、`docs/2026-11-01-remaining-work-audit.md`；Create/Update `docs/evidence/2026-11-03-m5-validation.md`、`2026-11-03-m5-manual-template.json`、`2026-11-03-m5-development/README.md`及任务/审查原始证据归档。不改写M1–M4历史日志。
 

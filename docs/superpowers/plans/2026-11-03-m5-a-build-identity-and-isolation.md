@@ -33,7 +33,7 @@
 
 新增 `Sources/flowtype/App/{RuntimeEnvironment,RuntimePaths,BuildInfo}.swift`；路径/身份各自只负责一件事。新增 `Utilities/DiagnosticLogWriter.swift` 承载可注入文件与轮转测试，保留 AppLogger facade。新增 `Testing/M5{Runtime,Isolation,BuildInfo}SelfTests.swift`；接入现有 `Testing/SelfTest.swift`。构建元数据工具独立为 `scripts/generate-build-info.swift`，B3 才接入打包脚本。
 
-### A1：最早启动上下文与安全运行根
+### Task 1: A1 — 最早启动上下文与安全运行根
 
 **Files:** Create上述 RuntimeEnvironment/RuntimePaths、M5RuntimeSelfTests；Modify `Sources/flowtype/App/FlowTypeApp.swift`、`Testing/SelfTest.swift`、`Utilities/AppLogger.swift`（先接隔离路径，身份header/flush留A3）。
 
@@ -52,7 +52,7 @@
 - [ ] **验证：** `swift build` 后运行 `.build/debug/FlowType --self-test --m5-runtime-only`，退出0；冲突/未知参数先用纯解析器及launch spy验证usage64，无 AppDelegate 调用。真实负例进程留B1有watchdog与全部副作用守卫后验证；不能为跑RED意外启动普通app。本任务 focused 只调用新测试，完整 runner 留给 A2。
 - [ ] **提交：** 仅 stage 本任务文件，`git diff --cached --check`，提交 `feat: bootstrap isolated validation runtime`。
 
-### A2：接通所有自动验证可达的持久化与副作用边界
+### Task 2: A2 — 接通所有自动验证可达的持久化与副作用边界
 
 **Files:** Modify `Core/{ConfigurationStore,Persistence,EnvMigration,PipelineOrchestrator}.swift`、`Core/Database/AppDatabase.swift`、`Services/{AudioRecorder,KeyboardInjector}.swift`、`Utilities/{KeychainHelper,PermissionHelper}.swift`、`Services/Speech/{QwenModelState,ModelLocator,ASRRouter}.swift`、`Services/Speech/LocalModelManager/{ModelPreset,LocalModelLibrary}.swift`、`App/StatusBarController.swift`、`Testing/SelfTest.swift`及确实仍访问真实状态的既有 `Testing/*.swift`；Create `Testing/M5IsolationSelfTests.swift`。以 `rg` 的调用链确认清单，不借机整理其他代码。
 
@@ -64,7 +64,7 @@
 - [ ] **验证：** focused退出0后，顺序 `swift build` → `.build/debug/FlowType --self-test`，完整报告0 failed；检查本 run 的数据库/备份证据。最终硬件副作用由注入计数证明，不运行普通 app 去试权限。新增后完整自测数应实际记录，不写死23872。
 - [ ] **提交：** scoped stage/`git diff --cached --check`，提交 `fix: isolate self-test persistence and startup effects`。
 
-### A3：构建身份、每 run 日志与关于菜单
+### Task 3: A3 — 构建身份、每 run 日志与关于菜单
 
 **Files:** Create `App/BuildInfo.swift`、`Utilities/DiagnosticLogWriter.swift`、`Testing/M5BuildInfoSelfTests.swift`、`scripts/generate-build-info.swift`；Modify `Utilities/AppLogger.swift`、`App/{FlowTypeApp,StatusBarController}.swift`、`Testing/SelfTest.swift`。本任务不改写 build-app 的 bundle 布局。
 

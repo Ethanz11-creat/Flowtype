@@ -35,7 +35,7 @@
 
 JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smokeTest"、runID(UUID string)、buildInfo(BuildIdentity)、durationMs(Int)、failureCode；恰一行stdout，诊断写隔离日志。参数/根初始化错误在上下文形成前可只写安全stderr并exit64/1，不虚构runID。每次子进程根唯一。
 
-### B1：外部watchdog与真实timer启动smoke
+### Task 1: B1 — 外部watchdog与真实timer启动smoke
 
 **Files:** Create `Sources/flowtype/App/Validation/{ValidationReport,StartupSmoke}.swift`、`Testing/M5SmokeSelfTests.swift`、`scripts/verification/{BoundedProcess,ProcessCLI,ProcessRunnerSelfTests}.swift`；Modify `App/FlowTypeApp.swift`、`App/StatusBarController.swift`、`WindowManager.swift`、`Services/Speech/ASRRouter.swift`、`Testing/SelfTest.swift`。
 
@@ -55,7 +55,7 @@ JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smo
 - [ ] **验证：** 两个focused退出0；顺序build/full self-test一次。通过runner分别验证重复主模式/未知M5选项/非法root参数的usage64；只在全部非app守卫已接好后运行，不给任何负例机会落入普通app。再用 `build/m5-process` 以15s timeout启动 `.build/debug/FlowType --smoke-test` 一次，核查stdout恰一JSON、durationMs≥6000、两tick≥1、tap禁用、development身份可见。未具备WindowServer明确记录Skip，不伪造Pass；最终十次留给C。不运行普通app。
 - [ ] **提交：** scoped stage/diff check，提交 `feat: add bounded startup smoke with real timer evidence`。
 
-### B2：独立资源入口和无模型artifact-check
+### Task 2: B2 — 独立资源入口和无模型artifact-check
 
 **Files:** Create `App/AppResources.swift`、`App/Validation/RuntimeArtifactCheck.swift`、`Testing/M5ArtifactSelfTests.swift`；Modify `App/{FlowTypeApp,StatusBarController}.swift`、`Services/Speech/ASRPostProcessor.swift`、`Testing/SelfTest.swift`、`Package.swift`（仅显式引用已有MLX）。
 
@@ -72,7 +72,7 @@ JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smo
 - [ ] **验证：** focused通过后顺序build/full一次，确认Package.resolved无改动。真实打包/MLX默认搜索验证留B3，不把fixture成功当真实GPU通过。
 - [ ] **提交：** scoped stage/diff check，提交 `feat: validate bundled resources and MLX artifact runtime`。
 
-### B3：可迁移bundle、staging签名与独立路径验证
+### Task 3: B3 — 可迁移bundle、staging签名与独立路径验证
 
 **Files:** Modify `scripts/{build-app,build-dmg}.sh`；Create `scripts/check-app.sh`、`scripts/write-artifact-manifest.swift`、`scripts/verification/ArtifactPackagingSelfTests.swift`。消费A3生成器、B1 runner、B2 artifact入口；不动依赖checkout。
 
