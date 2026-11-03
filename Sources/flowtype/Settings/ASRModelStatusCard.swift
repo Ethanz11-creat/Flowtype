@@ -20,8 +20,6 @@ struct ASRModelStatusCard: View {
                 cloudStatusView
             }
         }
-        .padding(14)
-        .glassCard(cornerRadius: 10)
         .task(id: store.current.asrRoutingPolicy) {
             await refreshCloudStatus()
         }
@@ -31,10 +29,7 @@ struct ASRModelStatusCard: View {
     }
 
     private var localStatusView: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("本地离线识别").font(.system(size: 12, weight: .medium))
-            QwenModelStatusCard(modelState: modelState, store: store, importedActions: importedActions)
-        }
+        QwenModelStatusCard(modelState: modelState, store: store, importedActions: importedActions)
     }
 
     private var cloudStatusView: some View {

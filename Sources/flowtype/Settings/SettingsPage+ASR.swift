@@ -31,7 +31,6 @@ struct ASRSettingsContent: View {
             modeSection
             DisclosureGroup(isExpanded: $localExpanded) {
                 localModelPicker
-                localModelStatus
             } label: {
                 Text(store.current.asrRoutingPolicy == .cloudOnly ? "本地模型 · 此模式不使用" : "本地模型")
                     .font(.system(size: 13, weight: .medium))

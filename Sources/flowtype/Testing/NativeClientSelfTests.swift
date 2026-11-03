@@ -10,5 +10,8 @@ enum NativeClientSelfTests {
         ReadinessPresentationSelfTests.run(r)
         await LocalSettingsOwnershipSelfTests.run(r)
         await SettingsChangeSelfTests.run(r)
+        await NativeModelPresentationSelfTests.run(r)
+        await ImportedModelUISelfTests.run(r)
+        await ModelProvisionSelfTests.runPresentationAndRouting(r)
     }
 }

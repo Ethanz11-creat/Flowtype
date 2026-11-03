@@ -8,6 +8,15 @@ struct ImportedASRModelList: View {
 
     private var busy: Bool { coordinator.operationID != nil || actions.isInspecting }
 
+    func presentation(for model: ImportedASRModel) -> ImportedASRModelPresentation {
+        let selection = LocalModelSelectionPresentation.make(config: store.current, coordinator: coordinator)
+        return .make(model: model,
+            assessment: LocalModelHardwareAssessment.current(model: model, activeModelBytes: coordinator.activeLease?.minimumResidentBytes),
+            isActive: selection.loaded?.id == model.id.uuidString,
+            isSelected: selection.selectedImportedID == model.id,
+            isPreparing: selection.isBusy && selection.targetID == model.id.uuidString)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -37,49 +46,52 @@ struct ImportedASRModelList: View {
                 Text(message).font(.system(size: 11)).foregroundColor(.orange)
                     .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
             }
-            Text(ImportedASRModelPresentation.importHelp)
-                .font(.system(size: 10)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text("来源示例（需自行下载完整兼容目录和分词器）：")
-                .font(.system(size: 10)).foregroundColor(.secondary)
-            ForEach(ImportedASRModelPresentation.sources, id: \.url) { source in
-                Link(source.name, destination: source.url).font(.system(size: 10))
+            Text("支持 Qwen3-ASR MLX 与兼容的 Whisper Core ML 目录；检查通过后仍需明确加载。")
+                .font(.system(size: 11)).foregroundColor(.secondary)
+            DisclosureGroup("支持范围与模型来源") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(ImportedASRModelPresentation.importHelp)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("来源示例（需自行下载完整兼容目录和分词器）：")
+                    ForEach(ImportedASRModelPresentation.sources, id: \.url) { source in
+                        Link(source.name, destination: source.url)
+                    }
+                }.font(.system(size: 11)).foregroundColor(.secondary).padding(.top, 6)
             }
             Text(ImportedASRModelPresentation.removalHelp)
-                .font(.system(size: 10)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: 11)).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onDisappear { actions.cancelInspection() }
     }
 
     private func modelRow(_ model: ImportedASRModel) -> some View {
-        let assessment = LocalModelHardwareAssessment.current(model: model, activeModelBytes: coordinator.activeLease?.minimumResidentBytes)
-        let p = ImportedASRModelPresentation.make(model: model, assessment: assessment,
-            isActive: coordinator.activeLease?.identity.id == model.id.uuidString)
+        let p = presentation(for: model)
         let exists = FileManager.default.fileExists(atPath: model.directory.path)
         return VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(p.name).font(.system(size: 12, weight: .medium))
                 Spacer()
-                Text(p.status).font(.system(size: 10)).foregroundColor(.secondary)
+                Text(p.status).font(.system(size: 11)).foregroundColor(.secondary)
             }
             Text("\(p.format) · 磁盘 \(p.size)").font(.system(size: 11))
-            Text(p.source).font(.system(size: 10)).foregroundColor(.secondary)
+            Text(p.source).font(.system(size: 11)).foregroundColor(.secondary)
                 .lineLimit(2).truncationMode(.middle).textSelection(.enabled)
             if !exists {
                 Text("目录不存在，请重新定位；原选择不会被自动替换。")
                     .font(.system(size: 11)).foregroundColor(.orange)
             }
             DisclosureGroup("硬件建议与兼容性") {
-                Text(p.hardwareAdvice).font(.system(size: 10)).foregroundColor(.secondary)
+                Text(p.hardwareAdvice).font(.system(size: 11)).foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-            }.font(.system(size: 10))
+            }.font(.system(size: 11))
             HStack {
-                Button("检查并切换") { actions.stageExisting(id: model.id) }
+                Button("检查并预览") { actions.stageExisting(id: model.id) }
                     .disabled(busy || !exists || !p.actions.contains(.load))
                 Button("重新定位") { pickDirectory(replacing: model.id) }.disabled(busy)
                 Button("移除记录") { actions.remove(id: model.id) }.disabled(busy)
             }.controlSize(.small)
         }
-        .padding(10).background(Color.secondary.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.vertical, 8)
     }
 
     private func previewCard(_ preview: ImportedASRModelActions.Preview) -> some View {
@@ -87,7 +99,7 @@ struct ImportedASRModelList: View {
         return VStack(alignment: .leading, spacing: 7) {
             Text("检测结果 · \(p.name)").font(.system(size: 12, weight: .semibold))
             Text("\(p.format) · 磁盘 \(p.size)").font(.system(size: 11))
-            Text(p.source).font(.system(size: 10)).textSelection(.enabled)
+            Text(p.source).font(.system(size: 11)).textSelection(.enabled)
             Text("静态文件检查通过；尚未保存或启用。实际模型图、运行内存与识别能力需加载验证。")
                 .font(.system(size: 11)).foregroundColor(.secondary)
             Text(p.hardwareAdvice).font(.system(size: 11)).foregroundColor(.orange)
