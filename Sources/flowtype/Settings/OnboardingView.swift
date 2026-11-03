@@ -1,415 +1,144 @@
 import SwiftUI
-import AVFoundation
+import Combine
 
+enum OnboardingStep: Int, CaseIterable {
+    case introduction, engine, permissions, trial
+
+    var title: String {
+        switch self {
+        case .introduction: "了解用途"
+        case .engine: "准备识别引擎"
+        case .permissions: "按需授权"
+        case .trial: "试说一句"
+        }
+    }
+}
+
+/// Navigation has no preparation authority. Finishing only invokes the supplied callback.
+@MainActor
+final class OnboardingFlow: ObservableObject {
+    @Published private(set) var step: OnboardingStep = .introduction
+    let trial: TrialSessionPresenter
+    let navigation: SettingsNavigation
+    private var navigationObservation: AnyCancellable?
+    private let onFinish: () -> Void
+    private var finished = false
+
+    init(trial: TrialSessionPresenter, navigation: SettingsNavigation,
+         onNavigate: @escaping (ClientDestination) -> Void, onFinish: @escaping () -> Void) {
+        self.trial = trial
+        self.navigation = navigation
+        self.onFinish = onFinish
+        navigationObservation = navigation.$request.compactMap { $0 }.sink { [weak self] request in
+            guard let self, !self.finished else { return }
+            self.trial.cancel()
+            onNavigate(request.destination)
+        }
+    }
+
+    func advance() {
+        guard !finished, let next = OnboardingStep(rawValue: step.rawValue + 1) else { return }
+        move(to: next)
+    }
+    func back() {
+        guard !finished, let previous = OnboardingStep(rawValue: step.rawValue - 1) else { return }
+        move(to: previous)
+    }
+    func configureEngine() { guard !finished else { return }; move(to: .engine) }
+    private func move(to next: OnboardingStep) {
+        if step == .trial && next != .trial { trial.cancel() }
+        step = next
+    }
+    func close() { trial.cancel() }
+    func finish() {
+        guard !finished else { return }
+        finished = true
+        close()
+        onFinish()
+    }
+}
+
+/// Reuses the settings components with one stable owner for checks and trial state.
 struct OnboardingView: View {
-    @State private var step = 0
-    @State private var hasAccessibility = false
-    @State private var hasMicrophone = false
-    @State private var micCheckDone = false
-    @State private var showAccessibilityHint = false
-    @ObservedObject private var modelState = QwenModelState.shared
-    @State private var showsModelLibrary = false
-    @StateObject private var store = ConfigurationStore.shared
-    @StateObject private var importedActions = ImportedASRModelActions(
-        coordinator: .shared, configuration: { ConfigurationStore.shared.current })
+    @StateObject var flow: OnboardingFlow
+    @ObservedObject var store: ConfigurationStore
+    @ObservedObject var monitor: ReadinessMonitor
+    @ObservedObject var modelState: QwenModelState
+    @ObservedObject var downloader: ModelDownloader
+    @StateObject var importedActions: ImportedASRModelActions
+    @StateObject var checks: CloudASRConnectionCheck
+    @StateObject var draftChecks: CloudASRConnectionCheck
+    @ObservedObject var navigation: SettingsNavigation
+
+    init(flow: OnboardingFlow, store: ConfigurationStore, monitor: ReadinessMonitor,
+         modelState: QwenModelState, downloader: ModelDownloader,
+         importedActions: ImportedASRModelActions, checks: CloudASRConnectionCheck,
+         draftChecks: CloudASRConnectionCheck) {
+        _flow = StateObject(wrappedValue: flow)
+        self.store = store
+        self.monitor = monitor
+        self.modelState = modelState
+        self.downloader = downloader
+        _importedActions = StateObject(wrappedValue: importedActions)
+        _checks = StateObject(wrappedValue: checks)
+        _draftChecks = StateObject(wrappedValue: draftChecks)
+        self.navigation = flow.navigation
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                ForEach(0..<4) { i in
-                    Circle()
-                        .fill(i <= step ? Brand.accent : Color.secondary.opacity(0.3))
-                        .frame(width: 8, height: 8)
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 16) {
+                ForEach(OnboardingStep.allCases, id: \.self) { step in
+                    Text("\(step.rawValue + 1). \(step.title)")
+                        .font(.system(size: 12, weight: flow.step == step ? .semibold : .regular))
+                        .foregroundStyle(flow.step == step ? Color.primary : Color.secondary)
                 }
             }
-            .padding(.top, 20)
-            .padding(.bottom, 16)
-
-            Group {
-                switch step {
-                case 0: welcomeStep
-                case 1: permissionsStep
-                case 2: quickConfigStep
-                default: demoStep
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Text(flow.step.title).font(Theme.Typography.pageTitle)
+                    switch flow.step {
+                    case .introduction:
+                        Text("FlowType 将语音转成文字，供你在 macOS 应用中使用。先选择识别方式，再按需授权和试说；这些步骤都可以返回或稍后完成。")
+                            .font(.system(size: 13)).foregroundStyle(.secondary)
+                        Text("浏览和完成设置不会开始录音、下载模型或请求权限。")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    case .engine:
+                        ASRSettingsContent(store: store, monitor: monitor, modelState: modelState,
+                            downloader: downloader, importedActions: importedActions, navigation: navigation,
+                            checks: checks, draftChecks: draftChecks)
+                    case .permissions:
+                        PermissionSettingsContent(store: store, monitor: monitor, navigation: navigation)
+                    case .trial:
+                        TrialSessionView(presenter: flow.trial, store: store, monitor: monitor,
+                                         configureEngine: flow.configureEngine)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Divider()
+            HStack {
+                if flow.step != .introduction { Button("返回", action: flow.back) }
+                Button("稍后完成", action: flow.finish)
+                Spacer()
+                if flow.step == .trial {
+                    Button("完成设置", action: flow.finish).buttonStyle(.borderedProminent)
+                } else {
+                    Button(flow.step == .permissions ? "继续试说（可跳过授权）" : "继续", action: flow.advance)
+                        .buttonStyle(.borderedProminent)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 32)
-            .padding(.bottom, 24)
         }
-        .frame(width: 520, height: 480)
+        .padding(28)
+        .frame(maxWidth: 900)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.pageBackground)
-    }
-
-    // MARK: - Step 0: Welcome
-
-    private var welcomeStep: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            Image(systemName: "mic.badge.plus")
-                .font(.system(size: 56))
-                .foregroundStyle(Brand.accent)
-
-            Text("欢迎使用 FlowType")
-                .font(.system(size: 24, weight: .bold))
-
-            Text("FlowType 是一款 macOS 语音输入工具。\n双击触发键开始录音，语音自动转为文字并输入到当前应用。")
-                .font(.system(size: 14))
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer()
-
-            Button(action: { withAnimation { step = 1 } }) {
-                Text("开始设置")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Brand.accent)
-            .controlSize(.large)
+        .onChange(of: store.current.cloudASRConfig) { old, new in
+            checks.synchronize(old: old, new: new)
+            draftChecks.synchronize(old: old, new: new)
         }
-    }
-
-    // MARK: - Step 1: Permissions
-
-    private var permissionsStep: some View {
-        VStack(spacing: 20) {
-            Text("权限设置")
-                .font(.system(size: 20, weight: .bold))
-
-            Text("FlowType 需要以下权限才能正常工作。")
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
-
-            VStack(spacing: 12) {
-                permissionRow(
-                    icon: "hand.raised.fill",
-                    title: "辅助功能",
-                    detail: "用于监听全局快捷键和注入文字",
-                    granted: hasAccessibility,
-                    action: {
-                        PermissionHelper.openAccessibilitySettings()
-                    },
-                    actionLabel: "打开系统设置"
-                )
-
-                permissionRow(
-                    icon: "mic.fill",
-                    title: "麦克风",
-                    detail: "用于录制语音输入",
-                    granted: hasMicrophone,
-                    action: {
-                        AVCaptureDevice.requestAccess(for: .audio) { granted in
-                            Task { @MainActor in
-                                hasMicrophone = granted
-                                micCheckDone = true
-                            }
-                        }
-                    },
-                    actionLabel: "请求权限"
-                )
-            }
-
-            Spacer()
-
-            if showAccessibilityHint && !hasAccessibility {
-                Text("需要先授予辅助功能权限，或点击「跳过」")
-                    .font(.caption)
-                    .foregroundColor(.red)
-            }
-
-            HStack {
-                Button("跳过") {
-                    withAnimation { step = 2 }
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button(action: {
-                    hasAccessibility = PermissionHelper.checkAccessibility()
-                }) {
-                    Text("刷新状态")
-                }
-                .buttonStyle(.bordered)
-
-                Button(action: {
-                    hasAccessibility = PermissionHelper.checkAccessibility()
-                    if hasAccessibility {
-                        showAccessibilityHint = false
-                        withAnimation { step = 2 }
-                    } else {
-                        showAccessibilityHint = true
-                    }
-                }) {
-                    Text("继续")
-                        .frame(width: 80)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Brand.accent)
-            }
-        }
-        .onAppear {
-            hasAccessibility = PermissionHelper.checkAccessibility()
-            checkMicPermission()
-        }
-    }
-
-    private func permissionRow(
-        icon: String,
-        title: String,
-        detail: String,
-        granted: Bool,
-        action: @escaping () -> Void,
-        actionLabel: String
-    ) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(granted ? .green : .orange)
-                .frame(width: 32)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .medium))
-                    Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(granted ? .green : .red)
-                }
-                Text(detail)
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-            }
-
-            Spacer()
-
-            if !granted {
-                Button(actionLabel, action: action)
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-            }
-        }
-        .padding(12)
-        .glassCard(cornerRadius: 10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(granted ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
-        )
-    }
-
-    private func checkMicPermission() {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized:
-            hasMicrophone = true
-            micCheckDone = true
-        case .notDetermined:
-            hasMicrophone = false
-            micCheckDone = false
-        default:
-            hasMicrophone = false
-            micCheckDone = true
-        }
-    }
-
-    // MARK: - Step 2: Quick Config
-
-    private var quickConfigStep: some View {
-        VStack(spacing: 20) {
-            Text("快速配置")
-                .font(.system(size: 20, weight: .bold))
-
-            Text("设置触发键和交互方式。你也可以稍后打开设置更改。")
-                .font(.system(size: 13))
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("触发键")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
-                        Picker("", selection: $store.current.triggerKey) {
-                            ForEach(TriggerKey.allCases, id: \.self) { key in
-                                Text(key.displayName).tag(key)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(width: 160)
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("交互模式")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
-                        Picker("", selection: $store.current.interactionMode) {
-                            ForEach(InteractionMode.allCases, id: \.self) { mode in
-                                Text(mode.displayName).tag(mode)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(width: 160)
-                    }
-                }
-
-                Toggle("停止后自动整理", isOn: $store.current.polishOnStop)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-
-                // Dynamic interaction hint
-                VStack(alignment: .leading, spacing: 10) {
-                    let mode = store.current.interactionMode
-
-                    if mode == .tapToStart {
-                        HStack(spacing: 12) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "hand.tap.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.blue)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("单击")
-                                        .font(.system(size: 11, weight: .semibold))
-                                    Text("立即停止录音")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                            HStack(spacing: 6) {
-                                Image(systemName: "hand.tap.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.purple)
-                                Image(systemName: "hand.tap.fill")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.purple)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("双击")
-                                        .font(.system(size: 11, weight: .semibold))
-                                    Text("开始录音")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.purple.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                        }
-                    } else {
-                        HStack(spacing: 6) {
-                            Image(systemName: "hand.tap.fill")
-                                .font(.system(size: 11))
-                                .foregroundColor(.blue)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("单击")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text("开始 / 停止录音")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.blue.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                }
-            }
-            .padding(16)
-            .glassCard()
-
-            Spacer()
-
-            HStack {
-                Button("稍后配置") {
-                    completeOnboarding(startModel: false)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button(action: { withAnimation { step = 3 } }) {
-                    Text("下一步")
-                        .frame(width: 100)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Brand.accent)
-            }
-        }
-    }
-
-    // MARK: - Step 3: Demo
-
-    private var demoStep: some View {
-        VStack(spacing: 20) {
-            Text("试一试")
-                .font(.system(size: 20, weight: .bold))
-
-            HStack(spacing: 8) {
-                Text(ImportedASRModelPresentation.availability(modelState.activeLease?.identity))
-                    .font(.system(size: 11)).foregroundColor(.secondary)
-                if modelState.activeLease == nil {
-                    Button("准备本地模型") { Task { await modelState.retryConfiguredModel() } }
-                        .controlSize(.small).disabled(modelState.operationID != nil)
-                }
-            }
-
-            Text("离线识别支持 Qwen3-ASR MLX 与 Whisper Core ML；须先成功加载兼容模型。")
-                .font(.system(size: 11)).foregroundColor(.secondary)
-            Button("导入与管理本地 ASR 模型") { showsModelLibrary = true }
-                .controlSize(.small).disabled(modelState.operationID != nil)
-                .sheet(isPresented: $showsModelLibrary) { ImportedASRModelLibrarySheet(store: store, coordinator: modelState, actions: importedActions) }
-
-            TrialSessionView(presenter: trialPresenter)
-
-            Spacer()
-
-            HStack {
-                Button("稍后配置") {
-                    completeOnboarding(startModel: false)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button(action: { completeOnboarding() }) {
-                    Text("开始使用 FlowType")
-                        .frame(width: 160)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Brand.accent)
-            }
-        }
-    }
-
-    @StateObject private var trialPresenter = TrialSessionPresenter(
-        configuration: .shared, resources: .shared,
-        refreshReadiness: { ReadinessMonitor.shared.refresh(); return ReadinessMonitor.shared.rawLevel },
-        readinessLevel: { ReadinessMonitor.shared.refresh(); return ReadinessMonitor.shared.rawLevel },
-        copy: { KeyboardInjector.copyText($0) })
-
-    private func completeOnboarding(startModel: Bool = true) {
-        store.current.hasCompletedOnboarding = true
-        store.save(store.current)
-        AppLogger.log("[Onboarding] Completed and saved")
-        if startModel, modelState.activeLease == nil, modelState.operationID == nil {
-            Task {
-                await modelState.loadModel()
-            }
-        }
-        NSApp.keyWindow?.close()
+        .onAppear { monitor.refresh() }
+        .onDisappear { flow.close() }
     }
 }

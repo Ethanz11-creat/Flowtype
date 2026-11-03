@@ -11,27 +11,34 @@ struct SettingsPage: View {
     @StateObject var draftChecks: CloudASRConnectionCheck
     @Environment(\.clientNavigationRequest) private var request
     @State private var location = SettingsLocation()
-    @State private var showTrialPlaceholder = false
+    @State private var showsTrial = false
+    @StateObject var trialPresenter: TrialSessionPresenter
     @State var providerDraft: LLMProviderDraft?
 
     /// Production composition boundary. Reusable constructors below resolve no singletons.
     init(navigation: SettingsNavigation? = nil) {
         let store = ConfigurationStore.shared
         let coordinator = QwenModelState.shared
-        self.init(navigation: navigation, store: store, monitor: .shared,
+        let monitor = ReadinessMonitor.shared
+        self.init(navigation: navigation, store: store, monitor: monitor,
                   modelState: coordinator, downloader: .shared,
-                  importedActions: ImportedASRModelActions(coordinator: coordinator, configuration: { store.current }))
+                  importedActions: ImportedASRModelActions(coordinator: coordinator, configuration: { store.current }),
+                  trialPresenter: TrialSessionPresenter(configuration: store, resources: .shared,
+                    refreshReadiness: { monitor.refresh(); return monitor.rawLevel },
+                    readinessLevel: { monitor.refresh(); return monitor.rawLevel },
+                    copy: { KeyboardInjector.copyText($0) }))
     }
 
     init(navigation: SettingsNavigation? = nil, store: ConfigurationStore,
          monitor: ReadinessMonitor, modelState: QwenModelState, downloader: ModelDownloader,
-         importedActions: ImportedASRModelActions,
+         importedActions: ImportedASRModelActions, trialPresenter: TrialSessionPresenter,
          checks: CloudASRConnectionCheck? = nil, draftChecks: CloudASRConnectionCheck? = nil) {
         self.navigation = navigation
         self.store = store
         self.monitor = monitor
         self.modelState = modelState
         self.downloader = downloader
+        _trialPresenter = StateObject(wrappedValue: trialPresenter)
         _importedActions = StateObject(wrappedValue: importedActions)
         _checks = StateObject(wrappedValue: checks ?? CloudASRConnectionCheck())
         _draftChecks = StateObject(wrappedValue: draftChecks ?? CloudASRConnectionCheck())
@@ -42,6 +49,11 @@ struct SettingsPage: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     heading
+                    if showsTrial {
+                        TrialSessionView(presenter: trialPresenter, store: store, monitor: monitor,
+                                         configureEngine: configureTrialEngine)
+                        Divider()
+                    }
                     groupTabs
                     Color.clear.frame(height: 0).id("settings-top")
                     groupContent
@@ -69,9 +81,11 @@ struct SettingsPage: View {
             draftChecks.synchronize(old: old, new: new)
         }
         .onAppear { monitor.refresh() }
-        .alert("试说一句", isPresented: $showTrialPlaceholder) {
-            Button("知道了", role: .cancel) {}
-        } message: { Text("试说入口正在准备。你可以从菜单开始听写；此按钮不会开始录音。") }
+        .onDisappear { trialPresenter.cancel() }
+        .onChange(of: location.section) { _, _ in
+            trialPresenter.cancel()
+            showsTrial = false
+        }
         .sheet(item: $providerDraft) { draft in
             ProviderEditSheet(
                 draft: draft, navigation: navigation,
@@ -94,8 +108,18 @@ struct SettingsPage: View {
         HStack {
             Text("设置").font(Theme.Typography.pageTitle)
             Spacer()
-            Button("试说一句…") { showTrialPlaceholder = true }.controlSize(.small)
+            Button(showsTrial ? "收起试说" : "试说一句…") {
+                if showsTrial { trialPresenter.cancel() }
+                showsTrial.toggle()
+            }.controlSize(.small)
         }
+    }
+
+    private func configureTrialEngine() {
+        trialPresenter.cancel()
+        showsTrial = false
+        if let navigation { navigation.navigate(to: .settings(.speech)) }
+        else { location.consume(NavigationRequest(id: UUID(), destination: .settings(.speech))) }
     }
 
     private var groupTabs: some View {

@@ -103,7 +103,10 @@ enum ReadinessPresentationSelfTests {
         let downloader = ModelDownloader(coordinator: coordinator, configuration: { store.current })
         let importedActions = ImportedASRModelActions(coordinator: coordinator, configuration: { store.current })
         let page = SettingsPage(navigation: navigation, store: store, monitor: monitor,
-            modelState: coordinator, downloader: downloader, importedActions: importedActions, checks: checks, draftChecks: drafts)
+            modelState: coordinator, downloader: downloader, importedActions: importedActions,
+            trialPresenter: TrialSessionPresenter(configuration: store, resources: SessionResourceCoordinator(),
+                refreshReadiness: { monitor.rawLevel }, readinessLevel: { monitor.rawLevel }, copy: { _ in }),
+            checks: checks, draftChecks: drafts)
         let asr = ASRSettingsContent(store: store, monitor: monitor, modelState: coordinator,
             downloader: downloader, importedActions: importedActions, navigation: navigation,
             checks: checks, draftChecks: drafts, devices: { [] })
