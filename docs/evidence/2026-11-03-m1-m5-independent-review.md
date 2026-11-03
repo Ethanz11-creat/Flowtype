@@ -2,6 +2,8 @@
 
 日期：2026-11-03。用户要求按 Superpowers `requesting-code-review` 审查，随后明确范围为M1一直到M5。本轮仅使用一位独立审查子智能体，无嵌套代理；controller复核两项发现的当前源码、调用链和规范依据。
 
+后续解决状态（2026-11-03）：**IR-01 / IR-02均已关闭**，修复提交9c20e31/bb8b5bf，限定独立复审均ADDRESSED、无新增Critical/Important；新候选24技术阶段Pass、full24364/0、smoke10/10。见[完整修复与新候选证据](2026-11-03-m1-m5-review-fixes/README.md)。整体release仍exit2/Pending，41个人工叶子与远端CI未完成。以下保留修复前原始审查及其历史结论。
+
 **结论：With fixes。2项Important / P2未关闭，未确认Critical；修复后才能完成M1–M5源码收尾。** 本轮仅审查与记录，没有修改产品源码、执行修复或补做真实验收。
 
 ## 范围与证据
@@ -76,3 +78,9 @@
 下一步修复IR-01和IR-02，分别运行有意义的定向回归并限定复审；源码变化后按影响更新技术验证与候选身份。当前审查只完成发现与记录，不提前记录修复成功。41个人工叶子和远端CI独立于这两项源码修复继续Pending。
 
 **Ready for complete closeout：No，With fixes。** 历史技术门禁仍是其精确身份上的有效记录，不能代替上述缺少分支/交错的回归，也不能据此关闭真实验收。
+
+## 后续修复闭环（2026-11-03）
+
+按用户授权使用receiving-code-review，先验证再分别修复两项；源码提交9c20e31、bb8b5bf。IR-01真实CLI回归RED9/3→GREEN12/0；IR-02真实阶段交错回归RED19772/3→GREEN19777/0。原审查者[限定复审](2026-11-03-m1-m5-review-fixes/focused/scoped-rereview.md)确认两项ADDRESSED，未发现新Critical/Important。原始发现与IR-02早于M1的来源界限保留。
+
+随后在clean bb8b5bf上执行一次新release，run761FBC46-7432-4C5D-A5FF-7D6FB67D71A5、build358：24技术阶段全部Pass，完整自测24364/0、smoke10/10、签名/移位资源/Metal/MLX通过。源码和产物哈希已独立核对。修复问题已关闭；真实验收仍未关闭，41个人工叶子和远端CI均Pending，整体exit2/Pending。新[证据索引](2026-11-03-m1-m5-review-fixes/README.md)不替换旧被测SHA或原始报告。

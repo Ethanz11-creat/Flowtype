@@ -1,0 +1,74 @@
+{
+  "architecture" : "arm64",
+  "binarySHA256" : "e3732eba9b9c1360f2132420a62a2d93d7e7043b36a4a4e591e83ec5a12a9158",
+  "buildInfo" : {
+    "buildNumber" : "358",
+    "builtAt" : "2026-11-03T06:39:15Z",
+    "dirty" : false,
+    "gitSHA" : "bb8b5bf671b94ca8f4c5ac5256583b4550ff88e2",
+    "schemaVersion" : 1,
+    "sourceTree" : "5d4772afcd862c9048ccf5d0ad65971cb6fae21f",
+    "version" : "1.0.0"
+  },
+  "buildInfoSHA256" : "1ed9598db11ce520d3396d960d4a0ace2f90c40d944cc6328428c752db6f5607",
+  "resources" : [
+    {
+      "path" : "Contents\/Resources\/AppIcon.icns",
+      "sha256" : "a048c3889fb5ec6ad70078fa9cd06b8a24fed73df43f60e1a7e5897a1984e949"
+    },
+    {
+      "path" : "Contents\/Resources\/FlowTypeBuild.json",
+      "sha256" : "1ed9598db11ce520d3396d960d4a0ace2f90c40d944cc6328428c752db6f5607"
+    },
+    {
+      "path" : "Contents\/Resources\/FlowType_FlowType.bundle\/AppIcon.icns",
+      "sha256" : "a048c3889fb5ec6ad70078fa9cd06b8a24fed73df43f60e1a7e5897a1984e949"
+    },
+    {
+      "path" : "Contents\/Resources\/FlowType_FlowType.bundle\/filler_words.json",
+      "sha256" : "480a6150c5bfd7ed7d252b3d5250cd20637675bc9cd0eab1376d5314be6ec619"
+    },
+    {
+      "path" : "Contents\/Resources\/FlowType_FlowType.bundle\/status_bar_icon.png",
+      "sha256" : "5f935d7f163f776dced0b8686dea3267e541afff4d51d5c7e4e5e9a0b8fbad58"
+    },
+    {
+      "path" : "Contents\/Resources\/FlowType_FlowType.bundle\/status_bar_icon@2x.png",
+      "sha256" : "b6c7e7fc446958199dce56b398d0b8a9b8e785216f78041e37edbee79397acf4"
+    },
+    {
+      "path" : "Contents\/Resources\/FlowType_FlowType.bundle\/tech_terms.json",
+      "sha256" : "8ed63363dabd176bec510237dab13b5ae3857d280ca624c6159ccbd1a978184b"
+    },
+    {
+      "path" : "Contents\/Resources\/GRDB_GRDB.bundle\/Info.plist",
+      "sha256" : "80a1c5d437d69170a04c679917173d19fe011976a81ee9577192bd5781232ad6"
+    },
+    {
+      "path" : "Contents\/Resources\/GRDB_GRDB.bundle\/PrivacyInfo.xcprivacy",
+      "sha256" : "17784da62e51f74c5859df32fe402e01e25cdf6f797a4add06e2a3ce15c911f4"
+    },
+    {
+      "path" : "Contents\/Resources\/mlx-swift_Cmlx.bundle\/Info.plist",
+      "sha256" : "cfbe686e8501543ffcc710ea41d5cf81f4cd807d520bb503ffae737ee7de2a90"
+    },
+    {
+      "path" : "Contents\/Resources\/mlx-swift_Cmlx.bundle\/default.metallib",
+      "sha256" : "f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f"
+    },
+    {
+      "path" : "Contents\/Resources\/swift-crypto_Crypto.bundle\/PrivacyInfo.xcprivacy",
+      "sha256" : "42fb8a30dd8d7ba0900e1bf17fe64ed8c12cfdb8a9c791ab6b4e1eceb0f299c0"
+    },
+    {
+      "path" : "Contents\/Resources\/swift-transformers_Hub.bundle\/gpt2_tokenizer_config.json",
+      "sha256" : "551e26ec611d8d0c8edc3ef72e518a38418cb71f40de1347dd486a595e1557d7"
+    },
+    {
+      "path" : "Contents\/Resources\/swift-transformers_Hub.bundle\/t5_tokenizer_config.json",
+      "sha256" : "e0aff0b1de9071e30d9a60a199303b6abe916a64a19932bd1c46992279b41a1f"
+    }
+  ],
+  "schemaVersion" : 1,
+  "shaderSHA256" : "f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f"
+}

@@ -1,0 +1,3 @@
+  ✗ FAIL: IR02 frozenStop: interruption blocks audio and downstream ASR/delivery
+  ✗ FAIL: IR02 frozenStop: realtime cancelled
+  ✗ FAIL: IR02 frozenStop: no successful audio duration

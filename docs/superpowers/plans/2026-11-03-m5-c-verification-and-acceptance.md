@@ -12,6 +12,8 @@
 
 ## 执行状态（2026-11-03更新）
 
+后续综合审查修复：独立M1–M5审查确认的显式shader缺省扫描和录音冻结/Stop竞态已由9c20e31/bb8b5bf修复，限定复审均ADDRESSED。新clean bb8b5bf/build358一次release的24技术阶段全部Pass、full24364/0、smoke10/10；整体仍exit2/Pending，41人工叶子与远端CI未完成。见[新修复证据](../../evidence/2026-11-03-m1-m5-review-fixes/README.md)。下段保留原C收口检查点。
+
 C1 653ecb8 / C2 66f1e78 / C3 4cdfaf4实现与独立任务审查通过，全M5源码审查通过，无阻塞项。唯一最终release run3683D6F7-2BD5-4F54-A3EF-5F80A38020D0在clean4cdfaf4上通过全部24技术阶段、full24334/0及十次独立smoke；候选1.0.0/build353。整体exit2/Pending，远端CI和41个人工叶子全Pending。原始安全证据已归档；归档提交和被测源码身份分列。API的预期路径/source分离为controller已记录的内部合同澄清，避免由报告自证身份。
 
 ## Global Constraints

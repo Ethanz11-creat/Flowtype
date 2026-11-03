@@ -1,6 +1,6 @@
 # 未完成任务核对 — 2026-11-01
 
-最新综合审查（2026-11-03）：按用户要求独立覆盖M1–M5，确认2项Important / P2未关闭：M5打包缺省路径仍扫描用户shader缓存，以及早于M1的录音冻结/正常停止竞态会继续处理部分音频。见[完整审查与修复建议](evidence/2026-11-03-m1-m5-independent-review.md)。当前结论为With fixes，需修复后再源码收尾；下文既有“审查通过”描述保留为原检查点，不表示本轮新增问题已经关闭。41项真机验收与远端CI仍Pending。
+最新修复（2026-11-03）：M1–M5独立审查的两项Important / P2均已修复，限定独立复审确认ADDRESSED、无新增Critical/Important。显式shader边界修复9c20e31、冻结/Stop竞态修复bb8b5bf；新clean候选bb8b5bf/build358的24技术阶段全部Pass、full24364/0、smoke10/10。见[原审查与解决状态](evidence/2026-11-03-m1-m5-independent-review.md)及[修复证据](evidence/2026-11-03-m1-m5-review-fixes/README.md)。这两项源码问题已关闭；41项真机验收与远端CI仍Pending，release仍exit2/Pending，下文旧候选结果保留原历史身份。
 
 历史核对基线：`flowtype-local` / `b9930bd`（产品源码最近变更 `2588d56`）。
 核对范围：docs 中的路线图、spec、实施计划、验证矩阵，现有 SDD 台账，

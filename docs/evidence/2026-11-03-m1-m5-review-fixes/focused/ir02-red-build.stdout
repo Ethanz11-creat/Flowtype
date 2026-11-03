@@ -1,0 +1,86 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/7] Write sources
+[3/7] Write swift-version--1AB21518FC5DEDBE.txt
+[5/11] Compiling FlowType RecordingStage.swift
+[6/11] Compiling FlowType M4StageFailureSelfTests.swift
+[7/11] Emitting module FlowType
+[8/11] Compiling FlowType RecordingStageTerminationSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/RecordingStageTerminationSelfTests.swift:19:25: error: type '(AVAudioPCMBuffer) -> Void' does not conform to the 'Sendable' protocol
+ 17 |         private let spectrum = AsyncStream<[Float]>.makeStream()
+ 18 |         var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)? {
+ 19 |             get { state.withLock { $0.buffer } }
+    |                         |- error: type '(AVAudioPCMBuffer) -> Void' does not conform to the 'Sendable' protocol
+    |                         `- note: a function type must be marked '@Sendable' to conform to 'Sendable'
+ 20 |             set { state.withLock { $0.buffer = newValue } }
+ 21 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/RecordingStageTerminationSelfTests.swift:20:48: error: capture of 'newValue' with non-Sendable type '((AVAudioPCMBuffer) -> Void)?' in a '@Sendable' closure [#SendableClosureCaptures]
+ 18 |         var onAudioBuffer: ((AVAudioPCMBuffer) -> Void)? {
+ 19 |             get { state.withLock { $0.buffer } }
+ 20 |             set { state.withLock { $0.buffer = newValue } }
+    |                                                |- error: capture of 'newValue' with non-Sendable type '((AVAudioPCMBuffer) -> Void)?' in a '@Sendable' closure [#SendableClosureCaptures]
+    |                                                `- note: a function type must be marked '@Sendable' to conform to 'Sendable'
+ 21 |         }
+ 22 |         var onPCMSamples: (@Sendable ([Float]) -> Void)? {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/RecordingStageTerminationSelfTests.swift:27:25: error: type '() -> Void' does not conform to the 'Sendable' protocol
+ 25 |         }
+ 26 |         var onRecordingFrozen: (() -> Void)? {
+ 27 |             get { state.withLock { $0.frozen } }
+    |                         |- error: type '() -> Void' does not conform to the 'Sendable' protocol
+    |                         `- note: a function type must be marked '@Sendable' to conform to 'Sendable'
+ 28 |             set { state.withLock { $0.frozen = newValue } }
+ 29 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/RecordingStageTerminationSelfTests.swift:28:48: error: capture of 'newValue' with non-Sendable type '(() -> Void)?' in a '@Sendable' closure [#SendableClosureCaptures]
+ 26 |         var onRecordingFrozen: (() -> Void)? {
+ 27 |             get { state.withLock { $0.frozen } }
+ 28 |             set { state.withLock { $0.frozen = newValue } }
+    |                                                |- error: capture of 'newValue' with non-Sendable type '(() -> Void)?' in a '@Sendable' closure [#SendableClosureCaptures]
+    |                                                `- note: a function type must be marked '@Sendable' to conform to 'Sendable'
+ 29 |         }
+ 30 |         func requestPermission() async -> Bool { true }
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[9/18] Compiling FlowType SettingsPage+ProviderActions.swift
+[10/18] Compiling FlowType PipelineRegistry.swift
+[11/18] Compiling FlowType AppleSpeechProvider.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[12/18] Compiling FlowType M5IsolationSelfTests.swift
+[13/18] Compiling FlowType SelfTest.swift
+[14/18] Compiling FlowType AudioRecorder.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[15/18] Compiling FlowType FlowTypeApp.swift

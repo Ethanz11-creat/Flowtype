@@ -1,0 +1,24 @@
+{
+  "runID": "761FBC46-7432-4C5D-A5FF-7D6FB67D71A5",
+  "technicalPhases": 24,
+  "manualPending": 41,
+  "ciStatus": "Pending",
+  "sourceIdentity": {
+    "gitSHA": "bb8b5bf671b94ca8f4c5ac5256583b4550ff88e2",
+    "sourceTree": "5d4772afcd862c9048ccf5d0ad65971cb6fae21f",
+    "dirty": false
+  },
+  "buildInfo": {
+    "buildNumber": "358",
+    "builtAt": "2026-11-03T06:39:15Z",
+    "dirty": false,
+    "gitSHA": "bb8b5bf671b94ca8f4c5ac5256583b4550ff88e2",
+    "schemaVersion": 1,
+    "sourceTree": "5d4772afcd862c9048ccf5d0ad65971cb6fae21f",
+    "version": "1.0.0"
+  },
+  "binarySHA256": "e3732eba9b9c1360f2132420a62a2d93d7e7043b36a4a4e591e83ec5a12a9158",
+  "buildInfoSHA256": "1ed9598db11ce520d3396d960d4a0ace2f90c40d944cc6328428c752db6f5607",
+  "shaderSHA256": "f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f",
+  "resourcesVerified": 14
+}

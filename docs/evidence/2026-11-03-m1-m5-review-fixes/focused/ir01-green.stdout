@@ -1,0 +1,14 @@
+PASS: missing: actual CLI exit1 / FlowType packaging: shaderInvalid
+PASS: missing: no user-cache enumeration
+PASS: missing: no published candidate
+PASS: empty: actual CLI exit1 / FlowType packaging: shaderInvalid
+PASS: empty: no user-cache enumeration
+PASS: empty: no published candidate
+PASS: explicit: actual CLI exit1 / FlowType packaging: sourceInvalid
+PASS: explicit: no user-cache enumeration
+PASS: explicit: no published candidate
+PASS: extra-argument: actual CLI exit64 / FlowType packaging: usage
+PASS: extra-argument: no user-cache enumeration
+PASS: extra-argument: no published candidate
+CLI input regression: 12 passed, 0 failed
+Raw evidence: /Users/yiheng/pycode/flowtype-local/build/m1-m5-review-fixes/cli-input-14f9adcd-6528-48f4-a49c-b5d21eecae28
