@@ -19,21 +19,39 @@ struct VerificationOptions {
         return VerificationOptions(lane: lane ?? .code, manual: manual, ci: ci)
     }
 }
+struct VerificationExportOptions {
+    let root: URL; let output: URL
+    static func parse(_ args: [String]) throws -> VerificationExportOptions {
+        guard args.count == 4, args[0] == "--export-evidence", args[2] == "--output",
+              !args[1].isEmpty, !args[3].isEmpty, !args[1].hasPrefix("--"), !args[3].hasPrefix("--") else { throw VerificationFailure.usage }
+        return VerificationExportOptions(root: URL(fileURLWithPath: args[1]), output: URL(fileURLWithPath: args[3]))
+    }
+}
 @main enum VerificationCLI {
+    static func verify(_ options: VerificationOptions, repository: URL, dependencies: VerificationDependencies = .live(), announce: (String) -> Void = { print($0) }) throws -> VerificationReport {
+        let output = try VerificationPaths.prepare(repository: repository).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+        announce("build/verification/\(output.lastPathComponent)/verify-report.json")
+        let report = try VerificationRunner.run(lane: options.lane, repository: repository, output: output, manualReport: options.manual, ciReport: options.ci, dependencies: dependencies)
+        return report
+    }
     static func main() {
         let arguments = Array(CommandLine.arguments.dropFirst())
         do { try BoundedProcess.dispatchChildIfNeeded(arguments: arguments) }
         catch { FileHandle.standardError.write(Data("FlowType verification: child control failed\n".utf8)); exit(125) }
         if arguments == ["--self-test"] { exit(VerificationSelfTests.run()) }
         do {
+            if arguments.first == "--export-evidence" {
+                let options = try VerificationExportOptions.parse(arguments)
+                let files = try VerificationEvidence.exportRun(runRoot: options.root, destination: options.output)
+                print("Evidence export: \(files.count) files")
+                exit(0)
+            }
             let options = try VerificationOptions.parse(arguments)
             try packagingCancellation.install()
             let repository = try canonicalExisting(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-            let output = try VerificationPaths.prepare(repository: repository).appendingPathComponent(UUID().uuidString)
-            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
-            let report = try VerificationRunner.run(lane: options.lane, repository: repository, output: output, manualReport: options.manual, ciReport: options.ci)
+            let report = try verify(options, repository: repository)
             print("Verification \(options.lane.rawValue): \(report.status.rawValue)")
-            print("build/verification/\(output.lastPathComponent)/verify-report.json")
             exit(report.exitCode)
         } catch {
             let failure = (error as? VerificationFailure) ?? .toolFailed

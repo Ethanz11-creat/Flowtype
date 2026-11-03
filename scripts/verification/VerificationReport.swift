@@ -57,6 +57,158 @@ struct VerificationDependencies {
     var writeReport: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
 }
 
+enum VerificationCapability {
+    static func operatingSystem(_ value: String) -> Bool {
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.range(of: #"\A[0-9]+(?:\.[0-9]+){0,2}\z"#, options: .regularExpression) != nil,
+              let major = Int(text.split(separator: ".")[0]) else { return false }
+        return major >= 15
+    }
+    static func architecture(_ value: String) -> Bool { value.trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" }
+    static func swiftVersion(_ value: String) -> Bool {
+        let regex = try! NSRegularExpression(pattern: #"(?:Apple )?Swift version ([0-9]+)\.([0-9]+)(?:\.[0-9]+)?(?:\s|$)"#)
+        guard let m = regex.firstMatch(in: value, range: NSRange(value.startIndex..<value.endIndex, in: value)),
+              let a = Range(m.range(at: 1), in: value), let b = Range(m.range(at: 2), in: value),
+              let major = Int(value[a]), let minor = Int(value[b]) else { return false }
+        return major > 6 || major == 6 && minor >= 2
+    }
+}
+enum VerificationEvidence {
+    private struct BootstrapFailure: Decodable { let schemaVersion: Int; let status: VerificationStatus; let failureCode: String }
+    private static let fm = FileManager.default
+    private static func encoded(_ report: VerificationReport) throws -> Data {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]; return try encoder.encode(report)
+    }
+    /// Walk literal components before reading any bytes. Missing partial-run files are permitted.
+    private static func file(_ relative: String, under root: URL) throws -> URL? {
+        let parts = relative.split(separator: "/", omittingEmptySubsequences: false)
+        guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }), !relative.hasPrefix("/") else { throw VerificationFailure.outputUnavailable }
+        var current = root
+        for (index, part) in parts.enumerated() {
+            current.appendPathComponent(String(part))
+            guard (try? fm.destinationOfSymbolicLink(atPath: current.path)) == nil else { throw VerificationFailure.outputUnavailable }
+            guard fm.fileExists(atPath: current.path) else { return nil }
+            guard try canonicalExisting(current).path == current.path else { throw VerificationFailure.outputUnavailable }
+            let info = try current.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
+            guard index == parts.count - 1 ? info.isRegularFile == true : info.isDirectory == true else { throw VerificationFailure.outputUnavailable }
+        }
+        return current
+    }
+    private static func ownedRoot(_ root: URL) throws -> URL {
+        let literal = root // standardizedFileURL rewrites macOS /private/var; preserve literal ownership paths.
+        guard UUID(uuidString: literal.lastPathComponent) != nil,
+              literal.deletingLastPathComponent().lastPathComponent == "verification",
+              literal.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "build",
+              try canonicalExisting(literal).path == literal.path else { throw VerificationFailure.outputUnavailable }
+        let repo = literal.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        guard try VerificationPaths.prepare(repository: repo).path == literal.deletingLastPathComponent().path else { throw VerificationFailure.outputUnavailable }
+        return literal
+    }
+    private static func emptyDestination(_ destination: URL, runRoot: URL) throws -> URL {
+        let literal = destination
+        guard try canonicalExisting(literal).path == literal.path,
+              try literal.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
+              !literal.path.hasPrefix(runRoot.path + "/"), literal.path != runRoot.path,
+              try fm.contentsOfDirectory(atPath: literal.path).isEmpty else { throw VerificationFailure.outputUnavailable }
+        return literal
+    }
+    private static func selected(_ root: URL) throws -> (String, VerificationReport)? {
+        let original = try file("verify-report.json", under: root), partial = try file("verify-report.partial.json", under: root)
+        func decode(_ url: URL) throws -> VerificationReport {
+            let report = try JSONDecoder().decode(VerificationReport.self, from: Data(contentsOf: url))
+            guard report.schemaVersion == 1, UUID(uuidString: report.runID) == UUID(uuidString: root.lastPathComponent) else { throw VerificationFailure.identityMismatch }
+            return report
+        }
+        let previous = try original.map(decode)
+        if let partial {
+            let newer = try decode(partial)
+            guard newer.status == .fail, newer.phases.last?.name == "report-write", newer.phases.last?.status == .fail,
+                  newer.phases.last?.failureCode == .outputUnavailable else { throw VerificationFailure.malformedReport }
+            if let previous {
+                guard previous.lane == newer.lane,
+                      previous.sourceIdentity == nil || newer.sourceIdentity == previous.sourceIdentity,
+                      previous.artifactIdentity == nil || newer.artifactIdentity == previous.artifactIdentity else { throw VerificationFailure.identityMismatch }
+            }
+            // A unique run never resumes with a successful overwrite. Fail evidence wins regardless of wall-clock metadata.
+            return ("verify-report.partial.json", newer)
+        }
+        return previous.map { ("verify-report.json", $0) }
+    }
+    static func exportAllowlisted(report: VerificationReport, runRoot: URL, destination: URL) throws -> [String] {
+        let root = try ownedRoot(runRoot), output = try emptyDestination(destination, runRoot: root)
+        guard let (reportName, disk) = try selected(root), try encoded(disk) == encoded(report) else { throw VerificationFailure.identityMismatch }
+        let internalNames: Set<String> = ["source-start", "source-end", "artifact-recovery-before", "artifact-source", "artifact-manifest", "artifact-recovery-after", "report-write"]
+        let commandNames = Set(["platform-os", "platform-arch", "platform-swift", "code-build", "code-full", "artifact-build", "artifact-signature", "artifact-check"] + (1...10).map { String(format: "smoke-%02d", $0) })
+        let streamNames = commandNames.subtracting(["platform-os", "platform-arch", "platform-swift"])
+        var payloads = [reportName: try encoded(report)], usedChildren: Set<String> = [], phases: Set<String> = []
+        func include(_ relative: String, required: Bool = false) throws {
+            if let source = try file(relative, under: root) { payloads[relative] = try Data(contentsOf: source) }
+            else if required { throw VerificationFailure.outputUnavailable }
+        }
+        for phase in report.phases {
+            guard phases.insert(phase.name).inserted, internalNames.contains(phase.name) || commandNames.contains(phase.name),
+                  report.lane != .code || !phase.name.hasPrefix("artifact-") && !phase.name.hasPrefix("smoke-"),
+                  report.lane != .artifact || !phase.name.hasPrefix("code-") else { throw VerificationFailure.malformedReport }
+            if internalNames.contains(phase.name) {
+                for path in phase.evidence {
+                    let parts = path.split(separator: "/")
+                    guard parts.count == 2, parts[0].hasPrefix("internal-"), UUID(uuidString: String(parts[0].dropFirst(9))) != nil,
+                          ["stdout", "stderr"].contains(String(parts[1].split(separator: ".").last ?? "")),
+                          UUID(uuidString: String(parts[1].dropLast(7))) != nil else { throw VerificationFailure.malformedReport }
+                    _ = try file(path, under: root) // Validate references, but never upload git/source command logs.
+                }
+                continue
+            }
+            var childID: String?
+            for path in phase.evidence {
+                let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+                guard parts.count == 3, parts[0] == "children", UUID(uuidString: String(parts[1])) != nil,
+                      ["stdout", "stderr", "process-result.json"].contains(parts[2]), childID == nil || childID == String(parts[1]) else { throw VerificationFailure.malformedReport }
+                childID = String(parts[1])
+                _ = try file(path, under: root)
+                if streamNames.contains(phase.name), parts[2] != "process-result.json" { try include(path, required: report.status == .pass) }
+            }
+            guard let childID else { continue }
+            guard usedChildren.insert(childID).inserted else { throw VerificationFailure.malformedReport }
+            let child = "children/" + childID, directory = root.appendingPathComponent(child)
+            if !fm.fileExists(atPath: directory.path) { continue }
+            // Only inspect immediate validation-root names; never recurse into config/defaults/DB/model directories.
+            if phase.name == "code-full" || phase.name.hasPrefix("smoke-") {
+                let names = try fm.contentsOfDirectory(atPath: directory.path).filter { $0.hasPrefix("validation-") && UUID(uuidString: String($0.dropFirst(11))) != nil }
+                guard names.count <= 1 else { throw VerificationFailure.malformedReport }
+                for name in names {
+                    let log = phase.name == "code-full" ? "diagnostic-selftest.log" : "diagnostic-smoke.log"
+                    for suffix in ["", ".1", ".2", ".3"] { try include(child + "/" + name + "/Logs/" + log + suffix) }
+                }
+            }
+            if phase.name == "artifact-check" {
+                for name in ["artifact.stdout", "artifact.stderr"] { try include(child + "/check-output/" + name) }
+                for suffix in ["", ".1", ".2", ".3"] { try include(child + "/check-output/validation-root/Logs/diagnostic-smoke.log" + suffix) }
+            }
+        }
+        // Validate the complete selection before creating any output, then write data, never copied links.
+        for path in payloads.keys.sorted() {
+            let target = output.appendingPathComponent(path)
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try payloads[path]!.write(to: target, options: .withoutOverwriting)
+        }
+        return payloads.keys.sorted()
+    }
+    static func exportRun(runRoot: URL, destination: URL) throws -> [String] {
+        let root = try ownedRoot(runRoot)
+        if let (_, report) = try selected(root) { return try exportAllowlisted(report: report, runRoot: root, destination: destination) }
+        let output = try emptyDestination(destination, runRoot: root)
+        guard let bootstrap = try file("bootstrap-failure.json", under: root) else { throw VerificationFailure.malformedReport }
+        let data = try Data(contentsOf: bootstrap), record = try JSONDecoder().decode(BootstrapFailure.self, from: data)
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              Set(object.keys) == Set(["schemaVersion", "status", "failureCode"]),
+              record.schemaVersion == 1, record.status == .fail, record.failureCode == "bootstrapFailed" else { throw VerificationFailure.malformedReport }
+        try Data("{\"schemaVersion\":1,\"status\":\"Fail\",\"failureCode\":\"bootstrapFailed\"}\n".utf8).write(to: output.appendingPathComponent("bootstrap-failure.json"), options: .withoutOverwriting)
+        try Data("FlowType verification: bootstrapFailed\n".utf8).write(to: output.appendingPathComponent("bootstrap.stderr"), options: .withoutOverwriting)
+        return ["bootstrap-failure.json", "bootstrap.stderr"]
+    }
+}
+
 private enum WireFailure: String, Codable { case startupFailed, timerDeadline, windowServerUnavailable, invalidBuildInfo, resourceMissing, resourceMalformed, resourceOutsideBundle, metalUnavailable, metalLibraryInvalid, mlxOperationFailed, unexpectedFailure }
 private enum WireOrigin: String, Codable { case packaged, development, invalid }
 private enum WireReadiness: String, Codable { case ready, degraded, blocked }
@@ -266,15 +418,13 @@ enum VerificationRunner {
             if code && dependencies.ciCode && value.identity.dirty { throw VerificationFailure.dirtySource }
         }
         let os = try execute("platform-os", URL(fileURLWithPath: "/usr/bin/sw_vers"), ["-productVersion"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
-            guard let major = Int(String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ".").first ?? ""), major >= 15 else { throw VerificationFailure.platformUnsupported }; return .pass
+            guard VerificationCapability.operatingSystem(String(decoding: bytes, as: UTF8.self)) else { throw VerificationFailure.platformUnsupported }; return .pass
         }
         let arch = try execute("platform-arch", URL(fileURLWithPath: "/usr/bin/uname"), ["-m"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
-            guard String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" else { throw VerificationFailure.platformUnsupported }; return .pass
+            guard VerificationCapability.architecture(String(decoding: bytes, as: UTF8.self)) else { throw VerificationFailure.platformUnsupported }; return .pass
         }
         let swift = try execute("platform-swift", URL(fileURLWithPath: "/usr/bin/swift"), ["--version"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
-            let text = String(decoding: bytes, as: UTF8.self), regex = try NSRegularExpression(pattern: #"Swift version ([0-9]+)\.([0-9]+)"#)
-            guard let m = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)), let a = Range(m.range(at: 1), in: text), let b = Range(m.range(at: 2), in: text),
-                  let major = Int(text[a]), let minor = Int(text[b]), major > 6 || major == 6 && minor >= 2 else { throw VerificationFailure.platformUnsupported }; return .pass
+            guard VerificationCapability.swiftVersion(String(decoding: bytes, as: UTF8.self)) else { throw VerificationFailure.platformUnsupported }; return .pass
         }
         let platform = os && arch && swift
         if code && platform && sourceOK {

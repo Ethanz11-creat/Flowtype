@@ -1,0 +1,49 @@
+name: Code validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  code:
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, verified 2026-11-03
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Confirm preinstalled toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$DEVELOPER_DIR"
+          /usr/bin/sw_vers -productVersion
+          /usr/bin/uname -m
+          /usr/bin/swift --version
+      - name: Verify code
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          scripts/verify.sh --lane code > build/ci-verify.stdout 2> build/ci-verify.stderr
+      - name: Export allowlisted evidence
+        id: evidence
+        if: always()
+        shell: bash
+        run: scripts/export-ci-evidence.sh build/ci-verify.stdout
+      - name: Upload allowlisted evidence
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, verified 2026-11-03
+        with:
+          name: code-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/ci-evidence/
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
