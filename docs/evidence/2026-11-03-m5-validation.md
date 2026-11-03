@@ -1,6 +1,6 @@
 # M5 验证与剩余验收台账
 
-日期2026-11-03。按[设计](../superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](../superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)实施。A/B/C源码、任务及全M5独立源码审查通过，无阻塞项。唯一最终release运行的24个技术阶段全部Pass；整体exit2/Pending，因为远端CI及全部41个人工叶子仍Pending。Pending表示未执行或缺证据，不是已确认产品故障。[开发证据索引](2026-11-03-m5-development/README.md)区分历史检查点、最终候选和后续文档归档。
+日期2026-11-03。按[设计](../superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](../superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)实施。A/B/C已实现，原任务与全M5审查曾通过；后续[独立M1–M5综合审查](2026-11-03-m1-m5-independent-review.md)确认2项Important / P2未关闭：缺省shader输入仍扫描缓存、既有录音冻结/停止竞态继续处理部分音频。当前源码收尾结论为With fixes，不能沿用原“无阻塞项”结论关闭这两项。既有唯一release运行的24个技术阶段全部Pass；整体exit2/Pending，因为远端CI及全部41个人工叶子仍Pending。Pending表示未执行或缺证据，与上述已确认源码问题分列。[开发证据索引](2026-11-03-m5-development/README.md)保留历史检查点、最终候选与归档身份；下文技术结果不改写为新运行。
 
 历史规划基线HEAD `b00b0a50d9c6913a91ef01c6a8c8944688add31e`，当时产品源码 `5dc1693`、Sources tree `872e9038b8def8ed720d9cc6370c57ed12d76794`。M4历史自测23872/0、旧app二进制 `ceded28e359918d8d66f8ed1090107fb4a8bffb46aa1b8b9e0278c94a5ccc250` 仍为[旧证据](2026-11-02-m4-development/README.md)。B3已在新检查点修复该旧strict/deep限制；不改写M4日志，也不把B3检查点当最终C验收。
 
