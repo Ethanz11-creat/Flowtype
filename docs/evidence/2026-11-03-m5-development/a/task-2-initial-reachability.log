@@ -1,0 +1,126 @@
+Sources/flowtype/Testing/LocalModelImportSelfTests.swift:12:        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-import-\(UUID())")
+Sources/flowtype/App/StatusBarController.swift:273:        if let data = UserDefaults.standard.data(forKey: defaultsKey),
+Sources/flowtype/Services/AudioRecorder.swift:141:                // launch via restorePendingDeviceIfNeeded(). Store the UID, not the
+Sources/flowtype/Services/AudioRecorder.swift:145:                        UserDefaults.standard.set(originalUID, forKey: Self.pendingRestoreKey)
+Sources/flowtype/Services/AudioRecorder.swift:166:                    UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
+Sources/flowtype/Services/AudioRecorder.swift:410:            UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
+Sources/flowtype/Services/AudioRecorder.swift:420:    static func restorePendingDeviceIfNeeded() {
+Sources/flowtype/Services/AudioRecorder.swift:421:        guard let uid = UserDefaults.standard.string(forKey: pendingRestoreKey) else { return }
+Sources/flowtype/Services/AudioRecorder.swift:422:        defer { UserDefaults.standard.removeObject(forKey: pendingRestoreKey) }
+Sources/flowtype/Core/ConfigurationStore.swift:17:    init(defaults: UserDefaults = .standard, backupDirectory: URL? = nil) {
+Sources/flowtype/Core/ConfigurationStore.swift:112:            (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/flowtype"))
+Sources/flowtype/Core/ConfigurationStore.swift:167:    // The data-protection keychain needs an entitlement unsigned apps lack (SecItemAdd -34018), which is
+Sources/flowtype/Utilities/PermissionHelper.swift:61:        if AXIsProcessTrusted() {
+Sources/flowtype/Utilities/PermissionHelper.swift:67:        let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+Sources/flowtype/Utilities/PermissionHelper.swift:68:        guard let tap = CGEvent.tapCreate(
+Sources/flowtype/Utilities/PermissionHelper.swift:80:        CGEvent.tapEnable(tap: tap, enable: false)
+Sources/flowtype/Utilities/PermissionHelper.swift:108:            UserDefaults.standard.set(true, forKey: "flowtype.hasShownPermissionGuide")
+Sources/flowtype/App/FlowTypeApp.swift:11:                                             temporaryDirectory: FileManager.default.temporaryDirectory) { context in
+Sources/flowtype/App/FlowTypeApp.swift:59:        AudioRecorder.restorePendingDeviceIfNeeded()
+Sources/flowtype/App/FlowTypeApp.swift:110:        AudioRecorder.restorePendingDeviceIfNeeded()
+Sources/flowtype/App/FlowTypeApp.swift:117:        await QwenModelState.shared.loadModel()
+Sources/flowtype/Utilities/DotEnv.swift:4:    static func load(path: String = ".env") -> [String: String] {
+Sources/flowtype/Utilities/DotEnv.swift:7:        // Try to find .env in project root (near Package.swift)
+Sources/flowtype/Services/KeyboardInjector.swift:43:        let value: CGEventSource
+Sources/flowtype/Services/KeyboardInjector.swift:45:            guard let value = CGEventSource(stateID: .hidSystemState) else {
+Sources/flowtype/Services/KeyboardInjector.swift:139:    // MARK: - Low-level CGEvent posting
+Sources/flowtype/Services/KeyboardInjector.swift:142:        let down: CGEvent
+Sources/flowtype/Services/KeyboardInjector.swift:143:        let up: CGEvent
+Sources/flowtype/Services/KeyboardInjector.swift:150:    private static func prepareUnicode(_ s: String, source: CGEventSource) throws -> (@Sendable () -> Void) {
+Sources/flowtype/Services/KeyboardInjector.swift:152:        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
+Sources/flowtype/Services/KeyboardInjector.swift:153:              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+Sources/flowtype/Services/KeyboardInjector.swift:162:    private static func prepareShiftReturn(source: CGEventSource) throws -> (@Sendable () -> Void) {
+Sources/flowtype/Services/KeyboardInjector.swift:164:        guard let down = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true),
+Sources/flowtype/Services/KeyboardInjector.swift:165:              let up = CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false) else {
+Sources/flowtype/Services/KeyboardInjector.swift:213:        guard let pid, !Task.isCancelled, AXIsProcessTrusted() else { return blind }
+Sources/flowtype/Services/KeyboardInjector.swift:269:    private let board = NSPasteboard.general
+Sources/flowtype/Services/KeyboardInjector.swift:286:        var items: [NSPasteboardItem] = []
+Sources/flowtype/Services/KeyboardInjector.swift:288:            let item = NSPasteboardItem()
+Sources/flowtype/Services/KeyboardInjector.swift:340:        let owned: PasteboardContents = [[NSPasteboard.PasteboardType.string.rawValue: Data(text.utf8)]]
+Sources/flowtype/Services/KeyboardInjector.swift:385:        guard let source = CGEventSource(stateID: .hidSystemState) else { throw InjectionError.eventSourceCreationFailed }
+Sources/flowtype/Services/KeyboardInjector.swift:386:        guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+Sources/flowtype/Services/KeyboardInjector.swift:387:              let up = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+Sources/flowtype/App/RuntimeEnvironment.swift:107:            defaults = .standard
+Sources/flowtype/App/RuntimeEnvironment.swift:139:        home: FileManager.default.homeDirectoryForCurrentUser,
+Sources/flowtype/App/RuntimeEnvironment.swift:140:        applicationSupport: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!,
+Sources/flowtype/App/RuntimeEnvironment.swift:141:        caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!)
+Sources/flowtype/Testing/M5RuntimeSelfTests.swift:29:        guard let resolved = realpath(FileManager.default.temporaryDirectory.path, nil) else {
+Sources/flowtype/Testing/M5RuntimeSelfTests.swift:133:        r.eq(paths.temporaryDirectory.path, "/fixture/temp", "M5 legacy temp base")
+Sources/flowtype/Core/Configuration.swift:30:    var cgEventFlag: CGEventFlags? {
+Sources/flowtype/Core/Configuration.swift:350:    /// needs an entitlement we don't have (SecItemAdd returns -34018). Trade-off: keys live in the
+Sources/flowtype/Utilities/KeychainHelper.swift:9:    /// UNSIGNED, which makes SecItemAdd fail with errSecMissingEntitlement (-34018) — that's exactly why
+Sources/flowtype/Utilities/KeychainHelper.swift:23:        SecItemDelete(deleteQuery as CFDictionary)
+Sources/flowtype/Utilities/KeychainHelper.swift:31:        let status = SecItemAdd(addQuery as CFDictionary, nil)
+Sources/flowtype/Utilities/KeychainHelper.swift:45:        let status = SecItemCopyMatching(query as CFDictionary, &result)
+Sources/flowtype/Utilities/KeychainHelper.swift:56:        SecItemDelete(query as CFDictionary)
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:10:        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-preparation-test-\(UUID())")
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:141:                case "startup": await state.loadModel()
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:191:        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-preparation-failures-\(UUID())")
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:250:        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-compilation-lifecycle-\(UUID())")
+Sources/flowtype/Testing/ImportedModelUISelfTests.swift:7:        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-import-ui-\(UUID())")
+Sources/flowtype/Testing/M3DeliverySelfTests.swift:515:        }], observers: [], effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
+Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift:156:        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-whisper-\(UUID())")
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:353:                    effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:594:                effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in ledger.update { $0.history += 1 } }),
+Sources/flowtype/Testing/M3SpeechPreflightSelfTests.swift:673:            effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in ledger.update { $0.history += 1 } }),
+Sources/flowtype/Testing/M3FinalFixSelfTests.swift:104:            ], observers: [], effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {},
+Sources/flowtype/Testing/WholeM2FixSelfTests.swift:85:        await restarted.loadModel()
+Sources/flowtype/Testing/ImportedLifecycleSelfTests.swift:48:        await state.loadModel()
+Sources/flowtype/Testing/ImportedLifecycleSelfTests.swift:123:        await restored.loadModel()
+Sources/flowtype/Testing/ImportedLifecycleSelfTests.swift:151:        await legacyState.loadModel()
+Sources/flowtype/Testing/ImportedLifecycleSelfTests.swift:189:        await missing.loadModel()
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:157:        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-preflight-\(UUID())")
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:421:        await unresolved.loadModel(provider: QwenASRProvider())
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:429:        await unknown.loadModel(provider: QwenASRProvider())
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:440:        await unknownWithInstalled.loadModel(provider: QwenASRProvider())
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:452:        await validExplicit.loadModel(provider: QwenASRProvider())
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:469:        await bootstrap.loadModel(provider: QwenASRProvider())
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:481:        await preOnboarding.loadModel(provider: QwenASRProvider())
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:491:        await explicitFailure.loadModel(provider: QwenASRProvider())
+Sources/flowtype/Services/Context/AXContextProvider.swift:18:            guard AXIsProcessTrusted() else { return nil }
+Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:82:        let tmpDir = FileManager.default.temporaryDirectory
+Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:139:                SFSpeechRecognizer.requestAuthorization { status in
+Sources/flowtype/Services/Speech/WhisperModelPreparation.swift:49:        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-whisper-runtime-" + UUID().uuidString)
+Sources/flowtype/Services/Speech/QwenModelState.swift:123:        self.availableDisk = availableDisk; self.environment = environment; self.commit = commit
+Sources/flowtype/Services/Speech/QwenModelState.swift:143:            try await candidate.loadModel(modelId: repo, cacheDir: directory, offlineMode: offline,
+Sources/flowtype/Services/Speech/QwenModelState.swift:200:    func loadModel(provider: QwenASRProvider? = nil) async {
+Sources/flowtype/Core/PipelineOrchestrator.swift:52:struct SessionEffects {
+Sources/flowtype/Core/PipelineOrchestrator.swift:58:    static let live = SessionEffects(prepare: {
+Sources/flowtype/Core/PipelineOrchestrator.swift:63:            await QwenModelState.shared.loadModel()
+Sources/flowtype/Core/PipelineOrchestrator.swift:78:    private let effects: SessionEffects
+Sources/flowtype/Core/PipelineOrchestrator.swift:161:        effects: SessionEffects = .live,
+Sources/flowtype/Testing/SelfTest.swift:154:        let dir = fm.temporaryDirectory.appendingPathComponent("flowtype-modeltest-\(UUID().uuidString)")
+Sources/flowtype/Testing/SelfTest.swift:561:        let quietEffects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+Sources/flowtype/Testing/SelfTest.swift:592:        let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in log.events.append("history") })
+Sources/flowtype/Testing/SelfTest.swift:889:            r.check(false, "keyboard: actual CGEvent posting gate rejects cancelled context")
+Sources/flowtype/Testing/SelfTest.swift:890:        } catch { r.check(error is CancellationError, "keyboard: actual CGEvent posting gate rejects cancelled context") }
+Sources/flowtype/Testing/SelfTest.swift:1243:        // stage. This never starts capture/models or touches clipboard/CGEvent.
+Sources/flowtype/Testing/SelfTest.swift:1348:            let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+Sources/flowtype/Testing/SelfTest.swift:1415:        let effects = SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in })
+Sources/flowtype/Testing/SelfTest.swift:1853:                                        effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
+Sources/flowtype/Testing/SelfTest.swift:1886:                                       effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}),
+Sources/flowtype/Testing/SelfTest.swift:1956:                                        effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
+Sources/flowtype/Testing/SelfTest.swift:1991:        let effects = SessionEffects(prepare: { probe.preparationCalls += 1 },
+Sources/flowtype/Testing/SelfTest.swift:2284:        let tmp = FileManager.default.temporaryDirectory
+Sources/flowtype/Testing/SelfTest.swift:2306:        let tmp2 = FileManager.default.temporaryDirectory
+Sources/flowtype/Testing/SelfTest.swift:3579:        let base = fm.temporaryDirectory.appendingPathComponent("flowtype-scannertest-\(UUID().uuidString)", isDirectory: true)
+Sources/flowtype/Testing/SelfTest.swift:4746:        // No clipboard, CGEvent, AX, or foreground application APIs are invoked.
+Sources/flowtype/Core/EnvMigration.swift:12:        guard !UserDefaults.standard.bool(forKey: hasMigratedKey) else { return }
+Sources/flowtype/Core/EnvMigration.swift:17:        // Try to load from .env file
+Sources/flowtype/Core/EnvMigration.swift:18:        let dotEnv = DotEnv.load(path: ".env")
+Sources/flowtype/Core/EnvMigration.swift:19:        let processEnv = ProcessInfo.processInfo.environment
+Sources/flowtype/Core/EnvMigration.swift:46:        if let oldData = UserDefaults.standard.data(forKey: "flowtype.config"),
+Sources/flowtype/Core/EnvMigration.swift:57:        UserDefaults.standard.set(true, forKey: hasMigratedKey)
+Sources/flowtype/Services/Speech/LocalModelManager/ModelPreset.swift:15:        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift:34:             NSPasteboard.general.clearContents()
+Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift:35:             NSPasteboard.general.setString(text, forType: .string)
+Sources/flowtype/Core/Database/AppDatabase.swift:109:        .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+Sources/flowtype/Core/Recovery/RecoveryEffects.swift:22:            NSPasteboard.general.clearContents()
+Sources/flowtype/Core/Recovery/RecoveryEffects.swift:23:            NSPasteboard.general.setString($0, forType: .string)
+Sources/flowtype/Core/Persistence.swift:14:        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+Sources/flowtype/Services/Speech/ModelLocator.swift:39:        let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first
+Sources/flowtype/Services/Speech/ModelLocator.swift:40:        let home = fm.homeDirectoryForCurrentUser
+Sources/flowtype/Services/Speech/QwenASRProvider.swift:88:    func loadModel(
+Sources/flowtype/Services/Speech/QwenASRProvider.swift:141:    func unloadModel() {
+Sources/flowtype/Services/Speech/QwenASRProvider.swift:154:        try await loadModel(
+Sources/flowtype/Services/Speech/LocalModelManager/LocalASRRuntimeFactory.swift:20:            try await provider.loadModel(modelId: compatibilityID, cacheDir: model.directory, offlineMode: true)

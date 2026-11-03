@@ -1,0 +1,2414 @@
+# Review package: aea7dc9..ffd4ba4
+
+## Commits
+ffd4ba4 fix: isolate self-test persistence and startup effects
+
+## Files changed
+ Sources/flowtype/App/RuntimeEnvironment.swift      |   2 +-
+ Sources/flowtype/App/StatusBarController.swift     |   3 +-
+ Sources/flowtype/App/ValidationEffects.swift       |  63 ++++++++++
+ Sources/flowtype/Core/ConfigurationStore.swift     |  14 +--
+ Sources/flowtype/Core/Database/AppDatabase.swift   |   4 +-
+ Sources/flowtype/Core/EnvMigration.swift           |   7 +-
+ Sources/flowtype/Core/Persistence.swift            |   7 +-
+ .../Core/Pipeline/Stages/InjectionStage.swift      |   3 +-
+ Sources/flowtype/Core/PipelineOrchestrator.swift   |   9 +-
+ .../flowtype/Core/Recovery/RecoveryEffects.swift   |   5 +-
+ Sources/flowtype/Services/AudioRecorder.swift      |  14 ++-
+ .../Services/Context/AXContextProvider.swift       |   1 +
+ Sources/flowtype/Services/KeyboardInjector.swift   |  22 +++-
+ Sources/flowtype/Services/LLMService.swift         |  10 +-
+ Sources/flowtype/Services/Speech/ASRRouter.swift   |   5 +-
+ .../Services/Speech/AppleSpeechProvider.swift      |   4 +-
+ .../Services/Speech/CloudASRProvider.swift         |   7 +-
+ Sources/flowtype/Services/Speech/CloudProbe.swift  |   3 +-
+ .../LocalModelManager/LocalModelLibrary.swift      |   9 +-
+ .../Speech/LocalModelManager/ModelPreset.swift     |   3 +-
+ .../flowtype/Services/Speech/ModelLocator.swift    |   4 +-
+ .../ModelProvisioning/ModelMetadataPreflight.swift |   7 +-
+ .../Services/Speech/OfflineWhisperKit.swift        |   1 +
+ .../flowtype/Services/Speech/QwenASRProvider.swift |   1 +
+ .../flowtype/Services/Speech/QwenModelState.swift  |  13 +-
+ .../Services/Speech/WebSocketTransport.swift       |   1 +
+ .../Services/Speech/WhisperModelPreparation.swift  |   3 +-
+ .../Testing/ImportedModelUISelfTests.swift         |   2 +-
+ .../Testing/LocalModelImportSelfTests.swift        |   2 +-
+ .../flowtype/Testing/M2ReviewFixSelfTests.swift    |   6 +-
+ .../flowtype/Testing/M5IsolationSelfTests.swift    | 138 +++++++++++++++++++++
+ Sources/flowtype/Testing/M5RuntimeSelfTests.swift  |   2 +-
+ .../flowtype/Testing/ModelProvisionSelfTests.swift |   2 +-
+ Sources/flowtype/Testing/SelfTest.swift            |  54 +++++---
+ .../flowtype/Testing/WhisperRuntimeSelfTests.swift |   2 +-
+ Sources/flowtype/Utilities/KeychainHelper.swift    |  12 +-
+ Sources/flowtype/Utilities/PermissionHelper.swift  |   7 +-
+ Sources/flowtype/Utilities/SoundFeedback.swift     |   3 +-
+ Sources/flowtype/WindowManager.swift               |   6 +
+ 39 files changed, 378 insertions(+), 83 deletions(-)
+
+## Diff
+diff --git a/Sources/flowtype/App/RuntimeEnvironment.swift b/Sources/flowtype/App/RuntimeEnvironment.swift
+index ef54441..97cae01 100644
+--- a/Sources/flowtype/App/RuntimeEnvironment.swift
++++ b/Sources/flowtype/App/RuntimeEnvironment.swift
+@@ -17,21 +17,21 @@ enum RuntimeBootstrapError: String, Error {
+     var exitCode: Int32 { self == .usage ? 64 : 1 }
+ }
+ 
+ struct RuntimeOptions: Sendable {
+     let mode: RuntimeMode
+     let validationRoot: String?
+     let selfTestFilter: String?
+     var role: ProcessRole {
+         switch mode { case .app: .app; case .selfTest: .selfTest; case .smoke, .artifact: .smokeTest }
+     }
+-    static let selfTestFilters = ["--m5-runtime-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
++    static let selfTestFilters = ["--m5-runtime-only", "--m5-isolation-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
+                                   "--m3-silence-only", "--m3-asr-regression-only", "--m3-delivery-only",
+                                   "--m2-review-inspection-only", "--m2-review-packages-only", "--m2-fix-only"]
+ 
+     static func parse(arguments: [String]) throws -> RuntimeOptions {
+         var mode: RuntimeMode?
+         var root: String?
+         var filter: String?
+         var index = 1 // argv[0] is the executable, never an option.
+         while index < arguments.count {
+             let argument = arguments[index]
+diff --git a/Sources/flowtype/App/StatusBarController.swift b/Sources/flowtype/App/StatusBarController.swift
+index 14dd2d7..404bd79 100644
+--- a/Sources/flowtype/App/StatusBarController.swift
++++ b/Sources/flowtype/App/StatusBarController.swift
+@@ -208,20 +208,21 @@ class StatusBarController: NSObject, NSMenuDelegate {
+     @objc private func showMenu() {
+         guard let button = statusItem?.button else { return }
+         statusItem?.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
+     }
+ 
+     @objc private func showSettings() {
+         openSettings(tab: .settings)
+     }
+ 
+     func openSettings(tab: AppTab = .settings) {
++        guard ValidationEffects.live.allow(.window) else { return }
+         if settingsWindowController == nil {
+             let controller = SettingsWindowController(initialTab: tab)
+             controller.onClose = { [weak self] in
+                 self?.settingsWindowController = nil
+             }
+             settingsWindowController = controller
+         }
+         settingsWindowController?.selectTab(tab)
+         settingsWindowController?.showWindow(nil)
+         NSApp.activate(ignoringOtherApps: true)
+@@ -263,21 +264,21 @@ class StatusBarController: NSObject, NSMenuDelegate {
+         case .degraded(.accessibilityMissing):
+             PermissionHelper.openAccessibilitySettings()
+             monitor.startPermissionWatchIfNeeded()
+         default:
+             break
+         }
+     }
+ 
+     @objc private func reloadConfiguration() {
+         let defaultsKey = "flowtype.config"
+-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
++        if let data = RuntimeEnvironment.defaults.data(forKey: defaultsKey),
+            let config = try? JSONDecoder().decode(Configuration.self, from: data) {
+             ConfigurationStore.shared.current = config
+         }
+         WindowManager.shared.reloadHotkey()
+ 
+         if let button = statusItem?.button {
+             let originalTitle = button.title
+             button.title = "已重新加载"
+             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                 button.title = originalTitle
+diff --git a/Sources/flowtype/App/ValidationEffects.swift b/Sources/flowtype/App/ValidationEffects.swift
+new file mode 100644
+index 0000000..6f445f9
+--- /dev/null
++++ b/Sources/flowtype/App/ValidationEffects.swift
+@@ -0,0 +1,63 @@
++import Foundation
++import os
++
++/// Concrete live boundaries, never injected model/session/transport state transitions.
++final class ValidationEffects: Sendable {
++    enum Operation: String, CaseIterable, Sendable {
++        case keychain, network, modelScan, modelLoad, modelDownload, audioDevice, permissionRequest
++        case clipboard, inputEvent, foregroundContext, sound, window, environment, pathMonitor
++    }
++    struct Counts: Sendable {
++        var permitted: [Operation: Int] = [:]
++        var blocked: [Operation: Int] = [:]
++    }
++    static let live: ValidationEffects = {
++        let role = RuntimeEnvironment.current.role
++        if role == .app { return ValidationEffects(role: role) }
++        return ValidationEffects(role: role, external: { _ in })
++    }()
++    private let role: ProcessRole
++    private let external: (@Sendable (Operation) -> Void)?
++    private let counts = OSAllocatedUnfairLock(initialState: Counts())
++    init(role: ProcessRole, external: (@Sendable (Operation) -> Void)? = nil) {
++        self.role = role; self.external = external
++    }
++    var snapshot: Counts { counts.withLock { $0 } }
++    func allow(_ operation: Operation) -> Bool {
++        guard role == .app else {
++            counts.withLock { $0.blocked[operation, default: 0] += 1 }
++            return false
++        }
++        // Ordinary app has no observer/counter overhead. Explicit adapters can
++        // account for admitted operations and independently observe downstream entry.
++        if let external {
++            counts.withLock { $0.permitted[operation, default: 0] += 1 }
++            external(operation)
++        }
++        return true
++    }
++}
++
++struct KeychainAccess: Sendable {
++    var save: @Sendable (String, String) -> Bool
++    var load: @Sendable (String) -> String?
++    var delete: @Sendable (String) -> Void
++    static let helper = KeychainAccess(save: { KeychainHelper.save(key: $0, value: $1) },
++                                       load: { KeychainHelper.load(key: $0) }, delete: { KeychainHelper.delete(key: $0) })
++    static func guarded(role: ProcessRole, system: KeychainAccess, effects: ValidationEffects) -> KeychainAccess {
++        let memory = OSAllocatedUnfairLock(initialState: [String: String]())
++        return KeychainAccess(save: { key, value in
++            guard role == .app else { memory.withLock { $0[key] = value }; return true }
++            guard effects.allow(.keychain) else { return false }
++            return system.save(key, value)
++        }, load: { key in
++            guard role == .app else { return memory.withLock { $0[key] } }
++            guard effects.allow(.keychain) else { return nil }
++            return system.load(key)
++        }, delete: { key in
++            guard role == .app else { memory.withLock { _ = $0.removeValue(forKey: key) }; return }
++            guard effects.allow(.keychain) else { return }
++            system.delete(key)
++        })
++    }
++}
+diff --git a/Sources/flowtype/Core/ConfigurationStore.swift b/Sources/flowtype/Core/ConfigurationStore.swift
+index 8ad2ece..fa21a7f 100644
+--- a/Sources/flowtype/Core/ConfigurationStore.swift
++++ b/Sources/flowtype/Core/ConfigurationStore.swift
+@@ -1,27 +1,28 @@
+ import Foundation
+ import Combine
+ 
+ class ConfigurationStore: ObservableObject, @unchecked Sendable {
+-    static let shared = ConfigurationStore()
++    static let shared = ConfigurationStore(defaults: RuntimeEnvironment.defaults,
++                                            backupDirectory: RuntimeEnvironment.current.paths.logsDirectory)
+ 
+     @Published var current: Configuration
+ 
+     private let defaultsKey = "flowtype.config"
+     private let migrationVersionKey = "flowtype.migrationVersion"
+     private let currentMigrationVersion = 5
+     private let keychainServicePrefix = "llmProvider."
+ 
+     private let defaults: UserDefaults
+     private let backupDirectory: URL?
+ 
+-    init(defaults: UserDefaults = .standard, backupDirectory: URL? = nil) {
++    init(defaults: UserDefaults = RuntimeEnvironment.defaults, backupDirectory: URL? = nil, keychain: KeychainAccess = .helper) {
+         self.defaults = defaults
+         self.backupDirectory = backupDirectory
+ 
+         guard let data = defaults.data(forKey: defaultsKey) else {
+             // No persisted config = first launch; a clean default is the correct outcome.
+             self.current = Configuration.default
+             return
+         }
+ 
+         let decoded: Configuration
+@@ -43,40 +44,40 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
+             if storedVersion < 1 {
+                 if config.asrLanguage == .auto {
+                     config.asrLanguage = .zh
+                 }
+                 needsSave = true
+             }
+ 
+             // Migration 2: move API key from UserDefaults JSON to Keychain
+             if storedVersion < 2 {
+                 if !config.llmApiKey.isEmpty {
+-                    _ = KeychainHelper.save(key: "llmApiKey", value: config.llmApiKey)
++                    _ = keychain.save("llmApiKey", config.llmApiKey)
+                     AppLogger.log("[ConfigurationStore] Migrated API key to Keychain")
+                 }
+                 needsSave = true
+             }
+ 
+             // Migration 3: migrate from single-provider to multi-provider format
+             if storedVersion < 3 {
+                 if config.llmProviders.isEmpty {
+                     let oldProvider = LLMProvider(
+                         id: UUID(),
+                         name: "默认配置",
+                         provider: config.llmProvider,
+                         baseURL: config.llmBaseURL,
+                         model: config.llmModel,
+                         isActive: true
+                     )
+-                    if let legacyApiKey = KeychainHelper.load(key: "llmApiKey"), !legacyApiKey.isEmpty {
++                    if let legacyApiKey = keychain.load("llmApiKey"), !legacyApiKey.isEmpty {
+                         let providerKey = "\(self.keychainServicePrefix)\(oldProvider.id.uuidString)"
+-                        _ = KeychainHelper.save(key: providerKey, value: legacyApiKey)
++                        _ = keychain.save(providerKey, legacyApiKey)
+                         AppLogger.log("[ConfigurationStore] Migrated legacy API key to provider \(oldProvider.id)")
+                     }
+                     config.llmProviders = [oldProvider]
+                     needsSave = true
+                 }
+             }
+ 
+             if storedVersion < 4 {
+                 // Migration 4: new fields have default values, just bump version
+                 needsSave = true
+@@ -101,22 +102,21 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
+                     defaults.set(encoded, forKey: defaultsKey)
+                 }
+             }
+             self.current = config
+         }
+     }
+ 
+     /// Persists a copy of an undecodable config blob so the user's settings are
+     /// recoverable for diagnosis, instead of being silently discarded.
+     private static func backupCorruptConfig(_ data: Data, error: Error, directory: URL?) {
+-        let dir = directory ?? URL(fileURLWithPath:
+-            (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/flowtype"))
++        let dir = directory ?? RuntimeEnvironment.current.paths.logsDirectory
+         let stamp = Int(Date().timeIntervalSince1970)
+         let backupURL = dir.appendingPathComponent("flowtype.config.corrupt-\(stamp).json")
+         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+         // REDACT secrets before writing into the shareable diagnostics dir (users zip + send these logs).
+         // String-level so it still works when the blob isn't valid JSON (corrupt configs often aren't),
+         // while always producing a backup for diagnosis.
+         var text = String(data: data, encoding: .utf8) ?? "<non-utf8 blob, \(data.count) bytes>"
+         if let re = try? NSRegularExpression(pattern: #""providerAPIKeys"\s*:\s*\{[^}]*\}"#) {
+             text = re.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
+                                                withTemplate: #""providerAPIKeys":"[REDACTED]""#)
+diff --git a/Sources/flowtype/Core/Database/AppDatabase.swift b/Sources/flowtype/Core/Database/AppDatabase.swift
+index d76350d..0455949 100644
+--- a/Sources/flowtype/Core/Database/AppDatabase.swift
++++ b/Sources/flowtype/Core/Database/AppDatabase.swift
+@@ -98,22 +98,20 @@ final class AppDatabase: @unchecked Sendable {
+                 t.add(column: "deliveryOutcome", .text)
+                 t.add(column: "stopToDeliveryMs", .integer)
+             }
+         }
+         return m
+     }
+ }
+ 
+ /// App-wide singleton: opens the on-disk DB and runs the one-time JSON migration before any store reads.
+ enum AppDatabaseProvider {
+-    static let dir: URL = FileManager.default
+-        .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+-        .appendingPathComponent("FlowType", isDirectory: true)
++    static let dir: URL = RuntimeEnvironment.current.paths.applicationSupportDirectory
+ 
+     static let shared: AppDatabase = {
+         let db = AppDatabase.make(at: dir)
+         // Only migrate (and back up the source JSON) into the DURABLE on-disk DB — never the ephemeral
+         // in-memory fallback, which would discard the import and orphan the JSON as *.bak (data loss).
+         if db.isOnDisk { JSONMigration.runIfNeeded(db, dir: dir) }
+         return db
+     }()
+ }
+diff --git a/Sources/flowtype/Core/EnvMigration.swift b/Sources/flowtype/Core/EnvMigration.swift
+index d06fdc8..00e4833 100644
+--- a/Sources/flowtype/Core/EnvMigration.swift
++++ b/Sources/flowtype/Core/EnvMigration.swift
+@@ -1,22 +1,23 @@
+ import Foundation
+ 
+ enum EnvMigration {
+     private static func apply(_ value: String?, to target: inout String, didMigrate: inout Bool) {
+         guard let value, !value.isEmpty else { return }
+         target = value
+         didMigrate = true
+     }
+ 
+     static func migrateIfNeeded() {
++        guard ValidationEffects.live.allow(.environment) else { return }
+         let hasMigratedKey = "flowtype.didMigrateEnv"
+-        guard !UserDefaults.standard.bool(forKey: hasMigratedKey) else { return }
++        guard !RuntimeEnvironment.defaults.bool(forKey: hasMigratedKey) else { return }
+ 
+         var config = ConfigurationStore.shared.current
+         var didMigrate = false
+ 
+         // Try to load from .env file
+         let dotEnv = DotEnv.load(path: ".env")
+         let processEnv = ProcessInfo.processInfo.environment
+         let env = dotEnv.merging(processEnv) { _, new in new }
+ 
+         // Env migration: update the active (first) provider, or create one if none exist
+@@ -36,32 +37,32 @@ enum EnvMigration {
+             didMigrate = true
+         }
+         // Ensure the provider is in the list
+         if config.llmProviders.isEmpty {
+             config.llmProviders = [activeProvider]
+         } else {
+             config.llmProviders[0] = activeProvider
+         }
+ 
+         // Migrate from old flat config format if present
+-        if let oldData = UserDefaults.standard.data(forKey: "flowtype.config"),
++        if let oldData = RuntimeEnvironment.defaults.data(forKey: "flowtype.config"),
+            let oldConfig = migrateOldConfiguration(from: oldData, into: config) {
+             config = oldConfig
+             didMigrate = true
+         }
+ 
+         if didMigrate {
+             ConfigurationStore.shared.save(config)
+             AppLogger.log("[EnvMigration] Migrated config to new format")
+         }
+ 
+-        UserDefaults.standard.set(true, forKey: hasMigratedKey)
++        RuntimeEnvironment.defaults.set(true, forKey: hasMigratedKey)
+     }
+ 
+     /// Attempt to decode old flat configuration and map to new nested structure
+     private static func migrateOldConfiguration(from data: Data, into config: Configuration) -> Configuration? {
+         struct OldConfiguration: Codable {
+             var apiKey: String?
+             var baseURL: String?
+             var llmModel: String?
+             var triggerKey: TriggerKey?
+         }
+diff --git a/Sources/flowtype/Core/Persistence.swift b/Sources/flowtype/Core/Persistence.swift
+index ef69337..c686650 100644
+--- a/Sources/flowtype/Core/Persistence.swift
++++ b/Sources/flowtype/Core/Persistence.swift
+@@ -4,26 +4,25 @@ enum PersistenceError: Error {
+     case directoryCreationFailed(Error)
+     case writeFailed(Error)
+     case readFailed(Error)
+     case decodeFailed(Error)
+ }
+ 
+ struct PersistentStore<T: Codable> {
+     let fileURL: URL
+ 
+     private static var appSupportDir: URL {
+-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+-        return base.appendingPathComponent("FlowType", isDirectory: true)
++        RuntimeEnvironment.current.paths.applicationSupportDirectory
+     }
+ 
+-    init(filename: String) {
+-        self.fileURL = Self.appSupportDir.appendingPathComponent(filename)
++    init(filename: String, directory: URL? = nil) {
++        self.fileURL = (directory ?? Self.appSupportDir).appendingPathComponent(filename)
+     }
+ 
+     func load() -> T? {
+         guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+         do {
+             let data = try Data(contentsOf: fileURL)
+             let decoder = JSONDecoder()
+             decoder.dateDecodingStrategy = .iso8601
+             return try decoder.decode(T.self, from: data)
+         } catch {
+diff --git a/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift b/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
+index b8b0407..361465f 100644
+--- a/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
++++ b/Sources/flowtype/Core/Pipeline/Stages/InjectionStage.swift
+@@ -24,22 +24,21 @@ final class InjectionStage: PipelineStage, @unchecked Sendable {
+          mode: @escaping @MainActor @Sendable () -> DeliveryMode = { ConfigurationStore.shared.current.deliveryMode },
+          bundleID: @escaping @MainActor @Sendable (Int32?) -> String? = { pid in
+              pid.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
+          },
+          paste: @escaping @MainActor @Sendable (String, SessionContext, DeliveryTargetSnapshot?) async -> PasteTransactionResult = { text, context, target in
+              await KeyboardInjector.pasteText(text, context: context) {
+                  decideDelivery(target: target, current: await KeyboardInjector.currentDeliveryTarget()) == .inject
+              }
+          },
+          copy: @escaping @MainActor @Sendable (String) -> Void = { text in
+-             NSPasteboard.general.clearContents()
+-             NSPasteboard.general.setString(text, forType: .string)
++             KeyboardInjector.copyText(text)
+              SoundFeedback.playCopiedToClipboard()
+          }) {
+         self.settle = settle
+         self.accessibilityTrusted = accessibilityTrusted
+         self.focus = focus
+         self.currentTarget = currentTarget
+         self.inject = inject
+         self.typingEvents = typingEvents
+         self.copy = copy
+         self.mode = mode
+diff --git a/Sources/flowtype/Core/PipelineOrchestrator.swift b/Sources/flowtype/Core/PipelineOrchestrator.swift
+index 4cf88e3..aafa3b4 100644
+--- a/Sources/flowtype/Core/PipelineOrchestrator.swift
++++ b/Sources/flowtype/Core/PipelineOrchestrator.swift
+@@ -49,27 +49,34 @@ enum DeliveryCopy: Equatable, Sendable {
+ 
+ /// External session effects are replaceable without changing pipeline ownership or transitions.
+ @MainActor
+ struct SessionEffects {
+     var prepare: @MainActor @Sendable () -> Void
+     var showWindow: @MainActor @Sendable () -> Void
+     var hideWindow: @MainActor @Sendable () -> Void
+     var saveHistory: (@MainActor @Sendable (SessionContext) -> Void)? = nil
+ 
+     static let live = SessionEffects(prepare: {
++        guard RuntimeEnvironment.current.role == .app else { return }
+         Task { @MainActor in
+             ASRRouter.shared.startProbing()
+             let cfg = ConfigurationStore.shared.current
+             guard cfg.asrRoutingPolicy != .cloudOnly else { return }
+             await QwenModelState.shared.loadModel()
+         }
+-    }, showWindow: { WindowManager.shared.showWindow() }, hideWindow: { WindowManager.shared.hide() })
++    }, showWindow: {
++        guard ValidationEffects.live.allow(.window) else { return }
++        WindowManager.shared.showWindow()
++    }, hideWindow: {
++        guard ValidationEffects.live.allow(.window) else { return }
++        WindowManager.shared.hide()
++    })
+ }
+ 
+ // MARK: - Session Controller
+ 
+ @MainActor
+ final class SessionController: ObservableObject {
+     static let shared = SessionController()
+ 
+     private let pipeline: [PipelineStage]
+     private let observers: [SessionObserver]
+diff --git a/Sources/flowtype/Core/Recovery/RecoveryEffects.swift b/Sources/flowtype/Core/Recovery/RecoveryEffects.swift
+index 724ed2d..340ea5d 100644
+--- a/Sources/flowtype/Core/Recovery/RecoveryEffects.swift
++++ b/Sources/flowtype/Core/Recovery/RecoveryEffects.swift
+@@ -11,15 +11,12 @@ struct RecoveryEffects {
+ 
+     static let live = RecoveryEffects(
+         openAccessibilitySettings: {
+             PermissionHelper.openAccessibilitySettings()
+             ReadinessMonitor.shared.startPermissionWatchIfNeeded()
+         },
+         openMicrophoneSettings: { PermissionHelper.openMicrophoneSettings() },
+         openSpeechRecognitionSettings: { PermissionHelper.openSpeechRecognitionSettings() },
+         openASRSettings: { StatusBarController.shared.openSettings(tab: .settings) },
+         openHistory: { StatusBarController.shared.openSettings(tab: .history) },
+-        copyText: {
+-            NSPasteboard.general.clearContents()
+-            NSPasteboard.general.setString($0, forType: .string)
+-        })
++        copyText: { KeyboardInjector.copyText($0) })
+ }
+diff --git a/Sources/flowtype/Services/AudioRecorder.swift b/Sources/flowtype/Services/AudioRecorder.swift
+index 7ffec89..1d51601 100644
+--- a/Sources/flowtype/Services/AudioRecorder.swift
++++ b/Sources/flowtype/Services/AudioRecorder.swift
+@@ -67,20 +67,21 @@ final class AudioRecorder: @unchecked Sendable {
+     // MARK: - Heartbeat detection
+     private var heartbeatTimer = CancellableTimer()
+     private let heartbeatInterval: TimeInterval = 2.0
+     private let heartbeatTimeout: TimeInterval = 5.0
+ 
+     func authorizationStatus() -> Int {
+         AVAudioApplication.shared.recordPermission.rawValue
+     }
+ 
+     func requestPermission() async -> Bool {
++        guard ValidationEffects.live.allow(.permissionRequest) else { return false }
+         let status = AVAudioApplication.shared.recordPermission
+         AppLogger.log("AudioRecorder: mic status = \(status) (undetermined/denied/granted)")
+         guard status == .undetermined else {
+             AppLogger.log("AudioRecorder: mic status is not undetermined, skipping request")
+             return status == .granted
+         }
+         let granted = await withCheckedContinuation { continuation in
+             AVAudioApplication.requestRecordPermission { granted in
+                 continuation.resume(returning: granted)
+             }
+@@ -94,20 +95,21 @@ final class AudioRecorder: @unchecked Sendable {
+         guard await requestPermission() else {
+             releaseOwner(ownerID)
+             throw AudioRecorderError.permissionDenied
+         }
+         return try lifecycleLock.withLock {
+             try startEngine(deviceID: deviceID, ownerID: ownerID)
+         }
+     }
+ 
+     private func startEngine(deviceID: String?, ownerID: UInt64) throws -> RecordingOutput {
++        guard ValidationEffects.live.allow(.audioDevice) else { throw AudioRecorderError.permissionDenied }
+         try Task.checkCancellation()
+         guard isOwner(ownerID) else { throw CancellationError() }
+ 
+         // Fresh visualizer state per session. Relies on start/stop being serial (the same
+         // assumption the engine reuse makes): after this, only the audio tap touches the
+         // analyzer, one buffer at a time.
+         spectrumAnalyzer.reset()
+ 
+         let freshEngine = AVAudioEngine()
+         guard isOwner(ownerID) else { throw CancellationError() }
+@@ -135,42 +137,42 @@ final class AudioRecorder: @unchecked Sendable {
+                 if originalResult != noErr {
+                     AppLogger.log("[AudioRecorder] Failed to save original device: \(originalResult)")
+                     originalDeviceID = kAudioObjectUnknown
+                 }
+                 // Crash safety: persist the original device's UID BEFORE changing the
+                 // system default, so a crash/kill mid-recording can be repaired at next
+                 // launch via restorePendingDeviceIfNeeded(). Store the UID, not the
+                 // AudioObjectID — numeric IDs are not stable across launches.
+                 if originalDeviceID != kAudioObjectUnknown {
+                     if let originalUID = AudioDeviceEnumerator.deviceUID(for: originalDeviceID) {
+-                        UserDefaults.standard.set(originalUID, forKey: Self.pendingRestoreKey)
++                        RuntimeEnvironment.defaults.set(originalUID, forKey: Self.pendingRestoreKey)
+                         AppLogger.log("[AudioRecorder] Persisted device-restore sentinel (uid=\(originalUID))")
+                     } else {
+                         AppLogger.log("[AudioRecorder] Could not resolve original device UID; crash-restore sentinel not written")
+                     }
+                 }
+                 // Set requested device
+                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+                 var mutableAudioDeviceID = audioDeviceID
+                 let setResult = AudioObjectSetPropertyData(
+                     AudioObjectID(kAudioObjectSystemObject),
+                     &propertyAddress,
+                     0,
+                     nil,
+                     deviceIDSize,
+                     &mutableAudioDeviceID
+                 )
+                 if setResult != noErr {
+                     AppLogger.log("[AudioRecorder] Failed to set default input device: \(setResult), falling back")
+                     originalDeviceID = kAudioObjectUnknown
+                     // The system default was never changed — no restore owed.
+-                    UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
++                    RuntimeEnvironment.defaults.removeObject(forKey: Self.pendingRestoreKey)
+                 }
+             } else {
+                 AppLogger.log("[AudioRecorder] Requested device \(requestedDeviceID) not found, using default")
+             }
+         }
+ 
+         let inputNode = freshEngine.inputNode
+         let inputFormat = inputNode.outputFormat(forBus: 0)
+         AppLogger.log("[AudioRecorder] Hardware input format: \(inputFormat)")
+ 
+@@ -400,48 +402,50 @@ final class AudioRecorder: @unchecked Sendable {
+     /// Covers in-process paths: normal stop, cancel, freeze auto-stop, and the
+     /// formatCreationFailed throws in startRecording. Clears the persisted sentinel
+     /// on success; keeps it on failure so the next launch retries.
+     private nonisolated func restoreOriginalDeviceIfNeeded() {
+         guard originalDeviceID != kAudioObjectUnknown else { return }
+         let restoreResult = Self.setSystemDefaultInputDevice(originalDeviceID)
+         if restoreResult != noErr {
+             AppLogger.log("[AudioRecorder] Failed to restore original input device: \(restoreResult)")
+         } else {
+             AppLogger.log("[AudioRecorder] Restored original input device")
+-            UserDefaults.standard.removeObject(forKey: Self.pendingRestoreKey)
++            RuntimeEnvironment.defaults.removeObject(forKey: Self.pendingRestoreKey)
+         }
+         originalDeviceID = kAudioObjectUnknown
+     }
+ 
+     /// Crash/quit recovery: if a previous session (or the current one, on Cmd+Q while
+     /// recording) left the system default input device overridden, restore it from the
+     /// persisted UID sentinel. Clears the sentinel whether or not the restore succeeds —
+     /// the original device may have been unplugged, and a stale sentinel must not
+     /// clobber a default the user has since chosen by hand.
+     static func restorePendingDeviceIfNeeded() {
+-        guard let uid = UserDefaults.standard.string(forKey: pendingRestoreKey) else { return }
+-        defer { UserDefaults.standard.removeObject(forKey: pendingRestoreKey) }
++        guard RuntimeEnvironment.current.role == .app else { return }
++        guard let uid = RuntimeEnvironment.defaults.string(forKey: pendingRestoreKey) else { return }
++        defer { RuntimeEnvironment.defaults.removeObject(forKey: pendingRestoreKey) }
+         AppLogger.log("[AudioRecorder] Pending input-device restore found (uid=\(uid))")
+         guard let deviceID = AudioDeviceEnumerator.findDeviceID(uid: uid) else {
+             AppLogger.log("[AudioRecorder] Pending restore: device not found (unplugged?); clearing sentinel")
+             return
+         }
+         let result = setSystemDefaultInputDevice(deviceID)
+         if result == noErr {
+             AppLogger.log("[AudioRecorder] Pending restore: system default input device restored")
+         } else {
+             AppLogger.log("[AudioRecorder] Pending restore failed: \(result); clearing sentinel")
+         }
+     }
+ 
+     /// Sets the system-wide default input device. Returns the CoreAudio status.
+     private static func setSystemDefaultInputDevice(_ deviceID: AudioObjectID) -> OSStatus {
++        guard ValidationEffects.live.allow(.audioDevice) else { return -1 }
+         var propertyAddress = AudioObjectPropertyAddress(
+             mSelector: kAudioHardwarePropertyDefaultInputDevice,
+             mScope: kAudioObjectPropertyScopeGlobal,
+             mElement: kAudioObjectPropertyElementMain
+         )
+         var mutableDeviceID = deviceID
+         return AudioObjectSetPropertyData(
+             AudioObjectID(kAudioObjectSystemObject),
+             &propertyAddress,
+             0,
+diff --git a/Sources/flowtype/Services/Context/AXContextProvider.swift b/Sources/flowtype/Services/Context/AXContextProvider.swift
+index 7fef275..575c6d6 100644
+--- a/Sources/flowtype/Services/Context/AXContextProvider.swift
++++ b/Sources/flowtype/Services/Context/AXContextProvider.swift
+@@ -2,20 +2,21 @@ import Foundation
+ import Cocoa
+ import ApplicationServices
+ 
+ /// One capture-start snapshot. AX IPC is synchronous, so it lives exclusively on
+ /// a worker; the caller waits at most 0.5s and never joins a timed-out worker.
+ final class AXContextProvider: ContextProvider, @unchecked Sendable {
+     static let messageTimeout: Float = 0.15
+     static let totalTimeout: TimeInterval = 0.5
+ 
+     func collect() async -> ForegroundContext? {
++        guard ValidationEffects.live.allow(.foregroundContext) else { return nil }
+         let identity = await MainActor.run {
+             let app = NSWorkspace.shared.frontmostApplication
+             return (app?.processIdentifier, app?.localizedName)
+         }
+         guard !Task.isCancelled, let pid = identity.0 else { return nil }
+         return await collectBoundedForegroundContext(timeout: Self.totalTimeout) {
+             guard AXIsProcessTrusted() else { return nil }
+             return Collector(deadline: Date().addingTimeInterval(Self.totalTimeout))
+                 .collect(pid: pid, appName: identity.1)
+         }
+diff --git a/Sources/flowtype/Services/KeyboardInjector.swift b/Sources/flowtype/Services/KeyboardInjector.swift
+index 9d68573..2d84727 100644
+--- a/Sources/flowtype/Services/KeyboardInjector.swift
++++ b/Sources/flowtype/Services/KeyboardInjector.swift
+@@ -65,20 +65,21 @@ struct KeyboardInjector {
+         }
+         defer { injectionLock.withLock { $0 = false } }
+ 
+         guard text.count <= maxChars else {
+             AppLogger.log("[KeyboardInjector] insertText rejected: \(text.count) chars exceeds \(maxChars) cap")
+             throw InjectionError.textTooLong
+         }
+         let driver: TypingEvents
+         if let events { driver = events }
+         else {
++            guard ValidationEffects.live.allow(.inputEvent) else { throw InjectionError.eventSourceCreationFailed }
+             let source = try UnicodeSource()
+             driver = TypingEvents(prepare: { pair in
+                 switch pair {
+                 case .unicode(let text): return try prepareUnicode(text, source: source.value)
+                 case .newline: return try prepareShiftReturn(source: source.value)
+                 }
+             }, wait: { try await Task.sleep(nanoseconds: interEventDelayNs * 2) })
+         }
+         func dispatch(_ pair: TypingPair) async throws {
+             try Task.checkCancellation()
+@@ -179,34 +180,40 @@ struct KeyboardInjector {
+             guard context.performDeliveryEvent(action) else { throw CancellationError() }
+         } else { action() }
+         try Task.checkCancellation()
+     }
+ 
+     // MARK: - Focus detection
+ 
+     /// Capture the frontmost PID before awaiting AX. All synchronous AX IPC runs
+     /// off the main actor; total waiting is bounded even for an unresponsive app.
+     static func currentDeliveryTarget() async -> DeliveryTargetSnapshot {
++        guard ValidationEffects.live.allow(.foregroundContext) else {
++            return DeliveryTargetSnapshot(pid: nil, signals: FocusSignals(secureInputActive: false, focus: .blindOrUnknown))
++        }
+         let pid = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+         let snapshot = await deliveryTarget(pid: pid)
+         // Invalidate a sample taken across an app switch, even if the new app
+         // happens to be the original stop target.
+         let after = await MainActor.run { NSWorkspace.shared.frontmostApplication?.processIdentifier }
+         let validated = deliverySnapshotAfterCollection(snapshot, frontmostPID: after)
+         if IsSecureEventInputEnabled() {
+             return DeliveryTargetSnapshot(pid: validated.pid, focusIdentity: validated.focusIdentity,
+                 signals: FocusSignals(secureInputActive: true, focus: .nonTextControl))
+         }
+         return validated
+     }
+ 
+     static func deliveryTarget(pid: Int32?) async -> DeliveryTargetSnapshot {
++        guard ValidationEffects.live.allow(.foregroundContext) else {
++            return DeliveryTargetSnapshot(pid: pid, signals: FocusSignals(secureInputActive: false, focus: .blindOrUnknown))
++        }
+         let fallback = DeliveryTargetSnapshot(pid: pid, signals: FocusSignals(secureInputActive: IsSecureEventInputEnabled(), focus: .blindOrUnknown))
+         return (try? await withAsyncDeadline(seconds: 0.5) {
+             let worker = Task.detached(priority: .utility) { collectDeliveryTarget(pid: pid) }
+             return await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+         }) ?? fallback
+     }
+ 
+     private static func collectDeliveryTarget(pid: Int32?) -> DeliveryTargetSnapshot {
+         let secure = IsSecureEventInputEnabled()
+         let blind = DeliveryTargetSnapshot(pid: pid, signals: FocusSignals(secureInputActive: secure, focus: .blindOrUnknown))
+@@ -259,36 +266,41 @@ struct PasteboardWriteReceipt {
+ 
+ /// nil means some advertised representation could not be materialized. Never clear
+ /// such a clipboard: a text-only backup would silently discard images/files/RTF.
+ @MainActor protocol DeliveryPasteboard: AnyObject {
+     var changeCount: Int { get }
+     func contents() -> PasteboardContents?
+     @discardableResult func write(_ contents: PasteboardContents) -> PasteboardWriteReceipt?
+ }
+ 
+ @MainActor final class SystemDeliveryPasteboard: DeliveryPasteboard {
+-    private let board = NSPasteboard.general
+-    var changeCount: Int { board.changeCount }
++    private var board: NSPasteboard? {
++        guard ValidationEffects.live.allow(.clipboard) else { return nil }
++        return NSPasteboard.general
++    }
++    var changeCount: Int { board?.changeCount ?? 0 }
+     func contents() -> PasteboardContents? {
++        guard let board else { return nil }
+         guard let items = board.pasteboardItems else { return board.types?.isEmpty != false ? [] : nil }
+         var result: PasteboardContents = []
+         for item in items {
+             var representations: [String: Data] = [:]
+             for type in item.types {
+                 guard let data = item.data(forType: type) else { return nil }
+                 representations[type.rawValue] = data
+             }
+             result.append(representations)
+         }
+         return result
+     }
+     func write(_ contents: PasteboardContents) -> PasteboardWriteReceipt? {
++        guard let board else { return nil }
+         // Build all items before clearing the shared pasteboard.
+         var items: [NSPasteboardItem] = []
+         for representations in contents {
+             let item = NSPasteboardItem()
+             for (type, data) in representations {
+                 guard item.setData(data, forType: .init(type)) else { return nil }
+             }
+             items.append(item)
+         }
+         let generation = board.clearContents()
+@@ -374,21 +386,27 @@ enum PasteTransactionResult: Equatable {
+             if let restore = board.write(original) { restored = restore.succeeded }
+         }
+         await cleanup.value
+         if dispatched { return Task.isCancelled || context.isCancelled ? .uncertain : .dispatched }
+         if Task.isCancelled || context.isCancelled { return .cancelled }
+         return restored ? .notDispatched : .clipboardChanged
+     }
+ }
+ 
+ extension KeyboardInjector {
++    @MainActor static func copyText(_ text: String) {
++        guard ValidationEffects.live.allow(.clipboard) else { return }
++        NSPasteboard.general.clearContents()
++        NSPasteboard.general.setString(text, forType: .string)
++    }
+     @MainActor static func preparePasteDispatch() throws -> (@MainActor () -> Void) {
++        guard ValidationEffects.live.allow(.inputEvent) else { throw InjectionError.eventSourceCreationFailed }
+         guard let source = CGEventSource(stateID: .hidSystemState) else { throw InjectionError.eventSourceCreationFailed }
+         guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+               let up = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+             throw InjectionError.eventCreationFailed
+         }
+         down.flags = .maskCommand
+         up.flags = .maskCommand
+         return {
+             isInjecting.withLock { $0 = true }
+             defer { isInjecting.withLock { $0 = false } }
+diff --git a/Sources/flowtype/Services/LLMService.swift b/Sources/flowtype/Services/LLMService.swift
+index b329966..bd8cab0 100644
+--- a/Sources/flowtype/Services/LLMService.swift
++++ b/Sources/flowtype/Services/LLMService.swift
+@@ -44,23 +44,25 @@ enum LLMError: Error {
+             return "网络错误: \(error.localizedDescription)"
+         case .timeout:
+             return "请求超时"
+         }
+     }
+ }
+ 
+ actor LLMService {
+ 
+     private let makeSession: @Sendable () -> URLSession
++    private let injectedSession: Bool
+ 
+-    init(makeSession: @escaping @Sendable () -> URLSession = { URLSession(configuration: .ephemeral) }) {
+-        self.makeSession = makeSession
++    init(makeSession: (@Sendable () -> URLSession)? = nil) {
++        self.makeSession = makeSession ?? { URLSession(configuration: .ephemeral) }
++        self.injectedSession = makeSession != nil
+     }
+ 
+     static func shouldPolish(_ text: String) -> String? {
+         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+         guard trimmed.count >= 4 else { return nil }
+ 
+         let fillerPattern = "^[嗯啊哦呃哼哈呀哪那个这个那么就是对吧然后然后]+$"
+         if let regex = try? NSRegularExpression(pattern: fillerPattern),
+            regex.firstMatch(in: trimmed, options: [], range: NSRange(location: 0, length: trimmed.utf16.count)) != nil {
+             return nil
+@@ -194,20 +196,21 @@ actor LLMService {
+ 
+         do {
+             let requestBody = try JSONSerialization.data(withJSONObject: body)
+             var request = URLRequest(url: url)
+             request.httpMethod = "POST"
+             request.timeoutInterval = 10
+             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+             request.httpBody = requestBody
+ 
++            guard ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+             let (data, response) = try await URLSession.shared.data(for: request)
+ 
+             guard let httpResponse = response as? HTTPURLResponse else {
+                 return .failure(LLMError.apiError("Non-HTTP response"))
+             }
+ 
+             guard (200...299).contains(httpResponse.statusCode) else {
+                 let statusCode = httpResponse.statusCode
+                 let errorBody = String(data: data, encoding: .utf8) ?? "(unable to decode error body)"
+                 let sanitizedBody = sanitizeErrorBody(errorBody)
+@@ -226,20 +229,23 @@ actor LLMService {
+ 
+     private func makeStream(
+         text: String,
+         systemPrompt: String,
+         maxTokens: Int,
+         timeoutSeconds: TimeInterval,
+         config: Configuration,
+         foregroundContext: ForegroundContext?
+     ) -> AsyncThrowingStream<String, Error> {
+         let temperature = config.temperature
++        guard injectedSession || ValidationEffects.live.allow(.network) else {
++            return AsyncThrowingStream { $0.finish(throwing: URLError(.notConnectedToInternet)) }
++        }
+ 
+         let session = makeSession()
+         let budget = CompletionBudget(seconds: timeoutSeconds)
+         return Self.producerOwnedStream(cancelTransport: { session.invalidateAndCancel() }) { continuation in
+             guard let validatedText = Self.shouldPolish(text) else {
+                 continuation.finish()
+                 return
+             }
+             if systemPrompt.isEmpty {
+                 AppLogger.log("[LLMService] WARNING: systemPrompt is empty, skipping")
+diff --git a/Sources/flowtype/Services/Speech/ASRRouter.swift b/Sources/flowtype/Services/Speech/ASRRouter.swift
+index 19d121f..2e4f26d 100644
+--- a/Sources/flowtype/Services/Speech/ASRRouter.swift
++++ b/Sources/flowtype/Services/Speech/ASRRouter.swift
+@@ -239,21 +239,21 @@ func routingInputs(from snapshot: RouterHealthSnapshot,
+                                             now: now,
+                                             ttl: ASRRouterProbeConfig.latencyTtl),
+         cloudConsecutiveFailures: snapshot.cloudConsecutiveFailures,
+         cloudProbeMs: probeIsCurrent ? snapshot.probeLatencyMs : nil,
+         cloudProbeFailed: snapshot.probeFailed
+     )
+ }
+ 
+ /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+ final class ASRRouter: @unchecked Sendable {
+-    static let shared = ASRRouter()
++    static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+ 
+     private let health = OSAllocatedUnfairLock(initialState: RouterHealthSnapshot())
+     private let monitor = NWPathMonitor()
+     private let monitorQueue = DispatchQueue(label: "flowtype.asr-router.path")
+ 
+     private var probeTimer: DispatchSourceTimer?
+     private let probeQueue = DispatchQueue(label: "flowtype.asr-router.probe")
+     /// 探测是否正在进行，防止链路抖动时重叠刷新。
+     private let probeInFlight = OSAllocatedUnfairLock(initialState: false)
+ 
+@@ -270,21 +270,21 @@ final class ASRRouter: @unchecked Sendable {
+          localLease: @escaping @MainActor @Sendable () -> LocalASRLease? = { QwenModelState.shared.activeLease },
+          uptimeNanoseconds: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
+          measureProbe: @escaping @Sendable (String, UInt16, TimeInterval) async -> Double? = {
+              await CloudProbe.measureLatency(host: $0, port: $1, timeout: $2)
+          }) {
+         self.configuration = configuration
+         self.localAvailable = localAvailable
+         self.localLease = localLease
+         self.uptimeNanoseconds = uptimeNanoseconds
+         self.measureProbe = measureProbe
+-        guard startMonitoring else { return }
++        guard startMonitoring, ValidationEffects.live.allow(.pathMonitor) else { return }
+         monitor.pathUpdateHandler = { [weak self] path in
+             guard let self else { return }
+             let current = Self.signature(for: path)
+             let changed = self.health.withLock { $0.applyNetworkPath(current) }
+             guard changed else { return }
+             AppLogger.log("[ASRRouter] network path changed (\(current.interface ?? "?")) → latency samples invalidated")
+             Task { await self.refreshProbeIfNeeded(force: true) }
+         }
+         monitor.start(queue: monitorQueue)
+     }
+@@ -316,20 +316,21 @@ final class ASRRouter: @unchecked Sendable {
+     func recordFailure(providerID: String, route: ASRRouteSnapshot) {
+         guard providerID == ASRProviderID.cloud else { return }
+         synchronizeConfigurationIdentity()
+         health.withLock { $0.recordFailure(route: route) }
+     }
+ 
+     /// 启动周期性探测（幂等）。app 启动时调用一次即可。
+     /// `@MainActor`：`probeTimer` 的 check-and-set 因此串行化（唯一调用点本就在 MainActor 上）。
+     @MainActor
+     func startProbing() {
++        guard RuntimeEnvironment.current.role == .app else { return }
+         guard probeTimer == nil else { return }
+         let timer = DispatchSource.makeTimerSource(queue: probeQueue)
+         timer.schedule(deadline: .now() + ASRRouterProbeConfig.firstDelay,
+                        repeating: ASRRouterProbeConfig.interval)
+         // Must be explicitly `@Sendable`: an unannotated closure formed in this `@MainActor`
+         // method would inherit MainActor isolation, then the first tick on `probeQueue`
+         // trips Swift 6's executor assertion (dispatch_assert_queue_fail → SIGTRAP).
+         timer.setEventHandler { @Sendable in
+             Task { await ASRRouter.shared.refreshProbeIfNeeded() }
+         }
+diff --git a/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift b/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift
+index 727b66d..2506a19 100644
+--- a/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift
++++ b/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift
+@@ -56,37 +56,38 @@ final class AppleSpeechProvider: @unchecked Sendable {
+         }
+         return recognizer.isAvailable && recognizer.supportsOnDeviceRecognition
+     }
+ 
+     // MARK: - SpeechProvider Protocol
+ 
+     /// One-shot offline recognition from raw Float32 PCM samples (the `SpeechProvider` contract).
+     /// Encodes them to a WAV container, writes to a temp file, then uses
+     /// `SFSpeechURLRecognitionRequest` with on-device recognition.
+     func transcribe(audioData: Data, timeout: TimeInterval = 20) async throws -> String {
++        guard ValidationEffects.live.allow(.modelLoad) else { throw SpeechProviderError.notAvailable }
+         refreshRecognizerIfNeeded()
+         guard let recognizer = recognizer,
+               recognizer.isAvailable,
+               recognizer.supportsOnDeviceRecognition else {
+             AppLogger.log("[AppleSpeechProvider] transcribe: not available")
+             throw SpeechProviderError.notAvailable
+         }
+ 
+         AppLogger.log("[AppleSpeechProvider] transcribe: starting with \(audioData.count) bytes")
+ 
+         // audioData is raw Float32 PCM per the SpeechProvider contract — encode a WAV
+         // container so SFSpeechURLRecognitionRequest can decode it.
+         guard let wavData = WAVEncoder.encode(samples: audioData, sampleRate: 16000) else {
+             throw SpeechProviderError.transcriptionFailed("空音频数据")
+         }
+ 
+-        let tmpDir = FileManager.default.temporaryDirectory
++        let tmpDir = RuntimeEnvironment.current.paths.temporaryDirectory
+         let tmpFile = tmpDir.appendingPathComponent("flowtype_apple_speech_\(UUID().uuidString).wav")
+         try wavData.write(to: tmpFile)
+         // §10 audio-never-persists: this is the ONLY audio FlowType ever writes to disk. The defer fires on
+         // EVERY exit of transcribe(...) — normal return (isFinal), thrown error / no-result, and the timeout
+         // guard below (which cancels the task → resumes the continuation → returns here). Never persist it.
+         defer {
+             try? FileManager.default.removeItem(at: tmpFile)
+         }
+ 
+         let request = SFSpeechURLRecognitionRequest(url: tmpFile)
+@@ -120,20 +121,21 @@ final class AppleSpeechProvider: @unchecked Sendable {
+             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                 box.resume(throwing: SpeechProviderError.transcriptionFailed("timeout after \(Int(timeout))s"))
+                 task.cancel()
+             }
+         }
+     }
+ 
+     // MARK: - Real-time Streaming Recognition (for preview during recording)
+ 
+     func startStreamingRecognition() async -> AsyncStream<String> {
++        guard ValidationEffects.live.allow(.permissionRequest) else { return AsyncStream { $0.finish() } }
+         refreshRecognizerIfNeeded()
+         stateLock.withLock { $0.finalResult = "" }
+ 
+         // Check authorization and request if needed
+         let authStatus = SFSpeechRecognizer.authorizationStatus()
+         AppLogger.log("[AppleSpeechProvider] startStreaming: authStatus=\(authStatus.rawValue) (0=notDetermined,1=denied,2=restricted,3=authorized)")
+         if authStatus == .notDetermined {
+             AppLogger.log("[AppleSpeechProvider] Requesting speech recognition authorization...")
+             await withCheckedContinuation { continuation in
+                 SFSpeechRecognizer.requestAuthorization { status in
+diff --git a/Sources/flowtype/Services/Speech/CloudASRProvider.swift b/Sources/flowtype/Services/Speech/CloudASRProvider.swift
+index 82c467f..73a3ef3 100644
+--- a/Sources/flowtype/Services/Speech/CloudASRProvider.swift
++++ b/Sources/flowtype/Services/Speech/CloudASRProvider.swift
+@@ -83,23 +83,25 @@ enum CloudASRError: Error, LocalizedError {
+ private final class CloudASRRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
+     func urlSession(_ session: URLSession, task: URLSessionTask,
+                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+                     completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+         completionHandler(nil)
+     }
+ }
+ 
+ actor CloudASRProvider: ASRProvider {
+     private let session: URLSession
++    private let injectedSession: Bool
+     private let logger: @Sendable (String) -> Void
+-    init(session: URLSession = .shared, logger: @escaping @Sendable (String) -> Void = { AppLogger.log($0) }) {
+-        self.session = session
++    init(session: URLSession? = nil, logger: @escaping @Sendable (String) -> Void = { AppLogger.log($0) }) {
++        self.session = session ?? .shared
++        self.injectedSession = session != nil
+         self.logger = logger
+     }
+     nonisolated let id = ASRProviderID.cloud
+     nonisolated let name = "CloudASR"
+     nonisolated let displayName = "云端 ASR"
+     // The HTTP adapter can deliver hints; each captured vendor capability gates actual wire fields.
+     nonisolated let capabilities = ASRCapabilities(
+         supportsLanguageHint: true, supportsContextHint: true, requiresNetwork: true, location: .cloud
+     )
+ 
+@@ -175,20 +177,21 @@ actor CloudASRProvider: ASRProvider {
+         } catch is CancellationError {
+             return .failure(.cancelled)
+         } catch let error as CloudASRError {
+             return .failure(error)
+         } catch {
+             return .failure(.networkError(Self.safeNetworkError(error)))
+         }
+     }
+ 
+     private func executeTranscriptionRequest(request: URLRequest, logPrefix: String) async throws -> String {
++        guard injectedSession || ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+         do {
+             try Task.checkCancellation()
+             let (data, response) = try await session.data(for: request, delegate: CloudASRRedirectPolicy())
+             // A task that expired/cancelled while the transport completed cannot deliver a late result.
+             try Task.checkCancellation()
+             guard let response = response as? HTTPURLResponse else { throw CloudASRError.invalidResponse }
+             guard (200...299).contains(response.statusCode) else {
+                 logger("\(logPrefix) HTTP \(response.statusCode)")
+                 throw CloudASRError.apiError(statusCode: response.statusCode, message: "")
+             }
+diff --git a/Sources/flowtype/Services/Speech/CloudProbe.swift b/Sources/flowtype/Services/Speech/CloudProbe.swift
+index d380caf..667b946 100644
+--- a/Sources/flowtype/Services/Speech/CloudProbe.swift
++++ b/Sources/flowtype/Services/Speech/CloudProbe.swift
+@@ -12,21 +12,22 @@ enum CloudProbe {
+         guard !trimmed.isEmpty, let components = URLComponents(string: trimmed) else { return nil }
+         guard let scheme = components.scheme?.lowercased(), ["https", "wss"].contains(scheme) else { return nil }
+         guard let host = components.host, !host.isEmpty else { return nil }
+         guard components.user == nil, components.password == nil,
+               let port = UInt16(exactly: components.port ?? 443), port > 0 else { return nil }
+         return (host, port)
+     }
+ 
+     /// 对主机做一次 TLS 握手计时（毫秒）。超时或失败返回 nil。
+     static func measureLatency(host: String, port: UInt16, timeout: TimeInterval = 2.0) async -> Double? {
+-        await withCheckedContinuation { (continuation: CheckedContinuation<Double?, Never>) in
++        guard ValidationEffects.live.allow(.network) else { return nil }
++        return await withCheckedContinuation { (continuation: CheckedContinuation<Double?, Never>) in
+             let box = SingleResumeBox<Double?>()
+             box.setContinuation(continuation)
+ 
+             let start = DispatchTime.now().uptimeNanoseconds
+             guard let nwPort = NWEndpoint.Port(rawValue: port) else {
+                 box.resume(returning: nil)
+                 return
+             }
+             let connection = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tls)
+             connection.stateUpdateHandler = { state in
+diff --git a/Sources/flowtype/Services/Speech/LocalModelManager/LocalModelLibrary.swift b/Sources/flowtype/Services/Speech/LocalModelManager/LocalModelLibrary.swift
+index 092bf0e..8726c6f 100644
+--- a/Sources/flowtype/Services/Speech/LocalModelManager/LocalModelLibrary.swift
++++ b/Sources/flowtype/Services/Speech/LocalModelManager/LocalModelLibrary.swift
+@@ -38,15 +38,22 @@ enum LocalModelLibrary {
+                 if result.customLocalModelPath == path { result.customLocalModelPath = nil }
+             }
+         }
+         return result
+     }
+ 
+     /// Legacy paths are staged and inspected, without writing configuration or selecting a model.
+     static func inspectLegacyCandidate(in configuration: Configuration) throws -> ImportedASRModel? {
+         guard let path = [configuration.customLocalModelPath, configuration.localModelPath]
+             .compactMap({ $0 }).first(where: { !$0.isEmpty }) else { return nil }
+-        return try ASRModelInspector.inspect(directory: URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
++        let directory = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
++        if RuntimeEnvironment.current.role != .app {
++            let root = RuntimeEnvironment.current.paths.validationRoot!.resolvingSymlinksInPath().path
++            guard directory.resolvingSymlinksInPath().path.hasPrefix(root + "/") else {
++                throw ModelProvisionError.incompleteLocal()
++            }
++        }
++        return try ASRModelInspector.inspect(directory: directory)
+     }
+ 
+     private static func canonical(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path }
+ }
+diff --git a/Sources/flowtype/Services/Speech/LocalModelManager/ModelPreset.swift b/Sources/flowtype/Services/Speech/LocalModelManager/ModelPreset.swift
+index 8dcc83e..85be469 100644
+--- a/Sources/flowtype/Services/Speech/LocalModelManager/ModelPreset.swift
++++ b/Sources/flowtype/Services/Speech/LocalModelManager/ModelPreset.swift
+@@ -5,22 +5,21 @@ struct ModelPreset: Identifiable, Hashable {
+     let name: String
+     let repoId: String
+     let expectedSizeBytes: Int64
+     let recommendedTiers: Set<HardwareTier>
+     let isDefaultForTier: Bool
+     let minMemoryBytes: Int64
+     let modelDescription: String
+ 
+     static let modelsDirectory: URL = {
+         let fm = FileManager.default
+-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+-        let dir = appSupport.appendingPathComponent("Flowtype/models", isDirectory: true)
++        let dir = RuntimeEnvironment.current.paths.modelsDirectory
+         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+         return dir
+     }()
+ 
+     func localDirectory() -> URL {
+         // Hub-style layout: <modelsDir>/<org>/<model>, e.g.
+         //   .../Flowtype/models/aufklarer/Qwen3-ASR-0.6B-MLX-4bit
+         // speech-swift's HubApi.snapshot() materializes downloads at
+         //   <downloadBase>/models/<org>/<model>
+         // so passing this directory as `cacheDir` makes weights land exactly here.
+diff --git a/Sources/flowtype/Services/Speech/ModelLocator.swift b/Sources/flowtype/Services/Speech/ModelLocator.swift
+index eaf17da..eba48da 100644
+--- a/Sources/flowtype/Services/Speech/ModelLocator.swift
++++ b/Sources/flowtype/Services/Speech/ModelLocator.swift
+@@ -28,20 +28,21 @@ enum ModelLocator {
+         for st in items where st.pathExtension == "safetensors" {
+             let real = st.resolvingSymlinksInPath()
+             if let size = (try? fm.attributesOfItem(atPath: real.path)[.size]) as? Int64 {
+                 totalSize += size
+             }
+         }
+         return totalSize >= minBytes
+     }
+ 
+     static func knownCacheDirs() -> [URL] {
++        guard ValidationEffects.live.allow(.modelScan) else { return [] }
+         let fm = FileManager.default
+         let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first
+         let home = fm.homeDirectoryForCurrentUser
+         var dirs: [URL] = []
+         if let caches {
+             dirs.append(caches.appendingPathComponent("qwen3-speech/models/aufklarer/Qwen3-ASR-0.6B-MLX-4bit", isDirectory: true))
+             dirs.append(caches.appendingPathComponent("qwen3-speech/aufklarer_Qwen3-ASR-0.6B-MLX-4bit", isDirectory: true))
+             dirs.append(caches.appendingPathComponent("qwen3-speech/models/aufklarer/Qwen3-ASR-1.7B-MLX-4bit", isDirectory: true))
+             dirs.append(caches.appendingPathComponent("qwen3-speech/aufklarer_Qwen3-ASR-1.7B-MLX-4bit", isDirectory: true))
+         }
+@@ -96,21 +97,22 @@ enum ModelLocator {
+         }
+ 
+         for cacheDir in knownCacheDirs() { add(cacheDir) }
+ 
+         return dirs
+     }
+ 
+     /// Resolves the active model directory and matching modelId from Configuration.
+     /// Identity is established from a known preset path or exact repository metadata, never size.
+     static func resolveActiveModel(config: Configuration) -> ResolvedModel? {
+-        resolveActiveModel(config: config, knownCacheDirectories: knownCacheDirs(), presetDirectory: { $0.localDirectory() })
++        guard ValidationEffects.live.allow(.modelScan) else { return nil }
++        return resolveActiveModel(config: config, knownCacheDirectories: knownCacheDirs(), presetDirectory: { $0.localDirectory() })
+     }
+ 
+     static func resolveActiveModel(config: Configuration, knownCacheDirectories: [URL],
+                                    presetDirectory: (ModelPreset) -> URL) -> ResolvedModel? {
+         let configured: URL?
+         if let custom = config.customLocalModelPath, !custom.isEmpty {
+             configured = URL(fileURLWithPath: (custom as NSString).expandingTildeInPath, isDirectory: true)
+         } else if let legacy = config.localModelPath, !legacy.isEmpty {
+             configured = URL(fileURLWithPath: (legacy as NSString).expandingTildeInPath, isDirectory: true)
+         } else {
+diff --git a/Sources/flowtype/Services/Speech/ModelProvisioning/ModelMetadataPreflight.swift b/Sources/flowtype/Services/Speech/ModelProvisioning/ModelMetadataPreflight.swift
+index 1771095..9d598e0 100644
+--- a/Sources/flowtype/Services/Speech/ModelProvisioning/ModelMetadataPreflight.swift
++++ b/Sources/flowtype/Services/Speech/ModelProvisioning/ModelMetadataPreflight.swift
+@@ -1,20 +1,22 @@
+ import Foundation
+ 
+ /// Checks the config metadata that Hub consumes before a provider may start downloading weights.
+ /// Redirects are inspected here so no GET, CDN request, or credential forwarding can occur.
+ final class ModelMetadataPreflight: Sendable {
+     private let session: URLSession
++    private let injectedSession: Bool
+ 
+-    init(session: URLSession = URLSession(configuration: .ephemeral)) {
++    init(session: URLSession? = nil) {
++        injectedSession = session != nil
+         let configuration = URLSessionConfiguration.ephemeral
+-        configuration.protocolClasses = session.configuration.protocolClasses
++        configuration.protocolClasses = session?.configuration.protocolClasses
+         configuration.urlCache = nil
+         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+         configuration.urlCredentialStorage = nil
+         configuration.httpCookieStorage = nil
+         configuration.timeoutIntervalForRequest = 10
+         self.session = URLSession(configuration: configuration)
+     }
+ 
+     deinit { session.invalidateAndCancel() }
+ 
+@@ -29,20 +31,21 @@ final class ModelMetadataPreflight: Sendable {
+         }
+         var url = endpoint.appendingPathComponent(repoID).appendingPathComponent("resolve/main/config.json")
+         var hops = 0
+         while true {
+             try Task.checkCancellation()
+             var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+             request.httpMethod = "HEAD"
+             request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+             let response: URLResponse
+             do {
++                guard injectedSession || ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+                 (_, response) = try await session.data(for: request, delegate: StopRedirects())
+             } catch {
+                 if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled {
+                     throw CancellationError()
+                 }
+                 throw ModelProvisionError.network(summary: ModelEndpointSummary(url: url))
+             }
+             try Task.checkCancellation()
+             guard let http = response as? HTTPURLResponse else {
+                 throw ModelProvisionError.metadataInvalid(summary: ModelEndpointSummary(url: url))
+diff --git a/Sources/flowtype/Services/Speech/OfflineWhisperKit.swift b/Sources/flowtype/Services/Speech/OfflineWhisperKit.swift
+index 9feb490..c5f9fa4 100644
+--- a/Sources/flowtype/Services/Speech/OfflineWhisperKit.swift
++++ b/Sources/flowtype/Services/Speech/OfflineWhisperKit.swift
+@@ -171,20 +171,21 @@ actor WhisperKitBackend: OfflineWhisperBackend {
+     // The backend is retained by active/captured leases and by in-flight inference.
+     private let preparedModels: PreparedWhisperModels
+ 
+     private init(kit: sending OfflineWhisperKit, metadata: WhisperRuntimeMetadata, preparedModels: PreparedWhisperModels) {
+         self.kit = kit
+         self.preparedModels = preparedModels
+         verifiedMetadata = metadata
+     }
+ 
+     static func load(_ options: WhisperOfflineLoadOptions) async throws -> WhisperKitBackend {
++        guard ValidationEffects.live.allow(.modelLoad) else { throw OfflineWhisperError.invalidLocalDirectory }
+         try WhisperGraphContract.validateRuntimeABI()
+         // Fail on local tokenizer errors before compiling or allocating model memory.
+         _ = try await OfflineWhisperKit.localTokenizer(at: options.tokenizerDirectory)
+         let prepared = try await WhisperModelPreparation.prepare(directory: options.modelDirectory)
+         let kit = try await OfflineWhisperKit(WhisperKitConfig(modelFolder: prepared.directory.path,
+             tokenizerFolder: options.tokenizerDirectory, verbose: false, logLevel: .none,
+             prewarm: false, load: options.load, download: options.download))
+         try Task.checkCancellation()
+         try await kit.loadModels()
+         try Task.checkCancellation()
+diff --git a/Sources/flowtype/Services/Speech/QwenASRProvider.swift b/Sources/flowtype/Services/Speech/QwenASRProvider.swift
+index f2a11e7..c96c6fe 100644
+--- a/Sources/flowtype/Services/Speech/QwenASRProvider.swift
++++ b/Sources/flowtype/Services/Speech/QwenASRProvider.swift
+@@ -84,20 +84,21 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
+     }
+ 
+     // MARK: - Model Lifecycle
+ 
+     func loadModel(
+         modelId: String,
+         cacheDir: URL? = nil,
+         offlineMode: Bool = false,
+         progressHandler: ((Double, String) -> Void)? = nil
+     ) async throws {
++        guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
+         AppLogger.log("[QwenASR] Loading model: \(modelId) offline=\(offlineMode) cacheDir=\(cacheDir?.path ?? "default")")
+         let loaded = try await Self.withProvisionErrors {
+             try await Qwen3ASRModel.fromPretrained(
+                 modelId: modelId,
+                 cacheDir: cacheDir,
+                 offlineMode: offlineMode,
+                 progressHandler: progressHandler
+             )
+         }
+         try Task.checkCancellation()
+diff --git a/Sources/flowtype/Services/Speech/QwenModelState.swift b/Sources/flowtype/Services/Speech/QwenModelState.swift
+index 335bb46..258c42a 100644
+--- a/Sources/flowtype/Services/Speech/QwenModelState.swift
++++ b/Sources/flowtype/Services/Speech/QwenModelState.swift
+@@ -27,21 +27,25 @@ private enum ProvisionGate {
+         await withCheckedContinuation { waiters.append($0) }
+     }
+     static func release() {
+         if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
+     }
+ }
+ 
+ struct ModelProvisionEnvironment: Sendable {
+     let read: @Sendable () -> String?
+     let write: @Sendable (String?) -> Void
+-    static let process = Self(read: { getenv("HF_ENDPOINT").map { String(cString: $0) } }, write: {
++    static let process = Self(read: {
++        guard ValidationEffects.live.allow(.environment) else { return nil }
++        return getenv("HF_ENDPOINT").map { String(cString: $0) }
++    }, write: {
++        guard ValidationEffects.live.allow(.environment) else { return }
+         if let value = $0 { setenv("HF_ENDPOINT", value, 1) } else { unsetenv("HF_ENDPOINT") }
+     })
+ }
+ 
+ private final class ProvisionProgress: @unchecked Sendable {
+     private let lock = NSLock()
+     private var tick: Date
+     private var fraction = 0.0
+     private var finished = false
+     init(now: Date) { tick = now }
+@@ -87,49 +91,54 @@ final class QwenModelState: ObservableObject {
+     private let commit: @MainActor (LocalASRLease) -> Void
+     private let inspect: @Sendable (URL) throws -> ImportedASRModel
+     private let assessHardware: @Sendable (ImportedASRModel, UInt64?) -> LocalModelHardwareAssessment
+     private let saveConfiguration: @MainActor (Configuration) -> Void
+     private var operation: Task<Void, Never>?
+     private var attemptID: UUID?
+     private var userCancelled = false
+ 
+     init(
+         preflight: @escaping @Sendable (ModelPreset, DownloadSource) async throws -> Void = { preset, source in
++            guard ValidationEffects.live.allow(.modelDownload) else { throw ModelProvisionError.loadFailed() }
+             _ = try await ModelMetadataPreflight().check(repoID: preset.repoId,
+                 endpoint: source.validatedEndpoint(isChina: DownloadSource.systemIsLikelyChina()))
+         },
+         load: (@Sendable (ModelProvisionTarget, Bool, @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease)? = nil,
+         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+         now: @escaping @Sendable () -> Date = { Date() },
+         configuration: @escaping @MainActor () -> Configuration = { ConfigurationStore.shared.current },
+         localModel: @escaping @Sendable (Configuration) -> ResolvedModel? = { ModelLocator.resolveActiveModel(config: $0) },
+         destination: @escaping @Sendable (ModelPreset) -> URL = { $0.localDirectory() },
+         availableDisk: @escaping @Sendable (URL) -> Int64? = { directory in
+             var existing = directory
+             while !FileManager.default.fileExists(atPath: existing.path), existing.path != "/" {
+                 existing.deleteLastPathComponent()
+             }
+             return (try? FileManager.default.attributesOfFileSystem(forPath: existing.path)[.systemFreeSize] as? NSNumber)?.int64Value
+         },
+         environment: ModelProvisionEnvironment = .process,
+-        inspect: @escaping @Sendable (URL) throws -> ImportedASRModel = { try ASRModelInspector.inspect(directory: $0) },
++        inspect: @escaping @Sendable (URL) throws -> ImportedASRModel = {
++            guard ValidationEffects.live.allow(.modelScan) else { throw ModelProvisionError.incompleteLocal() }
++            return try ASRModelInspector.inspect(directory: $0)
++        },
+         assessHardware: @escaping @Sendable (ImportedASRModel, UInt64?) -> LocalModelHardwareAssessment = {
+             LocalModelHardwareAssessment.current(model: $0, activeModelBytes: $1)
+         },
+         saveConfiguration: @escaping @MainActor (Configuration) -> Void = { _ in },
+         commit: @escaping @MainActor (LocalASRLease) -> Void = { _ in }
+     ) {
+         self.preflight = preflight; self.sleep = sleep; self.now = now
+         self.configuration = configuration; self.localModel = localModel; self.destination = destination
+         self.availableDisk = availableDisk; self.environment = environment; self.commit = commit
+         self.inspect = inspect; self.assessHardware = assessHardware; self.saveConfiguration = saveConfiguration
+         self.load = load ?? { target, offline, progress in
++            guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
+             let directory: URL
+             let repo: String
+             let identity: LocalModelIdentity
+             switch target {
+             case .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
+             case .imported(let model): return try await LocalASRRuntimeFactory.load(model)
+             case .preset(let preset):
+                 directory = destination(preset); repo = preset.repoId
+                 identity = .init(id: preset.id, displayName: preset.name, engine: "qwen", repoID: repo, directory: directory)
+             case .offline(let resolved):
+diff --git a/Sources/flowtype/Services/Speech/WebSocketTransport.swift b/Sources/flowtype/Services/Speech/WebSocketTransport.swift
+index d417858..0d3a031 100644
+--- a/Sources/flowtype/Services/Speech/WebSocketTransport.swift
++++ b/Sources/flowtype/Services/Speech/WebSocketTransport.swift
+@@ -23,20 +23,21 @@ actor URLSessionWebSocketTransport: WebSocketTransport {
+     private var socket: URLSessionWebSocketTask?
+     private var closed = false
+ 
+     func connect(request: URLRequest) async throws {
+         try Task.checkCancellation()
+         guard !closed else { throw CancellationError() }
+         guard socket == nil else { return }
+         guard let url = request.url, isValidRealtimeEndpoint(url.absoluteString) else {
+             throw RealtimeASRConfigurationError.invalidEndpoint
+         }
++        guard ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+         let session = URLSession(configuration: .ephemeral)
+         let socket = session.webSocketTask(with: request)
+         self.session = session
+         self.socket = socket
+         socket.resume()
+         // The first send awaits the upgrade, inside the adapter's start deadline.
+     }
+ 
+     func sendText(_ text: String) async throws {
+         let socket = try activeSocket()
+diff --git a/Sources/flowtype/Services/Speech/WhisperModelPreparation.swift b/Sources/flowtype/Services/Speech/WhisperModelPreparation.swift
+index f5bfbc9..66fda52 100644
+--- a/Sources/flowtype/Services/Speech/WhisperModelPreparation.swift
++++ b/Sources/flowtype/Services/Speech/WhisperModelPreparation.swift
+@@ -39,34 +39,35 @@ enum WhisperModelPreparation {
+                 .filter { fm.fileExists(atPath: $0.path) }
+             if matches.isEmpty && !required.contains(name) { continue }
+             guard matches.count == 1, let source = matches.first else { throw OfflineWhisperError.invalidLocalDirectory }
+             components.append((name, source))
+         }
+         try Task.checkCancellation()
+         // Already compiled imports retain their original path and avoid any temporary work.
+         guard components.contains(where: { $0.source.pathExtension == "mlpackage" }) else {
+             return PreparedWhisperModels(directory: directory)
+         }
+-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-whisper-runtime-" + UUID().uuidString)
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-whisper-runtime-" + UUID().uuidString)
+         try fm.createDirectory(at: root, withIntermediateDirectories: false)
+         let prepared = PreparedWhisperModels(directory: root, ownedDirectory: root)
+         for component in components {
+             try Task.checkCancellation()
+             let destination = root.appendingPathComponent(component.name + ".mlmodelc")
+             if component.source.pathExtension == "mlpackage" {
+                 // Pass the whole package: Core ML resolves its Manifest and external resources.
+                 try compile(component.source, destination)
+             } else {
+                 // Do not duplicate caller-owned multi-GB compiled weights in mixed imports.
+                 try fm.createSymbolicLink(at: destination, withDestinationURL: component.source)
+             }
+             try Task.checkCancellation()
+         }
+         return prepared
+     }
+ 
+     static func compilePackage(_ source: URL, _ destination: URL) throws {
++        guard ValidationEffects.live.allow(.modelLoad) else { throw OfflineWhisperError.invalidLocalDirectory }
+         let compiled = try MLModel.compileModel(at: source)
+         defer { try? FileManager.default.removeItem(at: compiled) }
+         try FileManager.default.moveItem(at: compiled, to: destination)
+     }
+ }
+diff --git a/Sources/flowtype/Testing/ImportedModelUISelfTests.swift b/Sources/flowtype/Testing/ImportedModelUISelfTests.swift
+index 9b69b12..5fb6c4e 100644
+--- a/Sources/flowtype/Testing/ImportedModelUISelfTests.swift
++++ b/Sources/flowtype/Testing/ImportedModelUISelfTests.swift
+@@ -1,17 +1,17 @@
+ import Foundation
+ 
+ /// UI boundaries use isolated configuration, temporary files and synthetic runtime providers.
+ enum ImportedModelUISelfTests {
+     @MainActor
+     static func run(_ r: SelfTest.Reporter) async {
+-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-import-ui-\(UUID())")
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-import-ui-\(UUID())")
+         let suite = "flowtype-import-ui-\(UUID())"
+         let defaults = UserDefaults(suiteName: suite)!
+         defaults.set(5, forKey: "flowtype.migrationVersion")
+         let store = ConfigurationStore(defaults: defaults)
+         defer {
+             store.flushPendingSave(); defaults.removePersistentDomain(forName: suite)
+             try? FileManager.default.removeItem(at: root)
+         }
+         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+         let retainedFile = root.appendingPathComponent("user-weight-placeholder")
+diff --git a/Sources/flowtype/Testing/LocalModelImportSelfTests.swift b/Sources/flowtype/Testing/LocalModelImportSelfTests.swift
+index ad092bf..974fad3 100644
+--- a/Sources/flowtype/Testing/LocalModelImportSelfTests.swift
++++ b/Sources/flowtype/Testing/LocalModelImportSelfTests.swift
+@@ -2,21 +2,21 @@ import Foundation
+ 
+ /// Synthetic metadata and sparse payloads only; never loads MLX/Core ML or user models.
+ enum LocalModelImportSelfTests {
+     static func runInspection(_ r: SelfTest.Reporter) {
+         InspectionNetworkProbe.reset()
+         _ = URLProtocol.registerClass(InspectionNetworkProbe.self)
+         defer {
+             URLProtocol.unregisterClass(InspectionNetworkProbe.self)
+             r.eq(InspectionNetworkProbe.calls, 0, "import: inspection performs no URL loading")
+         }
+-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-import-\(UUID())")
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-import-\(UUID())")
+         defer { try? FileManager.default.removeItem(at: root) }
+         do {
+             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+             try repeatedFileIdentity(root, r)
+             for (large, bits) in [(false, 4), (false, 8), (true, 4), (true, 8)] {
+                 let dir = root.appendingPathComponent("unrelated-\(large)-\(bits)")
+                 try qwenFixture(dir, large: large, bits: bits)
+                 let model = try ASRModelInspector.inspect(directory: dir)
+                 r.eq(model.engine, .qwenMLX, "import: metadata determines engine")
+                 r.eq(model.variant, large ? "1.7B" : "0.6B", "import: tensor/config scale")
+diff --git a/Sources/flowtype/Testing/M2ReviewFixSelfTests.swift b/Sources/flowtype/Testing/M2ReviewFixSelfTests.swift
+index 2bfbe9b..9fca3b5 100644
+--- a/Sources/flowtype/Testing/M2ReviewFixSelfTests.swift
++++ b/Sources/flowtype/Testing/M2ReviewFixSelfTests.swift
+@@ -1,20 +1,20 @@
+ import Foundation
+ import CoreML
+ import WhisperKit
+ 
+ /// Actual runtime path resolution and coordinator lifecycle; replace only expensive native work.
+ enum M2ReviewFixSelfTests {
+     static let names = ["MelSpectrogram", "AudioEncoder", "TextDecoder", "TextDecoderContextPrefill"]
+ 
+     static func packages(_ r: SelfTest.Reporter) async {
+-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-preparation-test-\(UUID())")
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preparation-test-\(UUID())")
+         defer { try? FileManager.default.removeItem(at: root) }
+         do {
+             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+             // A conventional root, a legal alternate Manifest root, a compiled component,
+             // and source prefill exercise the exact directories the pinned runtime resolves.
+             for (index, name) in names.enumerated() {
+                 if index == 2 {
+                     let compiled = root.appendingPathComponent(name + ".mlmodelc")
+                     try FileManager.default.createDirectory(at: compiled, withIntermediateDirectories: true)
+                     try Data("compiled".utf8).write(to: compiled.appendingPathComponent("coremldata.bin"))
+@@ -181,21 +181,21 @@ extension M2ReviewFixSelfTests {
+ private final class ReviewRuntimePaths: @unchecked Sendable {
+     private let lock = NSLock()
+     private var values: [URL] = []
+     func record(_ path: URL) { lock.withLock { values.append(path) } }
+     var paths: [URL] { lock.withLock { values } }
+ }
+ 
+ extension M2ReviewFixSelfTests {
+     static func packageFailures(_ r: SelfTest.Reporter) async {
+         let fm = FileManager.default
+-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-preparation-failures-\(UUID())")
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preparation-failures-\(UUID())")
+         defer { try? fm.removeItem(at: root) }
+         do {
+             try fm.createDirectory(at: root, withIntermediateDirectories: true)
+             for name in names.prefix(3) { try makePackage(root.appendingPathComponent(name + ".mlpackage"), modelPath: "custom/model.mlmodel") }
+             let failed = ReviewRuntimePaths()
+             do {
+                 _ = try await WhisperModelPreparation.prepare(directory: root) { source, destination in
+                     failed.record(destination.deletingLastPathComponent())
+                     try fixtureCompile(source, destination)
+                     if source.lastPathComponent == "AudioEncoder.mlpackage" { throw OfflineWhisperError.incompatibleGraph }
+@@ -240,21 +240,21 @@ extension M2ReviewFixSelfTests {
+             direct = nil
+             r.check(fm.fileExists(atPath: compiled.appendingPathComponent("AudioEncoder.mlmodelc").path), "fully compiled release never deletes original data")
+         } catch { r.check(false, "Whisper package failure/fastpath fixtures: \(error)") }
+     }
+ }
+ 
+ extension M2ReviewFixSelfTests {
+     @MainActor
+     static func compilationLifecycle(_ r: SelfTest.Reporter) async {
+         let fm = FileManager.default
+-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-compilation-lifecycle-\(UUID())")
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-compilation-lifecycle-\(UUID())")
+         defer { try? fm.removeItem(at: root) }
+         do {
+             try fm.createDirectory(at: root, withIntermediateDirectories: true)
+             for name in names.prefix(3) { try makePackage(root.appendingPathComponent(name + ".mlpackage"), modelPath: "custom/model.mlmodel") }
+             let model = ImportedASRModel(name: "source", directory: root, engine: .whisperCoreML,
+                 variant: "unverified", bits: nil, sizeBytes: 123, tokenizerDirectory: root, fileFingerprint: "fresh")
+             let blocked = ReviewBlockingWorker()
+             let paths = ReviewRuntimePaths()
+             let io = ReviewLoads()
+             var config = Configuration()
+diff --git a/Sources/flowtype/Testing/M5IsolationSelfTests.swift b/Sources/flowtype/Testing/M5IsolationSelfTests.swift
+new file mode 100644
+index 0000000..39ccce6
+--- /dev/null
++++ b/Sources/flowtype/Testing/M5IsolationSelfTests.swift
+@@ -0,0 +1,138 @@
++import Foundation
++import GRDB
++import os
++
++@MainActor
++enum M5IsolationSelfTests {
++    static func run(_ r: SelfTest.Reporter) async {
++        do { try testLegacyMigrationBoundaries(r) }
++        catch { r.check(false, "M5 isolation migration fixture failed") }
++        testDeniedEffects(r)
++        await testSingletonSideEffectBudget(r)
++        checkEffectBudget(r)
++    }
++
++    static func checkEffectBudget(_ r: SelfTest.Reporter) {
++        let counts = ValidationEffects.live.snapshot
++        for operation in ValidationEffects.Operation.allCases {
++            r.eq(counts.permitted[operation, default: 0], 0, "M5 actual \(operation.rawValue) budget zero")
++        }
++    }
++
++    // Catches migrations escaping an injected directory or using SecItem instead of injected keys.
++    static func testLegacyMigrationBoundaries(_ r: SelfTest.Reporter) throws {
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("m5-isolation-\(UUID())")
++        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
++        // Keep synthetic DB and backup evidence in this run for inspection.
++        let suite = "com.flowtype.validation.fixture.\(UUID())"
++        let defaults = UserDefaults(suiteName: suite)!
++        defer { defaults.removePersistentDomain(forName: suite) }
++        let keys = OSAllocatedUnfairLock(initialState: [String: String]())
++        let systemCalls = OSAllocatedUnfairLock(initialState: 0)
++        let fake = KeychainAccess(save: { key, value in keys.withLock { $0[key] = value }; return true },
++                                  load: { key in keys.withLock { $0[key] } },
++                                  delete: { key in keys.withLock { _ = $0.removeValue(forKey: key) } })
++        // Version-zero persisted state must match the decoder's real key layout.
++        // Flat llmApiKey is no longer decoded; the active provider resolves this map.
++        defaults.set(Data(#"{"llmProviders":[{"id":"11111111-2222-3333-4444-555555555555","name":"synthetic","provider":"custom","baseURL":"https://synthetic.invalid/v1","model":"synthetic","isActive":true}],"providerAPIKeys":{"11111111-2222-3333-4444-555555555555":"synthetic-legacy-key"},"asrLanguage":"auto"}"#.utf8), forKey: "flowtype.config")
++        let config = ConfigurationStore(defaults: defaults, backupDirectory: root, keychain: fake)
++        r.eq(keys.withLock { $0["llmApiKey"] }, "synthetic-legacy-key", "M5 migration uses injected legacy key storage")
++        if let provider = config.current.llmProviders.first {
++            r.eq(config.loadProviderAPIKey(provider.id), "synthetic-legacy-key", "M5 provider key survives version-zero migration")
++        } else { r.check(false, "M5 legacy migration creates provider") }
++        r.eq(defaults.integer(forKey: "flowtype.migrationVersion"), 5, "M5 fixture migration completes")
++        defaults.set(Data("{invalid sk-synthetic12345678".utf8), forKey: "flowtype.config")
++        _ = ConfigurationStore(defaults: defaults, backupDirectory: root, keychain: fake)
++        let backups = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
++            .filter { $0.lastPathComponent.hasPrefix("flowtype.config.corrupt-") }
++        r.eq(backups.count, 1, "M5 corrupt config backup stays in fixture")
++        if let backup = backups.first {
++            r.check(!(try String(contentsOf: backup, encoding: .utf8)).contains("sk-synthetic12345678"), "M5 corrupt backup redacts synthetic key")
++        }
++
++        let db = AppDatabase.make(at: root)
++        try Data(#"[{"id":"m5-synthetic-history","createdAt":"2026-01-01T00:00:00Z","rawTranscript":"synthetic","finalText":"synthetic","polishMode":"raw","durationMs":10}]"#.utf8)
++            .write(to: root.appendingPathComponent("history.json"))
++        try Data("[]".utf8).write(to: root.appendingPathComponent("daily_stats.json"))
++        JSONMigration.runIfNeeded(db, dir: root)
++        r.check(db.isOnDisk && JSONMigration.hasMigrated(db), "M5 durable fixture JSON migration commits")
++        r.eq(try db.dbQueue.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM session") }, 1,
++             "M5 fixture history row is imported into its durable SQLite DB")
++        for name in ["history.json.bak", "daily_stats.json.bak", "flowtype.sqlite"] {
++            r.check(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path), "M5 fixture migration evidence \(name)")
++        }
++        let store = PersistentStore<[String]>(filename: "synthetic.json", directory: root)
++        store.save(["fixture"])
++        r.eq(store.load(), ["fixture"], "M5 injected persistent store first save round-trips")
++        let denied = ValidationEffects(role: .selfTest, external: { _ in systemCalls.withLock { $0 += 1 } })
++        let keychain = KeychainAccess.guarded(role: .selfTest, system: fake, effects: denied)
++        r.check(keychain.save("m5-memory", "synthetic-memory"), "M5 validation keychain saves in memory")
++        r.eq(keychain.load("m5-memory"), "synthetic-memory", "M5 validation keychain reads memory")
++        keychain.delete("m5-memory")
++        r.eq(keychain.load("m5-memory"), nil, "M5 validation keychain deletes memory")
++        r.eq(systemCalls.withLock { $0 }, 0, "M5 SecItem downstream spy remains zero")
++        r.eq(keys.withLock { $0["m5-memory"] }, nil, "M5 validation keys never reach system adapter")
++    }
++
++    // Removing the role guard would invoke the independent downstream spy.
++    private static func testDeniedEffects(_ r: SelfTest.Reporter) {
++        let downstream = OSAllocatedUnfairLock(initialState: 0)
++        let gate = ValidationEffects(role: .selfTest, external: { _ in downstream.withLock { $0 += 1 } })
++        for operation in ValidationEffects.Operation.allCases {
++            r.check(!gate.allow(operation), "M5 denies actual \(operation.rawValue) boundary")
++        }
++        r.eq(downstream.withLock { $0 }, 0, "M5 every external downstream spy stays zero")
++        r.eq(gate.snapshot.permitted.values.reduce(0, +), 0, "M5 permitted external budget is zero")
++        let app = ValidationEffects(role: .app, external: { _ in downstream.withLock { $0 += 1 } })
++        r.check(app.allow(.keychain), "M5 app keeps live boundaries available")
++        r.eq(downstream.withLock { $0 }, 1, "M5 downstream spy detects a permitted boundary")
++    }
++
++    static func testSingletonSideEffectBudget(_ r: SelfTest.Reporter) async {
++        let paths = RuntimeEnvironment.current.paths
++        r.eq(PersistentStore<[String]>(filename: "fixture.json").fileURL.deletingLastPathComponent(), paths.applicationSupportDirectory,
++             "M5 default persistent store uses runtime support")
++        r.eq(AppDatabaseProvider.dir, paths.applicationSupportDirectory, "M5 DB provider uses runtime support")
++        _ = AppDatabaseProvider.shared
++        r.eq(ModelPreset.modelsDirectory, paths.modelsDirectory, "M5 preset path uses runtime models")
++        r.eq(ModelLocator.knownCacheDirs(), [], "M5 implicit cache locator performs no user scan")
++        let shared = ConfigurationStore.shared
++        r.check(shared.current.providerAPIKeys.isEmpty && shared.current.localModelPath == nil, "M5 shared starts without keys/model selection")
++        _ = SessionController.shared
++        _ = ASRRouter.shared
++        _ = QwenModelState.shared
++        _ = ModelDownloader.shared
++        _ = DictionaryStore.shared
++        SessionEffects.live.prepare()
++        EnvMigration.migrateIfNeeded()
++        AudioRecorder.restorePendingDeviceIfNeeded()
++        for _ in 0..<32 { await Task.yield() }
++        try? await Task.sleep(for: .milliseconds(30))
++        r.eq(QwenModelState.shared.status, .notLoaded, "M5 singleton preparation does not schedule model work")
++        r.eq(ValidationEffects.live.snapshot.permitted.values.reduce(0, +), 0, "M5 shared actual external boundary budget zero")
++        r.check(KeychainHelper.save(key: "m5-isolation-key", value: "synthetic"), "M5 actual helper saves validation memory")
++        r.eq(KeychainHelper.load(key: "m5-isolation-key"), "synthetic", "M5 actual helper reads validation memory")
++        KeychainHelper.delete(key: "m5-isolation-key")
++        r.eq(KeychainHelper.load(key: "m5-isolation-key"), nil, "M5 actual helper deletes validation memory")
++        let recorder = AudioRecorder()
++        r.check(!(await recorder.requestPermission()), "M5 recorder denies actual permission request")
++        KeyboardInjector.copyText("synthetic")
++        RecoveryEffects.live.copyText("synthetic")
++        r.eq(SystemDeliveryPasteboard().contents(), nil, "M5 actual pasteboard adapter refuses OS reads")
++        PermissionHelper.openMicrophoneSettings()
++        PermissionHelper.openAccessibilitySettings()
++        PermissionHelper.openSpeechRecognitionSettings()
++        SoundFeedback.playRecordingStart()
++        r.eq(await AXContextProvider().collect(), nil, "M5 actual context adapter refuses user AX reads")
++        r.eq(await CloudProbe.measureLatency(host: "synthetic.invalid", port: 443), nil, "M5 actual probe refuses network")
++        r.eq(ValidationEffects.live.snapshot.permitted.values.reduce(0, +), 0, "M5 actual denied adapter budget remains zero")
++        // nil backupDirectory must resolve to isolated logs, including injected constructors.
++        let suite = "com.flowtype.validation.corrupt.\(UUID())"
++        let defaults = UserDefaults(suiteName: suite)!
++        defer { defaults.removePersistentDomain(forName: suite) }
++        defaults.set(Data("invalid-synthetic".utf8), forKey: "flowtype.config")
++        _ = ConfigurationStore(defaults: defaults)
++        let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.logsDirectory.path)) ?? []
++        r.check(names.contains { $0.hasPrefix("flowtype.config.corrupt-") }, "M5 nil backup constructor uses isolated logs")
++    }
++}
+diff --git a/Sources/flowtype/Testing/M5RuntimeSelfTests.swift b/Sources/flowtype/Testing/M5RuntimeSelfTests.swift
+index 8476120..d9cd6b0 100644
+--- a/Sources/flowtype/Testing/M5RuntimeSelfTests.swift
++++ b/Sources/flowtype/Testing/M5RuntimeSelfTests.swift
+@@ -19,21 +19,21 @@ enum M5RuntimeSelfTests {
+     private static func fixture(_ body: (URL, URL) throws -> Void) throws {
+         let base = try fixtureTemporaryDirectory()
+             .appendingPathComponent("flowtype-m5-fixture-\(UUID().uuidString)")
+         let home = base.appendingPathComponent("home")
+         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+         defer { try? FileManager.default.removeItem(at: base) }
+         try body(base, home)
+     }
+ 
+     private static func fixtureTemporaryDirectory() throws -> URL {
+-        guard let resolved = realpath(FileManager.default.temporaryDirectory.path, nil) else {
++        guard let resolved = realpath(RuntimeEnvironment.current.paths.temporaryDirectory.path, nil) else {
+             throw RuntimeBootstrapError.rootPreparation
+         }
+         defer { free(resolved) }
+         return URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
+     }
+ 
+     private static func runtime(home: URL, runID: UUID = UUID()) -> RuntimeBootstrap {
+         RuntimeBootstrap(home: home,
+                          applicationSupport: home.appendingPathComponent("Library/Application Support"),
+                          caches: home.appendingPathComponent("Library/Caches"), runID: runID)
+diff --git a/Sources/flowtype/Testing/ModelProvisionSelfTests.swift b/Sources/flowtype/Testing/ModelProvisionSelfTests.swift
+index 4e0f402..604ca34 100644
+--- a/Sources/flowtype/Testing/ModelProvisionSelfTests.swift
++++ b/Sources/flowtype/Testing/ModelProvisionSelfTests.swift
+@@ -147,21 +147,21 @@ enum ModelProvisionSelfTests {
+         response(.init(headers: metadata))
+         let unsafe = URL(string: "https://secret@fixtures.invalid?secret")!
+         await failure("unsafe endpoint", .metadataInvalid(summary: .init(host: "fixtures.invalid", safePath: "/", httpStatus: nil)), endpoint: unsafe)
+         r.eq(ProtocolFixture.requests.count, 0, "invalid endpoint sends no request")
+ 
+         testIdentity(r)
+     }
+ 
+     private static func testIdentity(_ r: SelfTest.Reporter) {
+         let fm = FileManager.default
+-        let root = fm.temporaryDirectory.appendingPathComponent("flowtype-preflight-\(UUID())")
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preflight-\(UUID())")
+         defer { try? fm.removeItem(at: root) }
+         let legacy = root.appendingPathComponent("qwen3-speech/aufklarer_Qwen3-ASR-0.6B-MLX-4bit")
+         do {
+             try fm.createDirectory(at: legacy, withIntermediateDirectories: true)
+             try Data("{}".utf8).write(to: legacy.appendingPathComponent("config.json"))
+             try Data("{}".utf8).write(to: legacy.appendingPathComponent("tokenizer.json"))
+             let weights = legacy.appendingPathComponent("model.safetensors")
+             fm.createFile(atPath: weights.path, contents: nil)
+             let handle = try FileHandle(forWritingTo: weights)
+             try handle.truncate(atOffset: 2_000_000_000) // sparse file, deliberately large enough for either preset
+diff --git a/Sources/flowtype/Testing/SelfTest.swift b/Sources/flowtype/Testing/SelfTest.swift
+index b395d6b..090109e 100644
+--- a/Sources/flowtype/Testing/SelfTest.swift
++++ b/Sources/flowtype/Testing/SelfTest.swift
+@@ -9,38 +9,45 @@ import GRDB
+ ///
+ /// This machine (and any Command-Line-Tools-only setup) has no `XCTest` or
+ /// `Testing` module, so `swift test` cannot run. These checks live inside the
+ /// FlowType target (so they have `internal` access to the code under test) and
+ /// are invoked via `swift run FlowType --self-test`, exiting 0 on all-pass and 1
+ /// on any failure. Most checks are pure logic; the hidden AppKit panel geometry
+ /// check also exercises its real frame-constraining boundary without showing it.
+ /// System/hardware/visible UI behaviours are verified manually, not here.
+ enum SelfTest {
+ 
+-    final class Reporter {
+-        private(set) var passed = 0
+-        private(set) var failed = 0
++    final class Reporter: Sendable {
++        private let counts = OSAllocatedUnfairLock(initialState: (passed: 0, failed: 0))
++        var passed: Int { counts.withLock { $0.passed } }
++        var failed: Int { counts.withLock { $0.failed } }
+ 
+         func check(_ cond: Bool, _ msg: String) {
+             if cond {
+-                passed += 1
++                counts.withLock { $0.passed += 1 }
+             } else {
+-                failed += 1
++                counts.withLock { $0.failed += 1 }
+                 FileHandle.standardError.write(Data("  ✗ FAIL: \(msg)\n".utf8))
+             }
+         }
+ 
+         func eq<T: Equatable>(_ got: T, _ want: T, _ msg: String) {
+             check(got == want, "\(msg) — got \(String(describing: got)), want \(String(describing: want))")
+         }
+     }
+ 
++    @MainActor
++    private static func finish(_ r: Reporter) -> Never {
++        RuntimeEnvironment.finishValidation()
++        exit(r.failed == 0 ? 0 : 1)
++    }
++
+     // MARK: - PolishMode: 2 modes (raw/polish) + legacy-record migration
+ 
+     static func testPolishModeMigration(_ r: Reporter) {
+         func decode(_ raw: String) -> PolishMode? {
+             try? JSONDecoder().decode(PolishMode.self, from: Data("\"\(raw)\"".utf8))
+         }
+         r.check(decode("raw") == .raw, "polishMode: raw → raw")
+         r.check(decode("polish") == .polish, "polishMode: polish → polish")
+         r.check(decode("light") == .polish, "polishMode: legacy light → polish")
+         r.check(decode("structured") == .polish, "polishMode: legacy structured → polish")
+@@ -144,21 +151,21 @@ enum SelfTest {
+         r.eq(DownloadSource.official.endpoint(isChina: true), nil, "src: official → nil")
+         r.eq(DownloadSource.mirror.endpoint(isChina: false), "https://hf-mirror.com", "src: mirror → mirror")
+         r.eq(DownloadSource.custom("https://x.example").endpoint(isChina: false), "https://x.example", "src: custom → custom")
+         r.eq(DownloadSource.custom("   ").endpoint(isChina: false), nil, "src: blank custom → nil")
+     }
+ 
+     // MARK: - ModelLocator: completeness validation
+ 
+     static func testModelLocator(_ r: Reporter) {
+         let fm = FileManager.default
+-        let dir = fm.temporaryDirectory.appendingPathComponent("flowtype-modeltest-\(UUID().uuidString)")
++        let dir = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-modeltest-\(UUID().uuidString)")
+         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+         defer { try? fm.removeItem(at: dir) }
+         func write(_ name: String, _ bytes: Int) {
+             fm.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data(count: bytes))
+         }
+         r.check(!ModelLocator.validateComplete(dir, minBytes: 100), "locator: empty dir → incomplete")
+         write("config.json", 10); write("tokenizer.json", 10); write("model.safetensors", 200)
+         r.check(ModelLocator.validateComplete(dir, minBytes: 100), "locator: config+tok+big weights → complete")
+         r.check(!ModelLocator.validateComplete(dir, minBytes: 1000), "locator: weights below floor → incomplete")
+         try? fm.removeItem(at: dir.appendingPathComponent("config.json"))
+@@ -274,79 +281,85 @@ enum SelfTest {
+         r.eq(h7.last?.date, "2026-06-03", "heatmap: last cell is today")
+         r.eq(h7.filter { $0.chars > 0 }.count, 1, "heatmap: only the one data day is non-zero")
+         r.eq(StatsEngine.denseHeatmap([], range: .d30, now: now, cal: cal).count, 30, "heatmap: 30d empty → 30 zero cells")
+         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
+     }
+ 
+     @MainActor
+     static func runAndExit() async -> Never {
+         let r = Reporter()
+         print("=== FlowType --self-test ===")
++        if CommandLine.arguments.contains("--m5-isolation-only") {
++            await M5IsolationSelfTests.run(r)
++            print("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
++            finish(r)
++        }
+         if CommandLine.arguments.contains("--m5-runtime-only") {
+             await M5RuntimeSelfTests.run(r)
+-            RuntimeEnvironment.finishValidation()
+             print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m4-recovery-only") {
+             M4RecoveryPolicySelfTests.run(r)
+             await M4StageFailureSelfTests.run(r)
+             await M4RecoveryControllerSelfTests.run(r)
+             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
+             await M3SpeechPreflightSelfTests.benchmark(r)
+             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-silence-only") {
+             M3SpeechPreflightSelfTests.pure(r)
+             await M3SpeechPreflightSelfTests.background(r)
+             await M3SpeechPreflightSelfTests.integration(r)
+             print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-asr-regression-only") {
+             await testRealtimePipelineIntegration(r)
+             await ImportedLifecycleSelfTests.run(r)
+             await ModelProvisionSelfTests.runPresentationAndRouting(r)
+             print("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-delivery-only") {
+             M3DeliverySelfTests.policy(r)
+             await M3DeliverySelfTests.runtime(r)
+             await M3DeliverySelfTests.presentation(r)
+             await M3FinalFixSelfTests.run(r)
+             print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m2-review-inspection-only") {
+             await M2ReviewFixSelfTests.inspection(r)
+             print("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m2-review-packages-only") {
+             await M2ReviewFixSelfTests.packages(r)
+             await M2ReviewFixSelfTests.compilationLifecycle(r)
+             print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
+         if CommandLine.arguments.contains("--m2-fix-only") {
+             LocalModelImportSelfTests.runInspection(r)
+             await WhisperRuntimeSelfTests.run(r)
+             await WholeM2FixSelfTests.runRetry(r)
+             await WholeM2FixSelfTests.runGraphAdmission(r)
+             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+-            exit(r.failed == 0 ? 0 : 1)
++            finish(r)
+         }
++        await M5RuntimeSelfTests.run(r)
++        await M5IsolationSelfTests.run(r)
+         testLLMURL(r)            // B1
+         testSSEParse(r)          // B8
+         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
+         testModifierTapMachine(r) // modifier-trigger edge machine + detector window
+         testContinuationBox(r)   // exactly-once continuation resume (ASR providers)
+         testConfigCorrupt(r)     // B9
+         testInjectionEdgeCases(r) // injection edge cases: emoji/newlines/config/continuation
+         testInjectionSegmentation(r) // injection helpers
+         testASRWiring(r)         // ASR language + context
+         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
+@@ -461,22 +474,23 @@ enum SelfTest {
+         await testDeliveryModeStage(r)
+         M3SpeechPreflightSelfTests.pure(r)
+         await M3SpeechPreflightSelfTests.background(r)
+         await M3SpeechPreflightSelfTests.integration(r)
+         await testDeliveryContract(r)
+         await testStageOwnership(r) // actual async wrapper, before/during cancellation
+         await CloudProviderSelfTests.runConnectionOwnership(r)
+         M4RecoveryPolicySelfTests.run(r)
+         await M4StageFailureSelfTests.run(r)
+         await M4RecoveryControllerSelfTests.run(r)
++        M5IsolationSelfTests.checkEffectBudget(r)
+         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
+-        exit(r.failed == 0 ? 0 : 1)
++        finish(r)
+     }
+ 
+     private final class DeliveryLog: @unchecked Sendable {
+         private let lock = NSLock()
+         private var entries: [String] = []
+         func append(_ text: String) { lock.lock(); entries.append(text); lock.unlock() }
+         var value: [String] { lock.lock(); defer { lock.unlock() }; return entries }
+     }
+ 
+     @MainActor
+@@ -2274,21 +2288,21 @@ enum SelfTest {
+         r.check(d.idleSeconds(now: Date()) < 1, "watchdog: just-touched clock reads ~0 idle")
+         r.check(d.idleSeconds(now: Date().addingTimeInterval(31)) > 30, "watchdog: 31s without frames exceeds a 30s limit")
+         d.markYielded()
+         r.check(d.hasYielded, "watchdog: markYielded sets delivered flag")
+         r.check(d.idleSeconds(now: Date()) < 1, "watchdog: markYielded also counts as activity")
+     }
+ 
+     // MARK: - B9: corrupt persisted config is backed up, not silently discarded
+ 
+     static func testConfigCorrupt(_ r: Reporter) {
+-        let tmp = FileManager.default.temporaryDirectory
++        let tmp = RuntimeEnvironment.current.paths.temporaryDirectory
+             .appendingPathComponent("flowtype-selftest-\(UUID().uuidString)", isDirectory: true)
+         try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+         defer { try? FileManager.default.removeItem(at: tmp) }
+ 
+         // Corrupt blob -> reset to default AND a backup file is written.
+         let suite = "FlowTypeSelfTest.\(UUID().uuidString)"
+         guard let ud = UserDefaults(suiteName: suite) else {
+             r.check(false, "B9 could not create test UserDefaults suite"); return
+         }
+         defer { ud.removePersistentDomain(forName: suite) }
+@@ -2296,21 +2310,21 @@ enum SelfTest {
+ 
+         let store = ConfigurationStore(defaults: ud, backupDirectory: tmp)
+         r.eq(store.current.maxRecordingDuration, Configuration.default.maxRecordingDuration,
+              "B9 corrupt config resets to default")
+         let backups = (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? []
+         r.check(backups.contains { $0.hasPrefix("flowtype.config.corrupt-") },
+                 "B9 corrupt blob backed up to disk")
+ 
+         // First launch (no data) -> default, and NO spurious backup.
+         let suite2 = "FlowTypeSelfTest.\(UUID().uuidString)"
+-        let tmp2 = FileManager.default.temporaryDirectory
++        let tmp2 = RuntimeEnvironment.current.paths.temporaryDirectory
+             .appendingPathComponent("flowtype-selftest-\(UUID().uuidString)", isDirectory: true)
+         try? FileManager.default.createDirectory(at: tmp2, withIntermediateDirectories: true)
+         defer { try? FileManager.default.removeItem(at: tmp2) }
+         guard let ud2 = UserDefaults(suiteName: suite2) else {
+             r.check(false, "B9 could not create second test suite"); return
+         }
+         defer { ud2.removePersistentDomain(forName: suite2) }
+         _ = ConfigurationStore(defaults: ud2, backupDirectory: tmp2)
+         let backups2 = (try? FileManager.default.contentsOfDirectory(atPath: tmp2.path)) ?? []
+         r.check(backups2.isEmpty, "B9 first launch writes no spurious backup")
+@@ -3569,21 +3583,21 @@ enum SelfTest {
+         let high = ModelPreset.allPresets.first { $0.id == "qwen3-1.7b-4bit" }!
+         r.check(high.recommendedTiers.contains(.high), "preset: 1.7b recommended for high")
+         r.check(high.recommendedTiers.contains(.mid), "preset: 1.7b recommended for mid")
+         r.check(!high.recommendedTiers.contains(.low), "preset: 1.7b not recommended for low")
+     }
+ 
+     // MARK: - CustomModelScanner: validateModelDirectory error cases + success
+ 
+     static func testCustomModelScanner(_ r: Reporter) {
+         let fm = FileManager.default
+-        let base = fm.temporaryDirectory.appendingPathComponent("flowtype-scannertest-\(UUID().uuidString)", isDirectory: true)
++        let base = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-scannertest-\(UUID().uuidString)", isDirectory: true)
+         try? fm.createDirectory(at: base, withIntermediateDirectories: true)
+         defer { try? fm.removeItem(at: base) }
+ 
+         func write(_ name: String, _ bytes: Int, in dir: URL) {
+             fm.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data(count: bytes))
+         }
+ 
+         let minBytes: Int64 = 100 * 1024
+ 
+         // 1. Non-existent directory → .directoryNotFound
+diff --git a/Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift b/Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift
+index 40dc808..b44c681 100644
+--- a/Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift
++++ b/Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift
+@@ -146,21 +146,21 @@ enum WhisperRuntimeSelfTests {
+                 r.check(false, "Whisper rejects missing special token instead of guessing")
+             } catch { r.check(true, "Whisper rejects missing special token instead of guessing") }
+             let unicode = tokenizer.splitToWordTokens(tokenIds: [32, 160, 121, 254, 172, 253, 247, 224])
+             r.eq(unicode.words.joined(), "A你🙂", "Whisper split handles byte-split CJK/emoji after ASCII")
+             r.eq(unicode.wordTokens.flatMap { $0 }, [32, 160, 121, 254, 172, 253, 247, 224], "Whisper word splitting retains every token")
+             let replacement = tokenizer.splitToWordTokens(tokenIds: [171, 123, 121, 32])
+             r.eq(replacement.words.joined(), "�A", "Whisper split preserves literal replacement character")
+             r.eq(replacement.wordTokens.flatMap { $0 }, [171, 123, 121, 32], "Whisper replacement split retains tokens")
+         } catch { r.check(false, "Whisper tokenizer fixture: \(error)") }
+ 
+-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-whisper-\(UUID())")
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-whisper-\(UUID())")
+         defer { try? FileManager.default.removeItem(at: root) }
+         _ = URLProtocol.registerClass(WhisperNetworkTrap.self)
+         defer { URLProtocol.unregisterClass(WhisperNetworkTrap.self) }
+         WhisperNetworkTrap.count.withLock { $0 = 0 }
+         do {
+             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+             for corrupt in [false, true] {
+                 if corrupt {
+                     try Data("{broken".utf8).write(to: root.appendingPathComponent("tokenizer.json"))
+                     try Data("{}".utf8).write(to: root.appendingPathComponent("tokenizer_config.json"))
+diff --git a/Sources/flowtype/Utilities/KeychainHelper.swift b/Sources/flowtype/Utilities/KeychainHelper.swift
+index 231eb09..742ab15 100644
+--- a/Sources/flowtype/Utilities/KeychainHelper.swift
++++ b/Sources/flowtype/Utilities/KeychainHelper.swift
+@@ -1,58 +1,64 @@
+ import Foundation
+ import Security
+ 
+ enum KeychainHelper {
+     private static let service = "com.flowtype.app"
++    private static let access = KeychainAccess.guarded(role: RuntimeEnvironment.current.role,
++        system: KeychainAccess(save: systemSave, load: systemLoad, delete: systemDelete), effects: .live)
++
++    static func save(key: String, value: String) -> Bool { access.save(key, value) }
++    static func load(key: String) -> String? { access.load(key) }
++    static func delete(key: String) { access.delete(key) }
+ 
+     /// Traditional (file-based) keychain. We deliberately do NOT set kSecUseDataProtectionKeychain:
+     /// the data-protection keychain needs a keychain-access entitlement we don't have when distributing
+     /// UNSIGNED, which makes SecItemAdd fail with errSecMissingEntitlement (-34018) — that's exactly why
+     /// API keys weren't being saved. The traditional keychain works for unsigned apps (login keychain).
+     private static var baseQuery: [String: Any] {
+         [
+             kSecClass as String: kSecClassGenericPassword,
+             kSecAttrService as String: service,
+         ]
+     }
+ 
+-    static func save(key: String, value: String) -> Bool {
++    private static func systemSave(key: String, value: String) -> Bool {
+         guard let data = value.data(using: .utf8) else { return false }
+ 
+         var deleteQuery = baseQuery
+         deleteQuery[kSecAttrAccount as String] = key
+         SecItemDelete(deleteQuery as CFDictionary)
+ 
+         var addQuery = baseQuery
+         addQuery[kSecAttrAccount as String] = key
+         addQuery[kSecValueData as String] = data
+         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+         addQuery[kSecAttrSynchronizable as String] = false
+ 
+         let status = SecItemAdd(addQuery as CFDictionary, nil)
+         if status != errSecSuccess {
+             AppLogger.log("[KeychainHelper] save failed for '\(key)': \(status)")
+         }
+         return status == errSecSuccess
+     }
+ 
+-    static func load(key: String) -> String? {
++    private static func systemLoad(key: String) -> String? {
+         var query = baseQuery
+         query[kSecAttrAccount as String] = key
+         query[kSecReturnData as String] = true
+         query[kSecMatchLimit as String] = kSecMatchLimitOne
+ 
+         var result: AnyObject?
+         let status = SecItemCopyMatching(query as CFDictionary, &result)
+ 
+         guard status == errSecSuccess, let data = result as? Data else {
+             return nil
+         }
+         return String(data: data, encoding: .utf8)
+     }
+ 
+-    static func delete(key: String) {
++    private static func systemDelete(key: String) {
+         var query = baseQuery
+         query[kSecAttrAccount as String] = key
+         SecItemDelete(query as CFDictionary)
+     }
+ }
+diff --git a/Sources/flowtype/Utilities/PermissionHelper.swift b/Sources/flowtype/Utilities/PermissionHelper.swift
+index 6b6be8f..bf035e1 100644
+--- a/Sources/flowtype/Utilities/PermissionHelper.swift
++++ b/Sources/flowtype/Utilities/PermissionHelper.swift
+@@ -39,35 +39,38 @@ enum PermissionHelper {
+         case .denied, .restricted:
+             return .denied
+         case .notDetermined:
+             return .notDetermined
+         @unknown default:
+             return .unknown
+         }
+     }
+ 
+     static func openMicrophoneSettings() {
++        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") else { return }
+         NSWorkspace.shared.open(url)
+     }
+ 
+     static func openSpeechRecognitionSettings() {
++        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") else { return }
+         NSWorkspace.shared.open(url)
+     }
+ 
+     /// Check accessibility permission using both API query and functional test
+     static func checkAccessibility() -> Bool {
+         // API check - may return false for unsigned apps even if permission is granted
+         if AXIsProcessTrusted() {
+             return true
+         }
++        guard ValidationEffects.live.allow(.inputEvent) else { return false }
+ 
+         // Functional test: try to create a temporary event tap
+         // This is more reliable for unsigned apps
+         let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+         guard let tap = CGEvent.tapCreate(
+             tap: .cgSessionEventTap,
+             place: .headInsertEventTap,
+             options: .defaultTap,
+             eventsOfInterest: eventMask,
+             callback: { _, _, event, _ in Unmanaged.passUnretained(event) },
+@@ -79,40 +82,42 @@ enum PermissionHelper {
+         // Clean up the test tap properly
+         CGEvent.tapEnable(tap: tap, enable: false)
+         if let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) {
+             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+         }
+         CFMachPortInvalidate(tap)
+         return true
+     }
+ 
+     static func openAccessibilitySettings() {
++        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
+         NSWorkspace.shared.open(url)
+     }
+ 
+     @MainActor
+     static func showPermissionGuide() {
++        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+         let alert = NSAlert()
+         alert.messageText = "需要辅助功能权限"
+         alert.informativeText = "Flowtype 需要监听全局按键来触发语音输入。请前往「系统设置 → 隐私与安全性 → 辅助功能」，将 Flowtype 添加到列表中并勾选。"
+         alert.alertStyle = .warning
+         alert.addButton(withTitle: "打开设置")
+         alert.addButton(withTitle: "我已开启")
+         alert.addButton(withTitle: "稍后再说")
+ 
+         let response = alert.runModal()
+         if response == .alertFirstButtonReturn {
+             openAccessibilitySettings()
+         } else if response == .alertSecondButtonReturn {
+             // User claims they already enabled it - mark as handled
+-            UserDefaults.standard.set(true, forKey: "flowtype.hasShownPermissionGuide")
++            RuntimeEnvironment.defaults.set(true, forKey: "flowtype.hasShownPermissionGuide")
+         }
+     }
+ 
+     /// Check accessibility permission on every launch and show guide if missing.
+     /// Unlike showFirstLaunchGuideIfNeeded, this does NOT skip based on previous dismissal.
+     @MainActor
+     static func checkAndPromptAccessibilityIfNeeded() {
+         let hasPermission = checkAccessibility()
+         guard !hasPermission else { return }
+         showPermissionGuide()
+diff --git a/Sources/flowtype/Utilities/SoundFeedback.swift b/Sources/flowtype/Utilities/SoundFeedback.swift
+index 0b3cb60..8c8dafc 100644
+--- a/Sources/flowtype/Utilities/SoundFeedback.swift
++++ b/Sources/flowtype/Utilities/SoundFeedback.swift
+@@ -1,18 +1,19 @@
+ import AudioToolbox
+ 
+ /// Provides audio feedback for recording state changes.
+ /// Sounds respect macOS "Play user interface sound effects" setting.
+ enum SoundFeedback {
+ 
+     static var isEnabled: Bool {
+-        ConfigurationStore.shared.current.enableAudioFeedback
++        guard RuntimeEnvironment.current.role == .app else { return false }
++        return ConfigurationStore.shared.current.enableAudioFeedback && ValidationEffects.live.allow(.sound)
+     }
+ 
+     static func playRecordingStart() {
+         guard isEnabled else { return }
+         AudioServicesPlaySystemSound(1104) // ascending tone
+     }
+ 
+     static func playRecordingStop() {
+         guard isEnabled else { return }
+         AudioServicesPlaySystemSound(1103) // descending tone
+diff --git a/Sources/flowtype/WindowManager.swift b/Sources/flowtype/WindowManager.swift
+index 13abc24..745b302 100644
+--- a/Sources/flowtype/WindowManager.swift
++++ b/Sources/flowtype/WindowManager.swift
+@@ -161,36 +161,38 @@ class WindowManager: ObservableObject {
+ 
+     // MARK: - Hotkey Setup
+ 
+     nonisolated static func eventTapHealthAction(tapExists: Bool, tapEnabled: Bool,
+                                                  accessibilityTrusted: Bool) -> EventTapHealthAction {
+         if tapExists { return tapEnabled ? .none : .enableExisting }
+         return accessibilityTrusted ? .recreate : .waitForPermission
+     }
+ 
+     func setupGlobalHotkey() {
++        guard ValidationEffects.live.allow(.inputEvent) else { return }
+         AppLogger.log("[WindowManager] setupGlobalHotkey called")
+         let accessibilityEnabled = PermissionHelper.checkAccessibility()
+         if !accessibilityEnabled {
+             AppLogger.log("[WindowManager] WARNING: Accessibility permission not granted")
+         }
+ 
+         Self.cachedTriggerKey.value = triggerKey
+         Self.cachedInteractionMode.value = ConfigurationStore.shared.current.interactionMode
+         AppLogger.log("[WindowManager] Cached triggerKey: \(triggerKey.displayName), interactionMode: \(Self.cachedInteractionMode.value.displayName)")
+ 
+         _ = installEventTap()
+         startEventTapHealthCheck()
+         AppLogger.log("[WindowManager] Global hotkey registered (double-tap \(triggerKey.displayName) to start, single-tap to stop)")
+     }
+ 
+     func reloadHotkey() {
++        guard ValidationEffects.live.allow(.inputEvent) else { return }
+         AppLogger.log("[WindowManager] Queuing debounced hotkey reload...")
+         reloadWorkItem?.cancel()
+         let workItem = DispatchWorkItem { [weak self] in
+             guard let self = self else { return }
+             AppLogger.log("[WindowManager] Executing debounced reload...")
+             Self.cachedTriggerKey.value = self.triggerKey
+             Self.cachedInteractionMode.value = ConfigurationStore.shared.current.interactionMode
+             // Stale edge state across a tap rebuild could turn the next unrelated
+             // flagsChanged into a phantom release-tap — start the new tap clean.
+             Self.cachedTriggerWasDown.value = false
+@@ -213,20 +215,21 @@ class WindowManager: ObservableObject {
+             repeats: true
+         ) { [weak self] in
+             Task { @MainActor [weak self] in
+                 guard let self = self else { return }
+                 self.repairEventTap()
+             }
+         }
+     }
+ 
+     func repairEventTap() {
++        guard ValidationEffects.live.allow(.inputEvent) else { return }
+         // An installed tap is stronger evidence than a trust query for unsigned
+         // apps. Only probe permission when there is no tap to repair.
+         let trusted = eventTapPort != nil || PermissionHelper.checkAccessibility()
+         let action = Self.eventTapHealthAction(
+             tapExists: eventTapPort != nil,
+             tapEnabled: eventTapPort.map { CGEvent.tapIsEnabled(tap: $0) } ?? false,
+             accessibilityTrusted: trusted
+         )
+         if action != lastHealthAction {
+             AppLogger.log("[WindowManager] Event tap health action: \(action)")
+@@ -250,20 +253,21 @@ class WindowManager: ObservableObject {
+         if let tap = eventTapPort {
+             CGEvent.tapEnable(tap: tap, enable: false)
+             CFMachPortInvalidate(tap)
+         }
+         eventTapRunLoopSource = nil
+         eventTapPort = nil
+     }
+ 
+     @discardableResult
+     func installEventTap() -> Bool {
++        guard ValidationEffects.live.allow(.inputEvent) else { return false }
+         guard eventTapPort == nil else { return true }
+         let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+                       | CGEventMask(1 << CGEventType.keyDown.rawValue)
+                       | CGEventMask(1 << CGEventType.keyUp.rawValue)
+ 
+         guard let tap = CGEvent.tapCreate(
+             tap: .cgSessionEventTap,
+             place: .headInsertEventTap,
+             options: .defaultTap,
+             eventsOfInterest: eventMask,
+@@ -464,20 +468,21 @@ class WindowManager: ObservableObject {
+             break
+         }
+     }
+ 
+     // MARK: - Window Management
+ 
+     /// Distance the capsule travels while sliding in/out, in points.
+     private static let slideOffset: CGFloat = 60
+ 
+     func showWindow() {
++        guard ValidationEffects.live.allow(.window) else { return }
+         logPanelPresentation("show-request")
+         guard let panel = panel else { return }
+         panel.setCapsuleSize(SessionController.shared.sessionState.capsuleSize)
+         guard let screen = NSScreen.main else {
+             panel.alphaValue = 1
+             panel.orderFront(nil)
+             logPanelPresentation("show-ordered-no-screen")
+             return
+         }
+         // Already visible — don't replay the slide-in animation (e.g. .polishing → .notice).
+@@ -526,20 +531,21 @@ class WindowManager: ObservableObject {
+         }
+         let message = "[WindowManager] \(phase) state=\(stateCategory) \(panelState) \(appState)"
+         // Four fixed call-site phases bound this cache. Elapsed time and all
+         // associated state payloads are excluded, so timer ticks cannot spam it.
+         guard lastPanelPresentationLogs[phase] != message else { return }
+         lastPanelPresentationLogs[phase] = message
+         AppLogger.log(message)
+     }
+ 
+     func hide() {
++        guard ValidationEffects.live.allow(.window) else { return }
+         // Don't hide the panel during text injection — user needs to see progress
+         guard SessionController.shared.sessionState != .injecting else { return }
+         guard let panel = panel, panel.isVisible else {
+             panel?.orderOut(nil)
+             return
+         }
+ 
+         // Slide down + fade out, then actually order out once the animation finishes.
+         let origin = panel.frame.origin
+         NSAnimationContext.runAnimationGroup({ ctx in

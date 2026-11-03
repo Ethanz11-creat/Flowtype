@@ -1,0 +1,113 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/7] Write sources
+[3/7] Write swift-version--1AB21518FC5DEDBE.txt
+[5/11] Compiling FlowType RuntimeEnvironment.swift
+[6/11] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:33:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 31 |     }()
+ 32 | 
+ 33 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 34 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 35 | 
+[7/11] Compiling FlowType M5IsolationSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:24:20: error: cannot find 'KeychainAccess' in scope
+ 22 |         let keys = OSAllocatedUnfairLock(initialState: [String: String]())
+ 23 |         let systemCalls = OSAllocatedUnfairLock(initialState: 0)
+ 24 |         let fake = KeychainAccess(save: { key, value in keys.withLock { $0[key] = value }; return true },
+    |                    `- error: cannot find 'KeychainAccess' in scope
+ 25 |                                   load: { key in keys.withLock { $0[key] } },
+ 26 |                                   delete: { key in keys.withLock { _ = $0.removeValue(forKey: key) } })
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:28:94: error: extra argument 'keychain' in call
+ 26 |                                   delete: { key in keys.withLock { _ = $0.removeValue(forKey: key) } })
+ 27 |         defaults.set(Data(#"{"llmApiKey":"synthetic-legacy-key","llmProviders":[],"asrLanguage":"auto"}"#.utf8), forKey: "flowtype.config")
+ 28 |         let config = ConfigurationStore(defaults: defaults, backupDirectory: root, keychain: fake)
+    |                                                                                              `- error: extra argument 'keychain' in call
+ 29 |         r.eq(keys.withLock { $0["llmApiKey"] }, "synthetic-legacy-key", "M5 migration uses injected legacy key storage")
+ 30 |         if let provider = config.current.llmProviders.first {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:35:85: error: extra argument 'keychain' in call
+ 33 |         r.eq(defaults.integer(forKey: "flowtype.migrationVersion"), 5, "M5 fixture migration completes")
+ 34 |         defaults.set(Data("{invalid sk-synthetic12345678".utf8), forKey: "flowtype.config")
+ 35 |         _ = ConfigurationStore(defaults: defaults, backupDirectory: root, keychain: fake)
+    |                                                                                     `- error: extra argument 'keychain' in call
+ 36 |         let backups = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+ 37 |             .filter { $0.lastPathComponent.hasPrefix("flowtype.config.corrupt-") }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:49:86: error: extra argument 'directory' in call
+ 47 |             r.check(FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path), "M5 fixture migration evidence \(name)")
+ 48 |         }
+ 49 |         let store = PersistentStore<[String]>(filename: "synthetic.json", directory: root)
+    |                                                                                      `- error: extra argument 'directory' in call
+ 50 |         store.save(["fixture"])
+ 51 |         r.eq(store.load(), ["fixture"], "M5 injected persistent store first save round-trips")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:52:22: error: cannot find 'ValidationEffects' in scope
+ 50 |         store.save(["fixture"])
+ 51 |         r.eq(store.load(), ["fixture"], "M5 injected persistent store first save round-trips")
+ 52 |         let denied = ValidationEffects(role: .selfTest, external: { _ in systemCalls.withLock { $0 += 1 } })
+    |                      `- error: cannot find 'ValidationEffects' in scope
+ 53 |         let keychain = KeychainAccess.guarded(role: .selfTest, system: fake, effects: denied)
+ 54 |         r.check(keychain.save("m5-memory", "synthetic-memory"), "M5 validation keychain saves in memory")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:52:47: error: cannot infer contextual base in reference to member 'selfTest'
+ 50 |         store.save(["fixture"])
+ 51 |         r.eq(store.load(), ["fixture"], "M5 injected persistent store first save round-trips")
+ 52 |         let denied = ValidationEffects(role: .selfTest, external: { _ in systemCalls.withLock { $0 += 1 } })
+    |                                               `- error: cannot infer contextual base in reference to member 'selfTest'
+ 53 |         let keychain = KeychainAccess.guarded(role: .selfTest, system: fake, effects: denied)
+ 54 |         r.check(keychain.save("m5-memory", "synthetic-memory"), "M5 validation keychain saves in memory")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:53:24: error: cannot find 'KeychainAccess' in scope
+ 51 |         r.eq(store.load(), ["fixture"], "M5 injected persistent store first save round-trips")
+ 52 |         let denied = ValidationEffects(role: .selfTest, external: { _ in systemCalls.withLock { $0 += 1 } })
+ 53 |         let keychain = KeychainAccess.guarded(role: .selfTest, system: fake, effects: denied)
+    |                        `- error: cannot find 'KeychainAccess' in scope
+ 54 |         r.check(keychain.save("m5-memory", "synthetic-memory"), "M5 validation keychain saves in memory")
+ 55 |         r.eq(keychain.load("m5-memory"), "synthetic-memory", "M5 validation keychain reads memory")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:53:54: error: cannot infer contextual base in reference to member 'selfTest'
+ 51 |         r.eq(store.load(), ["fixture"], "M5 injected persistent store first save round-trips")
+ 52 |         let denied = ValidationEffects(role: .selfTest, external: { _ in systemCalls.withLock { $0 += 1 } })
+ 53 |         let keychain = KeychainAccess.guarded(role: .selfTest, system: fake, effects: denied)
+    |                                                      `- error: cannot infer contextual base in reference to member 'selfTest'
+ 54 |         r.check(keychain.save("m5-memory", "synthetic-memory"), "M5 validation keychain saves in memory")
+ 55 |         r.eq(keychain.load("m5-memory"), "synthetic-memory", "M5 validation keychain reads memory")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:65:20: error: cannot find 'ValidationEffects' in scope
+ 63 |     private static func testDeniedEffects(_ r: SelfTest.Reporter) {
+ 64 |         let downstream = OSAllocatedUnfairLock(initialState: 0)
+ 65 |         let gate = ValidationEffects(role: .selfTest, external: { _ in downstream.withLock { $0 += 1 } })
+    |                    `- error: cannot find 'ValidationEffects' in scope
+ 66 |         for operation in ValidationEffects.Operation.allCases {
+ 67 |             r.check(!gate.allow(operation), "M5 denies actual \(operation.rawValue) boundary")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:65:45: error: cannot infer contextual base in reference to member 'selfTest'
+ 63 |     private static func testDeniedEffects(_ r: SelfTest.Reporter) {
+ 64 |         let downstream = OSAllocatedUnfairLock(initialState: 0)
+ 65 |         let gate = ValidationEffects(role: .selfTest, external: { _ in downstream.withLock { $0 += 1 } })
+    |                                             `- error: cannot infer contextual base in reference to member 'selfTest'
+ 66 |         for operation in ValidationEffects.Operation.allCases {
+ 67 |             r.check(!gate.allow(operation), "M5 denies actual \(operation.rawValue) boundary")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:66:26: error: cannot find 'ValidationEffects' in scope
+ 64 |         let downstream = OSAllocatedUnfairLock(initialState: 0)
+ 65 |         let gate = ValidationEffects(role: .selfTest, external: { _ in downstream.withLock { $0 += 1 } })
+ 66 |         for operation in ValidationEffects.Operation.allCases {
+    |                          `- error: cannot find 'ValidationEffects' in scope
+ 67 |             r.check(!gate.allow(operation), "M5 denies actual \(operation.rawValue) boundary")
+ 68 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5IsolationSelfTests.swift:90:14: error: cannot find 'ValidationEffects' in scope
+ 88 |         for _ in 0..<32 { await Task.yield() }
+ 89 |         r.eq(QwenModelState.shared.status, .notLoaded, "M5 singleton preparation does not schedule model work")
+ 90 |         r.eq(ValidationEffects.live.snapshot.permitted.values.reduce(0, +), 0, "M5 shared actual external boundary budget zero")
+    |              `- error: cannot find 'ValidationEffects' in scope
+ 91 |         // nil backupDirectory must resolve to isolated logs, including injected constructors.
+ 92 |         let suite = "com.flowtype.validation.corrupt.\(UUID())"
+[8/12] Compiling FlowType M5RuntimeSelfTests.swift
+[9/12] Compiling FlowType SelfTest.swift

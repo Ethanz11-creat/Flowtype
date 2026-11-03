@@ -1,0 +1,7 @@
+ M scripts/verification/ArtifactPackaging.swift
+?? scripts/verification/ManualValidation.swift
+?? scripts/verification/VerificationCLI.swift
+?? scripts/verification/VerificationFixture.swift
+?? scripts/verification/VerificationReport.swift
+?? scripts/verification/VerificationSelfTests.swift
+?? scripts/verify.sh

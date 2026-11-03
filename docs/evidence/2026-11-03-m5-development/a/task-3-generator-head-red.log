@@ -1,0 +1,3 @@
+FAIL: HEAD change rejected
+FAIL: intervening dirty tree rejected
+=== build-info generator self-test: 27 passed, 2 failed ===

@@ -1,0 +1,40 @@
+FAIL: reject forged mode
+FAIL: reject forged role
+FAIL: reject forged durationMs
+FAIL: reject forged probeTimerTicks
+FAIL: reject forged windowHealthTicks
+FAIL: reject forged tap
+FAIL: reject forged schemaVersion
+FAIL: reject forged ok
+FAIL: reject forged probeTimerTicks
+FAIL: reject forged missing
+FAIL: reject forged old SHA
+FAIL: reject forged multiple JSON
+FAIL: reject forged Metal true MLX false
+FAIL: duplicate runtime runID
+FAIL: old copied hash cannot pass
+FAIL: code executes full
+FAIL: partial fail build-fail
+FAIL: failed build leaves full pending
+FAIL: partial fail full-timeout
+FAIL: record full actual timeout
+FAIL: partial fail focused
+FAIL: partial fail no-summary
+FAIL: partial fail source-change
+FAIL: bad signature blocks check
+FAIL: WindowServer Skip never overall Pass
+FAIL: seventh crash retained
+FAIL: manual CI stubs cannot attest release
+FAIL: release stages run once
+FAIL: owned recovery before and after failed packaging
+FAIL: parent write failure cannot pass
+FAIL: in-use recovery refuses mutation
+FAIL: recovery invokes actual downstream in-use guard
+FAIL: running candidate and old backup retained
+FAIL: full summary cannot be forged
+FAIL: full summary cannot be forged
+FAIL: full summary cannot be forged
+FAIL: full summary cannot be forged
+FAIL: full summary cannot be forged
+=== verification self-test: 2 passed, 38 failed ===
+Retained synthetic evidence: /var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-verification-CCEC1FE5-7E66-4068-9A5E-357C97EFF687

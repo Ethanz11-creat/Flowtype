@@ -1,0 +1,1128 @@
+# Review package: ffd4ba4..d6aaace
+
+## Commits
+d6aaace feat: add build identity and role-scoped diagnostics
+
+## Files changed
+ README.md                                          |   5 +
+ Sources/flowtype/App/BuildInfo.swift               |  85 ++++++++
+ Sources/flowtype/App/FlowTypeApp.swift             |  10 +
+ Sources/flowtype/App/RuntimeEnvironment.swift      |   2 +-
+ Sources/flowtype/App/StatusBarController.swift     |  13 ++
+ .../flowtype/Testing/M5BuildInfoSelfTests.swift    | 150 +++++++++++++++
+ Sources/flowtype/Testing/SelfTest.swift            |  31 +++
+ Sources/flowtype/Utilities/AppLogger.swift         | 140 ++++----------
+ .../flowtype/Utilities/DiagnosticLogWriter.swift   | 107 +++++++++++
+ scripts/generate-build-info.swift                  | 214 +++++++++++++++++++++
+ 10 files changed, 652 insertions(+), 105 deletions(-)
+
+## Diff
+diff --git a/README.md b/README.md
+index 2d19949..f900335 100644
+--- a/README.md
++++ b/README.md
+@@ -269,20 +269,22 @@ open build/Flowtype.app
+ ### Self-test
+ 
+ Run the built-in diagnostic suite before first use or after changes:
+ 
+ ```bash
+ swift run FlowType --self-test
+ ```
+ 
+ This runs 25+ tests covering configuration migration, injection decisions, appearance, model config, download sources, model locator, stats engine, database schema, SSE parsing, spectrum math, and FFT correctness.
+ 
++Automatic tests use synthetic inputs and a separate run directory. Pass `--validation-root /absolute/empty/directory` to retain its evidence, or use `--m5-buildinfo-only` with `--self-test` for identity/logging checks. Each run writes `Logs/diagnostic-selftest.log` with a synchronous identity header, UTC timestamps, role/run ID, and a flushed summary. Effect counters verify guarded code boundaries; they are not an OS sandbox. Existing free-text diagnostics are not comprehensively redacted, so automated runs must keep using synthetic inputs.
++
+ ## Configuration
+ 
+ All settings are managed through the **Settings GUI** (click the status bar icon → Settings, or press `Cmd + ,`):
+ 
+ | Section | Settings |
+ |----------|---------|
+ | **Local ASR** | Model load status, language (Auto / 中文 / English), download source |
+ | **LLM** | Provider(s), Base URL, API Key, Model ID, Test connection |
+ | **Recording** | Max duration, audio feedback, microphone device |
+ | **Privacy** | `storeTranscriptText` — store transcript text, or metadata only |
+@@ -324,20 +326,23 @@ Flowtype classifies the focused UI element before deciding how to insert text:
+ | Non-text control or unknown | Clipboard paste only |
+ 
+ This logic is fully covered by the built-in self-test suite.
+ 
+ ## Build scripts
+ 
+ | Script | Purpose |
+ |--------|---------|
+ | `scripts/build-app.sh` | Builds release binary, creates `.app` bundle, copies `mlx.metallib`, generates `Info.plist`, ad-hoc signs |
+ | `scripts/build-dmg.sh` | Creates distributable DMG from built `.app` with `/Applications` symlink |
++| `scripts/generate-build-info.swift` | Generates matching `FlowTypeBuild.json` and `Info.plist` from a clean, nonshallow Git checkout |
++
++Run the identity tool with `swift scripts/generate-build-info.swift --repo /path/to/checkout --output /path/to/empty/directory [--version 1.2.3]`. The version defaults to `1.0.0`; SHA, commit count, Sources tree and UTC time come from the tool. Its `--self-test` creates and removes independent temporary Git repositories without changing global Git configuration. Packaging integration is a separate step; the existing build script does not yet consume these generated files. Runtime development builds show `development` with unknown SHA/time, and malformed app identity stays `invalid`. The About menu and diagnostics use the same loaded identity.
+ 
+ ## Continuing development on another machine
+ 
+ When cloning this repo on a new Mac, here's what's **not included** and what you need to do:
+ 
+ 1. **Clone & build**
+    ```bash
+    git clone -b flowtype-local https://github.com/Ethanz11-creat/Flowtype.git
+    cd Flowtype
+    swift build
+diff --git a/Sources/flowtype/App/BuildInfo.swift b/Sources/flowtype/App/BuildInfo.swift
+new file mode 100644
+index 0000000..59a431d
+--- /dev/null
++++ b/Sources/flowtype/App/BuildInfo.swift
+@@ -0,0 +1,85 @@
++import Foundation
++
++/// Disk schema; runtime origin/failure belongs to BuildIdentity, never this file.
++struct BuildMetadata: Codable, Equatable, Sendable {
++    let schemaVersion: Int
++    let version: String
++    let buildNumber: String
++    let gitSHA: String
++    let sourceTree: String
++    let builtAt: String
++    let dirty: Bool
++}
++
++enum BuildInfoFailure: String, Codable, Sendable {
++    case missingMetadata, malformedMetadata, plistMismatch, dirtySource
++}
++
++struct BuildIdentity: Codable, Sendable {
++    enum Origin: String, Codable, Sendable { case packaged, development, invalid }
++    let origin: Origin
++    let metadata: BuildMetadata?
++    let failureCode: BuildInfoFailure?
++
++    private enum CodingKeys: String, CodingKey { case origin, metadata, failureCode }
++
++    func encode(to encoder: Encoder) throws {
++        var container = encoder.container(keyedBy: CodingKeys.self)
++        try container.encode(origin, forKey: .origin)
++        try container.encode(metadata, forKey: .metadata)
++        try container.encode(failureCode, forKey: .failureCode)
++    }
++
++    var aboutDescription: String {
++        guard origin == .packaged, let metadata else {
++            return "\(origin.rawValue) · build 0 · SHA unknown · UTC unknown"
++        }
++        return "\(metadata.version) · build \(metadata.buildNumber) · SHA \(metadata.gitSHA.prefix(8)) · UTC \(metadata.builtAt)"
++    }
++}
++
++enum BuildInfo {
++    static func load(bundle: Bundle) -> BuildIdentity {
++        // A broken app stays invalid. Runtime development never consults Git or environment overrides.
++        guard bundle.bundleURL.pathExtension.lowercased() == "app" else {
++            return BuildIdentity(origin: .development, metadata: nil, failureCode: nil)
++        }
++        let resource = bundle.bundleURL.appendingPathComponent("Contents/Resources/FlowTypeBuild.json")
++        guard FileManager.default.fileExists(atPath: resource.path) else { return invalid(.missingMetadata) }
++        guard let data = try? Data(contentsOf: resource) else { return invalid(.malformedMetadata) }
++        return validate(json: data, infoPlist: bundle.infoDictionary ?? [:])
++    }
++
++    static func validate(json: Data, infoPlist: [String: Any]) -> BuildIdentity {
++        guard let metadata = try? JSONDecoder().decode(BuildMetadata.self, from: json),
++              metadata.schemaVersion == 1,
++              matches(metadata.version, #"\A[0-9]+\.[0-9]+\.[0-9]+\z"#),
++              matches(metadata.buildNumber, #"\A[0-9]+\z"#),
++              matches(metadata.gitSHA, #"\A[0-9a-fA-F]{40}\z"#),
++              matches(metadata.sourceTree, #"\A[0-9a-fA-F]{40}\z"#),
++              validUTC(metadata.builtAt) else { return invalid(.malformedMetadata) }
++        guard !metadata.dirty else { return invalid(.dirtySource) }
++        guard infoPlist["CFBundleShortVersionString"] as? String == metadata.version,
++              infoPlist["CFBundleVersion"] as? String == metadata.buildNumber else { return invalid(.plistMismatch) }
++        return BuildIdentity(origin: .packaged, metadata: metadata, failureCode: nil)
++    }
++
++    private static func invalid(_ failure: BuildInfoFailure) -> BuildIdentity {
++        BuildIdentity(origin: .invalid, metadata: nil, failureCode: failure)
++    }
++    private static func matches(_ value: String, _ pattern: String) -> Bool {
++        value.range(of: pattern, options: .regularExpression) != nil
++    }
++    private static func validUTC(_ value: String) -> Bool {
++        guard matches(value, #"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z\z"#) else { return false }
++        let formatter = DateFormatter()
++        formatter.locale = Locale(identifier: "en_US_POSIX")
++        formatter.calendar = Calendar(identifier: .gregorian)
++        formatter.timeZone = TimeZone(secondsFromGMT: 0)
++        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
++        formatter.isLenient = false
++        let wholeSeconds = String(value.prefix(19)) + "Z"
++        guard let date = formatter.date(from: wholeSeconds) else { return false }
++        return formatter.string(from: date) == wholeSeconds
++    }
++}
+diff --git a/Sources/flowtype/App/FlowTypeApp.swift b/Sources/flowtype/App/FlowTypeApp.swift
+index 35a8a19..a751038 100644
+--- a/Sources/flowtype/App/FlowTypeApp.swift
++++ b/Sources/flowtype/App/FlowTypeApp.swift
+@@ -2,32 +2,41 @@ import SwiftUI
+ import AppKit
+ 
+ /// Establishes the runtime before any shared services or SwiftUI app initialization.
+ @main
+ enum FlowTypeMain {
+     @MainActor
+     static func main() async {
+         do {
+             try await RuntimeEnvironment.run(arguments: CommandLine.arguments,
+                                              temporaryDirectory: FileManager.default.temporaryDirectory) { context in
++                do { try AppLogger.configure(context: context, identity: BuildInfo.load(bundle: .main)) }
++                catch {
++                    RuntimeEnvironment.finishValidation()
++                    FileHandle.standardError.write(Data("FlowType: diagnostic logger configuration failed\n".utf8))
++                    AppLogger.flush()
++                    exit(1)
++                }
+                 switch context.mode {
+                 case .selfTest:
+                     await SelfTest.runAndExit()
+                 case .smoke, .artifact:
+                     RuntimeEnvironment.finishValidation()
++                    AppLogger.flush()
+                     FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))
+                     exit(1)
+                 case .app:
+                     FlowTypeApp.main()
+                 }
+             }
+         } catch {
++            AppLogger.flush()
+             let failure = (error as? RuntimeBootstrapError) ?? .rootPreparation
+             FileHandle.standardError.write(Data("FlowType: runtime bootstrap \(failure.rawValue)\n".utf8))
+             exit(failure.exitCode)
+         }
+     }
+ }
+ 
+ struct FlowTypeApp: App {
+     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+ 
+@@ -102,20 +111,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
+     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+         return false
+     }
+ 
+     func applicationWillTerminate(_ notification: Notification) {
+         ConfigurationStore.shared.flushPendingSave()
+         // Cmd+Q mid-recording never reaches stopRecording's device restore; the
+         // sentinel-based static restore covers it (no-op when nothing was overridden).
+         AudioRecorder.restorePendingDeviceIfNeeded()
+         AppLogger.log("[AppDelegate] App will terminate")
++        AppLogger.flush()
+     }
+ 
+     @MainActor
+     private func loadQwenASRModel() async {
+         AppLogger.log("[AppDelegate] Loading selected local ASR model...")
+         await QwenModelState.shared.loadModel()
+         if case .ready = QwenModelState.shared.status {
+             AppLogger.log("[AppDelegate] Local ASR model loaded: \(QwenModelState.shared.activeLease?.identity.engine ?? "local")")
+         } else {
+             AppLogger.log("[AppDelegate] Local ASR model loading failed")
+diff --git a/Sources/flowtype/App/RuntimeEnvironment.swift b/Sources/flowtype/App/RuntimeEnvironment.swift
+index 97cae01..e194923 100644
+--- a/Sources/flowtype/App/RuntimeEnvironment.swift
++++ b/Sources/flowtype/App/RuntimeEnvironment.swift
+@@ -17,21 +17,21 @@ enum RuntimeBootstrapError: String, Error {
+     var exitCode: Int32 { self == .usage ? 64 : 1 }
+ }
+ 
+ struct RuntimeOptions: Sendable {
+     let mode: RuntimeMode
+     let validationRoot: String?
+     let selfTestFilter: String?
+     var role: ProcessRole {
+         switch mode { case .app: .app; case .selfTest: .selfTest; case .smoke, .artifact: .smokeTest }
+     }
+-    static let selfTestFilters = ["--m5-runtime-only", "--m5-isolation-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
++    static let selfTestFilters = ["--m5-buildinfo-only", "--m5-runtime-only", "--m5-isolation-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
+                                   "--m3-silence-only", "--m3-asr-regression-only", "--m3-delivery-only",
+                                   "--m2-review-inspection-only", "--m2-review-packages-only", "--m2-fix-only"]
+ 
+     static func parse(arguments: [String]) throws -> RuntimeOptions {
+         var mode: RuntimeMode?
+         var root: String?
+         var filter: String?
+         var index = 1 // argv[0] is the executable, never an option.
+         while index < arguments.count {
+             let argument = arguments[index]
+diff --git a/Sources/flowtype/App/StatusBarController.swift b/Sources/flowtype/App/StatusBarController.swift
+index 404bd79..6f8b546 100644
+--- a/Sources/flowtype/App/StatusBarController.swift
++++ b/Sources/flowtype/App/StatusBarController.swift
+@@ -169,20 +169,24 @@ class StatusBarController: NSObject, NSMenuDelegate {
+         menu.addItem(lastDelivery.item)
+         updateMenuItems()
+         menu.addItem(NSMenuItem.separator())
+ 
+         let showItem = NSMenuItem(title: "显示 Flowtype", action: #selector(showSettings), keyEquivalent: ",")
+         showItem.target = self
+         menu.addItem(showItem)
+ 
+         menu.addItem(NSMenuItem.separator())
+ 
++        let aboutItem = NSMenuItem(title: "关于 FlowType", action: #selector(showAbout), keyEquivalent: "")
++        aboutItem.target = self
++        menu.addItem(aboutItem)
++
+         let viewLogsItem = NSMenuItem(title: "查看日志...", action: #selector(openLogs), keyEquivalent: "")
+         viewLogsItem.target = self
+         menu.addItem(viewLogsItem)
+ 
+         let reloadItem = NSMenuItem(title: "重新加载配置", action: #selector(reloadConfiguration), keyEquivalent: "")
+         reloadItem.target = self
+         menu.addItem(reloadItem)
+ 
+         menu.addItem(NSMenuItem.separator())
+ 
+@@ -221,20 +225,29 @@ class StatusBarController: NSObject, NSMenuDelegate {
+             controller.onClose = { [weak self] in
+                 self?.settingsWindowController = nil
+             }
+             settingsWindowController = controller
+         }
+         settingsWindowController?.selectTab(tab)
+         settingsWindowController?.showWindow(nil)
+         NSApp.activate(ignoringOtherApps: true)
+     }
+ 
++    @objc private func showAbout() {
++        guard RuntimeEnvironment.current.role == .app else { return }
++        let alert = NSAlert()
++        alert.messageText = "关于 FlowType"
++        alert.informativeText = AppLogger.identity.aboutDescription
++        alert.addButton(withTitle: "好")
++        alert.runModal()
++    }
++
+     @objc private func openLogs() {
+         AppLogger.openLogInFinder()
+     }
+ 
+     nonisolated func menuWillOpen(_ menu: NSMenu) {
+         // AppKit invokes menu delegates on the main thread. Match the synchronous
+         // MainActor bridge used by main-runloop callbacks in WindowManager.
+         MainActor.assumeIsolated {
+             ReadinessMonitor.shared.refresh()
+             updateMenuItems()
+diff --git a/Sources/flowtype/Testing/M5BuildInfoSelfTests.swift b/Sources/flowtype/Testing/M5BuildInfoSelfTests.swift
+new file mode 100644
+index 0000000..1b0276b
+--- /dev/null
++++ b/Sources/flowtype/Testing/M5BuildInfoSelfTests.swift
+@@ -0,0 +1,150 @@
++import Foundation
++
++/// Catches trusting malformed release identity and losing queued diagnostics at exit.
++enum M5BuildInfoSelfTests {
++    @MainActor
++    static func run(_ r: SelfTest.Reporter) async {
++        testMetadataValidation(r)
++        do { try testBundleOrigins(r); try await testIdentityAndConcurrentFlush(r) }
++        catch { r.check(false, "M5 identity/log fixture operation failed") }
++    }
++
++    static let metadata = BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42",
++        gitSHA: String(repeating: "a", count: 40), sourceTree: String(repeating: "b", count: 40),
++        builtAt: "2026-11-03T08:09:10Z", dirty: false)
++    static let plist: [String: String] = ["CFBundleShortVersionString": "1.2.3", "CFBundleVersion": "42"]
++
++    // Removing any field/format/plist/dirty check must fail one independent fixture.
++    static func testMetadataValidation(_ r: SelfTest.Reporter) {
++        let data = try! JSONEncoder().encode(metadata)
++        let good = BuildInfo.validate(json: data, infoPlist: plist)
++        r.eq(good.origin, .packaged, "M5 valid packaged identity")
++        r.eq(good.metadata, metadata, "M5 metadata preserved")
++        r.eq(good.failureCode, nil, "M5 valid identity has no failure")
++        let object = try! JSONSerialization.jsonObject(with: data) as! [String: Any]
++        var invalid: [(String, Data)] = [("bad JSON", Data("{".utf8)), ("array", Data("[]".utf8))]
++        for field in object.keys.sorted() {
++            var changed = object; changed.removeValue(forKey: field)
++            invalid.append(("missing \(field)", try! JSONSerialization.data(withJSONObject: changed)))
++        }
++        let mutations: [(String, Any)] = [
++            ("schemaVersion", 2), ("schemaVersion", true), ("version", "1.2"), ("version", "1.2.3\n"),
++            ("version", "-1.2.3"), ("version", "1.2.<3>"), ("buildNumber", "-1"),
++            ("buildNumber", "42\n"), ("buildNumber", 42), ("gitSHA", String(repeating: "a", count: 39)),
++            ("gitSHA", String(repeating: "g", count: 40)), ("sourceTree", "bad"),
++            ("builtAt", "2026-11-03T08:09:10+08:00"), ("builtAt", "2026-02-30T08:09:10Z"),
++            ("builtAt", "2026-11-03T08:09:10Z\n"), ("dirty", true), ("dirty", "false")]
++        for (field, value) in mutations {
++            var changed = object; changed[field] = value
++            invalid.append(("malformed \(field)", try! JSONSerialization.data(withJSONObject: changed)))
++        }
++        for (name, fixture) in invalid {
++            let identity = BuildInfo.validate(json: fixture, infoPlist: plist)
++            r.eq(identity.origin, .invalid, "M5 rejects \(name)")
++            r.eq(identity.metadata, nil, "M5 invalid identity hides untrusted metadata")
++            r.check(identity.failureCode != nil, "M5 invalid identity has closed failure")
++        }
++        for changed in [["CFBundleShortVersionString": "1.2.4", "CFBundleVersion": "42"],
++                        ["CFBundleShortVersionString": "1.2.3", "CFBundleVersion": "43"], [:]] {
++            r.eq(BuildInfo.validate(json: data, infoPlist: changed).origin, .invalid, "M5 rejects plist mismatch/missing")
++        }
++        let development = BuildIdentity(origin: .development, metadata: nil, failureCode: nil)
++        let encoded = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(development)) as! [String: Any]
++        r.check(encoded["metadata"] is NSNull && encoded["failureCode"] is NSNull,
++                "M5 development identity encodes explicit null metadata and failure")
++        let packagedJSON = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(good)) as! [String: Any]
++        r.check(packagedJSON["failureCode"] is NSNull, "M5 packaged identity encodes null failure")
++        r.check(good.aboutDescription.contains("1.2.3") && good.aboutDescription.contains("42") &&
++                good.aboutDescription.contains("aaaaaaaa") && good.aboutDescription.contains("2026-11-03T08:09:10Z"),
++                "M5 about derives version build SHA and UTC from identity")
++    }
++
++    // An .app with absent/bad JSON must never impersonate a development invocation.
++    static func testBundleOrigins(_ r: SelfTest.Reporter) throws {
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("m5-build-bundles-\(UUID())")
++        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: root) }
++        let app = root.appendingPathComponent("Broken.app/Contents")
++        try FileManager.default.createDirectory(at: app.appendingPathComponent("Resources"), withIntermediateDirectories: true)
++        var info = plist
++        info["CFBundleIdentifier"] = "com.flowtype.synthetic"
++        info["CFBundlePackageType"] = "APPL"
++        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
++            .write(to: app.appendingPathComponent("Info.plist"))
++        let bundle = Bundle(url: app.deletingLastPathComponent())!
++        r.eq(BuildInfo.load(bundle: bundle).origin, .invalid, "M5 missing app metadata is invalid")
++        try Data("{}".utf8).write(to: app.appendingPathComponent("Resources/FlowTypeBuild.json"))
++        r.eq(BuildInfo.load(bundle: bundle).origin, .invalid, "M5 malformed app is never development")
++        try JSONEncoder().encode(metadata).write(to: app.appendingPathComponent("Resources/FlowTypeBuild.json"))
++        r.eq(BuildInfo.load(bundle: bundle).origin, .packaged, "M5 loads app resource identity")
++        let dev = root.appendingPathComponent("Development.bundle")
++        try FileManager.default.createDirectory(at: dev, withIntermediateDirectories: true)
++        let identity = BuildInfo.load(bundle: Bundle(url: dev)!)
++        r.eq(identity.origin, .development, "M5 non-app development identity")
++        r.eq(identity.metadata, nil, "M5 development never guesses metadata")
++        r.check(identity.aboutDescription.contains("development") && identity.aboutDescription.contains("unknown"),
++                "M5 development about is explicit")
++    }
++
++    // Missing sync header, rotation, per-line prefixes or queue-aware flush breaks actual files.
++    static func testIdentityAndConcurrentFlush(_ r: SelfTest.Reporter) async throws {
++        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("m5-log-fixture-\(UUID())")
++        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: root) }
++        let identity = BuildInfo.validate(json: try JSONEncoder().encode(metadata), infoPlist: plist)
++        let id = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
++        let file = root.appendingPathComponent("run-one.log")
++        let writer = try DiagnosticLogWriter(fileURL: file, role: .selfTest, runID: id, identity: identity,
++                                             maxLogSize: 1400, maxRotatedFiles: 3)
++        let first = try String(contentsOf: file, encoding: .utf8)
++        r.check(first.contains("BuildIdentity") && first.contains("aaaaaaaa") && first.contains("1.2.3"),
++                "M5 synchronous startup header before first log")
++        DispatchQueue.concurrentPerform(iterations: 120) { index in writer.log("synthetic \(index)\nsecond line") }
++        writer.log("final-sentinel")
++        writer.flush()
++        let current = try String(contentsOf: file, encoding: .utf8)
++        r.check(current.split(separator: "\n").last?.hasSuffix("final-sentinel") == true, "M5 immediate flush retains final sentinel")
++        let files = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
++        r.eq(files.count, 4, "M5 rotation caps current plus three archives")
++        for url in files {
++            let text = try String(contentsOf: url, encoding: .utf8)
++            r.check(text.split(separator: "\n").first?.contains("BuildIdentity") == true, "M5 rotated header remains locatable")
++            let lines = text.split(separator: "\n")
++            r.check(!lines.isEmpty && lines.allSatisfy { $0.contains("role=selfTest") && $0.contains("runID=\(id.uuidString)") && $0.contains("[SelfTest]") },
++                    "M5 every physical line carries role run and self-test marker")
++            r.check(lines.allSatisfy { $0.range(of: #"^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\]"#, options: .regularExpression) != nil },
++                    "M5 every log line has UTC timestamp")
++        }
++        let completeFile = root.appendingPathComponent("complete.log")
++        let complete = try DiagnosticLogWriter(fileURL: completeFile, role: .selfTest, runID: id, identity: identity)
++        DispatchQueue.concurrentPerform(iterations: 120) { index in complete.log("record-\(index)") }
++        complete.log("complete-sentinel"); complete.flush()
++        let completeLines = try String(contentsOf: completeFile, encoding: .utf8).split(separator: "\n")
++        r.eq(completeLines.count, 122, "M5 concurrent flush preserves all records plus header and sentinel")
++        r.check((0..<120).allSatisfy { index in completeLines.filter { $0.hasSuffix(" record-\(index)") }.count == 1 },
++                "M5 each concurrent record written exactly once")
++        let queue = DispatchQueue(label: "com.flowtype.synthetic-log")
++
++        let other = root.appendingPathComponent("run-two.log")
++        let second = try DiagnosticLogWriter(fileURL: other, role: .smokeTest, runID: UUID(), identity: identity, queue: queue)
++        let completed = await withCheckedContinuation { continuation in
++            queue.async { second.log("inside-queue-sentinel"); second.flush(); continuation.resume(returning: true) }
++        }
++        r.check(completed, "M5 flush called from writer queue returns")
++        second.flush()
++        let secondText = try String(contentsOf: other, encoding: .utf8)
++        r.check(secondText.contains("inside-queue-sentinel") && !secondText.contains(id.uuidString), "M5 different runs do not mix logs")
++        r.check(!current.contains("inside-queue-sentinel"), "M5 second writer preserves first run")
++        let before = AppLogger.logFileURL
++        do { try AppLogger.configure(context: RuntimeEnvironment.current, identity: identity)
++            r.check(false, "M5 configure twice must fail")
++        } catch { r.check(true, "M5 configure twice fails") }
++        r.eq(AppLogger.logFileURL, before, "M5 configure conflict preserves original log")
++        let blocked = root.appendingPathComponent("regular-file")
++        try Data().write(to: blocked)
++        do { _ = try DiagnosticLogWriter(fileURL: blocked.appendingPathComponent("diagnostic.log"), role: .selfTest,
++                                         runID: id, identity: identity)
++            r.check(false, "M5 startup header write failure throws")
++        } catch { r.check(true, "M5 startup header write failure throws") }
++    }
++}
+diff --git a/Sources/flowtype/Testing/SelfTest.swift b/Sources/flowtype/Testing/SelfTest.swift
+index 090109e..cd6fde9 100644
+--- a/Sources/flowtype/Testing/SelfTest.swift
++++ b/Sources/flowtype/Testing/SelfTest.swift
+@@ -30,20 +30,21 @@ enum SelfTest {
+             }
+         }
+ 
+         func eq<T: Equatable>(_ got: T, _ want: T, _ msg: String) {
+             check(got == want, "\(msg) — got \(String(describing: got)), want \(String(describing: want))")
+         }
+     }
+ 
+     @MainActor
+     private static func finish(_ r: Reporter) -> Never {
++        AppLogger.flush()
+         RuntimeEnvironment.finishValidation()
+         exit(r.failed == 0 ? 0 : 1)
+     }
+ 
+     // MARK: - PolishMode: 2 modes (raw/polish) + legacy-record migration
+ 
+     static func testPolishModeMigration(_ r: Reporter) {
+         func decode(_ raw: String) -> PolishMode? {
+             try? JSONDecoder().decode(PolishMode.self, from: Data("\"\(raw)\"".utf8))
+         }
+@@ -281,85 +282,113 @@ enum SelfTest {
+         r.eq(h7.last?.date, "2026-06-03", "heatmap: last cell is today")
+         r.eq(h7.filter { $0.chars > 0 }.count, 1, "heatmap: only the one data day is non-zero")
+         r.eq(StatsEngine.denseHeatmap([], range: .d30, now: now, cal: cal).count, 30, "heatmap: 30d empty → 30 zero cells")
+         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
+     }
+ 
+     @MainActor
+     static func runAndExit() async -> Never {
+         let r = Reporter()
+         print("=== FlowType --self-test ===")
++        if CommandLine.arguments.contains("--m5-buildinfo-only") {
++            await M5BuildInfoSelfTests.run(r)
++            AppLogger.log("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
++            print("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
++            finish(r)
++        }
+         if CommandLine.arguments.contains("--m5-isolation-only") {
+             await M5IsolationSelfTests.run(r)
++            AppLogger.log("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m5-runtime-only") {
+             await M5RuntimeSelfTests.run(r)
++            AppLogger.log("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m4-recovery-only") {
+             M4RecoveryPolicySelfTests.run(r)
+             await M4StageFailureSelfTests.run(r)
+             await M4RecoveryControllerSelfTests.run(r)
++            AppLogger.log("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
+             await M3SpeechPreflightSelfTests.benchmark(r)
++            AppLogger.log("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-silence-only") {
+             M3SpeechPreflightSelfTests.pure(r)
+             await M3SpeechPreflightSelfTests.background(r)
+             await M3SpeechPreflightSelfTests.integration(r)
++            AppLogger.log("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-asr-regression-only") {
+             await testRealtimePipelineIntegration(r)
+             await ImportedLifecycleSelfTests.run(r)
+             await ModelProvisionSelfTests.runPresentationAndRouting(r)
++            AppLogger.log("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m3-delivery-only") {
+             M3DeliverySelfTests.policy(r)
+             await M3DeliverySelfTests.runtime(r)
+             await M3DeliverySelfTests.presentation(r)
+             await M3FinalFixSelfTests.run(r)
++            AppLogger.log("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m2-review-inspection-only") {
+             await M2ReviewFixSelfTests.inspection(r)
++            AppLogger.log("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m2-review-packages-only") {
+             await M2ReviewFixSelfTests.packages(r)
+             await M2ReviewFixSelfTests.compilationLifecycle(r)
++            AppLogger.log("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m2-fix-only") {
+             LocalModelImportSelfTests.runInspection(r)
+             await WhisperRuntimeSelfTests.run(r)
+             await WholeM2FixSelfTests.runRetry(r)
+             await WholeM2FixSelfTests.runGraphAdmission(r)
++            AppLogger.log("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
+             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         await M5RuntimeSelfTests.run(r)
+         await M5IsolationSelfTests.run(r)
++        await M5BuildInfoSelfTests.run(r)
+         testLLMURL(r)            // B1
+         testSSEParse(r)          // B8
+         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
+         testModifierTapMachine(r) // modifier-trigger edge machine + detector window
+         testContinuationBox(r)   // exactly-once continuation resume (ASR providers)
+         testConfigCorrupt(r)     // B9
+         testInjectionEdgeCases(r) // injection edge cases: emoji/newlines/config/continuation
+         testInjectionSegmentation(r) // injection helpers
+         testASRWiring(r)         // ASR language + context
+         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
+@@ -475,20 +504,22 @@ enum SelfTest {
+         M3SpeechPreflightSelfTests.pure(r)
+         await M3SpeechPreflightSelfTests.background(r)
+         await M3SpeechPreflightSelfTests.integration(r)
+         await testDeliveryContract(r)
+         await testStageOwnership(r) // actual async wrapper, before/during cancellation
+         await CloudProviderSelfTests.runConnectionOwnership(r)
+         M4RecoveryPolicySelfTests.run(r)
+         await M4StageFailureSelfTests.run(r)
+         await M4RecoveryControllerSelfTests.run(r)
+         M5IsolationSelfTests.checkEffectBudget(r)
++        AppLogger.log("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
++        AppLogger.flush()
+         print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
+         finish(r)
+     }
+ 
+     private final class DeliveryLog: @unchecked Sendable {
+         private let lock = NSLock()
+         private var entries: [String] = []
+         func append(_ text: String) { lock.lock(); entries.append(text); lock.unlock() }
+         var value: [String] { lock.lock(); defer { lock.unlock() }; return entries }
+     }
+diff --git a/Sources/flowtype/Utilities/AppLogger.swift b/Sources/flowtype/Utilities/AppLogger.swift
+index 33790d3..47276e4 100644
+--- a/Sources/flowtype/Utilities/AppLogger.swift
++++ b/Sources/flowtype/Utilities/AppLogger.swift
+@@ -1,120 +1,52 @@
+ import Foundation
+ import AppKit
++import os
+ 
+-/// File-based logger routed through the bootstrapped runtime's role and directories.
+-/// Use this instead of `print()` for persistent diagnostics — stdout is lost
+-/// inside .app bundles.
+-enum AppLogger {
+-    private static let logDir: String = {
+-        RuntimeEnvironment.current.paths.logsDirectory.path
+-    }()
+-
+-    private static let logPath: String = {
+-        let filename: String
+-        switch RuntimeEnvironment.current.role {
+-        case .app: filename = "diagnostic.log"
+-        case .selfTest: filename = "diagnostic-selftest.log"
+-        case .smokeTest: filename = "diagnostic-smoke.log"
+-        }
+-        return (logDir as NSString).appendingPathComponent(filename)
+-    }()
+-
+-    /// Security: maximum log file size (10 MB) before rotation
+-    private static let maxLogSize: UInt64 = 10 * 1024 * 1024
+-    /// Security: maximum number of rotated log files to keep
+-    private static let maxRotatedFiles = 3
+-
+-    private nonisolated(unsafe) static let formatter: ISO8601DateFormatter = {
+-        let f = ISO8601DateFormatter()
+-        f.formatOptions = [.withFullDate, .withTime, .withColonSeparatorInTime]
+-        return f
+-    }()
+-
+-    private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+-    private nonisolated(unsafe) static var fileHandle: FileHandle?
+-
+-    static func log(_ message: String) {
+-        let line = "[\(formatter.string(from: Date()))] \(message)\n"
+-        guard let data = line.data(using: .utf8) else { return }
+-        queue.async { writeData(data) }
+-    }
+-
+-    static func openLogInFinder() {
+-        NSWorkspace.shared.open(URL(fileURLWithPath: logPath))
+-    }
++enum AppLoggerError: String, Error { case alreadyConfigured }
+ 
+-    static var logFileURL: URL {
+-        URL(fileURLWithPath: logPath)
++/// Configured once at main's role boundary, before any shared service can log.
++enum AppLogger {
++    private struct State: Sendable {
++        var writer: DiagnosticLogWriter?
++        var identity: BuildIdentity?
+     }
+-
+-    private static func writeData(_ data: Data) {
+-        if fileHandle == nil {
+-            openHandle()
+-        }
+-        guard let fh = fileHandle else { return }
+-        do {
+-            try fh.write(contentsOf: data)
+-            // Check if rotation is needed after writing
+-            try maybeRotateLog()
+-        } catch {
+-            try? fh.close()
+-            fileHandle = nil
+-            openHandle()
+-            try? fileHandle?.write(contentsOf: data)
++    private static let state = OSAllocatedUnfairLock(initialState: State())
++
++    static func configure(context: RuntimeContext, identity: BuildIdentity) throws {
++        try state.withLock { value in
++            guard value.writer == nil else { throw AppLoggerError.alreadyConfigured }
++            let filename: String
++            switch context.role {
++            case .app: filename = "diagnostic.log"
++            case .selfTest: filename = "diagnostic-selftest.log"
++            case .smokeTest: filename = "diagnostic-smoke.log"
++            }
++            let writer = try DiagnosticLogWriter(fileURL: context.paths.logsDirectory.appendingPathComponent(filename),
++                                                 role: context.role, runID: context.runID, identity: identity)
++            value.identity = identity
++            value.writer = writer
+         }
+     }
+ 
+-    private static func maybeRotateLog() throws {
+-        guard let fh = fileHandle else { return }
+-        let currentOffset = fh.offsetInFile
+-        if currentOffset < maxLogSize { return }
+-
+-        // Close current file and rotate
+-        try fh.close()
+-        fileHandle = nil
+-
+-        let fm = FileManager.default
+-        let basePath = logPath
++    static func log(_ message: String) { state.withLock { $0.writer }?.log(message) }
++    static func flush() { state.withLock { $0.writer }?.flush() }
+ 
+-        // Delete oldest if at max
+-        let oldest = "\(basePath).\(maxRotatedFiles)"
+-        if fm.fileExists(atPath: oldest) {
+-            try? fm.removeItem(atPath: oldest)
+-        }
+-
+-        // Shift existing rotated files
+-        for i in (1..<maxRotatedFiles).reversed() {
+-            let src = "\(basePath).\(i)"
+-            let dst = "\(basePath).\(i + 1)"
+-            if fm.fileExists(atPath: src) {
+-                try? fm.moveItem(atPath: src, toPath: dst)
+-            }
++    static var identity: BuildIdentity {
++        state.withLock { value in
++            guard let identity = value.identity else { preconditionFailure("AppLogger accessed before configure") }
++            return identity
+         }
++    }
+ 
+-        // Move current to .1
+-        if fm.fileExists(atPath: basePath) {
+-            try? fm.moveItem(atPath: basePath, toPath: "\(basePath).1")
++    static var logFileURL: URL {
++        state.withLock { value in
++            guard let writer = value.writer else { preconditionFailure("AppLogger accessed before configure") }
++            return writer.fileURL
+         }
+-
+-        // Create new file
+-        fm.createFile(atPath: basePath, contents: nil, attributes: nil)
+     }
+ 
+-    private static func openHandle() {
+-        do {
+-            try FileManager.default.createDirectory(
+-                atPath: logDir,
+-                withIntermediateDirectories: true,
+-                attributes: nil
+-            )
+-            if !FileManager.default.fileExists(atPath: logPath) {
+-                FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
+-            }
+-            let fh = try FileHandle(forWritingTo: URL(fileURLWithPath: logPath))
+-            fh.seekToEndOfFile()
+-            fileHandle = fh
+-        } catch {
+-            // Silent fail — logging must never crash the app
+-        }
++    static func openLogInFinder() {
++        guard RuntimeEnvironment.current.role == .app else { return }
++        NSWorkspace.shared.open(logFileURL)
+     }
+ }
+diff --git a/Sources/flowtype/Utilities/DiagnosticLogWriter.swift b/Sources/flowtype/Utilities/DiagnosticLogWriter.swift
+new file mode 100644
+index 0000000..7d18647
+--- /dev/null
++++ b/Sources/flowtype/Utilities/DiagnosticLogWriter.swift
+@@ -0,0 +1,107 @@
++import Foundation
++
++/// All handle, formatter and rotation state is confined to the private serial queue.
++/// Explicit paths keep initialization failure from falling back to production logs.
++final class DiagnosticLogWriter: @unchecked Sendable {
++    let fileURL: URL
++    private let queue: DispatchQueue
++    private let queueKey = DispatchSpecificKey<UInt8>()
++    private let role: ProcessRole
++    private let runID: UUID
++    private let identity: BuildIdentity
++    private let maxLogSize: UInt64
++    private let maxRotatedFiles: Int
++    private let formatter: ISO8601DateFormatter
++    private var handle: FileHandle?
++    private var offset: UInt64 = 0
++
++    init(fileURL: URL, role: ProcessRole, runID: UUID, identity: BuildIdentity,
++         maxLogSize: UInt64 = 10 * 1024 * 1024, maxRotatedFiles: Int = 3,
++         queue: DispatchQueue = DispatchQueue(label: "com.flowtype.diagnostics", qos: .utility)) throws {
++        precondition(maxLogSize > 0 && maxRotatedFiles >= 1)
++        self.fileURL = fileURL; self.queue = queue; self.role = role; self.runID = runID
++        self.identity = identity; self.maxLogSize = maxLogSize; self.maxRotatedFiles = maxRotatedFiles
++        formatter = ISO8601DateFormatter()
++        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
++        formatter.timeZone = TimeZone(secondsFromGMT: 0)
++        queue.setSpecific(key: queueKey, value: 1)
++        // Required startup identity is synchronous, including disk synchronization, and may throw.
++        try onQueue {
++            try open()
++            try appendHeader()
++            try handle?.synchronize()
++        }
++    }
++
++    deinit { try? handle?.close() }
++
++    func log(_ message: String) {
++        if DispatchQueue.getSpecific(key: queueKey) != nil { write(message) }
++        else { queue.async { self.write(message) } }
++    }
++
++    func flush() {
++        onQueue { try? handle?.synchronize() }
++    }
++
++    private func onQueue<T>(_ body: () throws -> T) rethrows -> T {
++        if DispatchQueue.getSpecific(key: queueKey) != nil { return try body() }
++        return try queue.sync(execute: body)
++    }
++
++    private func line(_ message: String) -> Data {
++        let marker = role == .selfTest ? " [SelfTest]" : ""
++        let prefix = "[\(formatter.string(from: Date()))] role=\(role.rawValue) runID=\(runID.uuidString)\(marker) "
++        // Prefix each physical line; multiline diagnostics cannot lose their role/run ownership.
++        let normalized = message.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
++        return Data((normalized.components(separatedBy: "\n").map { prefix + $0 }.joined(separator: "\n") + "\n").utf8)
++    }
++
++    private func append(_ data: Data) throws {
++        guard let handle else { throw CocoaError(.fileWriteUnknown) }
++        try handle.write(contentsOf: data)
++        offset += UInt64(data.count)
++    }
++
++    private func appendHeader() throws {
++        let encoded = try JSONEncoder().encode(identity)
++        let json = String(decoding: encoded, as: UTF8.self)
++        try append(line("BuildIdentity \(json)"))
++    }
++
++    private func write(_ message: String) {
++        do {
++            if handle == nil { try open(); try appendHeader() }
++            // Rotate before the next record, preserving its sentinel in the active file.
++            if offset >= maxLogSize { try rotate(); try open(); try appendHeader() }
++            try append(line(message))
++        } catch {
++            // Later diagnostic I/O failures must not crash dictation. Never select another path.
++            try? handle?.close(); handle = nil
++        }
++    }
++
++    private func open() throws {
++        let fm = FileManager.default
++        try fm.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
++        if !fm.fileExists(atPath: fileURL.path) {
++            guard fm.createFile(atPath: fileURL.path, contents: nil) else { throw CocoaError(.fileWriteUnknown) }
++        }
++        let file = try FileHandle(forWritingTo: fileURL)
++        offset = try file.seekToEnd()
++        handle = file
++    }
++
++    private func rotate() throws {
++        try handle?.close(); handle = nil
++        let fm = FileManager.default
++        func archive(_ index: Int) -> URL { URL(fileURLWithPath: fileURL.path + ".\(index)") }
++        if fm.fileExists(atPath: archive(maxRotatedFiles).path) { try fm.removeItem(at: archive(maxRotatedFiles)) }
++        if maxRotatedFiles > 1 {
++            for index in (1..<maxRotatedFiles).reversed() where fm.fileExists(atPath: archive(index).path) {
++                try fm.moveItem(at: archive(index), to: archive(index + 1))
++            }
++        }
++        try fm.moveItem(at: fileURL, to: archive(1))
++    }
++}
+diff --git a/scripts/generate-build-info.swift b/scripts/generate-build-info.swift
+new file mode 100644
+index 0000000..3dbd39c
+--- /dev/null
++++ b/scripts/generate-build-info.swift
+@@ -0,0 +1,214 @@
++#!/usr/bin/env swift
++import Foundation
++import Darwin
++
++enum GenerationFailure: String, Error { case usage, invalidOutput, gitFailed, dirtySource, shallowHistory, changedSource }
++
++func command(_ arguments: [String], directory: URL) throws -> String {
++    let process = Process()
++    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
++    process.arguments = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"] + arguments
++    process.currentDirectoryURL = directory
++    var environment = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("GIT_") }
++    environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
++    environment["GIT_CONFIG_SYSTEM"] = "/dev/null"
++    environment["GIT_CONFIG_NOSYSTEM"] = "1"
++    process.environment = environment
++    let output = Pipe(); process.standardOutput = output
++    process.standardError = FileHandle.nullDevice
++    process.standardInput = FileHandle.nullDevice
++    try process.run()
++    let data = output.fileHandleForReading.readDataToEndOfFile()
++    process.waitUntilExit()
++    guard process.terminationStatus == 0, let text = String(data: data, encoding: .utf8) else { throw GenerationFailure.gitFailed }
++    return text.trimmingCharacters(in: .newlines)
++}
++
++func matches(_ value: String, _ pattern: String) -> Bool {
++    value.range(of: pattern, options: .regularExpression) != nil
++}
++
++struct GitSnapshot: Equatable {
++    let head: String
++    let sourceTree: String
++    let count: String
++}
++
++func snapshot(repo: URL) throws -> GitSnapshot {
++    guard try command(["rev-parse", "--is-shallow-repository"], directory: repo) == "false" else {
++        throw GenerationFailure.shallowHistory
++    }
++    guard try command(["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"], directory: repo).isEmpty else {
++        throw GenerationFailure.dirtySource
++    }
++    let state = try GitSnapshot(head: command(["rev-parse", "HEAD"], directory: repo),
++                                sourceTree: command(["rev-parse", "HEAD:Sources"], directory: repo),
++                                count: command(["rev-list", "--count", "HEAD"], directory: repo))
++    guard matches(state.head, #"\A[0-9a-fA-F]{40}\z"#), matches(state.sourceTree, #"\A[0-9a-fA-F]{40}\z"#),
++          matches(state.count, #"\A[0-9]+\z"#),
++          try command(["cat-file", "-t", "HEAD:Sources"], directory: repo) == "tree" else {
++        throw GenerationFailure.gitFailed
++    }
++    return state
++}
++
++func verifyUnchanged(_ original: GitSnapshot, repo: URL) throws {
++    guard try snapshot(repo: repo) == original else { throw GenerationFailure.changedSource }
++}
++
++func generate(repo: URL, output: URL, version: String) throws {
++    guard matches(version, #"\A[0-9]+\.[0-9]+\.[0-9]+\z"#) else { throw GenerationFailure.usage }
++    let values = try output.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
++    guard values.isDirectory == true, values.isSymbolicLink != true,
++          try FileManager.default.contentsOfDirectory(atPath: output.path).isEmpty else {
++        throw GenerationFailure.invalidOutput
++    }
++    let state = try snapshot(repo: repo)
++    let formatter = ISO8601DateFormatter()
++    formatter.timeZone = TimeZone(secondsFromGMT: 0)
++    formatter.formatOptions = [.withInternetDateTime]
++    let metadata: [String: Any] = ["schemaVersion": 1, "version": version, "buildNumber": state.count,
++        "gitSHA": state.head, "sourceTree": state.sourceTree, "builtAt": formatter.string(from: Date()), "dirty": false]
++    let plist: [String: Any] = [
++        "CFBundleIdentifier": "com.flowtype.app", "CFBundleName": "FlowType", "CFBundleDisplayName": "FlowType",
++        "CFBundleExecutable": "FlowType", "CFBundleIconFile": "AppIcon", "CFBundlePackageType": "APPL",
++        "CFBundleShortVersionString": version, "CFBundleVersion": state.count, "LSMinimumSystemVersion": "15.0",
++        "LSUIElement": true, "NSHighResolutionCapable": true,
++        "NSMicrophoneUsageDescription": "FlowType needs microphone access to record your voice input.",
++        "NSSpeechRecognitionUsageDescription": "FlowType needs speech recognition access to convert voice to text.",
++        "NSAccessibilityUsageDescription": "FlowType needs accessibility access to detect global hotkeys and inject text into other applications."]
++    let jsonData = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
++    let plistData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
++    try verifyUnchanged(state, repo: repo)
++    let jsonURL = output.appendingPathComponent("FlowTypeBuild.json")
++    let plistURL = output.appendingPathComponent("Info.plist")
++    // Only these newly owned files may be removed if the source changes or a write fails.
++    var owned: [URL] = []
++    do {
++        try jsonData.write(to: jsonURL, options: .withoutOverwriting); owned.append(jsonURL)
++        try plistData.write(to: plistURL, options: .withoutOverwriting); owned.append(plistURL)
++        try verifyUnchanged(state, repo: repo)
++    } catch {
++        for url in owned { try? FileManager.default.removeItem(at: url) }
++        throw error
++    }
++}
++
++func execute(_ arguments: [String]) -> Int32 {
++    do {
++        var repo: String?; var output: String?; var version = "1.0.0"; var sawVersion = false; var index = 0
++        while index < arguments.count {
++            guard index + 1 < arguments.count else { throw GenerationFailure.usage }
++            let value = arguments[index + 1]
++            switch arguments[index] {
++            case "--repo": guard repo == nil else { throw GenerationFailure.usage }; repo = value
++            case "--output": guard output == nil else { throw GenerationFailure.usage }; output = value
++            case "--version": guard !sawVersion else { throw GenerationFailure.usage }; version = value; sawVersion = true
++            default: throw GenerationFailure.usage
++            }
++            index += 2
++        }
++        guard let repo, let output else { throw GenerationFailure.usage }
++        try generate(repo: URL(fileURLWithPath: repo), output: URL(fileURLWithPath: output), version: version)
++        return 0
++    } catch let failure as GenerationFailure { return failure == .usage ? 64 : 1 }
++    catch { return 1 }
++}
++
++// Real independent Git repositories. No current checkout or global Git configuration is modified.
++func selfTest() -> Int32 {
++    var passed = 0; var failed = 0
++    func check(_ condition: Bool, _ name: String) {
++        if condition { passed += 1 } else { failed += 1; print("FAIL: \(name)") }
++    }
++    let fm = FileManager.default
++    let root = fm.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("flowtype-build-info-\(UUID())")
++    do {
++        try fm.createDirectory(at: root, withIntermediateDirectories: true)
++        defer { try? fm.removeItem(at: root) }
++        let repo = root.appendingPathComponent("repo with spaces")
++        try fm.createDirectory(at: repo.appendingPathComponent("Sources"), withIntermediateDirectories: true)
++        _ = try command(["init", "--quiet"], directory: repo)
++        func commit(_ message: String) throws {
++            _ = try command(["add", "."], directory: repo)
++            _ = try command(["-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", "commit", "--quiet", "-m", message], directory: repo)
++        }
++        try Data("synthetic source one\n".utf8).write(to: repo.appendingPathComponent("Sources/main.swift"))
++        try commit("one")
++        try Data("synthetic source two\n".utf8).write(to: repo.appendingPathComponent("Sources/main.swift"))
++        try commit("two")
++        let expectedHEAD = try command(["rev-parse", "HEAD"], directory: repo)
++        let expectedTree = try command(["rev-parse", "HEAD:Sources"], directory: repo)
++        var sequence = 0
++        func output() throws -> URL {
++            sequence += 1
++            let url = root.appendingPathComponent("output-\(sequence)")
++            try fm.createDirectory(at: url, withIntermediateDirectories: false)
++            return url
++        }
++        func run(_ version: String? = nil, source: URL? = nil) throws -> (Int32, URL) {
++            let target = try output()
++            let args = ["--repo", (source ?? repo).path, "--output", target.path] + (version.map { ["--version", $0] } ?? [])
++            return (execute(args), target)
++        }
++        let (status, target) = try run("2.3.4")
++        check(status == 0, "clean nonshallow repo with spaces generates")
++        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: target.appendingPathComponent("FlowTypeBuild.json"))) as! [String: Any]
++        let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: target.appendingPathComponent("Info.plist")), format: nil) as! [String: Any]
++        check(json["version"] as? String == "2.3.4" && plist["CFBundleShortVersionString"] as? String == "2.3.4", "one version in JSON and plist")
++        check(json["buildNumber"] as? String == "2" && plist["CFBundleVersion"] as? String == "2", "full commit count identity")
++        check(json["gitSHA"] as? String == expectedHEAD && json["sourceTree"] as? String == expectedTree, "committed HEAD and Sources tree identity")
++        check((json["builtAt"] as? String)?.range(of: #"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\z"#, options: .regularExpression) != nil, "generator records UTC")
++        check(json["dirty"] as? Bool == false && json["schemaVersion"] as? Int == 1, "clean schema one metadata")
++        check(plist["CFBundleIdentifier"] as? String == "com.flowtype.app" && plist["NSMicrophoneUsageDescription"] != nil &&
++              plist["NSSpeechRecognitionUsageDescription"] != nil && plist["NSAccessibilityUsageDescription"] != nil, "bundle identity and existing usage declarations")
++        let (_, defaults) = try run()
++        let defaultJSON = try JSONSerialization.jsonObject(with: Data(contentsOf: defaults.appendingPathComponent("FlowTypeBuild.json"))) as! [String: Any]
++        check(defaultJSON["version"] as? String == "1.0.0", "default version")
++        for version in ["1.2", "1.2.3\n", "1.2.<3>", "1.2.3$(touch injected)", "-1.2.3"] {
++            let (code, destination) = try run(version)
++            check(code == 64, "reject invalid version with usage64")
++            check(try fm.contentsOfDirectory(atPath: destination.path).isEmpty, "invalid version writes nothing")
++        }
++        check(execute(["--repo"]) == 64 && execute(["--bogus", "value"]) == 64, "CLI malformed args usage64")
++        check(execute(["--repo", repo.path, "--output", target.path, "--git-sha", "fake"]) == 64, "no arbitrary identity CLI override")
++        let originalJSON = try Data(contentsOf: target.appendingPathComponent("FlowTypeBuild.json"))
++        check(execute(["--repo", repo.path, "--output", target.path]) == 1, "reject occupied output")
++        check(try Data(contentsOf: target.appendingPathComponent("FlowTypeBuild.json")) == originalJSON, "occupied output preserved")
++        let destination = try output()
++        let alias = root.appendingPathComponent("output-link")
++        try fm.createSymbolicLink(at: alias, withDestinationURL: destination)
++        check(execute(["--repo", repo.path, "--output", alias.path]) == 1, "symlink output rejected")
++        try Data("dirty\n".utf8).write(to: repo.appendingPathComponent("Sources/main.swift"))
++        let (dirty, dirtyOutput) = try run()
++        check(try dirty == 1 && fm.contentsOfDirectory(atPath: dirtyOutput.path).isEmpty, "dirty tracked tree rejected without output")
++        _ = try command(["checkout", "--", "Sources/main.swift"], directory: repo)
++        try Data("untracked".utf8).write(to: repo.appendingPathComponent("untracked"))
++        let (untracked, _) = try run()
++        check(untracked == 1, "untracked source rejected")
++        try fm.removeItem(at: repo.appendingPathComponent("untracked"))
++        let shallow = root.appendingPathComponent("shallow")
++        _ = try command(["clone", "--quiet", "--depth", "1", repo.absoluteString, shallow.path], directory: root)
++        let (shallowStatus, shallowOutput) = try run(source: shallow)
++        check(try shallowStatus == 1 && fm.contentsOfDirectory(atPath: shallowOutput.path).isEmpty, "shallow release identity rejected")
++        let state = try snapshot(repo: repo)
++        try Data("new committed source\n".utf8).write(to: repo.appendingPathComponent("Sources/main.swift"))
++        try commit("third")
++        do { try verifyUnchanged(state, repo: repo); check(false, "HEAD change rejected") }
++        catch GenerationFailure.changedSource { check(true, "HEAD change rejected") }
++        _ = try command(["reset", "--hard", expectedHEAD], directory: repo)
++        try Data("intervening edit\n".utf8).write(to: repo.appendingPathComponent("Sources/main.swift"))
++        do { try verifyUnchanged(state, repo: repo); check(false, "intervening dirty tree rejected") }
++        catch GenerationFailure.dirtySource { check(true, "intervening dirty tree rejected") }
++        _ = try command(["checkout", "--", "Sources/main.swift"], directory: repo)
++        check(try command(["status", "--porcelain"], directory: repo).isEmpty, "fixture source remains clean")
++    } catch { failed += 1; print("FAIL: fixture operation") }
++    print("=== build-info generator self-test: \(passed) passed, \(failed) failed ===")
++    return failed == 0 ? 0 : 1
++}
++
++let arguments = Array(CommandLine.arguments.dropFirst())
++if arguments == ["--self-test"] { exit(selfTest()) }
++let result = execute(arguments)
++if result != 0 { FileHandle.standardError.write(Data("FlowType build identity generation failed\n".utf8)) }
++exit(result)

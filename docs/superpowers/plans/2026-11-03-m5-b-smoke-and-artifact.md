@@ -12,9 +12,9 @@
 
 ## 执行状态（2026-11-03更新）
 
-B1–B3实现与任务审查通过（7488553 / df63cd2 / c21cb25）。B3一次真实build/check已证明strict/deep、移位资源、Metal及实际MLX；最终C候选十次smoke未执行。步骤勾选表示B源码和该检查点，不扩展为最终发布。
+B1–B3实现与任务审查通过（7488553 / df63cd2 / c21cb25）。B3一次真实build/check已证明strict/deep、移位资源、Metal及实际MLX；该历史记录保持不变。最终C候选4cdfaf4/build353在唯一release运行中又通过strict/deep、移位资源、实际Metal/MLX及十次独立smoke；全24技术阶段Pass、full24334/0。全M5源码审查通过，整体仍因41项人工及远端CI Pending而exit2。
 
-- [ ] 后续独立归档B原始安全证据；等待controller调度，不修改历史日志。
+- [x] controller授权后，从安全staging独立归档B原始证据；[开发索引](../../evidence/2026-11-03-m5-development/README.md)保留历史身份和原日志。
 
 ## Global Constraints
 
@@ -97,7 +97,7 @@ JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smo
 - [x] **RED 验证：** 编译独立 `ArtifactPackagingSelfTests.swift`（自身@main，仅Foundation/Process，复用BoundedProcess）到 `build/m5-packaging-tests`；先运行看到负例失败。`bash -n scripts/build-app.sh scripts/build-dmg.sh scripts/check-app.sh`验证语法。
 - [x] **GREEN：** 实现staging/标准资源封装/manifest/移位检查和安全恢复；任何shader定位都不调用Python/安装/下载。如果所选MLX布局实际加载失败，保留Fail并定位，不篡改依赖或降级门禁。
 - [x] **验证：** fixture与语法通过，提交全部源码/脚本使checkout clean后，再运行一次真实build-app→check-app（runner watchdog分别900s/30s）。严格签名、移位资源、真实GPU微计算全有证据才artifact Pass；无法取得已有shader则该项Pending/Fail，不安装补齐。签名完成后不改bundle任何资源。此任务源码若仅shell改动不重复未变full；若改了B2源码，先focused再full。
-- [x] **源码提交：** scoped stage/diff check，提交 `build: package portable resources with strict signing`；真实门禁证据已在当前执行记录中审阅，最终独立docs归档仍待后续调度；报告准确记录被测源码commit和binary hash。不运行现有正在使用的正常app。
+- [x] **源码提交：** scoped stage/diff check，提交 `build: package portable resources with strict signing`；真实门禁证据已在当前执行记录中审阅，最终独立docs归档已按controller授权完成；报告准确记录被测源码commit和binary hash。不运行现有正在使用的正常app。
 
 ## 包级完成条件与交接
 

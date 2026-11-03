@@ -2,7 +2,7 @@
 
 历史规划记录：日期2026-11-03；规划基线b00b0a5，产品源码5dc1693/M4完整自测23872/0。用户该轮要求“先对M5做计划”，只产出设计/实施计划/验收台账；未授权该轮实施、安装、修改权限或发布。沿用后续子智能体逐项开发与独立审查偏好，当时开发尚未开始。
 
-执行更新（后续授权，2026-11-03）：以上为保留的历史规划轮，不是当前源码状态。A/B及C1/C2实现与任务独立审查通过；C3源码/文档/fixture待审，全M5源码审查和最终release技术门禁待后续调度。B3历史候选strict/deep、移位资源与实际Metal/MLX已Pass；远端CI、最终候选十次smoke及41个人工required叶子仍Pending。[执行索引](../../evidence/2026-11-03-m5-development/README.md)分列源码、产物、CI和人工，不更改M1–M4历史记录。
+执行更新（后续授权，2026-11-03）：以上为保留的历史规划轮，不是当前源码状态。A/B/C实现、任务及全M5源码独立审查通过。最终clean源码4cdfaf4、候选1.0.0/build353的唯一release运行已通过24个技术阶段、full24334/0、十次独立smoke、strict/deep、移位资源及实际Metal/MLX；整体exit2/Pending，远端CI及41个人工required叶子仍Pending。安全证据已归档，文档提交与被测源码身份分列。[执行索引](../../evidence/2026-11-03-m5-development/README.md)分列源码、产物、CI和人工，不更改M1–M4历史记录。
 
 ## 1. 意图、方案与边界
 
@@ -105,4 +105,4 @@ required：R1普通app冷启动10次（smoke10次另算），R2连续20次成功
 
 设计自检：所有旧M5目标有A/B/C owner；3s/5s矛盾已解决，suite并发、legacy Keychain、shared.prepare模型加载、真实tap触发、资源fallback、CI缺shader、完整签名和人工Pending均有明确合同。签名布局为依赖静态支持的选定实现，成功须运行证明，不虚记可行性已证实。
 
-历史规划状态为Planning only；原始基线和调研保持原样。当前[M5-A](../plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../plans/2026-11-03-m5-c-verification-and-acceptance.md)执行状态与checkbox已分别更新。C3/全M5源码审查、最终技术release和归档尚未完成，不把B3历史检查点或工具fixture当作最终通过。
+历史规划状态为Planning only；原始基线和调研保持原样。当前[M5-A](../plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../plans/2026-11-03-m5-c-verification-and-acceptance.md)执行状态与checkbox已分别更新。C3/全M5源码审查、唯一最终release技术门禁和独立文档证据归档已完成。最终被测SHA固定4cdfaf4；41项人工与远端CI仍Pending，不从技术通过推断发布完成。B3历史检查点与工具fixture仍单独保留。

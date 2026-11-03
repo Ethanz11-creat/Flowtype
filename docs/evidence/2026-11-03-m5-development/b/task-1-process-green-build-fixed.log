@@ -1,0 +1,7 @@
+scripts/verification/ProcessRunnerSelfTests.swift:11:74: error: cannot find '_NSGetEnviron' in scope
+ 9 |         var pid: pid_t = 0
+10 |         let status = argv.withUnsafeMutableBufferPointer { buffer in
+11 |             posix_spawn(&pid, executable, nil, nil, buffer.baseAddress!, _NSGetEnviron().pointee)
+   |                                                                          `- error: cannot find '_NSGetEnviron' in scope
+12 |         }
+13 |         precondition(status == 0)

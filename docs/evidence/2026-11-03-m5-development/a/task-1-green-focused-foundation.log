@@ -1,0 +1,8 @@
+  ✗ FAIL: M5 rejects unsafe validation root
+  ✗ FAIL: M5 rejects unsafe validation root
+  ✗ FAIL: M5 rejects unsafe validation root
+  ✗ FAIL: M5 rejects unsafe validation root
+  ✗ FAIL: M5 rejects unsafe validation root
+  ✗ FAIL: M5 runtime fixture operation failed
+=== FlowType --self-test ===
+=== M5 runtime self-test: 85 passed, 6 failed ===

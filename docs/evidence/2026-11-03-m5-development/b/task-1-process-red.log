@@ -1,0 +1,4 @@
+FAIL: TERM grace then bounded KILL
+FAIL: all owned descendants terminated
+FAIL: missing child handshake fails without launching target
+=== process runner self-test: 7 passed, 3 failed ===

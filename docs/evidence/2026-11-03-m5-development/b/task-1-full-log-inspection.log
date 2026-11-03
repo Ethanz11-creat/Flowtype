@@ -1,0 +1,14 @@
+{
+  "exitCode": 0,
+  "termination": "normal",
+  "timedOut": false,
+  "durationMs": 198198,
+  "runID": "C2CA72A3-FD3A-4012-8CF3-3D4B244E40A7",
+  "lineCount": 557,
+  "firstIsHeader": true,
+  "allLinesOwned": true,
+  "allLinesUTC": true,
+  "developmentIdentity": true,
+  "lastIsSummary": true,
+  "stderrEmpty": true
+}

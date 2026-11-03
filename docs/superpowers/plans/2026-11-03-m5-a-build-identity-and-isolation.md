@@ -14,6 +14,8 @@
 
 A1–A3实现与任务审查通过，提交aea7dc9 / ffd4ba4 / d6aaace；以下步骤按已完成源码任务勾选。原规划基线与历史命令保持记录，当前执行索引见[开发证据](../../evidence/2026-11-03-m5-development/README.md)。A完成不等于M5发布或GUI通过。
 
+最终更新：全M5源码审查已通过4cdfaf4；唯一最终release运行的24个技术阶段、full24334/0及十次smoke均Pass。A原始安全证据已由controller staging归档，原日志保持不变。最终候选为1.0.0/build353；整体仍因41项人工及远端CI Pending而exit2，关于菜单GUI仍Pending。
+
 ## Global Constraints
 
 - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。

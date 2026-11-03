@@ -1,0 +1,867 @@
+# Review package: c21cb25e4d37249d3d932939a6157b946b64a243..653ecb8b48acd1581629807b4cfa231e0128e977
+
+## Commits
+653ecb8 build: add bounded code and artifact verification lanes
+
+## Files changed
+ scripts/verification/ArtifactPackaging.swift     |  21 ++
+ scripts/verification/ManualValidation.swift      |   8 +
+ scripts/verification/VerificationCLI.swift       |  44 +++
+ scripts/verification/VerificationFixture.swift   |  45 +++
+ scripts/verification/VerificationReport.swift    | 344 +++++++++++++++++++++++
+ scripts/verification/VerificationSelfTests.swift | 250 ++++++++++++++++
+ scripts/verify.sh                                |  36 +++
+ 7 files changed, 748 insertions(+)
+
+## Diff
+diff --git a/scripts/verification/ArtifactPackaging.swift b/scripts/verification/ArtifactPackaging.swift
+index 5b860f4..578d1c1 100644
+--- a/scripts/verification/ArtifactPackaging.swift
++++ b/scripts/verification/ArtifactPackaging.swift
+@@ -89,20 +89,27 @@ func packagingCommand(_ executable: String, _ args: [String], cwd: URL, logs: UR
+ func packagingGit(_ args: [String], repo: URL, logs: URL) throws -> String {
+     let (result, bytes) = try packagingCommand("/usr/bin/git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"] + args, cwd: repo, logs: logs)
+     guard result.cliExitCode == 0 else { throw PackagingFailure.sourceInvalid }
+     return String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .newlines)
+ }
+ func packagingSnapshot(repo: URL, logs: URL) throws -> String {
+     guard try packagingGit(["rev-parse", "--is-shallow-repository"], repo: repo, logs: logs) == "false",
+           try packagingGit(["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"], repo: repo, logs: logs).isEmpty else { throw PackagingFailure.sourceInvalid }
+     return try packagingGit(["rev-parse", "HEAD"], repo: repo, logs: logs)
+ }
++func packagingCandidateInUse(_ app: URL, _ logs: URL) throws -> Bool {
++    let binary = app.appendingPathComponent("Contents/MacOS/FlowType")
++    guard FileManager.default.fileExists(atPath: binary.path) else { return false }
++    let (result, _) = try packagingCommand("/usr/sbin/lsof", ["-t", binary.path], cwd: app.deletingLastPathComponent(), logs: logs)
++    guard result.termination == .normal, result.exitCode == 0 || result.exitCode == 1 else { throw PackagingFailure.inUse }
++    return result.exitCode == 0
++}
+ func canonicalExisting(_ url: URL) throws -> URL {
+     guard let value = realpath(url.path, nil) else { throw PackagingFailure.restoreFailed }
+     defer { free(value) }
+     return URL(fileURLWithPath: String(cString: value))
+ }
+ func resourceDigests(_ input: URL) throws -> [ResourceDigest] {
+     let app = try canonicalExisting(input)
+     let root = app.appendingPathComponent("Contents/Resources")
+     guard let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { throw PackagingFailure.manifestInvalid }
+     var rows: [ResourceDigest] = []
+@@ -157,20 +164,28 @@ final class PackagingLock {
+     }
+     deinit { _ = flock(fd, LOCK_UN); close(fd) }
+ }
+ struct ArtifactPackager {
+     let repo: URL
+     let adapters: PackagingAdapters
+     var build: URL { repo.appendingPathComponent("build") }
+     var publicationURL: URL { build.appendingPathComponent(".m5-publication.json") }
+     var hidingURL: URL { build.appendingPathComponent(".m5-resources.json") }
+     private let fm = FileManager.default
++    /// Recovery reuses this exact journal/lock implementation. No build/sign/artifact adapter can run.
++    static func recoverOwned(repository: URL) throws {
++        let adapters = PackagingAdapters(releaseBuild: { _, _ in throw PackagingFailure.toolFailed }, releaseDirectory: { _, _ in throw PackagingFailure.toolFailed },
++            generateIdentity: { _, _, _, _ in throw PackagingFailure.toolFailed }, writeManifest: { _, _, _ in throw PackagingFailure.toolFailed },
++            sign: { _, _ in throw PackagingFailure.toolFailed }, verify: { _, _ in throw PackagingFailure.toolFailed },
++            inUse: packagingCandidateInUse, artifact: { _, _, _, _ in throw PackagingFailure.toolFailed })
++        try ArtifactPackager(repo: repository, adapters: adapters).recover()
++    }
+     func write<T: Encodable>(_ value: T, to url: URL) throws { try JSONEncoder().encode(value).write(to: url, options: .atomic) }
+     func exists(_ url: URL) -> Bool { fm.fileExists(atPath: url.path) || (try? fm.destinationOfSymbolicLink(atPath: url.path)) != nil }
+     func stage(_ token: String) -> URL { build.appendingPathComponent(".m5-stage-" + token) }
+     func requireReleaseDirectory(_ directory: URL) throws {
+         let repository = try canonicalExisting(repo).path
+         guard try canonicalExisting(repo.appendingPathComponent(".build")).path == repository + "/.build",
+               try canonicalExisting(directory).path.hasPrefix(repository + "/.build/"), directory.lastPathComponent == "release" else {
+             throw PackagingFailure.journalInvalid
+         }
+     }
+@@ -181,20 +196,26 @@ struct ArtifactPackager {
+             try fm.removeItem(at: directory)
+         }
+     }
+     func recoverPublication() throws {
+         guard exists(publicationURL) else { return }
+         let j = try JSONDecoder().decode(PublicationJournal.self, from: Data(contentsOf: publicationURL))
+         guard UUID(uuidString: j.token) != nil else { throw PackagingFailure.journalInvalid }
+         let app = build.appendingPathComponent("FlowType.app"), manifest = build.appendingPathComponent("FlowType.manifest.json")
+         let backupApp = build.appendingPathComponent(".m5-backup-\(j.token).app")
+         let backupManifest = build.appendingPathComponent(".m5-backup-\(j.token).manifest.json")
++        // Recovery can run before buildApp's ordinary in-use guard. Preserve any active candidate/backup.
++        let recoveryLogs = build.appendingPathComponent("recovery-\(UUID())")
++        try fm.createDirectory(at: recoveryLogs, withIntermediateDirectories: false)
++        for candidate in [app, backupApp] where exists(candidate) {
++            guard try !adapters.inUse(candidate, recoveryLogs) else { throw PackagingFailure.inUse }
++        }
+         func hash(_ url: URL) throws -> String { try packagingFingerprint(url) }
+         func restore(_ current: URL, _ backup: URL, old: String?, new: String) throws {
+             func retainNew() throws {
+                 let owned = stage(j.token)
+                 if !exists(owned) {
+                     try fm.createDirectory(at: owned, withIntermediateDirectories: false)
+                     try Data(j.token.utf8).write(to: owned.appendingPathComponent(".owner"))
+                 }
+                 guard try String(contentsOf: owned.appendingPathComponent(".owner"), encoding: .utf8) == j.token else { throw PackagingFailure.journalInvalid }
+                 let target = owned.appendingPathComponent(current.lastPathComponent)
+diff --git a/scripts/verification/ManualValidation.swift b/scripts/verification/ManualValidation.swift
+new file mode 100644
+index 0000000..a72221f
+--- /dev/null
++++ b/scripts/verification/ManualValidation.swift
+@@ -0,0 +1,8 @@
++import Foundation
++
++/// C1 deliberately does not attest manual or remote CI evidence. C3 supplies strict validation.
++enum ManualValidation {
++    static func evaluate(manualReport: URL?, ciReport: URL?, artifact: ArtifactManifest?) -> (VerificationStatus, VerificationStatus) {
++        (.pending, .pending)
++    }
++}
+diff --git a/scripts/verification/VerificationCLI.swift b/scripts/verification/VerificationCLI.swift
+new file mode 100644
+index 0000000..9d3e90e
+--- /dev/null
++++ b/scripts/verification/VerificationCLI.swift
+@@ -0,0 +1,44 @@
++import Foundation
++import Darwin
++
++struct VerificationOptions {
++    let lane: VerificationLane; let manual: URL?; let ci: URL?
++    static func parse(_ arguments: [String]) throws -> VerificationOptions {
++        var lane: VerificationLane?; var manual: URL?; var ci: URL?; var index = 0
++        while index < arguments.count {
++            guard index + 1 < arguments.count else { throw VerificationFailure.usage }
++            let value = arguments[index + 1]
++            switch arguments[index] {
++            case "--lane": guard lane == nil, let parsed = VerificationLane(rawValue: value) else { throw VerificationFailure.usage }; lane = parsed
++            case "--manual-report": guard manual == nil else { throw VerificationFailure.usage }; manual = URL(fileURLWithPath: value)
++            case "--ci-report": guard ci == nil else { throw VerificationFailure.usage }; ci = URL(fileURLWithPath: value)
++            default: throw VerificationFailure.usage
++            }
++            index += 2
++        }
++        return VerificationOptions(lane: lane ?? .code, manual: manual, ci: ci)
++    }
++}
++@main enum VerificationCLI {
++    static func main() {
++        let arguments = Array(CommandLine.arguments.dropFirst())
++        do { try BoundedProcess.dispatchChildIfNeeded(arguments: arguments) }
++        catch { FileHandle.standardError.write(Data("FlowType verification: child control failed\n".utf8)); exit(125) }
++        if arguments == ["--self-test"] { exit(VerificationSelfTests.run()) }
++        do {
++            let options = try VerificationOptions.parse(arguments)
++            try packagingCancellation.install()
++            let repository = try canonicalExisting(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
++            let output = try VerificationPaths.prepare(repository: repository).appendingPathComponent(UUID().uuidString)
++            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
++            let report = try VerificationRunner.run(lane: options.lane, repository: repository, output: output, manualReport: options.manual, ciReport: options.ci)
++            print("Verification \(options.lane.rawValue): \(report.status.rawValue)")
++            print("build/verification/\(output.lastPathComponent)/verify-report.json")
++            exit(report.exitCode)
++        } catch {
++            let failure = (error as? VerificationFailure) ?? .toolFailed
++            FileHandle.standardError.write(Data("FlowType verification: \(failure.rawValue)\n".utf8))
++            exit(failure == .usage ? 64 : 1)
++        }
++    }
++}
+diff --git a/scripts/verification/VerificationFixture.swift b/scripts/verification/VerificationFixture.swift
+new file mode 100644
+index 0000000..73a5042
+--- /dev/null
++++ b/scripts/verification/VerificationFixture.swift
+@@ -0,0 +1,45 @@
++import Foundation
++import Darwin
++
++/// Separate synthetic executable, compiled only by the verifier's self-test driver.
++@main enum VerificationFixture {
++    static func main() throws {
++        let args = Array(CommandLine.arguments.dropFirst())
++        let operation = args[0], scenario = args[1], config = URL(fileURLWithPath: args[2]), output = URL(fileURLWithPath: args[3])
++        let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: config))
++        let actualArgs = Array(args.dropFirst(4))
++        try JSONSerialization.data(withJSONObject: actualArgs).write(to: output.deletingLastPathComponent().appendingPathComponent("argv.json"))
++        if operation == "platform-os" { print("15.0"); return }
++        if operation == "platform-arch" { print("arm64"); return }
++        if operation == "platform-swift" { print("Apple Swift version 6.2.0"); return }
++        if operation == "code-build" || operation == "artifact-build" {
++            if scenario == "build-fail" { exit(1) }; return
++        }
++        if operation == "code-full" {
++            if scenario == "full-timeout" { Thread.sleep(forTimeInterval: 4) }
++            if scenario == "focused" { print("=== M5 runtime self-test: 12 passed, 0 failed ==="); return }
++            if scenario == "no-summary" { print("finished"); return }
++            print("=== FlowType --self-test ==="); print("=== self-test: 42 passed, 0 failed ==="); return
++        }
++        if operation == "artifact-signature" { if scenario == "signature-fail" { exit(1) }; return }
++        if operation == "artifact-check" && scenario == "check-timeout" { Thread.sleep(forTimeInterval: 4) }
++        let mode = operation == "artifact-check" ? "artifact" : "smoke"
++        if scenario == "seventh-crash" && operation == "smoke-07" { exit(1) }
++        var report: [String: Any] = ["schemaVersion": 1, "mode": mode, "ok": true, "role": "smokeTest", "runID": UUID().uuidString,
++            "durationMs": 6001, "failureCode": NSNull(), "buildInfo": ["origin": "packaged", "metadata": metadata, "failureCode": NSNull()]]
++        if mode == "artifact" {
++            report.merge(["appResources": true, "metalLibrary": true, "mlxOperation": true, "resolvedInsideApp": true]) { _, new in new }
++            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
++            try (JSONSerialization.data(withJSONObject: report) + Data("\n".utf8)).write(to: output.appendingPathComponent("artifact.stdout"))
++            let hashes = ["binary": String(repeating: "d", count: 64), "metadata": String(repeating: "e", count: 64), "shader": String(repeating: "c", count: 64)]
++            let check: [String: Any] = ["schemaVersion": 1, "ok": true, "failureCode": NSNull(), "signature": true, "resourcesHidden": true,
++                "resourcesRestored": true, "sourceCommit": String(repeating: "a", count: 40), "hashesBefore": hashes, "hashesAfter": hashes, "artifact": report]
++            try JSONSerialization.data(withJSONObject: check).write(to: output.appendingPathComponent("check-result.json")); return
++        }
++        report.merge(["readiness": "blocked", "ax": "denied", "mic": "notDetermined", "speech": "denied", "probeTimerTicks": 1, "windowHealthTicks": 1, "tap": "disabledForValidation"]) { _, new in new }
++        if scenario == "inflated-duration" { report["durationMs"] = 600_000 }
++        if scenario == "skip" { report["ok"] = false; report["failureCode"] = "windowServerUnavailable" }
++        FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: report) + Data("\n".utf8))
++        if scenario == "skip" { exit(69) }
++    }
++}
+diff --git a/scripts/verification/VerificationReport.swift b/scripts/verification/VerificationReport.swift
+new file mode 100644
+index 0000000..c9366b4
+--- /dev/null
++++ b/scripts/verification/VerificationReport.swift
+@@ -0,0 +1,344 @@
++import Foundation
++import Darwin
++
++// Standalone wire records: this tool never imports the product's @main module.
++enum VerificationStatus: String, Codable { case pass = "Pass", fail = "Fail", pending = "Pending", skip = "Skip" }
++enum VerificationLane: String, Codable { case code, artifact, release }
++enum VerificationFailure: String, Error, Codable {
++    case usage
++    case platformUnsupported, sourceInvalid, sourceChanged, dirtySource, shallowHistory, buildFailed, fullTestFailed
++    case signatureFailed, artifactFailed, smokeFailed, malformedReport, identityMismatch, duplicateRunID
++    case timedOut, windowServerUnavailable, recoveryFailed, outputUnavailable, notExecuted, toolFailed
++}
++struct BuildMetadataRecord: Codable, Equatable {
++    let schemaVersion: Int; let version: String; let buildNumber: String; let gitSHA: String
++    let sourceTree: String; let builtAt: String; let dirty: Bool
++}
++struct ArtifactResourceRecord: Codable, Equatable { let path: String; let sha256: String }
++struct ArtifactManifest: Codable, Equatable {
++    let schemaVersion: Int; let buildInfo: BuildMetadataRecord; let architecture: String
++    let binarySHA256: String; let buildInfoSHA256: String; let shaderSHA256: String
++    let resources: [ArtifactResourceRecord]
++}
++struct SourceIdentity: Codable, Equatable { let gitSHA: String; let sourceTree: String; let dirty: Bool }
++struct SourceSnapshot: Equatable { let identity: SourceIdentity; let fingerprint: String; let shallow: Bool }
++struct VerificationPhase: Codable {
++    let name: String; var status: VerificationStatus; var exitCode: Int32? = nil; var timedOut = false
++    var failureCode: VerificationFailure? = nil; var evidence: [String] = []
++    enum CodingKeys: String, CodingKey { case name, status, exitCode, timedOut, failureCode, evidence }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        try c.encode(name, forKey: .name); try c.encode(status, forKey: .status); try c.encode(exitCode, forKey: .exitCode)
++        try c.encode(timedOut, forKey: .timedOut); try c.encode(failureCode, forKey: .failureCode); try c.encode(evidence, forKey: .evidence)
++    }
++}
++struct VerificationReport: Codable {
++    let schemaVersion: Int; let runID: String; let lane: VerificationLane
++    var status: VerificationStatus; var sourceIdentity: SourceIdentity?; var artifactIdentity: ArtifactManifest?
++    var phases: [VerificationPhase]; var manualStatus: VerificationStatus; var ciStatus: VerificationStatus
++    var exitCode: Int32 { status == .pass ? 0 : status == .fail ? 1 : 2 }
++    enum CodingKeys: String, CodingKey { case schemaVersion, runID, lane, status, sourceIdentity, artifactIdentity, phases, manualStatus, ciStatus }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(runID, forKey: .runID); try c.encode(lane, forKey: .lane)
++        try c.encode(status, forKey: .status); try c.encode(sourceIdentity, forKey: .sourceIdentity); try c.encode(artifactIdentity, forKey: .artifactIdentity)
++        try c.encode(phases, forKey: .phases); try c.encode(manualStatus, forKey: .manualStatus); try c.encode(ciStatus, forKey: .ciStatus)
++    }
++}
++struct VerificationCommand {
++    let phase: String; let command: BoundedCommand; let childRoot: URL; let validationRoot: URL; let checkOutput: URL
++}
++struct VerificationDependencies {
++    let execute: (VerificationCommand) throws -> BoundedResult
++    let snapshot: (URL, URL) throws -> SourceSnapshot
++    let manifest: (URL) throws -> ArtifactManifest
++    let recover: (URL) throws -> Void
++    let ciCode: Bool
++    var writeReport: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
++}
++
++private enum WireFailure: String, Codable { case startupFailed, timerDeadline, windowServerUnavailable, invalidBuildInfo, resourceMissing, resourceMalformed, resourceOutsideBundle, metalUnavailable, metalLibraryInvalid, mlxOperationFailed, unexpectedFailure }
++private enum WireOrigin: String, Codable { case packaged, development, invalid }
++private enum WireReadiness: String, Codable { case ready, degraded, blocked }
++private enum WirePermission: String, Codable { case granted, denied, notDetermined, unknown }
++private struct WireIdentity: Codable, Equatable { let origin: WireOrigin; let metadata: BuildMetadataRecord?; let failureCode: String? }
++private struct RuntimeWire: Codable, Equatable {
++    let schemaVersion: Int; let mode: String; let ok: Bool; let role: String; let runID: String
++    let buildInfo: WireIdentity; let durationMs: Int; let failureCode: WireFailure?
++    let readiness: WireReadiness?; let ax: WirePermission?; let mic: WirePermission?; let speech: WirePermission?
++    let probeTimerTicks: Int?; let windowHealthTicks: Int?; let tap: String?
++    let appResources: Bool?; let metalLibrary: Bool?; let mlxOperation: Bool?; let resolvedInsideApp: Bool?
++}
++private struct HashTriple: Codable, Equatable { let binary: String; let metadata: String; let shader: String }
++private struct CheckWire: Decodable {
++    let schemaVersion: Int; let ok: Bool; let failureCode: String?; let signature: Bool
++    let resourcesHidden: Bool; let resourcesRestored: Bool; let hashesBefore: HashTriple; let hashesAfter: HashTriple
++    let sourceCommit: String; let artifact: RuntimeWire
++}
++enum VerificationValidation {
++    static func smokeTiming(_ bytes: Data, externalMs: Int) throws {
++        let wire = try JSONDecoder().decode(RuntimeWire.self, from: bytes)
++        guard externalMs >= 6000, wire.durationMs <= externalMs + 250 else { throw VerificationFailure.smokeFailed }
++    }
++    static func fullSummary(_ bytes: Data) -> Bool {
++        guard let text = String(data: bytes, encoding: .utf8) else { return false }
++        let lines = text.components(separatedBy: "\n")
++        let regex = try! NSRegularExpression(pattern: #"\A=== self-test: ([0-9]+) passed, ([0-9]+) failed ===\z"#)
++        let matches = lines.compactMap { line -> (Int, Int)? in
++            let range = NSRange(line.startIndex..<line.endIndex, in: line)
++            guard let match = regex.firstMatch(in: line, range: range), let p = Range(match.range(at: 1), in: line),
++                  let f = Range(match.range(at: 2), in: line), let passed = Int(line[p]), let failed = Int(line[f]) else { return nil }
++            return (passed, failed)
++        }
++        return lines.filter { $0 == "=== FlowType --self-test ===" }.count == 1 && matches.count == 1 && matches[0].0 > 0 && matches[0].1 == 0
++    }
++    static func runtime(_ bytes: Data, mode: String, manifest: ArtifactManifest, exit: Int32, seen: inout Set<String>) throws -> VerificationStatus {
++        guard let text = String(data: bytes, encoding: .utf8), text.components(separatedBy: "\n").count == 2, text.hasSuffix("\n") else { throw VerificationFailure.malformedReport }
++        let record: RuntimeWire
++        do { record = try JSONDecoder().decode(RuntimeWire.self, from: bytes) } catch { throw VerificationFailure.malformedReport }
++        let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any]
++        guard object?["failureCode"] != nil, (object?["buildInfo"] as? [String: Any])?["failureCode"] is NSNull,
++              record.schemaVersion == 1, record.mode == mode, record.role == "smokeTest", record.durationMs >= 0,
++              UUID(uuidString: record.runID) != nil else { throw VerificationFailure.malformedReport }
++        guard record.buildInfo.origin == .packaged, record.buildInfo.failureCode == nil, record.buildInfo.metadata == manifest.buildInfo else { throw VerificationFailure.identityMismatch }
++        let canonicalID = UUID(uuidString: record.runID)!.uuidString
++        guard seen.insert(canonicalID).inserted else { throw VerificationFailure.duplicateRunID }
++        if mode == "smoke" {
++            guard record.readiness != nil, record.ax != nil, record.mic != nil, record.speech != nil,
++                  record.probeTimerTicks != nil, record.windowHealthTicks != nil, record.tap == "disabledForValidation" else { throw VerificationFailure.malformedReport }
++            if exit == 69, !record.ok, record.failureCode == .windowServerUnavailable { return .skip }
++            guard exit == 0, record.ok, record.failureCode == nil, object?["failureCode"] is NSNull,
++                  record.durationMs >= 6000, record.probeTimerTicks! >= 1, record.windowHealthTicks! >= 1 else { throw VerificationFailure.smokeFailed }
++        } else {
++            guard mode == "artifact", exit == 0, record.ok, record.failureCode == nil, object?["failureCode"] is NSNull,
++                  record.appResources == true, record.metalLibrary == true, record.mlxOperation == true, record.resolvedInsideApp == true else { throw VerificationFailure.artifactFailed }
++        }
++        return .pass
++    }
++    static func check(_ directory: URL, manifest: ArtifactManifest, seen: inout Set<String>) throws {
++        let data = try Data(contentsOf: directory.appendingPathComponent("check-result.json"))
++        let record: CheckWire
++        do { record = try JSONDecoder().decode(CheckWire.self, from: data) } catch { throw VerificationFailure.malformedReport }
++        let expected = HashTriple(binary: manifest.binarySHA256, metadata: manifest.buildInfoSHA256, shader: manifest.shaderSHA256)
++        guard record.schemaVersion == 1, record.ok, record.failureCode == nil, record.signature, record.resourcesHidden, record.resourcesRestored,
++              record.hashesBefore == expected, record.hashesAfter == expected, record.sourceCommit == manifest.buildInfo.gitSHA,
++              (try JSONSerialization.jsonObject(with: data) as? [String: Any])?["failureCode"] is NSNull else { throw VerificationFailure.identityMismatch }
++        let stdout = try Data(contentsOf: directory.appendingPathComponent("artifact.stdout"))
++        _ = try runtime(stdout, mode: "artifact", manifest: manifest, exit: 0, seen: &seen)
++        guard try JSONDecoder().decode(RuntimeWire.self, from: stdout) == record.artifact else { throw VerificationFailure.identityMismatch }
++    }
++    static func loadManifest(repository: URL) throws -> ArtifactManifest {
++        let app = repository.appendingPathComponent("build/FlowType.app")
++        guard try canonicalExisting(app).path == canonicalExisting(repository).appendingPathComponent("build/FlowType.app").path else { throw VerificationFailure.identityMismatch }
++        let file = repository.appendingPathComponent("build/FlowType.manifest.json")
++        let record = try JSONDecoder().decode(ArtifactManifest.self, from: Data(contentsOf: file))
++        // Reuse B3's actual-byte verification, but decode and report an independent wire type.
++        _ = try validateManifest(app: app, file: file)
++        guard record.schemaVersion == 1, record.architecture == "arm64", record.buildInfo.schemaVersion == 1, !record.buildInfo.dirty,
++              record.buildInfo.gitSHA.range(of: #"\A[0-9a-f]{40}\z"#, options: .regularExpression) != nil,
++              record.buildInfo.sourceTree.range(of: #"\A[0-9a-f]{40}\z"#, options: .regularExpression) != nil else { throw VerificationFailure.identityMismatch }
++        return record
++    }
++}
++
++/// Shared with later exporters: validate every owned directory before creating or writing evidence.
++enum VerificationPaths {
++    static func prepare(repository: URL) throws -> URL {
++        let fm = FileManager.default
++        var parent = try canonicalExisting(repository)
++        for name in ["build", "verification"] {
++            let child = parent.appendingPathComponent(name)
++            guard (try? fm.destinationOfSymbolicLink(atPath: child.path)) == nil else { throw VerificationFailure.outputUnavailable }
++            if fm.fileExists(atPath: child.path) {
++                guard try child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else { throw VerificationFailure.outputUnavailable }
++            } else { try fm.createDirectory(at: child, withIntermediateDirectories: false) }
++            guard try canonicalExisting(child).path == child.path else { throw VerificationFailure.outputUnavailable }
++            parent = child
++        }
++        return parent
++    }
++}
++private final class VerificationLock {
++    let fd: Int32
++    init(repository: URL) throws {
++        let directory = try VerificationPaths.prepare(repository: repository)
++        fd = open(directory.appendingPathComponent(".writer.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC, 0o600)
++        guard fd >= 0 else { throw VerificationFailure.outputUnavailable }
++        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { close(fd); throw VerificationFailure.toolFailed }
++    }
++    deinit { _ = flock(fd, LOCK_UN); close(fd) }
++}
++extension VerificationDependencies {
++    static func live() -> VerificationDependencies {
++        VerificationDependencies(execute: { request in try BoundedProcess.run(request.command, shouldCancel: { packagingCancellation.isCancelled() }) },
++            snapshot: { repository, logs in
++                let sha = try packagingGit(["rev-parse", "HEAD"], repo: repository, logs: logs)
++                let tree = try packagingGit(["rev-parse", "HEAD:Sources"], repo: repository, logs: logs)
++                let status = try packagingGit(["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"], repo: repository, logs: logs)
++                let dirty = !status.isEmpty
++                let shallow = try packagingGit(["rev-parse", "--is-shallow-repository"], repo: repository, logs: logs) == "true"
++                guard sha.range(of: #"\A[0-9a-f]{40}\z"#, options: .regularExpression) != nil, tree.range(of: #"\A[0-9a-f]{40}\z"#, options: .regularExpression) != nil else { throw VerificationFailure.sourceInvalid }
++                let paths = try packagingGit(["ls-files", "-z", "--cached", "--", "Sources", "scripts", "Package.swift", "Package.resolved"], repo: repository, logs: logs)
++                let canonicalRepo = try canonicalExisting(repository)
++                var hashes: [String] = ["status:" + status]
++                for path in Set(paths.split(separator: "\0").map(String.init)).sorted() {
++                    let file = repository.appendingPathComponent(path)
++                    guard !path.hasPrefix("/"), !path.split(separator: "/").contains(".."),
++                          try canonicalExisting(file).path == canonicalRepo.appendingPathComponent(path).path else { throw VerificationFailure.sourceInvalid }
++                    hashes.append(path + ":" + (try packagingHash(file)))
++                }
++                return SourceSnapshot(identity: SourceIdentity(gitSHA: sha, sourceTree: tree, dirty: dirty), fingerprint: hashes.joined(separator: "\n"), shallow: shallow)
++            }, manifest: VerificationValidation.loadManifest, recover: { try ArtifactPackager.recoverOwned(repository: $0) },
++            ciCode: ProcessInfo.processInfo.environment["CI"].map { !$0.isEmpty && !["false", "0"].contains($0.lowercased()) } ?? false)
++    }
++}
++
++enum VerificationRunner {
++    static func run(lane: VerificationLane, repository: URL, output: URL, manualReport: URL?, ciReport: URL?) throws -> VerificationReport {
++        try run(lane: lane, repository: repository, output: output, manualReport: manualReport, ciReport: ciReport, dependencies: .live())
++    }
++    static func run(lane: VerificationLane, repository: URL, output: URL, manualReport: URL?, ciReport: URL?, dependencies: VerificationDependencies) throws -> VerificationReport {
++        let lock = try VerificationLock(repository: repository); defer { withExtendedLifetime(lock) {} }
++        let fm = FileManager.default
++        guard UUID(uuidString: output.lastPathComponent) != nil,
++              try canonicalExisting(output.deletingLastPathComponent()).path == VerificationPaths.prepare(repository: repository).path,
++              try output.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]).isDirectory == true,
++              try output.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true,
++              try fm.contentsOfDirectory(atPath: output.path).isEmpty else { throw VerificationFailure.outputUnavailable }
++        let code = lane != .artifact, artifact = lane != .code
++        var names = ["source-start", "platform-os", "platform-arch", "platform-swift"]
++        if code { names += ["code-build", "code-full"] }
++        if artifact { names += ["artifact-recovery-before", "artifact-source", "artifact-build", "artifact-manifest", "artifact-signature", "artifact-check", "artifact-recovery-after"] + (1...10).map { String(format: "smoke-%02d", $0) } }
++        names.append("source-end")
++        var report = VerificationReport(schemaVersion: 1, runID: UUID(uuidString: output.lastPathComponent)?.uuidString ?? UUID().uuidString,
++            lane: lane, status: .pending, sourceIdentity: nil, artifactIdentity: nil,
++            phases: names.map { VerificationPhase(name: $0, status: .pending, failureCode: .notExecuted) }, manualStatus: .pending, ciStatus: .pending)
++        func aggregate() {
++            var values = report.phases.map(\.status)
++            if lane == .release { values += [report.manualStatus, report.ciStatus] }
++            report.status = values.contains(.fail) ? .fail : values.contains(.pending) ? .pending : values.contains(.skip) ? .skip : .pass
++        }
++        func persist() throws {
++            aggregate()
++            do { try dependencies.writeReport(JSONEncoder().encode(report), output.appendingPathComponent("verify-report.json")) }
++            catch {
++                report.phases.append(VerificationPhase(name: "report-write", status: .fail, failureCode: .outputUnavailable)); report.status = .fail
++                try? JSONEncoder().encode(report).write(to: output.appendingPathComponent("verify-report.partial.json"), options: .atomic)
++                throw VerificationFailure.outputUnavailable
++            }
++        }
++        func replace(_ phase: VerificationPhase) throws { report.phases[report.phases.firstIndex(where: { $0.name == phase.name })!] = phase; try persist() }
++        func internalPhase(_ name: String, _ body: (URL) throws -> Void) throws -> Bool {
++            let logs = output.appendingPathComponent("internal-\(UUID())"); try fm.createDirectory(at: logs, withIntermediateDirectories: false)
++            var phase = VerificationPhase(name: name, status: .pass, exitCode: 0)
++            do { try body(logs) } catch { phase.status = .fail; phase.exitCode = nil; phase.failureCode = (error as? VerificationFailure) ?? (name.contains("recovery") ? .recoveryFailed : .toolFailed) }
++            phase.evidence = (try fm.contentsOfDirectory(at: logs, includingPropertiesForKeys: nil)).map { logs.lastPathComponent + "/" + $0.lastPathComponent }.sorted()
++            try replace(phase); return phase.status == .pass
++        }
++        func execute(_ name: String, _ executable: URL, _ args: [String], timeout: Double,
++                     failure: VerificationFailure, validate: (Data, VerificationCommand, BoundedResult) throws -> VerificationStatus = { _, _, _ in .pass }) throws -> Bool {
++            let child = output.appendingPathComponent("children/\(UUID())")
++            try fm.createDirectory(at: child, withIntermediateDirectories: true)
++            let validation = child.appendingPathComponent("validation-\(UUID())"), check = child.appendingPathComponent("check-output")
++            try fm.createDirectory(at: check, withIntermediateDirectories: false)
++            let resolvedArgs = args.map { $0 == "__VALIDATION_ROOT__" ? validation.path : $0 == "__CHECK_OUTPUT__" ? check.path : $0 }
++            let command = VerificationCommand(phase: name, command: BoundedCommand(executable: executable, arguments: resolvedArgs,
++                workingDirectory: repository, environment: ProcessInfo.processInfo.environment,
++                stdoutURL: child.appendingPathComponent("stdout"), stderrURL: child.appendingPathComponent("stderr"), timeoutSeconds: timeout),
++                childRoot: child, validationRoot: validation, checkOutput: check)
++            var phase = VerificationPhase(name: name, status: .fail, failureCode: failure,
++                evidence: ["children/\(child.lastPathComponent)/stdout", "children/\(child.lastPathComponent)/stderr", "children/\(child.lastPathComponent)/process-result.json"])
++            do {
++                let result = try dependencies.execute(command)
++                try JSONEncoder().encode(result).write(to: child.appendingPathComponent("process-result.json"), options: .withoutOverwriting)
++                phase.exitCode = result.exitCode; phase.timedOut = result.timedOut
++                if result.timedOut { phase.failureCode = .timedOut }
++                else if result.termination == .normal && (result.exitCode == 0 || name.hasPrefix("smoke-") && result.exitCode == 69) {
++                    phase.status = try validate(Data(contentsOf: command.command.stdoutURL), command, result)
++                    phase.failureCode = phase.status == .skip ? .windowServerUnavailable : nil
++                }
++            } catch { phase.failureCode = (error as? VerificationFailure) ?? failure }
++            try replace(phase); return phase.status == .pass || phase.status == .skip
++        }
++        var start: SourceSnapshot?
++        let sourceOK = try internalPhase("source-start") { logs in
++            let value = try dependencies.snapshot(repository, logs); start = value; report.sourceIdentity = value.identity
++            if code && dependencies.ciCode && value.identity.dirty { throw VerificationFailure.dirtySource }
++        }
++        let os = try execute("platform-os", URL(fileURLWithPath: "/usr/bin/sw_vers"), ["-productVersion"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
++            guard let major = Int(String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ".").first ?? ""), major >= 15 else { throw VerificationFailure.platformUnsupported }; return .pass
++        }
++        let arch = try execute("platform-arch", URL(fileURLWithPath: "/usr/bin/uname"), ["-m"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
++            guard String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" else { throw VerificationFailure.platformUnsupported }; return .pass
++        }
++        let swift = try execute("platform-swift", URL(fileURLWithPath: "/usr/bin/swift"), ["--version"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
++            let text = String(decoding: bytes, as: UTF8.self), regex = try NSRegularExpression(pattern: #"Swift version ([0-9]+)\.([0-9]+)"#)
++            guard let m = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)), let a = Range(m.range(at: 1), in: text), let b = Range(m.range(at: 2), in: text),
++                  let major = Int(text[a]), let minor = Int(text[b]), major > 6 || major == 6 && minor >= 2 else { throw VerificationFailure.platformUnsupported }; return .pass
++        }
++        let platform = os && arch && swift
++        if code && platform && sourceOK {
++            if try execute("code-build", URL(fileURLWithPath: "/usr/bin/swift"), ["build"], timeout: 900, failure: .buildFailed) {
++                _ = try execute("code-full", repository.appendingPathComponent(".build/debug/FlowType"), ["--self-test", "--validation-root", "__VALIDATION_ROOT__"], timeout: 900, failure: .fullTestFailed) { data, _, _ in
++                    guard VerificationValidation.fullSummary(data) else { throw VerificationFailure.fullTestFailed }; return .pass
++                }
++            }
++        }
++        if artifact {
++            let recovered = try internalPhase("artifact-recovery-before") { _ in try dependencies.recover(repository) }
++            let clean = try internalPhase("artifact-source") { _ in
++                guard let start else { throw VerificationFailure.sourceInvalid }
++                guard !start.identity.dirty else { throw VerificationFailure.dirtySource }
++                guard !start.shallow else { throw VerificationFailure.shallowHistory }
++            }
++            var candidate: ArtifactManifest?
++            if platform && sourceOK && recovered && clean {
++                if try execute("artifact-build", repository.appendingPathComponent("scripts/build-app.sh"), [], timeout: 900, failure: .buildFailed) {
++                    let loaded = try internalPhase("artifact-manifest") { _ in
++                        let value = try dependencies.manifest(repository)
++                        guard value.buildInfo.gitSHA == start?.identity.gitSHA, value.buildInfo.sourceTree == start?.identity.sourceTree, !value.buildInfo.dirty else { throw VerificationFailure.identityMismatch }
++                        candidate = value; report.artifactIdentity = value
++                    }
++                    if loaded, let candidate {
++                        if try execute("artifact-signature", URL(fileURLWithPath: "/usr/bin/codesign"), ["--verify", "--deep", "--strict", "--verbose=2", repository.appendingPathComponent("build/FlowType.app").path], timeout: 30, failure: .signatureFailed) {
++                            var seen: Set<String> = []
++                            let checked = try execute("artifact-check", repository.appendingPathComponent("scripts/check-app.sh"), ["--app", repository.appendingPathComponent("build/FlowType.app").path, "--output", "__CHECK_OUTPUT__"], timeout: 120, failure: .artifactFailed) { _, request, _ in
++                                try VerificationValidation.check(request.checkOutput, manifest: candidate, seen: &seen)
++                                guard try dependencies.manifest(repository) == candidate else { throw VerificationFailure.identityMismatch }; return .pass
++                            }
++                            let recoveryAfter = try internalPhase("artifact-recovery-after") { _ in try dependencies.recover(repository) }
++                            if checked && recoveryAfter {
++                                for index in 1...10 {
++                                    let name = String(format: "smoke-%02d", index)
++                                    do {
++                                        guard try dependencies.manifest(repository) == candidate else { throw VerificationFailure.identityMismatch }
++                                    } catch {
++                                        try replace(VerificationPhase(name: name, status: .fail, failureCode: .identityMismatch)); break
++                                    }
++                                    var stillValid = true
++                                    _ = try execute(name, repository.appendingPathComponent("build/FlowType.app/Contents/MacOS/FlowType"), ["--smoke-test", "--validation-root", "__VALIDATION_ROOT__"], timeout: 15, failure: .smokeFailed) { bytes, _, result in
++                                        guard try dependencies.manifest(repository) == candidate else { stillValid = false; throw VerificationFailure.identityMismatch }
++                                        if result.exitCode == 0 { try VerificationValidation.smokeTiming(bytes, externalMs: result.durationMs) }
++                                        let status = try VerificationValidation.runtime(bytes, mode: "smoke", manifest: candidate, exit: result.exitCode!, seen: &seen)
++                                        guard try dependencies.manifest(repository) == candidate else { stillValid = false; throw VerificationFailure.identityMismatch }; return status
++                                    }
++                                    if !stillValid { break }
++                                }
++                            }
++                        }
++                    }
++                }
++            }
++            if report.phases.first(where: { $0.name == "artifact-recovery-after" })?.status == .pending {
++                _ = try internalPhase("artifact-recovery-after") { _ in try dependencies.recover(repository) }
++            }
++        }
++        _ = try internalPhase("source-end") { logs in
++            let end = try dependencies.snapshot(repository, logs)
++            guard let start, end == start else { throw VerificationFailure.sourceChanged }
++        }
++        let statuses = ManualValidation.evaluate(manualReport: manualReport, ciReport: ciReport, artifact: report.artifactIdentity)
++        report.manualStatus = statuses.0; report.ciStatus = statuses.1
++        try persist(); return report
++    }
++}
+diff --git a/scripts/verification/VerificationSelfTests.swift b/scripts/verification/VerificationSelfTests.swift
+new file mode 100644
+index 0000000..5a55a15
+--- /dev/null
++++ b/scripts/verification/VerificationSelfTests.swift
+@@ -0,0 +1,250 @@
++import Foundation
++import Darwin
++
++/// These tests launch only an independent synthetic executable; no product/business/GPU calls.
++enum VerificationSelfTests {
++    static var passed = 0; static var failed = 0
++    static var fixture: URL!; static var root: URL!; static var config: URL!
++    static var lastRepository: URL!; static var lastOutput: URL!
++    static let metadata = BuildMetadataRecord(schemaVersion: 1, version: "1.0.0", buildNumber: "1", gitSHA: String(repeating: "a", count: 40), sourceTree: String(repeating: "b", count: 40), builtAt: "2026-11-03T00:00:00Z", dirty: false)
++    static var manifest: ArtifactManifest { ArtifactManifest(schemaVersion: 1, buildInfo: metadata, architecture: "arm64", binarySHA256: String(repeating: "d", count: 64), buildInfoSHA256: String(repeating: "e", count: 64), shaderSHA256: String(repeating: "c", count: 64), resources: []) }
++    static func check(_ value: Bool, _ name: String) { if value { passed += 1 } else { failed += 1; print("FAIL: \(name)") } }
++    static func object(mode: String = "smoke") -> [String: Any] {
++        var value: [String: Any] = ["schemaVersion": 1, "mode": mode, "ok": true, "role": "smokeTest", "runID": UUID().uuidString, "durationMs": 6001, "failureCode": NSNull(),
++            "buildInfo": ["origin": "packaged", "metadata": try! JSONSerialization.jsonObject(with: JSONEncoder().encode(metadata)), "failureCode": NSNull()]]
++        if mode == "artifact" { value.merge(["appResources": true, "metalLibrary": true, "mlxOperation": true, "resolvedInsideApp": true]) { _, new in new } }
++        else { value.merge(["readiness": "blocked", "ax": "denied", "mic": "notDetermined", "speech": "denied", "probeTimerTicks": 1, "windowHealthTicks": 1, "tap": "disabledForValidation"]) { _, new in new } }
++        return value
++    }
++    static func bytes(_ value: [String: Any]) -> Data { try! JSONSerialization.data(withJSONObject: value) + Data("\n".utf8) }
++    static func testExitZeroCannotForgeArtifactPass() throws {
++        var cases: [(String, Data, String)] = []
++        let good = object()
++        for (key, value) in [("mode", "artifact" as Any), ("role", "app"), ("durationMs", 5900), ("probeTimerTicks", 0), ("windowHealthTicks", 0),
++                             ("tap", "enabled"), ("schemaVersion", true), ("ok", 1), ("probeTimerTicks", true)] {
++            var changed = good; changed[key] = value; cases.append((key, bytes(changed), "smoke"))
++        }
++        var missing = good; missing.removeValue(forKey: "mic"); cases.append(("missing", bytes(missing), "smoke"))
++        var identity = good["buildInfo"] as! [String: Any]
++        var old = identity["metadata"] as! [String: Any]; old["gitSHA"] = String(repeating: "f", count: 40); identity["metadata"] = old
++        var changed = good; changed["buildInfo"] = identity; cases.append(("old SHA", bytes(changed), "smoke"))
++        cases.append(("multiple JSON", bytes(good) + bytes(good), "smoke"))
++        var artifact = object(mode: "artifact"); artifact["mlxOperation"] = false; cases.append(("Metal true MLX false", bytes(artifact), "artifact"))
++        for (name, data, mode) in cases {
++            var seen: Set<String> = []
++            do { _ = try VerificationValidation.runtime(data, mode: mode, manifest: manifest, exit: 0, seen: &seen); check(false, "reject forged \(name)") }
++            catch { check(true, "reject forged \(name)") }
++        }
++        var seen: Set<String> = []
++        _ = try VerificationValidation.runtime(bytes(good), mode: "smoke", manifest: manifest, exit: 0, seen: &seen)
++        do { _ = try VerificationValidation.runtime(bytes(good), mode: "smoke", manifest: manifest, exit: 0, seen: &seen); check(false, "duplicate runtime runID") }
++        catch { check(true, "duplicate runtime runID") }
++        let output = root.appendingPathComponent("old-hash-check"); try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
++        try bytes(object(mode: "artifact")).write(to: output.appendingPathComponent("artifact.stdout"))
++        let badHash: [String: Any] = ["schemaVersion": 1, "ok": true, "failureCode": NSNull(), "signature": true, "resourcesHidden": true, "resourcesRestored": true,
++            "hashesBefore": ["binary": "old", "metadata": "old", "shader": "old"], "hashesAfter": ["binary": "old", "metadata": "old", "shader": "old"], "sourceCommit": metadata.gitSHA, "artifact": object(mode: "artifact")]
++        try JSONSerialization.data(withJSONObject: badHash).write(to: output.appendingPathComponent("check-result.json"))
++        do { try VerificationValidation.check(output, manifest: manifest, seen: &seen); check(false, "old copied hash cannot pass") }
++        catch { check(true, "old copied hash cannot pass") }
++    }
++    static func testFullRunnerRequired() {
++        for value in ["=== M5 runtime self-test: 12 passed, 0 failed ===\n", "=== self-test: 0 passed, 0 failed ===\n", "=== self-test: 4 passed, 1 failed ===\n", "finished\n", "=== self-test: 4 passed, 0 failed ===\n=== self-test: 4 passed, 0 failed ===\n"] {
++            check(!VerificationValidation.fullSummary(Data(value.utf8)), "full summary cannot be forged")
++        }
++        check(VerificationValidation.fullSummary(Data("=== FlowType --self-test ===\n=== self-test: 42 passed, 0 failed ===\n".utf8)), "accept actual full summary")
++    }
++    static func dependencies(_ scenario: String, recovery: @escaping () -> Void = {}) -> VerificationDependencies {
++        var snapshots = 0
++        return VerificationDependencies(execute: { request in
++            let command = request.command
++            let timeout = scenario == "full-timeout" && request.phase == "code-full" ? 0.1 : 15.0
++            let actual = try BoundedProcess.run(BoundedCommand(executable: fixture,
++                arguments: [request.phase, scenario, config.path, request.checkOutput.path] + command.arguments,
++                workingDirectory: command.workingDirectory, environment: command.environment, stdoutURL: command.stdoutURL, stderrURL: command.stderrURL, timeoutSeconds: timeout))
++            if request.phase.hasPrefix("smoke-"), scenario != "instant-duration", actual.termination == .normal {
++                return BoundedResult(schemaVersion: 1, exitCode: actual.exitCode, termination: actual.termination, durationMs: 6100, timedOut: actual.timedOut, failureCode: actual.failureCode)
++            }
++            return actual
++        }, snapshot: { _, _ in
++            snapshots += 1
++            let sha = scenario == "source-change" && snapshots > 1 ? String(repeating: "f", count: 40) : metadata.gitSHA
++            return SourceSnapshot(identity: SourceIdentity(gitSHA: sha, sourceTree: metadata.sourceTree, dirty: false), fingerprint: sha, shallow: false)
++        }, manifest: { _ in manifest }, recover: { _ in recovery() }, ciCode: false)
++    }
++    static func runFixture(_ scenario: String, lane: VerificationLane, recovery: @escaping () -> Void = {}) throws -> VerificationReport {
++        let repo = root.appendingPathComponent("仓库 with spaces ; literal $(touch sentinel)-\(UUID())")
++        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
++        let output = try VerificationPaths.prepare(repository: repo).appendingPathComponent(UUID().uuidString)
++        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
++        lastRepository = repo; lastOutput = output
++        return try VerificationRunner.run(lane: lane, repository: repo, output: output, manualReport: nil, ciReport: nil, dependencies: dependencies(scenario, recovery: recovery))
++    }
++    static func testPartialReportAndSkipAggregation() throws {
++        let code = try runFixture("good", lane: .code)
++        check(code.status == .pass && code.phases.contains(where: { $0.name == "code-full" && $0.status == .pass }), "code executes full")
++        check(!code.phases.contains(where: { $0.name == "artifact-build" }), "code never builds app")
++        let full = code.phases.first { $0.name == "code-full" }!
++        let argvFile = lastOutput.appendingPathComponent(full.evidence[0]).deletingLastPathComponent().appendingPathComponent("argv.json")
++        let argv = try JSONDecoder().decode([String].self, from: Data(contentsOf: argvFile))
++        check(argv.count == 3 && argv[0] == "--self-test" && argv[1] == "--validation-root" && argv[2].contains("仓库 with spaces ; literal $(touch sentinel)"), "Unicode and shell syntax preserved as literal argv")
++        let childIDs = code.phases.flatMap(\.evidence).filter { $0.hasSuffix("/stdout") }.map { $0.split(separator: "/")[1] }
++        check(Set(childIDs).count == childIDs.count, "every child has a fresh evidence root")
++        for scenario in ["build-fail", "full-timeout", "focused", "no-summary", "source-change"] {
++            let report = try runFixture(scenario, lane: .code)
++            check(report.status == .fail && report.exitCode == 1, "partial fail \(scenario)")
++            if scenario == "build-fail" { check(report.phases.contains(where: { $0.name == "code-full" && $0.status == .pending }), "failed build leaves full pending") }
++            if scenario == "full-timeout" { check(report.phases.contains(where: { $0.name == "code-full" && $0.timedOut }), "record full actual timeout") }
++        }
++        let signature = try runFixture("signature-fail", lane: .artifact)
++        check(signature.status == .fail && signature.phases.contains(where: { $0.name == "artifact-check" && $0.status == .pending }), "bad signature blocks check")
++        let skipped = try runFixture("skip", lane: .artifact)
++        check(skipped.status != .pass && skipped.exitCode == 2, "WindowServer Skip never overall Pass")
++        let crashed = try runFixture("seventh-crash", lane: .artifact)
++        check(crashed.status == .fail && crashed.phases.contains(where: { $0.name == "smoke-07" && $0.status == .fail }), "seventh crash retained")
++        for scenario in ["instant-duration", "inflated-duration"] {
++            let report = try runFixture(scenario, lane: .artifact)
++            check(report.status == .fail && report.phases.contains(where: { $0.name == "smoke-01" && $0.status == .fail }), "external duration rejects \(scenario)")
++        }
++        let release = try runFixture("good", lane: .release)
++        check(release.status == .pending && release.exitCode == 2 && release.manualStatus == .pending && release.ciStatus == .pending, "manual CI stubs cannot attest release")
++        check(release.phases.filter { $0.name == "code-build" }.count == 1 && release.phases.filter { $0.name == "artifact-build" }.count == 1, "release stages run once")
++        var recovered = 0
++        _ = try runFixture("build-fail", lane: .artifact, recovery: { recovered += 1 })
++        check(recovered >= 2, "owned recovery before and after failed packaging")
++        let repo = root.appendingPathComponent("write-failure-repo")
++        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
++        let out = try VerificationPaths.prepare(repository: repo).appendingPathComponent(UUID().uuidString)
++        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: false)
++        var writer = dependencies("good")
++        writer.writeReport = { data, destination in
++            let report = try JSONDecoder().decode(VerificationReport.self, from: data)
++            if report.phases.contains(where: { $0.name == "code-build" && $0.status == .pass }) { throw VerificationFailure.outputUnavailable }
++            try data.write(to: destination, options: .atomic)
++        }
++        do { _ = try VerificationRunner.run(lane: .code, repository: repo, output: out, manualReport: nil, ciReport: nil, dependencies: writer); check(false, "parent write failure cannot pass") }
++        catch { check(true, "parent write failure cannot pass") }
++        let partial = try JSONDecoder().decode(VerificationReport.self, from: Data(contentsOf: out.appendingPathComponent("verify-report.partial.json")))
++        check(partial.status == .fail && partial.phases.contains(where: { $0.name == "code-build" && $0.status == .pass }) && partial.phases.contains(where: { $0.name == "code-full" && $0.status == .pending }), "late write failure preserves completed phase and pending dependency")
++    }
++    static func testCheckTimeoutUsesOwnedRecovery() throws {
++        let fm = FileManager.default, repo = root.appendingPathComponent("check-timeout-repo")
++        let bin = repo.appendingPathComponent(".build/synthetic/release")
++        try fm.createDirectory(at: bin, withIntermediateDirectories: true)
++        let original = bin.appendingPathComponent("Fixture.bundle")
++        try fm.createDirectory(at: original, withIntermediateDirectories: false)
++        let payload = Data("owned synthetic resource".utf8)
++        try payload.write(to: original.appendingPathComponent("payload"))
++        let expected = try packagingFingerprint(original), token = UUID().uuidString
++        let hidden = bin.appendingPathComponent(".m5-hidden-\(token)-Fixture.bundle")
++        let out = try VerificationPaths.prepare(repository: repo).appendingPathComponent(UUID().uuidString)
++        try fm.createDirectory(at: out, withIntermediateDirectories: false)
++        let marker = repo.appendingPathComponent("build/.m5-resources.json"), base = dependencies("good")
++        let injected = VerificationDependencies(execute: { request in
++            guard request.phase == "artifact-check" else { return try base.execute(request) }
++            try fm.moveItem(at: original, to: hidden)
++            let command = request.command
++            return try BoundedProcess.run(BoundedCommand(executable: fixture,
++                arguments: [request.phase, "check-timeout", config.path, request.checkOutput.path] + command.arguments,
++                workingDirectory: command.workingDirectory, environment: command.environment,
++                stdoutURL: command.stdoutURL, stderrURL: command.stderrURL, timeoutSeconds: 0.1), onLaunch: { pid in
++                    let journal = HidingJournal(token: token, releaseDirectory: bin.path, ownerPID: getpid(), innerPID: pid,
++                        resources: [HiddenResource(name: "Fixture.bundle", fingerprint: expected)])
++                    try JSONEncoder().encode(journal).write(to: marker, options: .atomic)
++                })
++        }, snapshot: base.snapshot, manifest: base.manifest, recover: { try ArtifactPackager.recoverOwned(repository: $0) }, ciCode: false)
++        let report = try VerificationRunner.run(lane: .artifact, repository: repo, output: out, manualReport: nil, ciReport: nil, dependencies: injected)
++        check(report.status == .fail && report.phases.contains(where: { $0.name == "artifact-check" && $0.timedOut }), "actual check timeout cannot pass")
++        check(report.phases.contains(where: { $0.name == "artifact-recovery-after" && $0.status == .pass }), "check timeout runs actual owned recovery core")
++        check(try packagingFingerprint(original) == expected && Data(contentsOf: original.appendingPathComponent("payload")) == payload,
++            "check timeout restores exact synthetic resource bytes")
++        check(!fm.fileExists(atPath: hidden.path) && !fm.fileExists(atPath: marker.path), "check timeout leaves no hidden resource or marker")
++        check(report.phases.filter { $0.name.hasPrefix("smoke-") }.allSatisfy { $0.status == .pending }, "check timeout blocks dependent smoke")
++    }
++    static func testRecoveryPreservesInUseCandidate() throws {
++        for active in ["current", "backup", "none", "live"] {
++        let repo = root.appendingPathComponent("recovery in use-\(active)"), build = repo.appendingPathComponent("build")
++        let fm = FileManager.default, token = UUID().uuidString
++        let app = build.appendingPathComponent("FlowType.app"), backup = build.appendingPathComponent(".m5-backup-\(token).app")
++        try fm.createDirectory(at: app.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true); try fm.createDirectory(at: backup.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
++        try Data("running candidate".utf8).write(to: app.appendingPathComponent("Contents/MacOS/FlowType")); try Data("old candidate".utf8).write(to: backup.appendingPathComponent("Contents/MacOS/FlowType"))
++        let current = try packagingFingerprint(app), old = try packagingFingerprint(backup)
++        let manifestURL = build.appendingPathComponent("FlowType.manifest.json"); try Data("manifest".utf8).write(to: manifestURL)
++        let journal = try PublicationJournal(token: token, committed: false, oldApp: old, oldManifest: packagingFingerprint(manifestURL), newApp: current, newManifest: "unused")
++        try JSONEncoder().encode(journal).write(to: build.appendingPathComponent(".m5-publication.json"))
++        var calls: [URL] = []
++        let adapters = PackagingAdapters(releaseBuild: { _, _ in throw PackagingFailure.toolFailed }, releaseDirectory: { _, _ in throw PackagingFailure.toolFailed },
++            generateIdentity: { _, _, _, _ in throw PackagingFailure.toolFailed }, writeManifest: { _, _, _ in throw PackagingFailure.toolFailed },
++            sign: { _, _ in throw PackagingFailure.toolFailed }, verify: { _, _ in throw PackagingFailure.toolFailed }, inUse: { url, _ in
++                calls.append(url)
++                return active == "current" && url.lastPathComponent == "FlowType.app" || active == "backup" && url.lastPathComponent.hasPrefix(".m5-backup-")
++            }, artifact: { _, _, _, _ in throw PackagingFailure.toolFailed })
++        if active == "current" || active == "backup" {
++            do { try ArtifactPackager(repo: repo, adapters: adapters).recover(); check(false, "in-use recovery refuses mutation") }
++            catch { check((error as? PackagingFailure) == .inUse, "in-use recovery refuses mutation") }
++            let expected = try canonicalExisting(active == "current" ? app : backup).path
++            check(calls.contains(where: { (try? canonicalExisting($0).path) == expected }), "recovery invokes correct downstream in-use guard")
++            check(try packagingFingerprint(app) == current && packagingFingerprint(backup) == old, "running candidate and old backup retained")
++        } else {
++            if active == "live" { try ArtifactPackager.recoverOwned(repository: repo) }
++            else { try ArtifactPackager(repo: repo, adapters: adapters).recover() }
++            check(try packagingFingerprint(app) == old, "legal recovery succeeds with real recovery integration")
++            check(!fm.fileExists(atPath: backup.path), "legal recovery completes backup ownership")
++        }
++        }
++    }
++    static func testSourceAndOutputBoundaries() throws {
++        let fm = FileManager.default, repo = root.appendingPathComponent("snapshot repo"), logs = root.appendingPathComponent("snapshot logs")
++        try fm.createDirectory(at: repo.appendingPathComponent("Sources/subdir"), withIntermediateDirectories: true)
++        try fm.createDirectory(at: logs, withIntermediateDirectories: false)
++        let source = repo.appendingPathComponent("Sources/subdir/main.swift")
++        try Data("tracked source".utf8).write(to: source)
++        for args in [["init", "--quiet"], ["add", "."], ["-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", "commit", "--quiet", "-m", "fixture"]] { _ = try packagingGit(args, repo: repo, logs: logs) }
++        let env = repo.appendingPathComponent(".env"); try Data("synthetic one".utf8).write(to: env)
++        let capture = VerificationDependencies.live().snapshot
++        let first = try capture(repo, logs)
++        try Data("synthetic two".utf8).write(to: env)
++        let second = try capture(repo, logs)
++        check(first == second && first.identity.dirty, "untracked config content is excluded from fingerprint")
++        try Data("changed tracked source".utf8).write(to: source)
++        check(try capture(repo, logs).fingerprint != second.fingerprint, "tracked source mutation changes fingerprint")
++        let outside = root.appendingPathComponent("outside source"); try fm.createDirectory(at: outside, withIntermediateDirectories: false)
++        try Data("foreign synthetic".utf8).write(to: outside.appendingPathComponent("main.swift"))
++        try fm.removeItem(at: source.deletingLastPathComponent()); try fm.createSymbolicLink(at: source.deletingLastPathComponent(), withDestinationURL: outside)
++        do { _ = try capture(repo, logs); check(false, "ancestor source symlink rejected") } catch { check(true, "ancestor source symlink rejected") }
++        for component in ["build", "verification"] {
++            let candidate = root.appendingPathComponent("escape-\(component)")
++            try fm.createDirectory(at: candidate, withIntermediateDirectories: false)
++            let target = root.appendingPathComponent("external-\(component)"); try fm.createDirectory(at: target, withIntermediateDirectories: false)
++            let link: URL
++            if component == "build" { link = candidate.appendingPathComponent("build") }
++            else { try fm.createDirectory(at: candidate.appendingPathComponent("build"), withIntermediateDirectories: false); link = candidate.appendingPathComponent("build/verification") }
++            try fm.createSymbolicLink(at: link, withDestinationURL: target)
++            do { _ = try VerificationPaths.prepare(repository: candidate); check(false, "evidence ancestor escape rejected") } catch { check(true, "evidence ancestor escape rejected") }
++            check(try fm.contentsOfDirectory(atPath: target.path).isEmpty, "external evidence directory untouched")
++        }
++        for args in [["--lane", "code", "--lane", "release"], ["--unknown", "value"], ["--lane", "bogus"], ["--lane"], ["--run-id", UUID().uuidString], ["--self-test", "--lane", "release"]] {
++            do { _ = try VerificationOptions.parse(args); check(false, "invalid verifier argv rejected") } catch { check((error as? VerificationFailure) == .usage, "invalid verifier argv rejected") }
++        }
++        check(try VerificationOptions.parse([]).lane == .code, "default verifier lane is code")
++    }
++    static func run() -> Int32 {
++        let fm = FileManager.default
++        root = fm.temporaryDirectory.appendingPathComponent("flowtype-verification-\(UUID())")
++        do {
++            try fm.createDirectory(at: root, withIntermediateDirectories: false)
++            fixture = root.appendingPathComponent("fixture-tool"); config = root.appendingPathComponent("metadata.json")
++            try JSONEncoder().encode(metadata).write(to: config)
++            let source = URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("scripts/verification/VerificationFixture.swift")
++            let compiled = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/usr/bin/swiftc"), arguments: ["-parse-as-library", source.path, "-o", fixture.path], workingDirectory: root,
++                environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("compile.stdout"), stderrURL: root.appendingPathComponent("compile.stderr"), timeoutSeconds: 30))
++            guard compiled.cliExitCode == 0 else { throw VerificationFailure.toolFailed }
++            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries] {
++                do { try test() } catch { failed += 1; print("FAIL: fixture \((error as? VerificationFailure)?.rawValue ?? String((error as NSError).code))") }
++            }
++            testFullRunnerRequired()
++        } catch { failed += 1; print("FAIL: fixture setup") }
++        print("=== verification self-test: \(passed) passed, \(failed) failed ===")
++        if failed == 0 { try? fm.removeItem(at: root) } else { print("Retained synthetic evidence: \(root.path)") }
++        return failed == 0 ? 0 : 1
++    }
++}
+diff --git a/scripts/verify.sh b/scripts/verify.sh
+new file mode 100755
+index 0000000..16489b5
+--- /dev/null
++++ b/scripts/verify.sh
+@@ -0,0 +1,36 @@
++#!/bin/bash
++set -euo pipefail
++ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
++cd "$ROOT"
++for DIRECTORY in "$ROOT/build" "$ROOT/build/tools" "$ROOT/build/verification"; do
++    if [ -L "$DIRECTORY" ] || { [ -e "$DIRECTORY" ] && [ ! -d "$DIRECTORY" ]; }; then
++        printf 'FlowType verification: outputUnavailable\n' >&2
++        exit 1
++    fi
++done
++mkdir -p "$ROOT/build/tools"
++TEMP=$(mktemp -d "$ROOT/build/tools/.verify-XXXXXX")
++trap 'rm -rf "$TEMP"' EXIT
++trap 'exit 143' TERM
++trap 'exit 130' INT
++# ArtifactPackaging.swift supplies the existing owned lock/journal recovery; its CLI/@main is excluded.
++if /usr/bin/swiftc -parse-as-library \
++    "$ROOT/scripts/verification/BoundedProcess.swift" \
++    "$ROOT/scripts/verification/ArtifactPackaging.swift" \
++    "$ROOT/scripts/verification/VerificationReport.swift" \
++    "$ROOT/scripts/verification/ManualValidation.swift" \
++    "$ROOT/scripts/verification/VerificationSelfTests.swift" \
++    "$ROOT/scripts/verification/VerificationCLI.swift" \
++    -o "$TEMP/flowtype-verify" > "$TEMP/compile.log" 2>&1; then
++    mv "$TEMP/flowtype-verify" "$ROOT/build/tools/flowtype-verify"
++else
++    IDENTIFIER=$(/usr/bin/uuidgen)
++    REPORT="$ROOT/build/verification/$IDENTIFIER"
++    mkdir -p "$REPORT"
++    cp "$TEMP/compile.log" "$REPORT/bootstrap-compile.log"
++    printf '{"schemaVersion":1,"status":"Fail","failureCode":"bootstrapFailed"}\n' > "$REPORT/bootstrap-failure.json"
++    printf 'Verification bootstrap: Fail\nbuild/verification/%s/bootstrap-failure.json\n' "$IDENTIFIER"
++    printf 'FlowType verification: bootstrapFailed\n' >&2
++    exit 1
++fi
++"$ROOT/build/tools/flowtype-verify" "$@"

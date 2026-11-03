@@ -1,0 +1,563 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/7] Write sources
+[3/7] Write swift-version--1AB21518FC5DEDBE.txt
+error: emit-module command failed with exit code 1 (use -v to see invocation)
+[5/15] Compiling FlowType FlowTypeApp.swift
+[6/15] Compiling FlowType WindowManager.swift
+[7/15] Compiling FlowType StatusBarController.swift
+[8/15] Compiling FlowType ValidationReport.swift
+[9/15] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[10/15] Compiling FlowType StartupSmoke.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[11/15] Compiling FlowType ASRRouter.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected '{' in body of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected '{' in body of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[12/15] Compiling FlowType SelfTest.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[13/23] Compiling FlowType OnboardingWindowController.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[14/24] Compiling FlowType CapsuleView.swift
+[15/24] Compiling FlowType SettingsView.swift
+[16/24] Compiling FlowType RecoveryEffects.swift
+[17/27] Compiling FlowType OnboardingView.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[18/27] Compiling FlowType M5SmokeSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[19/27] Compiling FlowType M5IsolationSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[20/27] Compiling FlowType PipelineOrchestrator.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[21/27] Compiling FlowType M4RecoveryControllerSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+[22/27] Compiling FlowType M3DeliverySelfTests.swift
+[23/27] Compiling FlowType M3FinalFixSelfTests.swift
+[24/27] Compiling FlowType M3SpeechPreflightSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:1: error: expected 'func' keyword in instance method declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    | `- error: expected 'func' keyword in instance method declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:5: error: found an unexpected second identifier in function declaration; is there an accidental break?
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |   |- error: found an unexpected second identifier in function declaration; is there an accidental break?
+    |   |- note: join the identifiers together
+    |   `- note: join the identifiers together with camel-case
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected '(' in argument list of function declaration
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected '(' in argument list of function declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:11: error: consecutive declarations on a line must be separated by ';'
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |         `- error: consecutive declarations on a line must be separated by ';'
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/ASRRouter.swift:374:12: error: expected declaration
+246 | 
+247 | /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+248 | final class ASRRouter: @unchecked Sendable {
+    |             `- note: in declaration of 'ASRRouter'
+249 |     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+250 | 
+    :
+372 | 
+373 |     /// 按需刷新探测样本。
+374 | 仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+    |          `- error: expected declaration
+375 |     func refreshProbeIfNeeded(force: Bool = false) async {
+376 |         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。

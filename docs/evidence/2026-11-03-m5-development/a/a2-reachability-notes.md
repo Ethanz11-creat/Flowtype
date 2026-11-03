@@ -1,0 +1,14 @@
+# Controller reachability checks for A2
+
+Read-only source audit, no runtime/real user data access. These are concrete integration risks for the A2 brief, not extra features.
+
+- PersistentStore.appSupportDir and AppDatabaseProvider.dir independently use ApplicationSupport/FlowType; DB initialization can rename legacy JSON. ModelPreset separately uses Flowtype/models. Preserve casing/formulas for app, route all nonapp to current.paths.
+- ConfigurationStore.backupCorruptConfig defaults to Library/Logs/flowtype when backupDirectory=nil; not enough to only change .shared if tests/other production constructors keep nil fallback. Role-aware default boundary needed.
+- SessionController init defaults evaluate PipelineRegistry.defaultPipeline/defaultObservers and effects.prepare(); live.prepare schedules router/model task immediately. Guard before scheduling, not after model lookup. Construction itself must remain safe.
+- ASRRouter init currently defaults startMonitoring=true, NWPathMonitor callback can invoke refreshProbe. Shared role selection must suppress selfTest monitoring; smoke can passively monitor but zero provider probes. Real probe timer/instance capture belongs B1.
+- QwenModelState init constructs closures only (no model work itself). loadModel/localModel/destination are the dangerous later edges; injected instances must remain functional for existing coordinator tests. Do not disable all injected state-machine tests under nonapp.
+- RecordingStage.execute defaults call AudioRecorder.requestPermission/startRecording; guards at real recorder/permission boundary preserve injected stage regression semantics. Nonapp's actual audio default sentinel restore must return before touching hardware.
+- InjectionStage default copy and RecoveryEffects.live copyText call NSPasteboard.general directly; other real KeyboardInjector paste/event methods likewise. Block actual OS boundaries, preserving synthetic inject/postIfActive tests and state transitions.
+- Existing full self-test constructs NSApplication/hidden FloatingPanel for frame geometry; it never displays. WindowServer dependence is real, cannot silently count missing screen as full Pass. Older sizes 320×94 there test arbitrary geometry; current product card remains380×156, so don't rewrite historical fixture merely to match UI.
+- Existing test/model temp paths use FileManager.default.temporaryDirectory with UUID. Prefer RuntimePaths.temporaryDirectory for all new runs/fixtures so evidence ownership and cleanup are local. WhisperModelPreparation also creates temporary compiled runtime dirs; default production behavior must remain.
+- ASRProviderRegistry construction creates Qwen/Cloud providers but doesn't itself request transcription; existing capability tests use it. Do not replace registry with fake wholesale.

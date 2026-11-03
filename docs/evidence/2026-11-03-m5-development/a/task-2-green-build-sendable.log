@@ -1,0 +1,36 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/8] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:33:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 31 |     }()
+ 32 | 
+ 33 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 34 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 35 | 
+[6/8] Compiling FlowType SelfTest.swift
+[7/25] Compiling FlowType M3FinalFixSelfTests.swift
+[8/25] Compiling FlowType M3SpeechPreflightSelfTests.swift
+[9/25] Compiling FlowType M2ReviewFixSelfTests.swift
+[10/25] Compiling FlowType M3DeliverySelfTests.swift
+[11/25] Compiling FlowType ImportedModelUISelfTests.swift
+[12/25] Compiling FlowType LocalModelImportSelfTests.swift
+[13/25] Compiling FlowType WhisperRuntimeSelfTests.swift
+[14/25] Compiling FlowType WholeM2FixSelfTests.swift
+[15/25] Compiling FlowType M4StageFailureSelfTests.swift
+[16/25] Compiling FlowType M5IsolationSelfTests.swift
+[17/25] Compiling FlowType M5RuntimeSelfTests.swift
+[18/25] Compiling FlowType ModelProvisionSelfTests.swift
+[19/25] Compiling FlowType FlowTypeApp.swift
+[20/25] Compiling FlowType CloudProviderSelfTests.swift
+[21/25] Compiling FlowType ImportedLifecycleSelfTests.swift
+[22/25] Compiling FlowType M4RecoveryControllerSelfTests.swift
+[23/25] Compiling FlowType M4RecoveryPolicySelfTests.swift
+[23/26] Write Objects.LinkFileList
+[24/26] Linking FlowType
+[25/26] Applying FlowType
+Build complete! (35.90s)

@@ -1,0 +1,538 @@
+  ✗ FAIL: M5 rejects malformed schemaVersion — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 2, version: "1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed version — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed version — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3\n", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed version — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "-1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed version — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.<3>", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed buildNumber — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "-1", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed buildNumber — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42\n", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed gitSHA — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed gitSHA — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42", gitSHA: "gggggggggggggggggggggggggggggggggggggggg", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed sourceTree — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bad", builtAt: "2026-11-03T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed builtAt — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10+08:00", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed builtAt — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-02-30T08:09:10Z", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed builtAt — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z\n", dirty: false)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects malformed dirty — got packaged, want invalid
+  ✗ FAIL: M5 invalid identity hides untrusted metadata — got Optional(FlowType.BuildMetadata(schemaVersion: 1, version: "1.2.3", buildNumber: "42", gitSHA: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceTree: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", builtAt: "2026-11-03T08:09:10Z", dirty: true)), want nil
+  ✗ FAIL: M5 invalid identity has closed failure
+  ✗ FAIL: M5 rejects plist mismatch/missing — got packaged, want invalid
+  ✗ FAIL: M5 rejects plist mismatch/missing — got packaged, want invalid
+  ✗ FAIL: M5 rejects plist mismatch/missing — got packaged, want invalid
+  ✗ FAIL: M5 about derives version build SHA and UTC from identity
+  ✗ FAIL: M5 missing app metadata is invalid — got development, want invalid
+  ✗ FAIL: M5 malformed app is never development — got development, want invalid
+  ✗ FAIL: M5 loads app resource identity — got development, want packaged
+  ✗ FAIL: M5 development about is explicit
+  ✗ FAIL: M5 synchronous startup header before first log
+  ✗ FAIL: M5 rotation caps current plus three archives — got 1, want 4
+  ✗ FAIL: M5 rotated header remains locatable
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 every physical line carries role run and self-test marker
+  ✗ FAIL: M5 every log line has UTC timestamp
+  ✗ FAIL: M5 configure twice must fail
+=== FlowType --self-test ===
+=== M5 build info self-test: 47 passed, 536 failed ===

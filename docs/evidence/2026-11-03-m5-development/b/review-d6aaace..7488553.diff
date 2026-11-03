@@ -1,0 +1,1370 @@
+# Review package: d6aaace2bcbc74d21499543e83684598391bda41..HEAD
+
+## Commits
+7488553 feat: add bounded startup smoke with real timer evidence
+
+## Files changed
+ Sources/flowtype/App/FlowTypeApp.swift             |  18 ++-
+ Sources/flowtype/App/RuntimeEnvironment.swift      |   2 +-
+ Sources/flowtype/App/StatusBarController.swift     |  48 ++++++-
+ Sources/flowtype/App/Validation/StartupSmoke.swift |  57 ++++++++
+ .../flowtype/App/Validation/ValidationReport.swift |  64 +++++++++
+ Sources/flowtype/Services/Speech/ASRRouter.swift   |  41 +++++-
+ Sources/flowtype/Testing/M5SmokeSelfTests.swift    | 105 +++++++++++++++
+ Sources/flowtype/Testing/SelfTest.swift            |  13 +-
+ Sources/flowtype/WindowManager.swift               |  69 ++++++++--
+ scripts/verification/BoundedProcess.swift          | 148 +++++++++++++++++++++
+ scripts/verification/ProcessCLI.swift              |  40 ++++++
+ scripts/verification/ProcessRunnerSelfTests.swift  | 105 +++++++++++++++
+ 12 files changed, 682 insertions(+), 28 deletions(-)
+
+## Diff
+diff --git a/Sources/flowtype/App/FlowTypeApp.swift b/Sources/flowtype/App/FlowTypeApp.swift
+index a751038..71c1c13 100644
+--- a/Sources/flowtype/App/FlowTypeApp.swift
++++ b/Sources/flowtype/App/FlowTypeApp.swift
+@@ -12,21 +12,37 @@ enum FlowTypeMain {
+                 do { try AppLogger.configure(context: context, identity: BuildInfo.load(bundle: .main)) }
+                 catch {
+                     RuntimeEnvironment.finishValidation()
+                     FileHandle.standardError.write(Data("FlowType: diagnostic logger configuration failed\n".utf8))
+                     AppLogger.flush()
+                     exit(1)
+                 }
+                 switch context.mode {
+                 case .selfTest:
+                     await SelfTest.runAndExit()
+-                case .smoke, .artifact:
++                case .smoke:
++                    let report = await StartupSmoke.run(context: context)
++                    do {
++                        let data = try JSONEncoder().encode(report)
++                        AppLogger.log(String(decoding: data, as: UTF8.self))
++                        RuntimeEnvironment.finishValidation()
++                        AppLogger.flush()
++                        FileHandle.standardOutput.write(data + Data("\n".utf8))
++                        exit(report.exitCode)
++                    } catch {
++                        RuntimeEnvironment.finishValidation()
++                        AppLogger.flush()
++                        FileHandle.standardError.write(Data("FlowType: validation report encoding failed\n".utf8))
++                        exit(1)
++                    }
++                case .artifact:
++
+                     RuntimeEnvironment.finishValidation()
+                     AppLogger.flush()
+                     FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))
+                     exit(1)
+                 case .app:
+                     FlowTypeApp.main()
+                 }
+             }
+         } catch {
+             AppLogger.flush()
+diff --git a/Sources/flowtype/App/RuntimeEnvironment.swift b/Sources/flowtype/App/RuntimeEnvironment.swift
+index e194923..dd562c3 100644
+--- a/Sources/flowtype/App/RuntimeEnvironment.swift
++++ b/Sources/flowtype/App/RuntimeEnvironment.swift
+@@ -17,21 +17,21 @@ enum RuntimeBootstrapError: String, Error {
+     var exitCode: Int32 { self == .usage ? 64 : 1 }
+ }
+ 
+ struct RuntimeOptions: Sendable {
+     let mode: RuntimeMode
+     let validationRoot: String?
+     let selfTestFilter: String?
+     var role: ProcessRole {
+         switch mode { case .app: .app; case .selfTest: .selfTest; case .smoke, .artifact: .smokeTest }
+     }
+-    static let selfTestFilters = ["--m5-buildinfo-only", "--m5-runtime-only", "--m5-isolation-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
++    static let selfTestFilters = ["--m5-smoke-contract-only", "--m5-buildinfo-only", "--m5-runtime-only", "--m5-isolation-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
+                                   "--m3-silence-only", "--m3-asr-regression-only", "--m3-delivery-only",
+                                   "--m2-review-inspection-only", "--m2-review-packages-only", "--m2-fix-only"]
+ 
+     static func parse(arguments: [String]) throws -> RuntimeOptions {
+         var mode: RuntimeMode?
+         var root: String?
+         var filter: String?
+         var index = 1 // argv[0] is the executable, never an option.
+         while index < arguments.count {
+             let argument = arguments[index]
+diff --git a/Sources/flowtype/App/StatusBarController.swift b/Sources/flowtype/App/StatusBarController.swift
+index 6f8b546..1670503 100644
+--- a/Sources/flowtype/App/StatusBarController.swift
++++ b/Sources/flowtype/App/StatusBarController.swift
+@@ -2,46 +2,48 @@ import AppKit
+ import SwiftUI
+ import Combine
+ 
+ /// Owns the presented menu command and the session effect boundary.
+ @MainActor
+ final class DictationMenuController: NSObject {
+     enum Command: Int { case start, stop, unavailable }
+ 
+     let item: NSMenuItem
+     private let session: SessionController
++    private let actionGate: ValidationActionGate
+     private var sessionCancellable: AnyCancellable?
+ 
+-    init(session: SessionController) {
+-        self.session = session
++    init(session: SessionController, actionGate: ValidationActionGate = .live) {
++        self.session = session; self.actionGate = actionGate
+         item = NSMenuItem(title: "", action: #selector(activate(_:)), keyEquivalent: "")
+         super.init()
+         item.target = self
+         refresh(for: session.sessionState)
+         // Session state is committed before MainActor publication. Update
+         // synchronously, including during menu tracking.
+         sessionCancellable = session.sessionStatePublisher.sink { [weak self] state in
+             self?.refresh(for: state)
+         }
+     }
+ 
+     func refresh(for state: SessionState) {
+         item.title = StatusBarController.dictationMenuTitle(for: state)
+-        item.isEnabled = StatusBarController.dictationMenuEnabled(for: state)
++        item.isEnabled = actionGate.isApp && StatusBarController.dictationMenuEnabled(for: state)
+         switch state {
+         case .preparing, .recording: item.tag = Command.stop.rawValue
+         case .idle, .notice, .error: item.tag = Command.start.rawValue
+         case .processing, .polishing, .injecting: item.tag = Command.unavailable.rawValue
+         }
+     }
+ 
+     @objc private func activate(_ sender: NSMenuItem) {
++        guard actionGate.allow(.dictation) else { return }
+         guard sender.isEnabled, let command = Command(rawValue: sender.tag) else { return }
+         // Dispatch the presented command, then validate against the live session.
+         // A queued Stop selection must never turn into Start after capture ends.
+         switch (command, session.sessionState) {
+         case (.stop, .preparing), (.stop, .recording): session.endRecording()
+         case (.start, .idle), (.start, .notice), (.start, .error): session.startRecording()
+         default: break
+         }
+     }
+ }
+@@ -53,25 +55,31 @@ class StatusBarController: NSObject, NSMenuDelegate {
+     private var statusItem: NSStatusItem?
+     private var settingsWindowController: SettingsWindowController?
+     private var onboardingWindowController: OnboardingWindowController?
+     private var statusMenuItem: NSMenuItem?
+     private var sessionCancellable: AnyCancellable?
+     private var readinessCancellable: AnyCancellable?
+     private var dictationMenuController: DictationMenuController?
+     private var lastDeliveryMenuController: LastDeliveryMenuController?
+     private var originalStatusImage: NSImage?
+ 
+-    private override init() {
++    var isConfigured: Bool { statusItem?.button != nil && statusItem?.menu != nil }
++
++    private let actionGate: ValidationActionGate
++    private let actionEffects: ((ValidationAction) -> Void)?
++    init(actionGate: ValidationActionGate = .live, actionEffects: ((ValidationAction) -> Void)? = nil) {
++        self.actionGate = actionGate; self.actionEffects = actionEffects
+         super.init()
+     }
+ 
+     func setup() {
++        guard statusItem == nil else { return }
+         let statusBar = NSStatusBar.system
+         statusItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
+ 
+         guard let button = statusItem?.button else { return }
+ 
+         if let image = Bundle.module.image(forResource: "status_bar_icon") {
+             image.size = NSSize(width: 18, height: 18)
+             image.isTemplate = true
+             button.image = image
+         } else {
+@@ -199,126 +207,156 @@ class StatusBarController: NSObject, NSMenuDelegate {
+         let permissionItem = NSMenuItem(title: "重新检测权限", action: #selector(checkPermissions), keyEquivalent: "")
+         permissionItem.target = self
+         menu.addItem(permissionItem)
+ 
+         menu.addItem(NSMenuItem.separator())
+ 
+         let quitItem = NSMenuItem(title: "退出 Flowtype", action: #selector(quit), keyEquivalent: "q")
+         quitItem.target = self
+         menu.addItem(quitItem)
+ 
++        if !actionGate.isApp { for item in menu.items where item.action != nil { item.isEnabled = false } }
+         statusItem?.menu = menu
+     }
+ 
++    func finishValidation() {
++        guard RuntimeEnvironment.current.role != .app else { return }
++        sessionCancellable = nil; readinessCancellable = nil
++        dictationMenuController = nil; lastDeliveryMenuController = nil
++        statusItem?.menu?.delegate = nil
++        if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
++        statusItem = nil
++    }
++
+     @objc private func showMenu() {
++        guard actionGate.allow(.menuWindow) else { return }
++        if let actionEffects { actionEffects(.menuWindow); return }
+         guard let button = statusItem?.button else { return }
+         statusItem?.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
+     }
+ 
+     @objc private func showSettings() {
++        guard actionGate.allow(.menuWindow) else { return }
++        if let actionEffects { actionEffects(.menuWindow); return }
+         openSettings(tab: .settings)
+     }
+ 
+     func openSettings(tab: AppTab = .settings) {
++        guard actionGate.allow(.menuWindow) else { return }
++        if let actionEffects { actionEffects(.menuWindow); return }
+         guard ValidationEffects.live.allow(.window) else { return }
+         if settingsWindowController == nil {
+             let controller = SettingsWindowController(initialTab: tab)
+             controller.onClose = { [weak self] in
+                 self?.settingsWindowController = nil
+             }
+             settingsWindowController = controller
+         }
+         settingsWindowController?.selectTab(tab)
+         settingsWindowController?.showWindow(nil)
+         NSApp.activate(ignoringOtherApps: true)
+     }
+ 
+     @objc private func showAbout() {
++        guard actionGate.allow(.menuWindow) else { return }
++        if let actionEffects { actionEffects(.menuWindow); return }
+         guard RuntimeEnvironment.current.role == .app else { return }
+         let alert = NSAlert()
+         alert.messageText = "关于 FlowType"
+         alert.informativeText = AppLogger.identity.aboutDescription
+         alert.addButton(withTitle: "好")
+         alert.runModal()
+     }
+ 
+     @objc private func openLogs() {
++        guard actionGate.allow(.menuWindow) else { return }
++        if let actionEffects { actionEffects(.menuWindow); return }
+         AppLogger.openLogInFinder()
+     }
+ 
+     nonisolated func menuWillOpen(_ menu: NSMenu) {
+         // AppKit invokes menu delegates on the main thread. Match the synchronous
+         // MainActor bridge used by main-runloop callbacks in WindowManager.
+         MainActor.assumeIsolated {
+             ReadinessMonitor.shared.refresh()
+             updateMenuItems()
+         }
+     }
+ 
+     private func updateMenuItems() {
+         let monitor = ReadinessMonitor.shared
+         statusMenuItem?.title = readinessMenuTitle(monitor.snapshot)
+         switch monitor.rawLevel {
+-        case .blocked, .degraded(.accessibilityMissing): statusMenuItem?.isEnabled = true
++        case .blocked, .degraded(.accessibilityMissing): statusMenuItem?.isEnabled = actionGate.isApp
+         default: statusMenuItem?.isEnabled = false
+         }
+         let state = SessionController.shared.sessionState
+         dictationMenuController?.refresh(for: state)
+         lastDeliveryMenuController?.refresh(for: SessionController.shared.lastDeliverySummary)
+     }
+ 
+     @objc private func repairReadiness() {
++        guard actionGate.allow(.repair) else { return }
++        if let actionEffects { actionEffects(.repair); return }
+         let monitor = ReadinessMonitor.shared
+         monitor.refresh()
+         switch monitor.rawLevel {
+         case .blocked(.microphoneDenied):
+             PermissionHelper.openMicrophoneSettings()
+         case .blocked(.noEngine):
+             openSettings(tab: .settings)
+         case .degraded(.accessibilityMissing):
+             PermissionHelper.openAccessibilitySettings()
+             monitor.startPermissionWatchIfNeeded()
+         default:
+             break
+         }
+     }
+ 
+     @objc private func reloadConfiguration() {
++        guard actionGate.allow(.configuration) else { return }
++        if let actionEffects { actionEffects(.configuration); return }
+         let defaultsKey = "flowtype.config"
+         if let data = RuntimeEnvironment.defaults.data(forKey: defaultsKey),
+            let config = try? JSONDecoder().decode(Configuration.self, from: data) {
+             ConfigurationStore.shared.current = config
+         }
+         WindowManager.shared.reloadHotkey()
+ 
+         if let button = statusItem?.button {
+             let originalTitle = button.title
+             button.title = "已重新加载"
+             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                 button.title = originalTitle
+             }
+         }
+     }
+ 
+     @objc private func checkPermissions() {
++        guard actionGate.allow(.permission) else { return }
++        if let actionEffects { actionEffects(.permission); return }
+         let monitor = ReadinessMonitor.shared
+         monitor.refresh()
+         WindowManager.shared.repairEventTap()
+         monitor.startPermissionWatchIfNeeded()
+         updateMenuItems()
+     }
+ 
+     @objc private func quit() {
++        guard actionGate.allow(.quit) else { return }
++        if let actionEffects { actionEffects(.quit); return }
+         NSApp.terminate(nil)
+     }
+ 
+     @objc private func showOnboarding() {
++        guard actionGate.allow(.menuWindow) else { return }
++        if let actionEffects { actionEffects(.menuWindow); return }
+         if onboardingWindowController == nil {
+             let controller = OnboardingWindowController()
+             controller.onClose = { [weak self] in
+                 self?.onboardingWindowController = nil
+             }
+             onboardingWindowController = controller
+         }
+         onboardingWindowController?.showWindow(nil)
+         NSApp.activate(ignoringOtherApps: true)
+     }
+diff --git a/Sources/flowtype/App/Validation/StartupSmoke.swift b/Sources/flowtype/App/Validation/StartupSmoke.swift
+new file mode 100644
+index 0000000..484da33
+--- /dev/null
++++ b/Sources/flowtype/App/Validation/StartupSmoke.swift
+@@ -0,0 +1,57 @@
++import Foundation
++import AppKit
++import CoreGraphics
++
++@MainActor
++enum StartupSmoke {
++    static func run(context: RuntimeContext) async -> SmokeReport {
++        let started = DispatchTime.now().uptimeNanoseconds
++        func duration() -> Int { Int((DispatchTime.now().uptimeNanoseconds - started) / 1_000_000) }
++        let identity = AppLogger.identity
++        var snapshot = ReadinessSnapshot(accessibility: .unknown, microphone: .unknown, speechRecognition: .unknown,
++            localModel: .unavailable(reason: "validation"), cloudASR: .unavailable(reason: "validation"),
++            appleSpeech: .unavailable(reason: "validation"), computedAt: Date())
++        func failure(_ code: ValidationFailureCode) -> SmokeReport {
++            SmokeReport.evaluate(context: context, buildInfo: identity, durationMs: duration(), snapshot: snapshot,
++                                 probeTimerTicks: 0, windowHealthTicks: 0, failure: code)
++        }
++        guard context.role == .smokeTest, context.mode == .smoke else { return failure(.startupFailed) }
++        guard identity.origin != .invalid else { return failure(.invalidBuildInfo) }
++        // This API returns nil when no graphical login/WindowServer session is available.
++        // Other initialization failures must not be relabeled as this explicit unsupported case.
++        guard CGSessionCopyCurrentDictionary() != nil else { return failure(.windowServerUnavailable) }
++        let application = NSApplication.shared
++        application.setActivationPolicy(.accessory)
++        _ = ConfigurationStore.shared
++        _ = SessionController.shared
++        let router = ASRRouter.shared
++        let windows = WindowManager.shared
++        guard let panel = windows.panel, !panel.isVisible else { return failure(.startupFailed) }
++        let status = StatusBarController.shared
++        status.setup()
++        let readiness = ReadinessMonitor.shared
++        defer {
++            router.stopProbing()
++            windows.finishValidation()
++            status.finishValidation()
++            readiness.stopPermissionWatch()
++        }
++        guard status.isConfigured else { return failure(.startupFailed) }
++        readiness.refresh()
++        snapshot = readiness.snapshot
++        let baselineProbe = router.probeTimerTicks
++        let baselineWindow = windows.windowHealthTicks
++        router.startProbing()
++        windows.startValidationHealthCheck()
++        let observing = DispatchTime.now().uptimeNanoseconds
++        func observedSeconds() -> Double { Double(DispatchTime.now().uptimeNanoseconds - observing) / 1_000_000_000 }
++        while observedSeconds() < 10 {
++            if observedSeconds() >= 6, router.probeTimerTicks > baselineProbe, windows.windowHealthTicks > baselineWindow { break }
++            do { try await Task.sleep(for: .milliseconds(100)) }
++            catch { return failure(.unexpectedFailure) }
++        }
++        readiness.refresh()
++        return SmokeReport.evaluate(context: context, buildInfo: identity, durationMs: duration(), snapshot: readiness.snapshot,
++            probeTimerTicks: router.probeTimerTicks - baselineProbe, windowHealthTicks: windows.windowHealthTicks - baselineWindow)
++    }
++}
+diff --git a/Sources/flowtype/App/Validation/ValidationReport.swift b/Sources/flowtype/App/Validation/ValidationReport.swift
+new file mode 100644
+index 0000000..1873589
+--- /dev/null
++++ b/Sources/flowtype/App/Validation/ValidationReport.swift
+@@ -0,0 +1,64 @@
++import Foundation
++
++enum ValidationFailureCode: String, Codable, Sendable {
++    case startupFailed, timerDeadline, windowServerUnavailable, invalidBuildInfo
++    case resourceMissing, resourceMalformed, resourceOutsideBundle, metalUnavailable, metalLibraryInvalid, mlxOperationFailed, unexpectedFailure
++}
++enum ValidationReadiness: String, Codable, Sendable { case ready, degraded, blocked }
++enum ValidationPermission: String, Codable, Sendable { case granted, denied, notDetermined, unknown }
++enum ValidationAction: String, CaseIterable, Sendable {
++    case tapInstall, tapRepair, hotkey, dictation, menuWindow, repair, permission, configuration, quit
++}
++struct ValidationActionGate: Sendable {
++    let role: ProcessRole
++    var downstream: (@Sendable (ValidationAction) -> Void)? = nil
++    static var live: ValidationActionGate { ValidationActionGate(role: RuntimeEnvironment.current.role) }
++    var isApp: Bool { role == .app }
++    func allow(_ action: ValidationAction) -> Bool { guard isApp else { return false }; downstream?(action); return true }
++}
++struct SmokeReport: Codable, Sendable {
++    let schemaVersion: Int
++    let mode: String
++    let ok: Bool
++    let role: ProcessRole
++    let runID: String
++    let buildInfo: BuildIdentity
++    let durationMs: Int
++    let failureCode: ValidationFailureCode?
++    let readiness: ValidationReadiness
++    let ax: ValidationPermission
++    let mic: ValidationPermission
++    let speech: ValidationPermission
++    let probeTimerTicks: Int
++    let windowHealthTicks: Int
++    let tap: String
++    var exitCode: Int32 { ok ? 0 : failureCode == .windowServerUnavailable ? 69 : 1 }
++
++    static func evaluate(context: RuntimeContext, buildInfo: BuildIdentity, durationMs: Int,
++                         snapshot: ReadinessSnapshot, probeTimerTicks: Int, windowHealthTicks: Int,
++                         failure: ValidationFailureCode? = nil) -> SmokeReport {
++        let problem = failure ?? (durationMs < 6000 || probeTimerTicks < 1 || windowHealthTicks < 1 ? .timerDeadline : nil)
++        let readiness: ValidationReadiness
++        switch classifyReadiness(snapshot) { case .ready: readiness = .ready; case .blocked: readiness = .blocked; case .degraded: readiness = .degraded }
++        func permission(_ state: PermissionState) -> ValidationPermission {
++            switch state { case .granted: .granted; case .denied: .denied; case .notDetermined: .notDetermined; case .unknown: .unknown }
++        }
++        return SmokeReport(schemaVersion: 1, mode: "smoke", ok: problem == nil, role: context.role, runID: context.runID.uuidString,
++            buildInfo: buildInfo, durationMs: durationMs, failureCode: problem, readiness: readiness,
++            ax: permission(snapshot.accessibility), mic: permission(snapshot.microphone), speech: permission(snapshot.speechRecognition),
++            probeTimerTicks: probeTimerTicks, windowHealthTicks: windowHealthTicks, tap: "disabledForValidation")
++    }
++
++    private enum CodingKeys: String, CodingKey {
++        case schemaVersion, mode, ok, role, runID, buildInfo, durationMs, failureCode, readiness, ax, mic, speech, probeTimerTicks, windowHealthTicks, tap
++    }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(mode, forKey: .mode); try c.encode(ok, forKey: .ok)
++        try c.encode(role, forKey: .role); try c.encode(runID, forKey: .runID); try c.encode(buildInfo, forKey: .buildInfo)
++        try c.encode(durationMs, forKey: .durationMs); try c.encode(failureCode, forKey: .failureCode)
++        try c.encode(readiness, forKey: .readiness); try c.encode(ax, forKey: .ax); try c.encode(mic, forKey: .mic)
++        try c.encode(speech, forKey: .speech); try c.encode(probeTimerTicks, forKey: .probeTimerTicks)
++        try c.encode(windowHealthTicks, forKey: .windowHealthTicks); try c.encode(tap, forKey: .tap)
++    }
++}
+diff --git a/Sources/flowtype/Services/Speech/ASRRouter.swift b/Sources/flowtype/Services/Speech/ASRRouter.swift
+index 2e4f26d..31c1c04 100644
+--- a/Sources/flowtype/Services/Speech/ASRRouter.swift
++++ b/Sources/flowtype/Services/Speech/ASRRouter.swift
+@@ -245,40 +245,49 @@ func routingInputs(from snapshot: RouterHealthSnapshot,
+ }
+ 
+ /// 无感择优：维护 provider 健康画像 + 网络可达性，输出有序候选 provider 链。
+ final class ASRRouter: @unchecked Sendable {
+     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+ 
+     private let health = OSAllocatedUnfairLock(initialState: RouterHealthSnapshot())
+     private let monitor = NWPathMonitor()
+     private let monitorQueue = DispatchQueue(label: "flowtype.asr-router.path")
+ 
++    private struct TimerEvidence { var ticks = 0; var generation: UUID? }
++    private let timerEvidence = OSAllocatedUnfairLock(initialState: TimerEvidence())
++    var probeTimerTicks: Int { timerEvidence.withLock { $0.ticks } }
++    private let probeFirstDelay: TimeInterval
++    private let probeInterval: TimeInterval
++    private let role: ProcessRole
+     private var probeTimer: DispatchSourceTimer?
+     private let probeQueue = DispatchQueue(label: "flowtype.asr-router.probe")
+     /// 探测是否正在进行，防止链路抖动时重叠刷新。
+     private let probeInFlight = OSAllocatedUnfairLock(initialState: false)
+ 
+     private let configuration: @MainActor @Sendable () -> Configuration
+     private let localAvailable: @MainActor @Sendable () -> Bool
+     private let localLease: @MainActor @Sendable () -> LocalASRLease?
+     private let uptimeNanoseconds: @Sendable () -> UInt64
+     private let measureProbe: @Sendable (String, UInt16, TimeInterval) async -> Double?
+ 
+     /// Dependencies keep the real capture/probe boundary runnable offline.
+     init(startMonitoring: Bool = true,
+          configuration: @escaping @MainActor @Sendable () -> Configuration = { ConfigurationStore.shared.current },
+          localAvailable: @escaping @MainActor @Sendable () -> Bool = { QwenModelState.shared.activeLease != nil },
+          localLease: @escaping @MainActor @Sendable () -> LocalASRLease? = { QwenModelState.shared.activeLease },
+          uptimeNanoseconds: @escaping @Sendable () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
++         probeFirstDelay: TimeInterval = ASRRouterProbeConfig.firstDelay,
++         probeInterval: TimeInterval = ASRRouterProbeConfig.interval, role: ProcessRole = RuntimeEnvironment.current.role,
+          measureProbe: @escaping @Sendable (String, UInt16, TimeInterval) async -> Double? = {
+              await CloudProbe.measureLatency(host: $0, port: $1, timeout: $2)
+          }) {
++        self.probeFirstDelay = probeFirstDelay; self.probeInterval = probeInterval; self.role = role
+         self.configuration = configuration
+         self.localAvailable = localAvailable
+         self.localLease = localLease
+         self.uptimeNanoseconds = uptimeNanoseconds
+         self.measureProbe = measureProbe
+         guard startMonitoring, ValidationEffects.live.allow(.pathMonitor) else { return }
+         monitor.pathUpdateHandler = { [weak self] path in
+             guard let self else { return }
+             let current = Self.signature(for: path)
+             let changed = self.health.withLock { $0.applyNetworkPath(current) }
+@@ -316,36 +325,58 @@ final class ASRRouter: @unchecked Sendable {
+     func recordFailure(providerID: String, route: ASRRouteSnapshot) {
+         guard providerID == ASRProviderID.cloud else { return }
+         synchronizeConfigurationIdentity()
+         health.withLock { $0.recordFailure(route: route) }
+     }
+ 
+     /// 启动周期性探测（幂等）。app 启动时调用一次即可。
+     /// `@MainActor`：`probeTimer` 的 check-and-set 因此串行化（唯一调用点本就在 MainActor 上）。
+     @MainActor
+     func startProbing() {
+-        guard RuntimeEnvironment.current.role == .app else { return }
++        guard role != .selfTest else { return }
+         guard probeTimer == nil else { return }
+         let timer = DispatchSource.makeTimerSource(queue: probeQueue)
+-        timer.schedule(deadline: .now() + ASRRouterProbeConfig.firstDelay,
+-                       repeating: ASRRouterProbeConfig.interval)
++        timer.schedule(deadline: .now() + probeFirstDelay,
++                       repeating: probeInterval)
+         // Must be explicitly `@Sendable`: an unannotated closure formed in this `@MainActor`
+         // method would inherit MainActor isolation, then the first tick on `probeQueue`
+         // trips Swift 6's executor assertion (dispatch_assert_queue_fail → SIGTRAP).
+-        timer.setEventHandler { @Sendable in
+-            Task { await ASRRouter.shared.refreshProbeIfNeeded() }
++        let generation = UUID()
++        timerEvidence.withLock { $0.generation = generation }
++        timer.setEventHandler { @Sendable [weak self] in
++            guard let self else { return }
++            let active = self.timerEvidence.withLock { state in
++                guard state.generation == generation else { return false }
++                state.ticks += 1
++                return true
++            }
++            guard active else { return }
++            Task { [weak self] in
++                guard let self, self.timerEvidence.withLock({ $0.generation == generation }) else { return }
++                await self.refreshProbeIfNeeded()
++            }
+         }
+         timer.resume()
+         probeTimer = timer
+         AppLogger.log("[ASRRouter] cloud probe started (interval \(Int(ASRRouterProbeConfig.interval))s)")
+     }
+ 
++    @MainActor
++    func stopProbing() {
++        timerEvidence.withLock { $0.generation = nil }
++        probeTimer?.setEventHandler {}
++        probeTimer?.cancel()
++        probeTimer = nil
++    }
++
++    deinit { probeTimer?.cancel(); monitor.cancel() }
++
+     /// 按需刷新探测样本。仅 `auto` 策略 + 已配置云端 + 非计费链路时执行。
+     func refreshProbeIfNeeded(force: Bool = false) async {
+         // 链路抖动会让多个 `force` 刷新重叠，每个都持有一个最长 2s 的连接；串行化即可。
+         let alreadyRunning = probeInFlight.withLock { running -> Bool in
+             if running { return true }
+             running = true
+             return false
+         }
+         guard !alreadyRunning else { return }
+         defer { probeInFlight.withLock { $0 = false } }
+diff --git a/Sources/flowtype/Testing/M5SmokeSelfTests.swift b/Sources/flowtype/Testing/M5SmokeSelfTests.swift
+new file mode 100644
+index 0000000..fdfce00
+--- /dev/null
++++ b/Sources/flowtype/Testing/M5SmokeSelfTests.swift
+@@ -0,0 +1,105 @@
++import Foundation
++import AppKit
++import os
++
++enum M5SmokeSelfTests {
++    @MainActor
++    static func run(_ r: SelfTest.Reporter) async {
++        testSmokeReport(r)
++        testValidationActionGuards(r)
++        await testTimerOwnershipAndEvidence(r)
++    }
++
++    // Missing timer evidence or generic errors must not become success/WindowServer Skip.
++    static func testSmokeReport(_ r: SelfTest.Reporter) {
++        let context = RuntimeContext(role: .smokeTest, mode: .smoke, runID: UUID(), paths: RuntimeEnvironment.current.paths,
++                                     defaultsSuiteName: nil, selfTestFilter: nil)
++        let identity = BuildIdentity(origin: .development, metadata: nil, failureCode: nil)
++        let snapshot = ReadinessSnapshot(accessibility: .denied, microphone: .notDetermined, speechRecognition: .denied,
++            localModel: .unavailable(reason: "synthetic"), cloudASR: .unavailable(reason: "synthetic"), appleSpeech: .unavailable(reason: "synthetic"), computedAt: Date())
++        func report(_ probe: Int = 1, _ window: Int = 1, duration: Int = 6000, failure: ValidationFailureCode? = nil) -> SmokeReport {
++            SmokeReport.evaluate(context: context, buildInfo: identity, durationMs: duration, snapshot: snapshot,
++                                 probeTimerTicks: probe, windowHealthTicks: window, failure: failure)
++        }
++        let good = report()
++        r.check(good.ok && good.exitCode == 0 && good.readiness == .blocked, "M5 smoke succeeds with absent engines and permissions")
++        r.eq(good.mic, .notDetermined, "M5 smoke retains read-only permission state")
++        for candidate in [report(0), report(1, 0), report(duration: 5999)] {
++            r.check(!candidate.ok && candidate.exitCode == 1 && candidate.failureCode == .timerDeadline, "M5 smoke requires duration plus both actual timer callbacks")
++        }
++        r.eq(report(failure: .windowServerUnavailable).exitCode, 69, "M5 only explicit WindowServer absence is Skip69")
++        for failure in [ValidationFailureCode.startupFailed, .unexpectedFailure] {
++            r.check(!report(failure: failure).ok && report(failure: failure).exitCode == 1, "M5 ordinary startup failures never Skip")
++        }
++        let json = try! JSONSerialization.jsonObject(with: JSONEncoder().encode(good)) as! [String: Any]
++        r.check(json["failureCode"] is NSNull, "M5 successful smoke emits explicit null failure")
++        r.eq(json["mode"] as? String, "smoke", "M5 smoke JSON mode")
++        r.eq(good.tap, "disabledForValidation", "M5 smoke never claims a live tap")
++    }
++
++    // Direct dispatch, even after a sender is force-enabled, must honor the process role.
++    @MainActor
++    static func testValidationActionGuards(_ r: SelfTest.Reporter) {
++        let calls = OSAllocatedUnfairLock(initialState: 0)
++        for role in [ProcessRole.selfTest, .smokeTest] {
++            let gate = ValidationActionGate(role: role, downstream: { _ in calls.withLock { $0 += 1 } })
++            for action in ValidationAction.allCases { r.check(!gate.allow(action), "M5 validation action denied: \(action)") }
++            let shows = OSAllocatedUnfairLock(initialState: 0)
++            let session = SessionController(pipeline: [], observers: [],
++                effects: SessionEffects(prepare: {}, showWindow: { shows.withLock { $0 += 1 } }, hideWindow: {}), readinessLevel: { .ready })
++            let menu = DictationMenuController(session: session, actionGate: gate)
++            menu.item.isEnabled = true
++            _ = (menu.item.target as? NSObject)?.perform(menu.item.action!, with: menu.item)
++            r.eq(shows.withLock { $0 }, 0, "M5 forced menu selector cannot start capture in validation")
++            session.cancel()
++        }
++        r.eq(calls.withLock { $0 }, 0, "M5 no downstream action in non-app roles")
++        for role in [ProcessRole.selfTest, .smokeTest, .app] {
++            let effects = OSAllocatedUnfairLock(initialState: [ValidationAction: Int]())
++            let gate = ValidationActionGate(role: role)
++            let window = WindowManager(panelFactory: { nil }, actionGate: gate, actionEffects: { action in effects.withLock { $0[action, default: 0] += 1 } })
++            r.eq(window.installEventTap(), role == .app, "M5 actual install entry respects role")
++            window.setupGlobalHotkey(); window.repairEventTap(); window.reloadHotkey()
++            window.handleDoubleTap(); window.handleSingleTap()
++            r.eq(effects.withLock { $0.values.reduce(0, +) }, role == .app ? 6 : 0,
++                 "M5 actual window install repair reload and hotkey downstream guarded")
++            let status = StatusBarController(actionGate: gate, actionEffects: { action in effects.withLock { $0[action, default: 0] += 1 } })
++            for name in ["repairReadiness", "checkPermissions", "reloadConfiguration", "showSettings", "showOnboarding", "quit", "openLogs", "showAbout", "showMenu"] {
++                _ = status.perform(NSSelectorFromString(name))
++            }
++            status.openSettings()
++            r.eq(effects.withLock { $0.values.reduce(0, +) }, role == .app ? 16 : 0,
++                 "M5 direct menu repair permission configuration and window selectors guard downstream")
++        }
++        let app = ValidationActionGate(role: .app, downstream: { _ in calls.withLock { $0 += 1 } })
++        for action in ValidationAction.allCases { r.check(app.allow(action), "M5 app action gate permits synthetic control") }
++        r.eq(calls.withLock { $0 }, ValidationAction.allCases.count, "M5 app positive control reaches action observer")
++    }
++
++    // A callback that redirects to shared, double-starts or merely waits cannot satisfy these.
++    @MainActor
++    static func testTimerOwnershipAndEvidence(_ r: SelfTest.Reporter) async {
++        let firstReads = OSAllocatedUnfairLock(initialState: 0)
++        let secondReads = OSAllocatedUnfairLock(initialState: 0)
++        let first = ASRRouter(startMonitoring: false, configuration: { firstReads.withLock { $0 += 1 }; return Configuration() },
++                              localAvailable: { false }, localLease: { nil }, probeFirstDelay: 0.03, probeInterval: 5, role: .smokeTest)
++        let second = ASRRouter(startMonitoring: false, configuration: { secondReads.withLock { $0 += 1 }; return Configuration() },
++                               localAvailable: { false }, localLease: { nil }, probeFirstDelay: 0.03, probeInterval: 5, role: .smokeTest)
++        r.eq(first.probeTimerTicks, 0, "M5 waiting without start is not a timer tick")
++        first.startProbing(); first.startProbing()
++        try? await Task.sleep(for: .milliseconds(150))
++        r.eq(first.probeTimerTicks, 1, "M5 duplicate probe start owns one real timer")
++        r.check(firstReads.withLock { $0 } > 0, "M5 real probe callback refreshes owning instance")
++        r.eq(second.probeTimerTicks, 0, "M5 second router receives no callback")
++        r.eq(secondReads.withLock { $0 }, 0, "M5 first router callback never refreshes another instance")
++        first.stopProbing(); second.stopProbing()
++        let window = WindowManager(eventTapHealthInterval: 0.03, panelFactory: { nil })
++        window.startValidationHealthCheck(); window.startValidationHealthCheck()
++        try? await Task.sleep(for: .milliseconds(110))
++        r.check(window.windowHealthTicks >= 2 && window.windowHealthTicks <= 4, "M5 actual health timer advances once per interval")
++        window.stopValidationHealthCheck()
++        let stopped = window.windowHealthTicks
++        try? await Task.sleep(for: .milliseconds(65))
++        r.eq(window.windowHealthTicks, stopped, "M5 stopped health timer cannot keep ticking")
++    }
++}
+diff --git a/Sources/flowtype/Testing/SelfTest.swift b/Sources/flowtype/Testing/SelfTest.swift
+index cd6fde9..b0dccb5 100644
+--- a/Sources/flowtype/Testing/SelfTest.swift
++++ b/Sources/flowtype/Testing/SelfTest.swift
+@@ -282,21 +282,29 @@ enum SelfTest {
+         r.eq(h7.last?.date, "2026-06-03", "heatmap: last cell is today")
+         r.eq(h7.filter { $0.chars > 0 }.count, 1, "heatmap: only the one data day is non-zero")
+         r.eq(StatsEngine.denseHeatmap([], range: .d30, now: now, cal: cal).count, 30, "heatmap: 30d empty → 30 zero cells")
+         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
+     }
+ 
+     @MainActor
+     static func runAndExit() async -> Never {
+         let r = Reporter()
+         print("=== FlowType --self-test ===")
++        if CommandLine.arguments.contains("--m5-smoke-contract-only") {
++            await M5SmokeSelfTests.run(r)
++            AppLogger.log("=== M5 smoke contract self-test: \(r.passed) passed, \(r.failed) failed ===")
++            AppLogger.flush()
++            print("=== M5 smoke contract self-test: \(r.passed) passed, \(r.failed) failed ===")
++            finish(r)
++        }
+         if CommandLine.arguments.contains("--m5-buildinfo-only") {
++
+             await M5BuildInfoSelfTests.run(r)
+             AppLogger.log("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
+             AppLogger.flush()
+             print("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         if CommandLine.arguments.contains("--m5-isolation-only") {
+             await M5IsolationSelfTests.run(r)
+             AppLogger.log("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
+             AppLogger.flush()
+@@ -375,20 +383,21 @@ enum SelfTest {
+             await WholeM2FixSelfTests.runRetry(r)
+             await WholeM2FixSelfTests.runGraphAdmission(r)
+             AppLogger.log("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+             AppLogger.flush()
+             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+             finish(r)
+         }
+         await M5RuntimeSelfTests.run(r)
+         await M5IsolationSelfTests.run(r)
+         await M5BuildInfoSelfTests.run(r)
++        await M5SmokeSelfTests.run(r)
+         testLLMURL(r)            // B1
+         testSSEParse(r)          // B8
+         testLLMFailoverGuards(r) // failover-after-yield guard + inactivity watchdog clock
+         testModifierTapMachine(r) // modifier-trigger edge machine + detector window
+         testContinuationBox(r)   // exactly-once continuation resume (ASR providers)
+         testConfigCorrupt(r)     // B9
+         testInjectionEdgeCases(r) // injection edge cases: emoji/newlines/config/continuation
+         testInjectionSegmentation(r) // injection helpers
+         testASRWiring(r)         // ASR language + context
+         testSpectrumMath(r)      // SpectrumMath pure DSP helpers
+@@ -1890,21 +1899,21 @@ enum SelfTest {
+             }
+             _ = target.perform(action, with: item)
+         }
+ 
+         let probe = ReadinessPreflightProbe()
+         let stage = StageRendezvous()
+         let session = SessionController(pipeline: [SuspensibleStage(rendezvous: stage, suspend: true)],
+                                         observers: [probe],
+                                         effects: SessionEffects(prepare: {}, showWindow: { probe.windowShows += 1 }, hideWindow: {}),
+                                         readinessLevel: { .ready })
+-        let menu = DictationMenuController(session: session)
++        let menu = DictationMenuController(session: session, actionGate: ValidationActionGate(role: .app))
+         let staleStart = menu.item.copy() as! NSMenuItem
+         click(menu.item)
+         r.eq(session.sessionState, .preparing, "menu dispatch: displayed Start begins capture preparation")
+         await stage.waitForInvocation()
+         r.eq(menu.item.title, "停止听写", "open menu: session change refreshes Start to Stop")
+         // Simulate opening during capture even on the original implementation.
+         menu.refresh(for: session.sessionState)
+         let staleStop = menu.item.copy() as! NSMenuItem
+         probe.context?.statePublisher.send(.processing(provider: "synthetic"))
+         r.eq(menu.item.title, "处理中…", "open menu: processing updates the visible title")
+@@ -1923,21 +1932,21 @@ enum SelfTest {
+         for _ in 0..<10 { await Task.yield() }
+         r.eq(await stage.invocationCount, 1, "menu dispatch: stale Stop starts no additional pipeline stage")
+         session.cancel()
+         await stage.release()
+ 
+         // The inverse stale command must not stop a newer capture either.
+         let secondStage = StageRendezvous()
+         let second = SessionController(pipeline: [SuspensibleStage(rendezvous: secondStage, suspend: true)], observers: [],
+                                        effects: SessionEffects(prepare: {}, showWindow: {}, hideWindow: {}),
+                                        readinessLevel: { .ready })
+-        let secondMenu = DictationMenuController(session: second)
++        let secondMenu = DictationMenuController(session: second, actionGate: ValidationActionGate(role: .app))
+         second.startRecording()
+         await secondStage.waitForInvocation()
+         // Keep the original item's target/action, but dispatch against this session.
+         staleStart.target = secondMenu.item.target
+         click(staleStart)
+         r.eq(second.sessionState, .preparing, "menu dispatch: stale Start cannot stop a newer capture")
+         secondMenu.refresh(for: second.sessionState)
+         click(secondMenu.item)
+         r.eq(second.sessionState, .idle, "menu dispatch: valid displayed Stop cancels preparation")
+         second.cancel()
+diff --git a/Sources/flowtype/WindowManager.swift b/Sources/flowtype/WindowManager.swift
+index 745b302..5c7e740 100644
+--- a/Sources/flowtype/WindowManager.swift
++++ b/Sources/flowtype/WindowManager.swift
+@@ -81,28 +81,31 @@ enum EventTapHealthAction: Equatable, Sendable {
+ }
+ 
+ @MainActor
+ class WindowManager: ObservableObject {
+     static let shared = WindowManager()
+     var panel: FloatingPanel?
+ 
+     private var eventTapPort: CFMachPort?
+     private var eventTapRunLoopSource: CFRunLoopSource?
+     private var eventTapFailureCount = 0
+-    private var healthTimerStarted = false
++    private(set) var windowHealthTicks = 0
++    private var healthGeneration: UUID?
++    private let actionGate: ValidationActionGate
++    private let actionEffects: ((ValidationAction) -> Void)?
+     private var lastHealthAction: EventTapHealthAction = .none
+     private var reloadWorkItem: DispatchWorkItem?
+     private var lastPanelPresentationLogs: [String: String] = [:]
+ 
+     /// Periodic timer to ensure the CGEvent tap stays enabled after system events.
+-    private var eventTapHealthTimer = CancellableTimer()
+-    private let eventTapHealthInterval: TimeInterval = 5.0
++    private var eventTapHealthTimer: DispatchSourceTimer?
++    private let eventTapHealthInterval: TimeInterval
+ 
+     /// Current trigger key from configuration
+     private var triggerKey: TriggerKey { ConfigurationStore.shared.current.triggerKey }
+ 
+     /// Cached trigger key for safe access from C callback (avoids actor isolation issues)
+     private static var cachedTriggerKey = MainThreadCachedValue<TriggerKey>(.command)
+ 
+     /// Cached interaction mode for safe access from C callback.
+     private static var cachedInteractionMode = MainThreadCachedValue<InteractionMode>(.tapToStart)
+ 
+@@ -133,21 +136,23 @@ class WindowManager: ObservableObject {
+     nonisolated static func nonModifierReleaseAllowed(heldDuration: TimeInterval?, sawOtherKey: Bool,
+                                                      state: SessionState) -> Bool {
+         guard let heldDuration, !sawOtherKey else { return false }
+         switch state {
+         case .preparing, .recording: return true
+         case .idle, .error, .notice: return heldDuration >= nonModifierHoldThreshold
+         case .processing, .polishing, .injecting: return false
+         }
+     }
+ 
+-    init() {
++    init(eventTapHealthInterval: TimeInterval = 5, panelFactory: (() -> FloatingPanel?)? = nil, actionGate: ValidationActionGate = .live, actionEffects: ((ValidationAction) -> Void)? = nil) {
++        self.eventTapHealthInterval = eventTapHealthInterval; self.actionGate = actionGate; self.actionEffects = actionEffects
++        if let panelFactory { panel = panelFactory(); return }
+         let view = AnyView(
+             CapsuleView()
+                 .environmentObject(SessionController.shared)
+         )
+         panel = FloatingPanel(view: view)
+ 
+         // Wire up tap detector callbacks
+         let detector = OptionTapDetector.shared
+         detector.onDoubleTap = { [weak self] in
+             guard let self = self else { return }
+@@ -161,37 +166,41 @@ class WindowManager: ObservableObject {
+ 
+     // MARK: - Hotkey Setup
+ 
+     nonisolated static func eventTapHealthAction(tapExists: Bool, tapEnabled: Bool,
+                                                  accessibilityTrusted: Bool) -> EventTapHealthAction {
+         if tapExists { return tapEnabled ? .none : .enableExisting }
+         return accessibilityTrusted ? .recreate : .waitForPermission
+     }
+ 
+     func setupGlobalHotkey() {
++        guard actionGate.allow(.tapInstall) else { return }
++        if let actionEffects { actionEffects(.tapInstall); return }
+         guard ValidationEffects.live.allow(.inputEvent) else { return }
+         AppLogger.log("[WindowManager] setupGlobalHotkey called")
+         let accessibilityEnabled = PermissionHelper.checkAccessibility()
+         if !accessibilityEnabled {
+             AppLogger.log("[WindowManager] WARNING: Accessibility permission not granted")
+         }
+ 
+         Self.cachedTriggerKey.value = triggerKey
+         Self.cachedInteractionMode.value = ConfigurationStore.shared.current.interactionMode
+         AppLogger.log("[WindowManager] Cached triggerKey: \(triggerKey.displayName), interactionMode: \(Self.cachedInteractionMode.value.displayName)")
+ 
+         _ = installEventTap()
+         startEventTapHealthCheck()
+         AppLogger.log("[WindowManager] Global hotkey registered (double-tap \(triggerKey.displayName) to start, single-tap to stop)")
+     }
+ 
+     func reloadHotkey() {
++        guard actionGate.allow(.configuration) else { return }
++        if let actionEffects { actionEffects(.configuration); return }
+         guard ValidationEffects.live.allow(.inputEvent) else { return }
+         AppLogger.log("[WindowManager] Queuing debounced hotkey reload...")
+         reloadWorkItem?.cancel()
+         let workItem = DispatchWorkItem { [weak self] in
+             guard let self = self else { return }
+             AppLogger.log("[WindowManager] Executing debounced reload...")
+             Self.cachedTriggerKey.value = self.triggerKey
+             Self.cachedInteractionMode.value = ConfigurationStore.shared.current.interactionMode
+             // Stale edge state across a tap rebuild could turn the next unrelated
+             // flagsChanged into a phantom release-tap — start the new tap clean.
+@@ -201,34 +210,59 @@ class WindowManager: ObservableObject {
+             OptionTapDetector.shared.cancelPendingTaps()
+             self.tearDownEventTap()
+             _ = self.installEventTap()
+             AppLogger.log("[WindowManager] Hotkey reloaded with trigger key: \(self.triggerKey.displayName)")
+         }
+         reloadWorkItem = workItem
+         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
+     }
+ 
+     private func startEventTapHealthCheck() {
+-        guard !healthTimerStarted else { return }
+-        healthTimerStarted = true
+-        eventTapHealthTimer.schedule(
+-            withTimeInterval: eventTapHealthInterval,
+-            repeats: true
+-        ) { [weak self] in
+-            Task { @MainActor [weak self] in
+-                guard let self = self else { return }
++        guard eventTapHealthTimer == nil else { return }
++        let generation = UUID()
++        healthGeneration = generation
++        let timer = DispatchSource.makeTimerSource(queue: .main)
++        timer.schedule(deadline: .now() + eventTapHealthInterval, repeating: eventTapHealthInterval)
++        timer.setEventHandler { @Sendable [weak self] in
++            MainActor.assumeIsolated {
++                guard let self, self.healthGeneration == generation else { return }
++                self.windowHealthTicks += 1
+                 self.repairEventTap()
+             }
+         }
++        eventTapHealthTimer = timer
++        timer.resume()
++    }
++
++    func startValidationHealthCheck() {
++        guard RuntimeEnvironment.current.role != .app else { return }
++        startEventTapHealthCheck()
++    }
++
++    func stopValidationHealthCheck() {
++        healthGeneration = nil
++        eventTapHealthTimer?.setEventHandler {}
++        eventTapHealthTimer?.cancel()
++        eventTapHealthTimer = nil
++    }
++
++    func finishValidation() {
++        guard RuntimeEnvironment.current.role != .app else { return }
++        stopValidationHealthCheck()
++        reloadWorkItem?.cancel()
++        OptionTapDetector.shared.cancelPendingTaps()
++        panel?.close(); panel = nil
+     }
+ 
+     func repairEventTap() {
++        guard actionGate.allow(.tapRepair) else { return }
++        if let actionEffects { actionEffects(.tapRepair); return }
+         guard ValidationEffects.live.allow(.inputEvent) else { return }
+         // An installed tap is stronger evidence than a trust query for unsigned
+         // apps. Only probe permission when there is no tap to repair.
+         let trusted = eventTapPort != nil || PermissionHelper.checkAccessibility()
+         let action = Self.eventTapHealthAction(
+             tapExists: eventTapPort != nil,
+             tapEnabled: eventTapPort.map { CGEvent.tapIsEnabled(tap: $0) } ?? false,
+             accessibilityTrusted: trusted
+         )
+         if action != lastHealthAction {
+@@ -253,20 +287,22 @@ class WindowManager: ObservableObject {
+         if let tap = eventTapPort {
+             CGEvent.tapEnable(tap: tap, enable: false)
+             CFMachPortInvalidate(tap)
+         }
+         eventTapRunLoopSource = nil
+         eventTapPort = nil
+     }
+ 
+     @discardableResult
+     func installEventTap() -> Bool {
++        guard actionGate.allow(.tapInstall) else { return false }
++        if let actionEffects { actionEffects(.tapInstall); return true }
+         guard ValidationEffects.live.allow(.inputEvent) else { return false }
+         guard eventTapPort == nil else { return true }
+         let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+                       | CGEventMask(1 << CGEventType.keyDown.rawValue)
+                       | CGEventMask(1 << CGEventType.keyUp.rawValue)
+ 
+         guard let tap = CGEvent.tapCreate(
+             tap: .cgSessionEventTap,
+             place: .headInsertEventTap,
+             options: .defaultTap,
+@@ -295,20 +331,21 @@ class WindowManager: ObservableObject {
+         eventTapFailureCount += 1
+         if eventTapFailureCount == 1 || eventTapFailureCount.isMultiple(of: 12) {
+             AppLogger.log("[WindowManager] FAILED to create CGEvent tap (attempt \(eventTapFailureCount))")
+         }
+         return false
+     }
+ 
+     /// CGEventTap callback — runs on the main thread since source is added to main RunLoop.
+     /// MainActor.assumeIsolated routes session actions synchronously on this main-runloop callback.
+     private static let eventTapCallback: CGEventTapCallBack = { proxy, type, event, refcon in
++        guard RuntimeEnvironment.current.role == .app else { return Unmanaged.passUnretained(event) }
+         // Security: enforce that callback runs on main thread (all cached values are main-thread-only)
+         dispatchPrecondition(condition: .onQueue(.main))
+ 
+         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+             if let refcon = refcon {
+                 let manager = Unmanaged<WindowManager>.fromOpaque(refcon).takeUnretainedValue()
+                 assert(WindowManager.shared === manager, "eventTapCallback refcon must point to the WindowManager singleton")
+                 if let tap = manager.eventTapPort {
+                     CGEvent.tapEnable(tap: tap, enable: true)
+                 }
+@@ -438,31 +475,35 @@ class WindowManager: ObservableObject {
+             }
+         } else if !isTriggerKeyNow && wasDown {
+             AppLogger.log("[EventTap] Trigger key release suppressed (shortcut chord during hold)")
+         }
+ 
+         return Unmanaged.passRetained(event)
+     }
+ 
+     // MARK: - Tap Handlers
+ 
+-    private func handleDoubleTap() {
++    func handleDoubleTap() {
++        guard actionGate.allow(.hotkey) else { return }
++        if let actionEffects { actionEffects(.hotkey); return }
+         let controller = SessionController.shared
+         // Double-tap belongs exclusively to idle start detection. An active release
+         // already stopped synchronously and cannot change the polish policy.
+         switch controller.sessionState {
+         case .idle, .error, .notice: controller.startRecording()
+         default: break
+         }
+     }
+ 
+-    private func handleSingleTap() {
++    func handleSingleTap() {
++        guard actionGate.allow(.hotkey) else { return }
++        if let actionEffects { actionEffects(.hotkey); return }
+         let controller = SessionController.shared
+         switch controller.sessionState {
+         case .preparing, .recording:
+             controller.endRecording()
+         case .idle, .error, .notice:
+             if ConfigurationStore.shared.current.interactionMode == .toggle {
+                 controller.startRecording()
+             }
+         default:
+             break
+diff --git a/scripts/verification/BoundedProcess.swift b/scripts/verification/BoundedProcess.swift
+new file mode 100644
+index 0000000..ec7fff2
+--- /dev/null
++++ b/scripts/verification/BoundedProcess.swift
+@@ -0,0 +1,148 @@
++import Foundation
++import Darwin
++
++struct BoundedCommand: Sendable {
++    let executable: URL
++    let arguments: [String]
++    let workingDirectory: URL
++    let environment: [String: String]
++    let stdoutURL: URL
++    let stderrURL: URL
++    let timeoutSeconds: Double
++}
++enum BoundedTermination: String, Codable, Sendable { case normal, signal, launchFailure, timeout }
++enum BoundedFailure: String, Codable, Sendable { case launchFailed, handshakeFailed, deadlineExceeded, childSignaled, childFailed, cleanupFailed }
++struct BoundedResult: Codable, Sendable {
++    let schemaVersion: Int
++    let exitCode: Int32?
++    let termination: BoundedTermination
++    let durationMs: Int
++    let timedOut: Bool
++    let failureCode: BoundedFailure?
++    private enum CodingKeys: String, CodingKey { case schemaVersion, exitCode, termination, durationMs, timedOut, failureCode }
++    func encode(to encoder: Encoder) throws {
++        var c = encoder.container(keyedBy: CodingKeys.self)
++        try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(exitCode, forKey: .exitCode)
++        try c.encode(termination, forKey: .termination); try c.encode(durationMs, forKey: .durationMs)
++        try c.encode(timedOut, forKey: .timedOut); try c.encode(failureCode, forKey: .failureCode)
++    }
++    var cliExitCode: Int32 {
++        switch termination { case .normal: exitCode ?? 1; case .timeout: 124; case .signal, .launchFailure: 1 }
++    }
++}
++enum BoundedProcessError: Error { case invalidCommand, outputUnavailable, childControl }
++
++enum BoundedProcess {
++    /// Every consuming CLI must call this before its ordinary option parsing.
++    /// fd0 is a private full-duplex launch socket only until exec; target stdin is /dev/null.
++    static func dispatchChildIfNeeded(arguments: [String]) throws {
++        guard arguments.first == "--bounded-child" else { return }
++        guard arguments.count >= 3, arguments[1] == "--" else { throw BoundedProcessError.childControl }
++        var type: Int32 = 0; var length = socklen_t(MemoryLayout<Int32>.size)
++        guard getsockopt(STDIN_FILENO, SOL_SOCKET, SO_TYPE, &type, &length) == 0, type == SOCK_STREAM else {
++            throw BoundedProcessError.childControl
++        }
++        let control = fcntl(STDIN_FILENO, F_DUPFD_CLOEXEC, 3)
++        guard control >= 0 else { throw BoundedProcessError.childControl }
++        defer { close(control) }
++        guard setpgid(0, 0) == 0 else { throw BoundedProcessError.childControl }
++        let ready = Array("READY \(getpid())\n".utf8)
++        guard ready.withUnsafeBytes({ Darwin.write(control, $0.baseAddress, $0.count) }) == ready.count else { throw BoundedProcessError.childControl }
++        let null = open("/dev/null", O_RDONLY)
++        guard null >= 0 else { throw BoundedProcessError.childControl }
++        guard dup2(null, STDIN_FILENO) >= 0 else { close(null); throw BoundedProcessError.childControl }
++        if null != STDIN_FILENO { close(null) }
++        let target = Array(arguments.dropFirst(2))
++        let strings = target.map { strdup($0) }
++        defer { for string in strings { free(string) } }
++        var argv = strings + [nil]
++        argv.withUnsafeMutableBufferPointer { buffer in _ = execv(target[0], buffer.baseAddress!) }
++        let failure = Array("EXECFAIL\n".utf8)
++        _ = failure.withUnsafeBytes { Darwin.write(control, $0.baseAddress, $0.count) }
++        throw BoundedProcessError.childControl
++    }
++
++    /// Synchronous, external process watchdog. No target actor/run loop participates in its deadline.
++    static func run(_ command: BoundedCommand, runnerExecutableURL: URL? = nil) throws -> BoundedResult {
++        guard command.timeoutSeconds.isFinite, command.timeoutSeconds > 0,
++              command.stdoutURL.standardizedFileURL != command.stderrURL.standardizedFileURL,
++              !([command.executable.path] + command.arguments).contains(where: { $0.utf8.contains(0) }) else {
++            throw BoundedProcessError.invalidCommand
++        }
++        let started = DispatchTime.now().uptimeNanoseconds
++        func elapsed() -> Double { Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000 }
++        func result(_ termination: BoundedTermination, _ failure: BoundedFailure?, _ exit: Int32? = nil) -> BoundedResult {
++            BoundedResult(schemaVersion: 1, exitCode: exit, termination: termination, durationMs: Int(elapsed() * 1000),
++                          timedOut: termination == .timeout, failureCode: failure)
++        }
++        let fm = FileManager.default
++        try Data().write(to: command.stdoutURL, options: .withoutOverwriting)
++        try Data().write(to: command.stderrURL, options: .withoutOverwriting)
++        let stdout = try FileHandle(forWritingTo: command.stdoutURL)
++        let stderr = try FileHandle(forWritingTo: command.stderrURL)
++        defer { try? stdout.close(); try? stderr.close() }
++        guard fm.isExecutableFile(atPath: command.executable.path) else { return result(.launchFailure, .launchFailed) }
++        var sockets: [Int32] = [-1, -1]
++        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sockets) == 0 else { throw BoundedProcessError.childControl }
++        let parent = sockets[0]
++        let input = FileHandle(fileDescriptor: sockets[1], closeOnDealloc: true)
++        defer { close(parent); try? input.close() }
++        _ = fcntl(parent, F_SETFD, FD_CLOEXEC)
++        _ = fcntl(parent, F_SETFL, O_NONBLOCK)
++        let process = Process()
++        process.executableURL = runnerExecutableURL ?? URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
++        process.arguments = ["--bounded-child", "--", command.executable.path] + command.arguments
++        process.currentDirectoryURL = command.workingDirectory
++        process.environment = command.environment
++        process.standardInput = input; process.standardOutput = stdout; process.standardError = stderr
++        do { try process.run() } catch { return result(.launchFailure, .launchFailed) }
++        try input.close()
++        let pid = process.processIdentifier
++        var ready = false
++        func groupExists() -> Bool { kill(-pid, 0) == 0 || errno == EPERM }
++        func stopOwned() -> Bool {
++            // A handshake grants group ownership. Before it, verify this exact child's group.
++            let ownGroup = pid > 1 && pid != getpgrp() && (ready || getpgid(pid) == pid)
++            let target = ownGroup ? -pid : pid
++            if process.isRunning || (ownGroup && groupExists()) { kill(target, SIGTERM) }
++            let grace = elapsed() + 2
++            while elapsed() < grace && (process.isRunning || (ownGroup && groupExists())) { Thread.sleep(forTimeInterval: 0.01) }
++            if process.isRunning || (ownGroup && groupExists()) { kill(target, SIGKILL) }
++            let reap = elapsed() + 1
++            while elapsed() < reap && (process.isRunning || (ownGroup && groupExists())) { Thread.sleep(forTimeInterval: 0.01) }
++            return !process.isRunning && (!ownGroup || !groupExists())
++        }
++        var received = Data()
++        var execConfirmed = false
++        let handshakeLimit = min(command.timeoutSeconds, 5)
++        while elapsed() < handshakeLimit {
++            var buffer = [UInt8](repeating: 0, count: 256)
++            let count = Darwin.read(parent, &buffer, buffer.count)
++            if count > 0 {
++                received.append(contentsOf: buffer.prefix(count))
++                if received.count > 512 { break }
++                ready = String(decoding: received, as: UTF8.self).hasPrefix("READY \(pid)\n")
++                if String(decoding: received, as: UTF8.self).contains("EXECFAIL") { break }
++            } else if count == 0 {
++                execConfirmed = received == Data("READY \(pid)\n".utf8)
++                break
++            } else if errno != EAGAIN && errno != EINTR { break }
++            else { Thread.sleep(forTimeInterval: 0.005) }
++        }
++        guard ready, execConfirmed else {
++            let clean = stopOwned()
++            return result(.launchFailure, !clean ? .cleanupFailed : String(decoding: received, as: UTF8.self).contains("EXECFAIL") ? .launchFailed : .handshakeFailed)
++        }
++        while process.isRunning && elapsed() < command.timeoutSeconds { Thread.sleep(forTimeInterval: 0.01) }
++        if process.isRunning {
++            let clean = stopOwned()
++            return result(.timeout, clean ? .deadlineExceeded : .cleanupFailed)
++        }
++        let reason = process.terminationReason
++        let status = process.terminationStatus
++        // A normally exiting parent may leave helpers in this owned group; clean that group too.
++        guard stopOwned() else { return result(.launchFailure, .cleanupFailed) }
++        if reason == .uncaughtSignal { return result(.signal, .childSignaled) }
++        return result(.normal, status == 0 ? nil : .childFailed, status)
++    }
++}
+diff --git a/scripts/verification/ProcessCLI.swift b/scripts/verification/ProcessCLI.swift
+new file mode 100644
+index 0000000..5da8c23
+--- /dev/null
++++ b/scripts/verification/ProcessCLI.swift
+@@ -0,0 +1,40 @@
++import Foundation
++import Darwin
++
++@main
++enum ProcessCLI {
++    static func main() {
++        let arguments = Array(CommandLine.arguments.dropFirst())
++        do { try BoundedProcess.dispatchChildIfNeeded(arguments: arguments) }
++        catch { FileHandle.standardError.write(Data("FlowType runner: child control failed\n".utf8)); exit(125) }
++        if ProcessRunnerSelfTests.fixture(arguments: arguments) { return }
++        if arguments == ["--self-test"] { exit(ProcessRunnerSelfTests.run()) }
++        var timeout: Double?; var stdout: String?; var stderr: String?; var report: String?; var target: [String] = []
++        var index = 0
++        while index < arguments.count {
++            if arguments[index] == "--" { target = Array(arguments.dropFirst(index + 1)); break }
++            guard index + 1 < arguments.count else { exit(64) }
++            let value = arguments[index + 1]
++            switch arguments[index] {
++            case "--timeout": guard timeout == nil, let number = Double(value), number.isFinite, number > 0 else { exit(64) }; timeout = number
++            case "--stdout": guard stdout == nil else { exit(64) }; stdout = value
++            case "--stderr": guard stderr == nil else { exit(64) }; stderr = value
++            case "--result": guard report == nil else { exit(64) }; report = value
++            default: exit(64)
++            }
++            index += 2
++        }
++        guard let timeout, let stdout, let stderr, let report, !target.isEmpty else { exit(64) }
++        let reportURL = URL(fileURLWithPath: report).standardizedFileURL
++        guard reportURL != URL(fileURLWithPath: stdout).standardizedFileURL,
++              reportURL != URL(fileURLWithPath: stderr).standardizedFileURL else { exit(64) }
++        do {
++            guard !FileManager.default.fileExists(atPath: reportURL.path) else { throw BoundedProcessError.outputUnavailable }
++            let result = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: target[0]), arguments: Array(target.dropFirst()),
++                workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), environment: ProcessInfo.processInfo.environment,
++                stdoutURL: URL(fileURLWithPath: stdout), stderrURL: URL(fileURLWithPath: stderr), timeoutSeconds: timeout))
++            try JSONEncoder().encode(result).write(to: reportURL, options: .withoutOverwriting)
++            exit(result.cliExitCode)
++        } catch { FileHandle.standardError.write(Data("FlowType runner: tool failure\n".utf8)); exit(125) }
++    }
++}
+diff --git a/scripts/verification/ProcessRunnerSelfTests.swift b/scripts/verification/ProcessRunnerSelfTests.swift
+new file mode 100644
+index 0000000..12db5f4
+--- /dev/null
++++ b/scripts/verification/ProcessRunnerSelfTests.swift
+@@ -0,0 +1,105 @@
++import Foundation
++import Darwin
++
++enum ProcessRunnerSelfTests {
++    private static func spawn(_ executable: String, _ arguments: [String]) -> pid_t {
++        let strings = ([executable] + arguments).map { strdup($0) }
++        defer { for string in strings { free(string) } }
++        var argv = strings + [nil]
++        var pid: pid_t = 0
++        var environment: [UnsafeMutablePointer<CChar>?] = [nil]
++        let status = argv.withUnsafeMutableBufferPointer { buffer in
++            environment.withUnsafeMutableBufferPointer { values in
++                posix_spawn(&pid, executable, nil, nil, buffer.baseAddress!, values.baseAddress!)
++            }
++        }
++        precondition(status == 0)
++        return pid
++    }
++
++    static func fixture(arguments: [String]) -> Bool {
++        guard arguments.first == "--fixture", arguments.count >= 2 else { return false }
++        switch arguments[1] {
++        case "signal": raise(SIGKILL)
++        case "output": FileHandle.standardOutput.write(Data(repeating: 65, count: 2 * 1024 * 1024)); exit(23)
++        case "descendants", "grandchild":
++            signal(SIGTERM, SIG_IGN)
++            if arguments[1] == "descendants" {
++                let child = spawn(CommandLine.arguments[0], ["--fixture", "grandchild", arguments[2]])
++                try! Data("\(getpid())\n\(child)\n".utf8).write(to: URL(fileURLWithPath: arguments[2]))
++            } else {
++                let child = spawn("/bin/sleep", ["30"])
++                let url = URL(fileURLWithPath: arguments[2] + ".grandchild")
++                try! Data("\(child)".utf8).write(to: url)
++            }
++            while true { pause() }
++        case "blocked", "independent": while true { pause() }
++        default: exit(64)
++        }
++        exit(0)
++    }
++
++    static func run() -> Int32 {
++        var passed = 0; var failed = 0
++        func check(_ value: Bool, _ name: String) { if value { passed += 1 } else { failed += 1; print("FAIL: \(name)") } }
++        let fm = FileManager.default
++        let root = fm.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("flowtype-process-\(UUID())")
++        do {
++            try fm.createDirectory(at: root, withIntermediateDirectories: true)
++            defer { try? fm.removeItem(at: root) }
++            let own = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
++            var sequence = 0
++            func command(_ args: [String], timeout: Double = 0.4, executable: URL? = nil) -> BoundedCommand {
++                sequence += 1
++                return BoundedCommand(executable: executable ?? own, arguments: args, workingDirectory: root, environment: [:],
++                    stdoutURL: root.appendingPathComponent("stdout-\(sequence)"), stderrURL: root.appendingPathComponent("stderr-\(sequence)"), timeoutSeconds: timeout)
++            }
++            let independent = Process(); independent.executableURL = own; independent.arguments = ["--fixture", "independent"]
++            independent.standardInput = FileHandle.nullDevice; independent.standardOutput = FileHandle.nullDevice; independent.standardError = FileHandle.nullDevice
++            try independent.run()
++            defer { if independent.isRunning { kill(independent.processIdentifier, SIGKILL) } }
++            let blocked = try BoundedProcess.run(command(["--fixture", "blocked"]))
++            check(blocked.timedOut && blocked.termination == .timeout && blocked.durationMs < 5000, "blocked main times out without unbounded wait")
++            check(blocked.cliExitCode == 124, "timeout CLI status124")
++            let signaled = try BoundedProcess.run(command(["--fixture", "signal"], timeout: 3))
++            check(signaled.termination == .signal && !signaled.timedOut, "signal exit is failure")
++            check(signaled.cliExitCode == 1 && signaled.failureCode == .childSignaled, "signal CLI failure status")
++            let outputCommand = command(["--fixture", "output"], timeout: 3)
++            let output = try BoundedProcess.run(outputCommand)
++            check(output.termination == .normal && output.exitCode == 23, "normal child exit status preserved")
++            check(try Data(contentsOf: outputCommand.stdoutURL).count == 2 * 1024 * 1024, "large stdout fully drained to file")
++            check(output.cliExitCode == 23, "CLI preserves normal nonzero child status")
++            let inputCommand = command([], timeout: 3, executable: URL(fileURLWithPath: "/bin/cat"))
++            let input = try BoundedProcess.run(inputCommand)
++            check(input.cliExitCode == 0 && input.failureCode == nil, "normal successful CLI status0")
++            check(try Data(contentsOf: inputCommand.stdoutURL).isEmpty, "target stdin is closed /dev/null")
++            let successJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(input)) as! [String: Any]
++            check(successJSON["failureCode"] is NSNull, "successful result failure is explicit null")
++            let literal = "literal spaces; $(touch forbidden)"
++            let literalCommand = command(["%s", literal], timeout: 3, executable: URL(fileURLWithPath: "/usr/bin/printf"))
++            let literalResult = try BoundedProcess.run(literalCommand)
++            check(try literalResult.exitCode == 0 && String(contentsOf: literalCommand.stdoutURL, encoding: .utf8) == literal,
++                  "arguments remain literal without shell evaluation")
++            let pids = root.appendingPathComponent("descendants.pid")
++            let descendants = try BoundedProcess.run(command(["--fixture", "descendants", pids.path], timeout: 1))
++            var owned: [pid_t] = []
++            if let text = try? String(contentsOf: pids, encoding: .utf8) { owned += text.split(separator: "\n").compactMap { Int32($0) } }
++            if let text = try? String(contentsOf: URL(fileURLWithPath: pids.path + ".grandchild"), encoding: .utf8), let pid = Int32(text) { owned.append(pid) }
++            defer { for pid in owned where kill(pid, 0) == 0 { kill(pid, SIGKILL) } }
++            check(descendants.timedOut && descendants.durationMs >= 2900 && descendants.durationMs < 6000, "TERM grace then bounded KILL")
++            let deadline = Date().addingTimeInterval(1)
++            while Date() < deadline && owned.contains(where: { kill($0, 0) == 0 }) { Thread.sleep(forTimeInterval: 0.02) }
++            if owned.contains(where: { kill($0, 0) == 0 }) { print("owned fixture states: " + owned.map { "pid=\($0) group=\(getpgid($0)) alive=\(kill($0, 0) == 0)" }.joined(separator: "; ")) }
++            check(owned.count == 3 && owned.allSatisfy { kill($0, 0) == -1 && errno == ESRCH }, "all owned descendants terminated")
++            check(independent.isRunning, "independent fixture survives other group cleanup")
++            let missing = try BoundedProcess.run(command([], executable: root.appendingPathComponent("missing")))
++            check(missing.termination == .launchFailure && missing.failureCode != nil, "missing executable is closed launch failure")
++            let handshake = try BoundedProcess.run(command(["--fixture", "blocked"]), runnerExecutableURL: URL(fileURLWithPath: "/usr/bin/true"))
++            check(handshake.termination == .launchFailure && handshake.failureCode == .handshakeFailed && !handshake.timedOut, "missing child handshake fails without launching target")
++            let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(output)) as! [String: Any]
++            check(encoded["timedOut"] as? Bool == false, "result is Codable")
++        } catch { check(false, "process fixture operation failed") }
++        print("=== process runner self-test: \(passed) passed, \(failed) failed ===")
++        return failed == 0 ? 0 : 1
++    }
++}

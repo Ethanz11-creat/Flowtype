@@ -1,0 +1,48 @@
+  ✗ FAIL: M5 missing packaged resources never use development fallback — got nil, want Optional(FlowType.ValidationFailureCode.resourceMissing)
+  ✗ FAIL: M5 missing packaged resources never use development fallback — got nil, want Optional(FlowType.ValidationFailureCode.resourceMissing)
+  ✗ FAIL: M5 rejects malformed or empty tech_terms.json — got nil, want Optional(FlowType.ValidationFailureCode.resourceMalformed)
+  ✗ FAIL: M5 rejects malformed or empty tech_terms.json — got nil, want Optional(FlowType.ValidationFailureCode.resourceMalformed)
+  ✗ FAIL: M5 rejects malformed or empty tech_terms.json — got nil, want Optional(FlowType.ValidationFailureCode.resourceMalformed)
+  ✗ FAIL: M5 rejects malformed or empty filler_words.json — got nil, want Optional(FlowType.ValidationFailureCode.resourceMalformed)
+  ✗ FAIL: M5 rejects malformed or empty filler_words.json — got nil, want Optional(FlowType.ValidationFailureCode.resourceMalformed)
+  ✗ FAIL: M5 rejects malformed or empty filler_words.json — got nil, want Optional(FlowType.ValidationFailureCode.resourceMalformed)
+  ✗ FAIL: M5 rejects malformed or empty status_bar_icon.png — got nil, want Optional(FlowType.ValidationFailureCode.resourceMalformed)
+  ✗ FAIL: M5 rejects missing status_bar_icon.png — got nil, want Optional(FlowType.ValidationFailureCode.resourceMissing)
+  ✗ FAIL: M5 rejects missing filler_words.json — got nil, want Optional(FlowType.ValidationFailureCode.resourceMissing)
+  ✗ FAIL: M5 rejects file symlink escaping app — got nil, want Optional(FlowType.ValidationFailureCode.resourceOutsideBundle)
+  ✗ FAIL: M5 rejects bundle symlink escaping app — got nil, want Optional(FlowType.ValidationFailureCode.resourceOutsideBundle)
+  ✗ FAIL: M5 rejects metal symlink escaping app — got nil, want Optional(FlowType.ValidationFailureCode.resourceOutsideBundle)
+  ✗ FAIL: M5 artifact stops before later effects: success — got [], want ["resources", "metal", "mlx"]
+  ✗ FAIL: M5 artifact explicit null on success
+  ✗ FAIL: M5 artifact closed failure: MLX failed — got nil, want Optional(FlowType.ValidationFailureCode.mlxOperationFailed)
+  ✗ FAIL: M5 artifact truthful success: MLX failed — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: MLX failed — got [true, true, true, true], want [true, true, false, true]
+  ✗ FAIL: M5 artifact stops before later effects: MLX failed — got [], want ["resources", "metal", "mlx"]
+  ✗ FAIL: M5 artifact closed failure: no GPU — got nil, want Optional(FlowType.ValidationFailureCode.metalUnavailable)
+  ✗ FAIL: M5 artifact truthful success: no GPU — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: no GPU — got [true, true, true, true], want [true, false, false, true]
+  ✗ FAIL: M5 artifact stops before later effects: no GPU — got [], want ["resources", "metal"]
+  ✗ FAIL: M5 artifact closed failure: bad library — got nil, want Optional(FlowType.ValidationFailureCode.metalLibraryInvalid)
+  ✗ FAIL: M5 artifact truthful success: bad library — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: bad library — got [true, true, true, true], want [true, false, false, true]
+  ✗ FAIL: M5 artifact stops before later effects: bad library — got [], want ["resources", "metal"]
+  ✗ FAIL: M5 artifact closed failure: wrong output — got nil, want Optional(FlowType.ValidationFailureCode.mlxOperationFailed)
+  ✗ FAIL: M5 artifact truthful success: wrong output — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: wrong output — got [true, true, true, true], want [true, true, false, true]
+  ✗ FAIL: M5 artifact stops before later effects: wrong output — got [], want ["resources", "metal", "mlx"]
+  ✗ FAIL: M5 artifact closed failure: missing resources — got nil, want Optional(FlowType.ValidationFailureCode.resourceMissing)
+  ✗ FAIL: M5 artifact truthful success: missing resources — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: missing resources — got [true, true, true, true], want [false, false, false, false]
+  ✗ FAIL: M5 artifact stops before later effects: missing resources — got [], want ["resources"]
+  ✗ FAIL: M5 artifact closed failure: invalid identity — got nil, want Optional(FlowType.ValidationFailureCode.invalidBuildInfo)
+  ✗ FAIL: M5 artifact truthful success: invalid identity — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: invalid identity — got [true, true, true, true], want [false, false, false, false]
+  ✗ FAIL: M5 artifact closed failure: invalid identity — got nil, want Optional(FlowType.ValidationFailureCode.invalidBuildInfo)
+  ✗ FAIL: M5 artifact truthful success: invalid identity — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: invalid identity — got [true, true, true, true], want [false, false, false, false]
+  ✗ FAIL: M5 artifact closed failure: invalid identity — got nil, want Optional(FlowType.ValidationFailureCode.invalidBuildInfo)
+  ✗ FAIL: M5 artifact truthful success: invalid identity — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: invalid identity — got [true, true, true, true], want [false, false, false, false]
+  ✗ FAIL: M5 artifact closed failure: invalid identity — got nil, want Optional(FlowType.ValidationFailureCode.invalidBuildInfo)
+  ✗ FAIL: M5 artifact truthful success: invalid identity — got true, want false
+  ✗ FAIL: M5 artifact only completed stages are true: invalid identity — got [true, true, true, true], want [false, false, false, false]

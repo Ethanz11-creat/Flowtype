@@ -1,0 +1,1 @@
+  ✗ FAIL: M5 rejects metal symlink escaping app — got nil, want Optional(FlowType.ValidationFailureCode.resourceOutsideBundle)

@@ -1,0 +1,165 @@
+Sources/flowtype/App/FlowTypeApp.swift-15-                    FileHandle.standardError.write(Data("FlowType: diagnostic logger configuration failed\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:16:                    AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift:17:                    exit(1)
+Sources/flowtype/App/FlowTypeApp.swift-18-                }
+Sources/flowtype/App/FlowTypeApp.swift-19-                switch context.mode {
+Sources/flowtype/App/FlowTypeApp.swift-20-                case .selfTest:
+Sources/flowtype/App/FlowTypeApp.swift-21-                    await SelfTest.runAndExit()
+Sources/flowtype/App/FlowTypeApp.swift:22:                case .smoke:
+Sources/flowtype/App/FlowTypeApp.swift-23-                    let report = await StartupSmoke.run(context: context)
+Sources/flowtype/App/FlowTypeApp.swift-24-                    do {
+Sources/flowtype/App/FlowTypeApp.swift-25-                        let data = try JSONEncoder().encode(report)
+Sources/flowtype/App/FlowTypeApp.swift-26-                        AppLogger.log(String(decoding: data, as: UTF8.self))
+Sources/flowtype/App/FlowTypeApp.swift-27-                        RuntimeEnvironment.finishValidation()
+Sources/flowtype/App/FlowTypeApp.swift:28:                        AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-29-                        FileHandle.standardOutput.write(data + Data("\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:30:                        exit(report.exitCode)
+Sources/flowtype/App/FlowTypeApp.swift-31-                    } catch {
+Sources/flowtype/App/FlowTypeApp.swift-32-                        RuntimeEnvironment.finishValidation()
+Sources/flowtype/App/FlowTypeApp.swift:33:                        AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-34-                        FileHandle.standardError.write(Data("FlowType: validation report encoding failed\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:35:                        exit(1)
+Sources/flowtype/App/FlowTypeApp.swift-36-                    }
+Sources/flowtype/App/FlowTypeApp.swift-37-                case .artifact:
+Sources/flowtype/App/FlowTypeApp.swift-38-
+Sources/flowtype/App/FlowTypeApp.swift-39-                    RuntimeEnvironment.finishValidation()
+Sources/flowtype/App/FlowTypeApp.swift:40:                    AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-41-                    FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:42:                    exit(1)
+Sources/flowtype/App/FlowTypeApp.swift-43-                case .app:
+Sources/flowtype/App/FlowTypeApp.swift-44-                    FlowTypeApp.main()
+Sources/flowtype/App/FlowTypeApp.swift-45-                }
+Sources/flowtype/App/FlowTypeApp.swift-46-            }
+Sources/flowtype/App/FlowTypeApp.swift-47-        } catch {
+Sources/flowtype/App/FlowTypeApp.swift:48:            AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-49-            let failure = (error as? RuntimeBootstrapError) ?? .rootPreparation
+Sources/flowtype/App/FlowTypeApp.swift-50-            FileHandle.standardError.write(Data("FlowType: runtime bootstrap \(failure.rawValue)\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:51:            exit(failure.exitCode)
+Sources/flowtype/App/FlowTypeApp.swift-52-        }
+Sources/flowtype/App/FlowTypeApp.swift-53-    }
+Sources/flowtype/App/FlowTypeApp.swift-54-}
+Sources/flowtype/App/FlowTypeApp.swift-55-
+--
+Sources/flowtype/App/FlowTypeApp.swift-136-        AppLogger.log("[AppDelegate] App will terminate")
+Sources/flowtype/App/FlowTypeApp.swift:137:        AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-138-    }
+Sources/flowtype/App/FlowTypeApp.swift-139-
+Sources/flowtype/App/FlowTypeApp.swift-140-    @MainActor
+Sources/flowtype/App/FlowTypeApp.swift-141-    private func loadQwenASRModel() async {
+--
+Sources/flowtype/WindowManager.swift-175-    func setupGlobalHotkey() {
+Sources/flowtype/WindowManager.swift:176:        guard actionGate.allow(.tapInstall) else { return }
+Sources/flowtype/WindowManager.swift-177-        if let actionEffects { actionEffects(.tapInstall); return }
+Sources/flowtype/WindowManager.swift-178-        guard ValidationEffects.live.allow(.inputEvent) else { return }
+Sources/flowtype/WindowManager.swift-179-        AppLogger.log("[WindowManager] setupGlobalHotkey called")
+Sources/flowtype/WindowManager.swift-180-        let accessibilityEnabled = PermissionHelper.checkAccessibility()
+--
+Sources/flowtype/WindowManager.swift-194-    func reloadHotkey() {
+Sources/flowtype/WindowManager.swift:195:        guard actionGate.allow(.configuration) else { return }
+Sources/flowtype/WindowManager.swift-196-        if let actionEffects { actionEffects(.configuration); return }
+Sources/flowtype/WindowManager.swift-197-        guard ValidationEffects.live.allow(.inputEvent) else { return }
+Sources/flowtype/WindowManager.swift-198-        AppLogger.log("[WindowManager] Queuing debounced hotkey reload...")
+Sources/flowtype/WindowManager.swift-199-        reloadWorkItem?.cancel()
+--
+Sources/flowtype/WindowManager.swift-256-    func repairEventTap() {
+Sources/flowtype/WindowManager.swift:257:        guard actionGate.allow(.tapRepair) else { return }
+Sources/flowtype/WindowManager.swift-258-        if let actionEffects { actionEffects(.tapRepair); return }
+Sources/flowtype/WindowManager.swift-259-        guard ValidationEffects.live.allow(.inputEvent) else { return }
+Sources/flowtype/WindowManager.swift-260-        // An installed tap is stronger evidence than a trust query for unsigned
+Sources/flowtype/WindowManager.swift-261-        // apps. Only probe permission when there is no tap to repair.
+--
+Sources/flowtype/WindowManager.swift-296-    func installEventTap() -> Bool {
+Sources/flowtype/WindowManager.swift:297:        guard actionGate.allow(.tapInstall) else { return false }
+Sources/flowtype/WindowManager.swift-298-        if let actionEffects { actionEffects(.tapInstall); return true }
+Sources/flowtype/WindowManager.swift-299-        guard ValidationEffects.live.allow(.inputEvent) else { return false }
+Sources/flowtype/WindowManager.swift-300-        guard eventTapPort == nil else { return true }
+Sources/flowtype/WindowManager.swift-301-        let eventMask = CGEventMask(1 << CGEventType.flagsChanged.rawValue)
+--
+Sources/flowtype/WindowManager.swift-485-    func handleDoubleTap() {
+Sources/flowtype/WindowManager.swift:486:        guard actionGate.allow(.hotkey) else { return }
+Sources/flowtype/WindowManager.swift-487-        if let actionEffects { actionEffects(.hotkey); return }
+Sources/flowtype/WindowManager.swift-488-        let controller = SessionController.shared
+Sources/flowtype/WindowManager.swift-489-        // Double-tap belongs exclusively to idle start detection. An active release
+Sources/flowtype/WindowManager.swift-490-        // already stopped synchronously and cannot change the polish policy.
+--
+Sources/flowtype/WindowManager.swift-497-    func handleSingleTap() {
+Sources/flowtype/WindowManager.swift:498:        guard actionGate.allow(.hotkey) else { return }
+Sources/flowtype/WindowManager.swift-499-        if let actionEffects { actionEffects(.hotkey); return }
+Sources/flowtype/WindowManager.swift-500-        let controller = SessionController.shared
+Sources/flowtype/WindowManager.swift-501-        switch controller.sessionState {
+Sources/flowtype/WindowManager.swift-502-        case .preparing, .recording:
+--
+Sources/flowtype/App/StatusBarController.swift-38-    @objc private func activate(_ sender: NSMenuItem) {
+Sources/flowtype/App/StatusBarController.swift:39:        guard actionGate.allow(.dictation) else { return }
+Sources/flowtype/App/StatusBarController.swift-40-        guard sender.isEnabled, let command = Command(rawValue: sender.tag) else { return }
+Sources/flowtype/App/StatusBarController.swift-41-        // Dispatch the presented command, then validate against the live session.
+Sources/flowtype/App/StatusBarController.swift-42-        // A queued Stop selection must never turn into Start after capture ends.
+Sources/flowtype/App/StatusBarController.swift-43-        switch (command, session.sessionState) {
+--
+Sources/flowtype/App/StatusBarController.swift-230-    @objc private func showMenu() {
+Sources/flowtype/App/StatusBarController.swift:231:        guard actionGate.allow(.menuWindow) else { return }
+Sources/flowtype/App/StatusBarController.swift-232-        if let actionEffects { actionEffects(.menuWindow); return }
+Sources/flowtype/App/StatusBarController.swift-233-        guard let button = statusItem?.button else { return }
+Sources/flowtype/App/StatusBarController.swift-234-        statusItem?.menu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY), in: button)
+Sources/flowtype/App/StatusBarController.swift-235-    }
+--
+Sources/flowtype/App/StatusBarController.swift-237-    @objc private func showSettings() {
+Sources/flowtype/App/StatusBarController.swift:238:        guard actionGate.allow(.menuWindow) else { return }
+Sources/flowtype/App/StatusBarController.swift-239-        if let actionEffects { actionEffects(.menuWindow); return }
+Sources/flowtype/App/StatusBarController.swift-240-        openSettings(tab: .settings)
+Sources/flowtype/App/StatusBarController.swift-241-    }
+Sources/flowtype/App/StatusBarController.swift-242-
+Sources/flowtype/App/StatusBarController.swift-243-    func openSettings(tab: AppTab = .settings) {
+Sources/flowtype/App/StatusBarController.swift:244:        guard actionGate.allow(.menuWindow) else { return }
+Sources/flowtype/App/StatusBarController.swift-245-        if let actionEffects { actionEffects(.menuWindow); return }
+Sources/flowtype/App/StatusBarController.swift-246-        guard ValidationEffects.live.allow(.window) else { return }
+Sources/flowtype/App/StatusBarController.swift-247-        if settingsWindowController == nil {
+Sources/flowtype/App/StatusBarController.swift-248-            let controller = SettingsWindowController(initialTab: tab)
+--
+Sources/flowtype/App/StatusBarController.swift-259-    @objc private func showAbout() {
+Sources/flowtype/App/StatusBarController.swift:260:        guard actionGate.allow(.menuWindow) else { return }
+Sources/flowtype/App/StatusBarController.swift-261-        if let actionEffects { actionEffects(.menuWindow); return }
+Sources/flowtype/App/StatusBarController.swift-262-        guard RuntimeEnvironment.current.role == .app else { return }
+Sources/flowtype/App/StatusBarController.swift-263-        let alert = NSAlert()
+Sources/flowtype/App/StatusBarController.swift-264-        alert.messageText = "关于 FlowType"
+--
+Sources/flowtype/App/StatusBarController.swift-270-    @objc private func openLogs() {
+Sources/flowtype/App/StatusBarController.swift:271:        guard actionGate.allow(.menuWindow) else { return }
+Sources/flowtype/App/StatusBarController.swift-272-        if let actionEffects { actionEffects(.menuWindow); return }
+Sources/flowtype/App/StatusBarController.swift-273-        AppLogger.openLogInFinder()
+Sources/flowtype/App/StatusBarController.swift-274-    }
+Sources/flowtype/App/StatusBarController.swift-275-
+--
+Sources/flowtype/App/StatusBarController.swift-297-    @objc private func repairReadiness() {
+Sources/flowtype/App/StatusBarController.swift:298:        guard actionGate.allow(.repair) else { return }
+Sources/flowtype/App/StatusBarController.swift-299-        if let actionEffects { actionEffects(.repair); return }
+Sources/flowtype/App/StatusBarController.swift-300-        let monitor = ReadinessMonitor.shared
+Sources/flowtype/App/StatusBarController.swift-301-        monitor.refresh()
+Sources/flowtype/App/StatusBarController.swift-302-        switch monitor.rawLevel {
+--
+Sources/flowtype/App/StatusBarController.swift-315-    @objc private func reloadConfiguration() {
+Sources/flowtype/App/StatusBarController.swift:316:        guard actionGate.allow(.configuration) else { return }
+Sources/flowtype/App/StatusBarController.swift-317-        if let actionEffects { actionEffects(.configuration); return }
+Sources/flowtype/App/StatusBarController.swift-318-        let defaultsKey = "flowtype.config"
+Sources/flowtype/App/StatusBarController.swift-319-        if let data = RuntimeEnvironment.defaults.data(forKey: defaultsKey),
+Sources/flowtype/App/StatusBarController.swift-320-           let config = try? JSONDecoder().decode(Configuration.self, from: data) {
+--
+Sources/flowtype/App/StatusBarController.swift-334-    @objc private func checkPermissions() {
+Sources/flowtype/App/StatusBarController.swift:335:        guard actionGate.allow(.permission) else { return }
+Sources/flowtype/App/StatusBarController.swift-336-        if let actionEffects { actionEffects(.permission); return }
+Sources/flowtype/App/StatusBarController.swift-337-        let monitor = ReadinessMonitor.shared
+Sources/flowtype/App/StatusBarController.swift-338-        monitor.refresh()
+Sources/flowtype/App/StatusBarController.swift-339-        WindowManager.shared.repairEventTap()
+--
+Sources/flowtype/App/StatusBarController.swift-344-    @objc private func quit() {
+Sources/flowtype/App/StatusBarController.swift:345:        guard actionGate.allow(.quit) else { return }
+Sources/flowtype/App/StatusBarController.swift-346-        if let actionEffects { actionEffects(.quit); return }
+Sources/flowtype/App/StatusBarController.swift-347-        NSApp.terminate(nil)
+Sources/flowtype/App/StatusBarController.swift-348-    }
+Sources/flowtype/App/StatusBarController.swift-349-
+Sources/flowtype/App/StatusBarController.swift-350-    @objc private func showOnboarding() {
+Sources/flowtype/App/StatusBarController.swift:351:        guard actionGate.allow(.menuWindow) else { return }
+Sources/flowtype/App/StatusBarController.swift-352-        if let actionEffects { actionEffects(.menuWindow); return }
+Sources/flowtype/App/StatusBarController.swift-353-        if onboardingWindowController == nil {
+Sources/flowtype/App/StatusBarController.swift-354-            let controller = OnboardingWindowController()
+Sources/flowtype/App/StatusBarController.swift-355-            controller.onClose = { [weak self] in

@@ -1,0 +1,10 @@
+README.md
+Sources/flowtype/App/BuildInfo.swift
+Sources/flowtype/App/FlowTypeApp.swift
+Sources/flowtype/App/RuntimeEnvironment.swift
+Sources/flowtype/App/StatusBarController.swift
+Sources/flowtype/Testing/M5BuildInfoSelfTests.swift
+Sources/flowtype/Testing/SelfTest.swift
+Sources/flowtype/Utilities/AppLogger.swift
+Sources/flowtype/Utilities/DiagnosticLogWriter.swift
+scripts/generate-build-info.swift

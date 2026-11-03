@@ -1,0 +1,4 @@
+[flowtype-local ffd4ba4] fix: isolate self-test persistence and startup effects
+ 39 files changed, 378 insertions(+), 83 deletions(-)
+ create mode 100644 Sources/flowtype/App/ValidationEffects.swift
+ create mode 100644 Sources/flowtype/Testing/M5IsolationSelfTests.swift

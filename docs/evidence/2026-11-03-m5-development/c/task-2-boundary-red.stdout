@@ -1,0 +1,6 @@
+FAIL: genuine Fail partial takes precedence even with older timestamp
+FAIL: newer partial report exports
+FAIL: CLI emits owned path once even on late write failure
+FAIL: actual CI helper exports late-write evidence
+=== verification self-test: 97 passed, 4 failed ===
+Retained synthetic evidence: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-verification-3C1F130A-FA69-4058-AC5A-4023EFBE8F74

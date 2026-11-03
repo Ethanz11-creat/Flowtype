@@ -1,0 +1,8 @@
+[flowtype-local 7488553] feat: add bounded startup smoke with real timer evidence
+ 12 files changed, 682 insertions(+), 28 deletions(-)
+ create mode 100644 Sources/flowtype/App/Validation/StartupSmoke.swift
+ create mode 100644 Sources/flowtype/App/Validation/ValidationReport.swift
+ create mode 100644 Sources/flowtype/Testing/M5SmokeSelfTests.swift
+ create mode 100644 scripts/verification/BoundedProcess.swift
+ create mode 100644 scripts/verification/ProcessCLI.swift
+ create mode 100644 scripts/verification/ProcessRunnerSelfTests.swift

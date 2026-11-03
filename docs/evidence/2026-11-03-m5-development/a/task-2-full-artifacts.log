@@ -1,0 +1,16 @@
+{
+  "databases": [
+    {
+      "path": "ApplicationSupport/flowtype.sqlite",
+      "sessionCount": 0,
+      "migrationMarkerCount": 1
+    },
+    {
+      "path": "Tmp/m5-isolation-F4558A1E-B401-45C7-8C6D-256C116B9910/flowtype.sqlite",
+      "sessionCount": 1,
+      "migrationMarkerCount": 1
+    }
+  ],
+  "jsonBackupCount": 2,
+  "corruptBackupCount": 2
+}

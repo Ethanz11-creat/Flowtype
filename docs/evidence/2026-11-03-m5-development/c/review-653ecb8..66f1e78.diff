@@ -1,0 +1,556 @@
+# Review package: 653ecb8b48acd1581629807b4cfa231e0128e977..66f1e78c2ea31db7290a5083abab4069df229b38
+
+## Commits
+66f1e78 ci: gate code validation and whitelist evidence
+
+## Files changed
+ .github/workflows/ci.yml                         |  49 +++++++
+ scripts/export-ci-evidence.sh                    |  37 ++++++
+ scripts/verification/VerificationCLI.swift       |  26 +++-
+ scripts/verification/VerificationReport.swift    | 160 ++++++++++++++++++++++-
+ scripts/verification/VerificationSelfTests.swift | 139 +++++++++++++++++++-
+ 5 files changed, 401 insertions(+), 10 deletions(-)
+
+## Diff
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..78973e2
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,49 @@
++name: Code validation
++
++on:
++  push:
++  pull_request:
++
++permissions:
++  contents: read
++
++jobs:
++  code:
++    runs-on: macos-15
++    timeout-minutes: 40
++    env:
++      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
++    steps:
++      - name: Checkout complete history
++        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, verified 2026-11-03
++        with:
++          fetch-depth: 0
++          persist-credentials: false
++      - name: Confirm preinstalled toolchain
++        shell: bash
++        run: |
++          set -euo pipefail
++          test -d "$DEVELOPER_DIR"
++          /usr/bin/sw_vers -productVersion
++          /usr/bin/uname -m
++          /usr/bin/swift --version
++      - name: Verify code
++        shell: bash
++        run: |
++          set -euo pipefail
++          mkdir -p build
++          scripts/verify.sh --lane code > build/ci-verify.stdout 2> build/ci-verify.stderr
++      - name: Export allowlisted evidence
++        id: evidence
++        if: always()
++        shell: bash
++        run: scripts/export-ci-evidence.sh build/ci-verify.stdout
++      - name: Upload allowlisted evidence
++        if: ${{ always() && steps.evidence.outcome == 'success' }}
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, verified 2026-11-03
++        with:
++          name: code-verification-${{ github.run_id }}-${{ github.run_attempt }}
++          path: build/ci-evidence/
++          if-no-files-found: error
++          include-hidden-files: false
++          retention-days: 7
+diff --git a/scripts/export-ci-evidence.sh b/scripts/export-ci-evidence.sh
+new file mode 100755
+index 0000000..945c55f
+--- /dev/null
++++ b/scripts/export-ci-evidence.sh
+@@ -0,0 +1,37 @@
++#!/bin/bash
++set -euo pipefail
++ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
++cd "$ROOT"
++fail() { printf 'FlowType evidence export: outputUnavailable\n' >&2; exit 1; }
++[ "$#" -eq 1 ] || fail
++for DIRECTORY in "$ROOT/build" "$ROOT/build/tools" "$ROOT/build/verification"; do
++    [ ! -L "$DIRECTORY" ] && [ -d "$DIRECTORY" ] || fail
++done
++[ -f "$1" ] && [ ! -L "$1" ] || fail
++# Consume the one safe report path emitted by this invocation; never search the verification root.
++REPORT=$(awk '/^build\/verification\/[[:xdigit:]-]+\/(verify-report|bootstrap-failure)[.]json$/ { print; count++ } END { if (count != 1) exit 1 }' "$1") || fail
++RUN_REL=${REPORT%/*}
++RUN_ID=${RUN_REL##*/}
++[[ "$RUN_ID" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || fail
++RUN="$ROOT/$RUN_REL"
++[ -d "$RUN" ] && [ ! -L "$RUN" ] || fail
++DEST="$ROOT/build/ci-evidence"
++[ ! -L "$DEST" ] || fail
++if [ -e "$DEST" ]; then
++    [ -d "$DEST" ] && [ -z "$(ls -A "$DEST")" ] || fail
++else
++    mkdir "$DEST"
++fi
++if [ "${REPORT##*/}" = bootstrap-failure.json ]; then
++    # This fallback also works when swiftc could not produce the tool. Compiler output is never uploaded.
++    [ -f "$RUN/bootstrap-failure.json" ] && [ ! -L "$RUN/bootstrap-failure.json" ] || fail
++    EXPECTED=$(mktemp "$ROOT/build/.bootstrap-XXXXXX")
++    trap 'rm -f "$EXPECTED"' EXIT
++    printf '{"schemaVersion":1,"status":"Fail","failureCode":"bootstrapFailed"}\n' > "$EXPECTED"
++    cmp -s "$EXPECTED" "$RUN/bootstrap-failure.json" || fail
++    cp "$EXPECTED" "$DEST/bootstrap-failure.json"
++    printf 'FlowType verification: bootstrapFailed\n' > "$DEST/bootstrap.stderr"
++else
++    [ -x "$ROOT/build/tools/flowtype-verify" ] && [ ! -L "$ROOT/build/tools/flowtype-verify" ] || fail
++    "$ROOT/build/tools/flowtype-verify" --export-evidence "$RUN" --output "$DEST"
++fi
+diff --git a/scripts/verification/VerificationCLI.swift b/scripts/verification/VerificationCLI.swift
+index 9d3e90e..11b3473 100644
+--- a/scripts/verification/VerificationCLI.swift
++++ b/scripts/verification/VerificationCLI.swift
+@@ -12,33 +12,51 @@ struct VerificationOptions {
+             case "--lane": guard lane == nil, let parsed = VerificationLane(rawValue: value) else { throw VerificationFailure.usage }; lane = parsed
+             case "--manual-report": guard manual == nil else { throw VerificationFailure.usage }; manual = URL(fileURLWithPath: value)
+             case "--ci-report": guard ci == nil else { throw VerificationFailure.usage }; ci = URL(fileURLWithPath: value)
+             default: throw VerificationFailure.usage
+             }
+             index += 2
+         }
+         return VerificationOptions(lane: lane ?? .code, manual: manual, ci: ci)
+     }
+ }
++struct VerificationExportOptions {
++    let root: URL; let output: URL
++    static func parse(_ args: [String]) throws -> VerificationExportOptions {
++        guard args.count == 4, args[0] == "--export-evidence", args[2] == "--output",
++              !args[1].isEmpty, !args[3].isEmpty, !args[1].hasPrefix("--"), !args[3].hasPrefix("--") else { throw VerificationFailure.usage }
++        return VerificationExportOptions(root: URL(fileURLWithPath: args[1]), output: URL(fileURLWithPath: args[3]))
++    }
++}
+ @main enum VerificationCLI {
++    static func verify(_ options: VerificationOptions, repository: URL, dependencies: VerificationDependencies = .live(), announce: (String) -> Void = { print($0) }) throws -> VerificationReport {
++        let output = try VerificationPaths.prepare(repository: repository).appendingPathComponent(UUID().uuidString)
++        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
++        announce("build/verification/\(output.lastPathComponent)/verify-report.json")
++        let report = try VerificationRunner.run(lane: options.lane, repository: repository, output: output, manualReport: options.manual, ciReport: options.ci, dependencies: dependencies)
++        return report
++    }
+     static func main() {
+         let arguments = Array(CommandLine.arguments.dropFirst())
+         do { try BoundedProcess.dispatchChildIfNeeded(arguments: arguments) }
+         catch { FileHandle.standardError.write(Data("FlowType verification: child control failed\n".utf8)); exit(125) }
+         if arguments == ["--self-test"] { exit(VerificationSelfTests.run()) }
+         do {
++            if arguments.first == "--export-evidence" {
++                let options = try VerificationExportOptions.parse(arguments)
++                let files = try VerificationEvidence.exportRun(runRoot: options.root, destination: options.output)
++                print("Evidence export: \(files.count) files")
++                exit(0)
++            }
+             let options = try VerificationOptions.parse(arguments)
+             try packagingCancellation.install()
+             let repository = try canonicalExisting(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+-            let output = try VerificationPaths.prepare(repository: repository).appendingPathComponent(UUID().uuidString)
+-            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+-            let report = try VerificationRunner.run(lane: options.lane, repository: repository, output: output, manualReport: options.manual, ciReport: options.ci)
++            let report = try verify(options, repository: repository)
+             print("Verification \(options.lane.rawValue): \(report.status.rawValue)")
+-            print("build/verification/\(output.lastPathComponent)/verify-report.json")
+             exit(report.exitCode)
+         } catch {
+             let failure = (error as? VerificationFailure) ?? .toolFailed
+             FileHandle.standardError.write(Data("FlowType verification: \(failure.rawValue)\n".utf8))
+             exit(failure == .usage ? 64 : 1)
+         }
+     }
+ }
+diff --git a/scripts/verification/VerificationReport.swift b/scripts/verification/VerificationReport.swift
+index c9366b4..0d15ca9 100644
+--- a/scripts/verification/VerificationReport.swift
++++ b/scripts/verification/VerificationReport.swift
+@@ -50,20 +50,172 @@ struct VerificationCommand {
+ }
+ struct VerificationDependencies {
+     let execute: (VerificationCommand) throws -> BoundedResult
+     let snapshot: (URL, URL) throws -> SourceSnapshot
+     let manifest: (URL) throws -> ArtifactManifest
+     let recover: (URL) throws -> Void
+     let ciCode: Bool
+     var writeReport: (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+ }
+ 
++enum VerificationCapability {
++    static func operatingSystem(_ value: String) -> Bool {
++        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
++        guard text.range(of: #"\A[0-9]+(?:\.[0-9]+){0,2}\z"#, options: .regularExpression) != nil,
++              let major = Int(text.split(separator: ".")[0]) else { return false }
++        return major >= 15
++    }
++    static func architecture(_ value: String) -> Bool { value.trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" }
++    static func swiftVersion(_ value: String) -> Bool {
++        let regex = try! NSRegularExpression(pattern: #"(?:Apple )?Swift version ([0-9]+)\.([0-9]+)(?:\.[0-9]+)?(?:\s|$)"#)
++        guard let m = regex.firstMatch(in: value, range: NSRange(value.startIndex..<value.endIndex, in: value)),
++              let a = Range(m.range(at: 1), in: value), let b = Range(m.range(at: 2), in: value),
++              let major = Int(value[a]), let minor = Int(value[b]) else { return false }
++        return major > 6 || major == 6 && minor >= 2
++    }
++}
++enum VerificationEvidence {
++    private struct BootstrapFailure: Decodable { let schemaVersion: Int; let status: VerificationStatus; let failureCode: String }
++    private static let fm = FileManager.default
++    private static func encoded(_ report: VerificationReport) throws -> Data {
++        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]; return try encoder.encode(report)
++    }
++    /// Walk literal components before reading any bytes. Missing partial-run files are permitted.
++    private static func file(_ relative: String, under root: URL) throws -> URL? {
++        let parts = relative.split(separator: "/", omittingEmptySubsequences: false)
++        guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }), !relative.hasPrefix("/") else { throw VerificationFailure.outputUnavailable }
++        var current = root
++        for (index, part) in parts.enumerated() {
++            current.appendPathComponent(String(part))
++            guard (try? fm.destinationOfSymbolicLink(atPath: current.path)) == nil else { throw VerificationFailure.outputUnavailable }
++            guard fm.fileExists(atPath: current.path) else { return nil }
++            guard try canonicalExisting(current).path == current.path else { throw VerificationFailure.outputUnavailable }
++            let info = try current.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey])
++            guard index == parts.count - 1 ? info.isRegularFile == true : info.isDirectory == true else { throw VerificationFailure.outputUnavailable }
++        }
++        return current
++    }
++    private static func ownedRoot(_ root: URL) throws -> URL {
++        let literal = root // standardizedFileURL rewrites macOS /private/var; preserve literal ownership paths.
++        guard UUID(uuidString: literal.lastPathComponent) != nil,
++              literal.deletingLastPathComponent().lastPathComponent == "verification",
++              literal.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == "build",
++              try canonicalExisting(literal).path == literal.path else { throw VerificationFailure.outputUnavailable }
++        let repo = literal.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
++        guard try VerificationPaths.prepare(repository: repo).path == literal.deletingLastPathComponent().path else { throw VerificationFailure.outputUnavailable }
++        return literal
++    }
++    private static func emptyDestination(_ destination: URL, runRoot: URL) throws -> URL {
++        let literal = destination
++        guard try canonicalExisting(literal).path == literal.path,
++              try literal.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
++              !literal.path.hasPrefix(runRoot.path + "/"), literal.path != runRoot.path,
++              try fm.contentsOfDirectory(atPath: literal.path).isEmpty else { throw VerificationFailure.outputUnavailable }
++        return literal
++    }
++    private static func selected(_ root: URL) throws -> (String, VerificationReport)? {
++        let original = try file("verify-report.json", under: root), partial = try file("verify-report.partial.json", under: root)
++        func decode(_ url: URL) throws -> VerificationReport {
++            let report = try JSONDecoder().decode(VerificationReport.self, from: Data(contentsOf: url))
++            guard report.schemaVersion == 1, UUID(uuidString: report.runID) == UUID(uuidString: root.lastPathComponent) else { throw VerificationFailure.identityMismatch }
++            return report
++        }
++        let previous = try original.map(decode)
++        if let partial {
++            let newer = try decode(partial)
++            guard newer.status == .fail, newer.phases.last?.name == "report-write", newer.phases.last?.status == .fail,
++                  newer.phases.last?.failureCode == .outputUnavailable else { throw VerificationFailure.malformedReport }
++            if let previous {
++                guard previous.lane == newer.lane,
++                      previous.sourceIdentity == nil || newer.sourceIdentity == previous.sourceIdentity,
++                      previous.artifactIdentity == nil || newer.artifactIdentity == previous.artifactIdentity else { throw VerificationFailure.identityMismatch }
++            }
++            // A unique run never resumes with a successful overwrite. Fail evidence wins regardless of wall-clock metadata.
++            return ("verify-report.partial.json", newer)
++        }
++        return previous.map { ("verify-report.json", $0) }
++    }
++    static func exportAllowlisted(report: VerificationReport, runRoot: URL, destination: URL) throws -> [String] {
++        let root = try ownedRoot(runRoot), output = try emptyDestination(destination, runRoot: root)
++        guard let (reportName, disk) = try selected(root), try encoded(disk) == encoded(report) else { throw VerificationFailure.identityMismatch }
++        let internalNames: Set<String> = ["source-start", "source-end", "artifact-recovery-before", "artifact-source", "artifact-manifest", "artifact-recovery-after", "report-write"]
++        let commandNames = Set(["platform-os", "platform-arch", "platform-swift", "code-build", "code-full", "artifact-build", "artifact-signature", "artifact-check"] + (1...10).map { String(format: "smoke-%02d", $0) })
++        let streamNames = commandNames.subtracting(["platform-os", "platform-arch", "platform-swift"])
++        var payloads = [reportName: try encoded(report)], usedChildren: Set<String> = [], phases: Set<String> = []
++        func include(_ relative: String, required: Bool = false) throws {
++            if let source = try file(relative, under: root) { payloads[relative] = try Data(contentsOf: source) }
++            else if required { throw VerificationFailure.outputUnavailable }
++        }
++        for phase in report.phases {
++            guard phases.insert(phase.name).inserted, internalNames.contains(phase.name) || commandNames.contains(phase.name),
++                  report.lane != .code || !phase.name.hasPrefix("artifact-") && !phase.name.hasPrefix("smoke-"),
++                  report.lane != .artifact || !phase.name.hasPrefix("code-") else { throw VerificationFailure.malformedReport }
++            if internalNames.contains(phase.name) {
++                for path in phase.evidence {
++                    let parts = path.split(separator: "/")
++                    guard parts.count == 2, parts[0].hasPrefix("internal-"), UUID(uuidString: String(parts[0].dropFirst(9))) != nil,
++                          ["stdout", "stderr"].contains(String(parts[1].split(separator: ".").last ?? "")),
++                          UUID(uuidString: String(parts[1].dropLast(7))) != nil else { throw VerificationFailure.malformedReport }
++                    _ = try file(path, under: root) // Validate references, but never upload git/source command logs.
++                }
++                continue
++            }
++            var childID: String?
++            for path in phase.evidence {
++                let parts = path.split(separator: "/", omittingEmptySubsequences: false)
++                guard parts.count == 3, parts[0] == "children", UUID(uuidString: String(parts[1])) != nil,
++                      ["stdout", "stderr", "process-result.json"].contains(parts[2]), childID == nil || childID == String(parts[1]) else { throw VerificationFailure.malformedReport }
++                childID = String(parts[1])
++                _ = try file(path, under: root)
++                if streamNames.contains(phase.name), parts[2] != "process-result.json" { try include(path, required: report.status == .pass) }
++            }
++            guard let childID else { continue }
++            guard usedChildren.insert(childID).inserted else { throw VerificationFailure.malformedReport }
++            let child = "children/" + childID, directory = root.appendingPathComponent(child)
++            if !fm.fileExists(atPath: directory.path) { continue }
++            // Only inspect immediate validation-root names; never recurse into config/defaults/DB/model directories.
++            if phase.name == "code-full" || phase.name.hasPrefix("smoke-") {
++                let names = try fm.contentsOfDirectory(atPath: directory.path).filter { $0.hasPrefix("validation-") && UUID(uuidString: String($0.dropFirst(11))) != nil }
++                guard names.count <= 1 else { throw VerificationFailure.malformedReport }
++                for name in names {
++                    let log = phase.name == "code-full" ? "diagnostic-selftest.log" : "diagnostic-smoke.log"
++                    for suffix in ["", ".1", ".2", ".3"] { try include(child + "/" + name + "/Logs/" + log + suffix) }
++                }
++            }
++            if phase.name == "artifact-check" {
++                for name in ["artifact.stdout", "artifact.stderr"] { try include(child + "/check-output/" + name) }
++                for suffix in ["", ".1", ".2", ".3"] { try include(child + "/check-output/validation-root/Logs/diagnostic-smoke.log" + suffix) }
++            }
++        }
++        // Validate the complete selection before creating any output, then write data, never copied links.
++        for path in payloads.keys.sorted() {
++            let target = output.appendingPathComponent(path)
++            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
++            try payloads[path]!.write(to: target, options: .withoutOverwriting)
++        }
++        return payloads.keys.sorted()
++    }
++    static func exportRun(runRoot: URL, destination: URL) throws -> [String] {
++        let root = try ownedRoot(runRoot)
++        if let (_, report) = try selected(root) { return try exportAllowlisted(report: report, runRoot: root, destination: destination) }
++        let output = try emptyDestination(destination, runRoot: root)
++        guard let bootstrap = try file("bootstrap-failure.json", under: root) else { throw VerificationFailure.malformedReport }
++        let data = try Data(contentsOf: bootstrap), record = try JSONDecoder().decode(BootstrapFailure.self, from: data)
++        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
++              Set(object.keys) == Set(["schemaVersion", "status", "failureCode"]),
++              record.schemaVersion == 1, record.status == .fail, record.failureCode == "bootstrapFailed" else { throw VerificationFailure.malformedReport }
++        try Data("{\"schemaVersion\":1,\"status\":\"Fail\",\"failureCode\":\"bootstrapFailed\"}\n".utf8).write(to: output.appendingPathComponent("bootstrap-failure.json"), options: .withoutOverwriting)
++        try Data("FlowType verification: bootstrapFailed\n".utf8).write(to: output.appendingPathComponent("bootstrap.stderr"), options: .withoutOverwriting)
++        return ["bootstrap-failure.json", "bootstrap.stderr"]
++    }
++}
++
+ private enum WireFailure: String, Codable { case startupFailed, timerDeadline, windowServerUnavailable, invalidBuildInfo, resourceMissing, resourceMalformed, resourceOutsideBundle, metalUnavailable, metalLibraryInvalid, mlxOperationFailed, unexpectedFailure }
+ private enum WireOrigin: String, Codable { case packaged, development, invalid }
+ private enum WireReadiness: String, Codable { case ready, degraded, blocked }
+ private enum WirePermission: String, Codable { case granted, denied, notDetermined, unknown }
+ private struct WireIdentity: Codable, Equatable { let origin: WireOrigin; let metadata: BuildMetadataRecord?; let failureCode: String? }
+ private struct RuntimeWire: Codable, Equatable {
+     let schemaVersion: Int; let mode: String; let ok: Bool; let role: String; let runID: String
+     let buildInfo: WireIdentity; let durationMs: Int; let failureCode: WireFailure?
+     let readiness: WireReadiness?; let ax: WirePermission?; let mic: WirePermission?; let speech: WirePermission?
+     let probeTimerTicks: Int?; let windowHealthTicks: Int?; let tap: String?
+@@ -259,29 +411,27 @@ enum VerificationRunner {
+                 }
+             } catch { phase.failureCode = (error as? VerificationFailure) ?? failure }
+             try replace(phase); return phase.status == .pass || phase.status == .skip
+         }
+         var start: SourceSnapshot?
+         let sourceOK = try internalPhase("source-start") { logs in
+             let value = try dependencies.snapshot(repository, logs); start = value; report.sourceIdentity = value.identity
+             if code && dependencies.ciCode && value.identity.dirty { throw VerificationFailure.dirtySource }
+         }
+         let os = try execute("platform-os", URL(fileURLWithPath: "/usr/bin/sw_vers"), ["-productVersion"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
+-            guard let major = Int(String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ".").first ?? ""), major >= 15 else { throw VerificationFailure.platformUnsupported }; return .pass
++            guard VerificationCapability.operatingSystem(String(decoding: bytes, as: UTF8.self)) else { throw VerificationFailure.platformUnsupported }; return .pass
+         }
+         let arch = try execute("platform-arch", URL(fileURLWithPath: "/usr/bin/uname"), ["-m"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
+-            guard String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" else { throw VerificationFailure.platformUnsupported }; return .pass
++            guard VerificationCapability.architecture(String(decoding: bytes, as: UTF8.self)) else { throw VerificationFailure.platformUnsupported }; return .pass
+         }
+         let swift = try execute("platform-swift", URL(fileURLWithPath: "/usr/bin/swift"), ["--version"], timeout: 30, failure: .platformUnsupported) { bytes, _, _ in
+-            let text = String(decoding: bytes, as: UTF8.self), regex = try NSRegularExpression(pattern: #"Swift version ([0-9]+)\.([0-9]+)"#)
+-            guard let m = regex.firstMatch(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text)), let a = Range(m.range(at: 1), in: text), let b = Range(m.range(at: 2), in: text),
+-                  let major = Int(text[a]), let minor = Int(text[b]), major > 6 || major == 6 && minor >= 2 else { throw VerificationFailure.platformUnsupported }; return .pass
++            guard VerificationCapability.swiftVersion(String(decoding: bytes, as: UTF8.self)) else { throw VerificationFailure.platformUnsupported }; return .pass
+         }
+         let platform = os && arch && swift
+         if code && platform && sourceOK {
+             if try execute("code-build", URL(fileURLWithPath: "/usr/bin/swift"), ["build"], timeout: 900, failure: .buildFailed) {
+                 _ = try execute("code-full", repository.appendingPathComponent(".build/debug/FlowType"), ["--self-test", "--validation-root", "__VALIDATION_ROOT__"], timeout: 900, failure: .fullTestFailed) { data, _, _ in
+                     guard VerificationValidation.fullSummary(data) else { throw VerificationFailure.fullTestFailed }; return .pass
+                 }
+             }
+         }
+         if artifact {
+diff --git a/scripts/verification/VerificationSelfTests.swift b/scripts/verification/VerificationSelfTests.swift
+index 5a55a15..28e244f 100644
+--- a/scripts/verification/VerificationSelfTests.swift
++++ b/scripts/verification/VerificationSelfTests.swift
+@@ -220,31 +220,168 @@ enum VerificationSelfTests {
+             else { try fm.createDirectory(at: candidate.appendingPathComponent("build"), withIntermediateDirectories: false); link = candidate.appendingPathComponent("build/verification") }
+             try fm.createSymbolicLink(at: link, withDestinationURL: target)
+             do { _ = try VerificationPaths.prepare(repository: candidate); check(false, "evidence ancestor escape rejected") } catch { check(true, "evidence ancestor escape rejected") }
+             check(try fm.contentsOfDirectory(atPath: target.path).isEmpty, "external evidence directory untouched")
+         }
+         for args in [["--lane", "code", "--lane", "release"], ["--unknown", "value"], ["--lane", "bogus"], ["--lane"], ["--run-id", UUID().uuidString], ["--self-test", "--lane", "release"]] {
+             do { _ = try VerificationOptions.parse(args); check(false, "invalid verifier argv rejected") } catch { check((error as? VerificationFailure) == .usage, "invalid verifier argv rejected") }
+         }
+         check(try VerificationOptions.parse([]).lane == .code, "default verifier lane is code")
+     }
++    static func evidenceFixture() throws -> (URL, URL, VerificationReport, String) {
++        let fm = FileManager.default, repo = root.appendingPathComponent("evidence-\(UUID())")
++        try fm.createDirectory(at: repo, withIntermediateDirectories: false)
++        let run = try VerificationPaths.prepare(repository: repo).appendingPathComponent(UUID().uuidString)
++        let child = "children/11111111-1111-4111-8111-111111111111"
++        try fm.createDirectory(at: run.appendingPathComponent(child), withIntermediateDirectories: true)
++        try Data("synthetic build stdout\n".utf8).write(to: run.appendingPathComponent(child + "/stdout"))
++        try Data("synthetic build stderr\n".utf8).write(to: run.appendingPathComponent(child + "/stderr"))
++        let diagnostic = child + "/validation-22222222-2222-4222-8222-222222222222/Logs/diagnostic-selftest.log"
++        try fm.createDirectory(at: run.appendingPathComponent(diagnostic).deletingLastPathComponent(), withIntermediateDirectories: true)
++        try Data("synthetic isolated diagnostic\n".utf8).write(to: run.appendingPathComponent(diagnostic))
++        let report = VerificationReport(schemaVersion: 1, runID: run.lastPathComponent, lane: .code, status: .fail,
++            sourceIdentity: nil, artifactIdentity: nil, phases: [VerificationPhase(name: "code-full", status: .fail, exitCode: 1,
++                evidence: [child + "/stdout", child + "/stderr", child + "/process-result.json"])], manualStatus: .pending, ciStatus: .pending)
++        try JSONEncoder().encode(report).write(to: run.appendingPathComponent("verify-report.json"))
++        let output = repo.appendingPathComponent("export"); try fm.createDirectory(at: output, withIntermediateDirectories: false)
++        return (run, output, report, diagnostic)
++    }
++    static func testEvidenceAllowlist() throws {
++        let fm = FileManager.default
++        let (run, output, report, diagnostic) = try evidenceFixture()
++        for canary in [".env", "user.sqlite", "weights.bin", "defaults.json", "production.log", "audio.wav"] {
++            try Data("synthetic canary".utf8).write(to: run.appendingPathComponent(canary))
++        }
++        let external = root.appendingPathComponent("external-canary"); try Data("external synthetic".utf8).write(to: external)
++        try fm.createSymbolicLink(at: run.appendingPathComponent("external-link"), withDestinationURL: external)
++        do {
++            let files = try VerificationEvidence.exportAllowlisted(report: report, runRoot: run, destination: output)
++            check(Set(files) == Set(["verify-report.json", "children/11111111-1111-4111-8111-111111111111/stdout", "children/11111111-1111-4111-8111-111111111111/stderr", diagnostic]), "allowlist copies only report, streams, isolated diagnostic")
++            check(try Data(contentsOf: output.appendingPathComponent(diagnostic)) == Data("synthetic isolated diagnostic\n".utf8), "diagnostic copy preserves synthetic bytes")
++        } catch { check(false, "allowlisted failed report exports available evidence") }
++        for path in ["../.env", "/tmp/outside", "children/11111111-1111-4111-8111-111111111111/defaults.json", "children/not-a-uuid/stdout", "children/11111111-1111-4111-8111-111111111111/validation-22222222-2222-4222-8222-222222222222/Logs/production.log"] {
++            let (owned, out, source, _) = try evidenceFixture()
++            var changed = source; changed.phases[0].evidence = [path]
++            try JSONEncoder().encode(changed).write(to: owned.appendingPathComponent("verify-report.json"))
++            do { _ = try VerificationEvidence.exportAllowlisted(report: changed, runRoot: owned, destination: out); check(false, "unknown or escaped evidence reference rejected") }
++            catch { check(true, "unknown or escaped evidence reference rejected") }
++            check(try fm.contentsOfDirectory(atPath: out.path).isEmpty, "rejected evidence leaves destination empty")
++        }
++        for target in ["stream", "diagnostic", "ancestor"] {
++            let (owned, out, source, log) = try evidenceFixture()
++            let link = owned.appendingPathComponent(target == "stream" ? source.phases[0].evidence[0] : target == "diagnostic" ? log : "children")
++            try fm.removeItem(at: link); try fm.createSymbolicLink(at: link, withDestinationURL: target == "ancestor" ? owned.deletingLastPathComponent() : external)
++            do { _ = try VerificationEvidence.exportAllowlisted(report: source, runRoot: owned, destination: out); check(false, "allowlisted symlink rejected") }
++            catch { check(true, "allowlisted symlink rejected") }
++        }
++        let (partialRoot, partialOut, older, _) = try evidenceFixture()
++        var partial = older; partial.status = .fail
++        partial.phases.append(VerificationPhase(name: "report-write", status: .fail, failureCode: .outputUnavailable))
++        try JSONEncoder().encode(partial).write(to: partialRoot.appendingPathComponent("verify-report.partial.json"))
++        try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: 100)], ofItemAtPath: partialRoot.appendingPathComponent("verify-report.partial.json").path)
++        do {
++            let files = try VerificationEvidence.exportRun(runRoot: partialRoot, destination: partialOut)
++            check(files.contains("verify-report.partial.json") && !files.contains("verify-report.json"), "genuine Fail partial takes precedence even with older timestamp")
++            let decoded = try JSONDecoder().decode(VerificationReport.self, from: Data(contentsOf: partialOut.appendingPathComponent("verify-report.partial.json")))
++            check(decoded.phases.last?.name == "report-write", "partial export preserves late failure phase")
++        } catch { check(false, "newer partial report exports") }
++        let (missingRoot, missingOut, missing, _) = try evidenceFixture()
++        try fm.removeItem(at: missingRoot.appendingPathComponent(missing.phases[0].evidence[1]))
++        do { let files = try VerificationEvidence.exportRun(runRoot: missingRoot, destination: missingOut); check(files.count == 3, "partial failed run tolerates missing permitted files") }
++        catch { check(false, "partial failed run tolerates missing permitted files") }
++        let (foreignRoot, foreignOut, foreign, _) = try evidenceFixture()
++        var wrong = foreign; wrong.phases[0] = VerificationPhase(name: "unknown-phase", status: .fail)
++        try JSONEncoder().encode(wrong).write(to: foreignRoot.appendingPathComponent("verify-report.json"))
++        do { _ = try VerificationEvidence.exportRun(runRoot: foreignRoot, destination: foreignOut); check(false, "unknown phase rejected") }
++        catch { check(true, "unknown phase rejected") }
++        let (bootstrapRoot, bootstrapOut, _, _) = try evidenceFixture()
++        try fm.removeItem(at: bootstrapRoot.appendingPathComponent("verify-report.json"))
++        try Data("{\"schemaVersion\":1,\"status\":\"Fail\",\"failureCode\":\"bootstrapFailed\"}\n".utf8).write(to: bootstrapRoot.appendingPathComponent("bootstrap-failure.json"))
++        try Data("compiler private canary".utf8).write(to: bootstrapRoot.appendingPathComponent("bootstrap-compile.log"))
++        do { let files = try VerificationEvidence.exportRun(runRoot: bootstrapRoot, destination: bootstrapOut); check(Set(files) == Set(["bootstrap-failure.json", "bootstrap.stderr"]), "bootstrap export excludes raw compiler output") }
++        catch { check(false, "bootstrap export accepts actual wrapper schema") }
++        let invalidOut = bootstrapOut.deletingLastPathComponent().appendingPathComponent("invalid-bootstrap-export")
++        try fm.createDirectory(at: invalidOut, withIntermediateDirectories: false)
++        try Data("{\"schemaVersion\":true,\"status\":\"Fail\",\"failureCode\":\"bootstrapFailed\"}\n".utf8).write(to: bootstrapRoot.appendingPathComponent("bootstrap-failure.json"))
++        do { _ = try VerificationEvidence.exportRun(runRoot: bootstrapRoot, destination: invalidOut); check(false, "bootstrap rejects Boolean schema masquerading as integer") }
++        catch { check(true, "bootstrap rejects Boolean schema masquerading as integer") }
++        let (conflictRoot, conflictOut, original, _) = try evidenceFixture()
++        var conflict = original
++        conflict = VerificationReport(schemaVersion: 1, runID: original.runID, lane: .artifact, status: .fail, sourceIdentity: nil, artifactIdentity: nil,
++            phases: [VerificationPhase(name: "report-write", status: .fail, failureCode: .outputUnavailable)], manualStatus: .pending, ciStatus: .pending)
++        try JSONEncoder().encode(conflict).write(to: conflictRoot.appendingPathComponent("verify-report.partial.json"))
++        do { _ = try VerificationEvidence.exportRun(runRoot: conflictRoot, destination: conflictOut); check(false, "partial conflicts with original lane are rejected") }
++        catch { check(true, "partial conflicts with original lane are rejected") }
++    }
++    static func testCICapabilityAndUploadContract() {
++        check(VerificationCapability.operatingSystem("15.8.2\n") && VerificationCapability.operatingSystem("26.0\n"), "CI supports documented macOS capability")
++        check(!VerificationCapability.operatingSystem("14.9\n") && !VerificationCapability.operatingSystem("15oops"), "CI refuses macOS14 and malformed versions")
++        check(VerificationCapability.architecture("arm64\n") && !VerificationCapability.architecture("x86_64\n"), "CI refuses Intel capability")
++        check(VerificationCapability.swiftVersion("Apple Swift version 6.2.1 (swiftlang-test)\n") && !VerificationCapability.swiftVersion("Apple Swift version 6.1.2\n"), "CI requires actual Swift6.2 capability")
++    }
++    static func testCIInvocationFallbacks() throws {
++        let fm = FileManager.default, scripts = URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("scripts")
++        for scenario in ["late-write", "bootstrap"] {
++            let repo = root.appendingPathComponent("ci-invocation-\(scenario)"), helper = repo.appendingPathComponent("scripts/export-ci-evidence.sh")
++            try fm.createDirectory(at: helper.deletingLastPathComponent(), withIntermediateDirectories: true)
++            try fm.copyItem(at: scripts.appendingPathComponent("export-ci-evidence.sh"), to: helper)
++            let console = repo.appendingPathComponent("build/ci-verify.stdout")
++            try fm.createDirectory(at: console.deletingLastPathComponent(), withIntermediateDirectories: true)
++            if scenario == "late-write" {
++                var emitted: [String] = [], writer = dependencies("good")
++                writer.writeReport = { data, destination in
++                    let value = try JSONDecoder().decode(VerificationReport.self, from: data)
++                    if value.phases.contains(where: { $0.name == "code-build" && $0.status == .pass }) { throw VerificationFailure.outputUnavailable }
++                    try data.write(to: destination, options: .atomic)
++                }
++                do { _ = try VerificationCLI.verify(VerificationOptions.parse([]), repository: repo, dependencies: writer, announce: { emitted.append($0) }); check(false, "late CLI write must fail") }
++                catch { check(true, "late CLI write must fail") }
++                check(emitted.count == 1 && emitted[0].hasSuffix("/verify-report.json"), "CLI emits owned path once even on late write failure")
++                try Data((emitted.joined(separator: "\n") + "\n").utf8).write(to: console)
++                let tool = repo.appendingPathComponent("build/tools/flowtype-verify")
++                try fm.createDirectory(at: tool.deletingLastPathComponent(), withIntermediateDirectories: true)
++                try fm.copyItem(at: URL(fileURLWithPath: CommandLine.arguments[0]), to: tool)
++            } else {
++                let verify = repo.appendingPathComponent("scripts/verify.sh")
++                try fm.copyItem(at: scripts.appendingPathComponent("verify.sh"), to: verify)
++                let result = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/bin/bash"), arguments: [verify.path, "--lane", "code"], workingDirectory: repo,
++                    environment: ProcessInfo.processInfo.environment, stdoutURL: console, stderrURL: repo.appendingPathComponent("build/ci-verify.stderr"), timeoutSeconds: 30))
++                check(result.cliExitCode == 1, "actual copied wrapper compile failure is nonzero")
++            }
++            let result = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/bin/bash"), arguments: [helper.path, console.path], workingDirectory: repo,
++                environment: ProcessInfo.processInfo.environment, stdoutURL: repo.appendingPathComponent("helper.stdout"), stderrURL: repo.appendingPathComponent("helper.stderr"), timeoutSeconds: 30))
++            check(result.cliExitCode == 0, "actual CI helper exports \(scenario) evidence")
++            if result.cliExitCode == 0 {
++                let destination = repo.appendingPathComponent("build/ci-evidence")
++                if scenario == "late-write" {
++                    let partial = try JSONDecoder().decode(VerificationReport.self, from: Data(contentsOf: destination.appendingPathComponent("verify-report.partial.json")))
++                    check(partial.status == .fail && partial.phases.last?.name == "report-write", "CLI plus helper uploads genuine late partial failure")
++                    check(!fm.fileExists(atPath: destination.appendingPathComponent("verify-report.json").path), "CI helper excludes stale full report")
++                } else {
++                    check(Set(try fm.contentsOfDirectory(atPath: destination.path)) == Set(["bootstrap-failure.json", "bootstrap.stderr"]), "compile-unavailable fallback contains only safe status stderr")
++                }
++            }
++        }
++    }
+     static func run() -> Int32 {
+         let fm = FileManager.default
+         root = fm.temporaryDirectory.appendingPathComponent("flowtype-verification-\(UUID())")
+         do {
+             try fm.createDirectory(at: root, withIntermediateDirectories: false)
++            root = try canonicalExisting(root) // macOS /var is an OS alias; owned fixtures use the canonical root.
+             fixture = root.appendingPathComponent("fixture-tool"); config = root.appendingPathComponent("metadata.json")
+             try JSONEncoder().encode(metadata).write(to: config)
+             let source = URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("scripts/verification/VerificationFixture.swift")
+             let compiled = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/usr/bin/swiftc"), arguments: ["-parse-as-library", source.path, "-o", fixture.path], workingDirectory: root,
+                 environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("compile.stdout"), stderrURL: root.appendingPathComponent("compile.stderr"), timeoutSeconds: 30))
+             guard compiled.cliExitCode == 0 else { throw VerificationFailure.toolFailed }
+-            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries] {
++            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks] {
+                 do { try test() } catch { failed += 1; print("FAIL: fixture \((error as? VerificationFailure)?.rawValue ?? String((error as NSError).code))") }
+             }
+             testFullRunnerRequired()
++            testCICapabilityAndUploadContract()
+         } catch { failed += 1; print("FAIL: fixture setup") }
+         print("=== verification self-test: \(passed) passed, \(failed) failed ===")
+         if failed == 0 { try? fm.removeItem(at: root) } else { print("Retained synthetic evidence: \(root.path)") }
+         return failed == 0 ? 0 : 1
+     }
+ }

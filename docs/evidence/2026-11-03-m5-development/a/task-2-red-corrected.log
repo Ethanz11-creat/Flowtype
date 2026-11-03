@@ -1,0 +1,3 @@
+  ✗ FAIL: M5 migration uses injected legacy key storage — got nil, want Optional("synthetic-legacy-key")
+=== FlowType --self-test ===
+=== M5 isolation self-test: 30 passed, 1 failed ===

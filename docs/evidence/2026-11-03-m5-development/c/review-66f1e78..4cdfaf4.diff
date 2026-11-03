@@ -1,0 +1,1345 @@
+# Review package: 66f1e78c2ea31db7290a5083abab4069df229b38..4cdfaf42cbea1bd04a63a4803a8d103a23e0178f
+
+## Commits
+4cdfaf4 feat: validate manual and CI acceptance evidence
+
+## Files changed
+ README.md                                          |  11 +-
+ docs/2026-10-14-flowtype-product-validation.md     |  36 ++++-
+ docs/2026-11-01-remaining-work-audit.md            |  10 +-
+ docs/evidence/2026-11-03-m5-development/README.md  |  30 ++++
+ docs/evidence/2026-11-03-m5-manual-template.json   | 175 +++++++++++++++++++++
+ docs/evidence/2026-11-03-m5-validation.md          |  44 ++++--
+ ...2026-11-03-m5-a-build-identity-and-isolation.md |  36 +++--
+ .../plans/2026-11-03-m5-b-smoke-and-artifact.md    |  40 +++--
+ .../2026-11-03-m5-c-verification-and-acceptance.md |  47 +++---
+ .../2026-11-03-m5-release-guardrails-design.md     |  16 +-
+ scripts/verification/ManualValidation.swift        | 160 ++++++++++++++++++-
+ scripts/verification/VerificationCLI.swift         |   6 +
+ scripts/verification/VerificationReport.swift      |  10 +-
+ scripts/verification/VerificationSelfTests.swift   |  96 ++++++++++-
+ 14 files changed, 623 insertions(+), 94 deletions(-)
+
+## Diff
+diff --git a/README.md b/README.md
+index f900335..b2a8f23 100644
+--- a/README.md
++++ b/README.md
+@@ -324,25 +324,32 @@ Flowtype classifies the focused UI element before deciding how to insert text:
+ | Editable text field (non-secure) | Simulated keystrokes for short text; clipboard paste for multi-line/long text |
+ | Secure input field (password, etc.) | Clipboard paste only (user must manually paste) |
+ | Non-text control or unknown | Clipboard paste only |
+ 
+ This logic is fully covered by the built-in self-test suite.
+ 
+ ## Build scripts
+ 
+ | Script | Purpose |
+ |--------|---------|
+-| `scripts/build-app.sh` | Builds release binary, creates `.app` bundle, copies `mlx.metallib`, generates `Info.plist`, ad-hoc signs |
++| `scripts/build-app.sh` | Builds a clean release candidate in owned staging, generates matching identity/plist, copies resource bundles and explicit shader, verifies strict ad-hoc signing before publication |
++| `scripts/check-app.sh` | Verifies the candidate after moving it outside the checkout, hides/restores owned developer resources, and checks actual Metal/MLX operation |
++| `scripts/verify.sh` | Defaults to bounded code build/full self-test; artifact and release lanes add fixed-candidate signature/resources/ten smoke checks |
++| `scripts/export-ci-evidence.sh` | Exports only allowlisted evidence from the one reported run, including safe failure/partial reports |
+ | `scripts/build-dmg.sh` | Creates distributable DMG from built `.app` with `/Applications` symlink |
+ | `scripts/generate-build-info.swift` | Generates matching `FlowTypeBuild.json` and `Info.plist` from a clean, nonshallow Git checkout |
+ 
+-Run the identity tool with `swift scripts/generate-build-info.swift --repo /path/to/checkout --output /path/to/empty/directory [--version 1.2.3]`. The version defaults to `1.0.0`; SHA, commit count, Sources tree and UTC time come from the tool. Its `--self-test` creates and removes independent temporary Git repositories without changing global Git configuration. Packaging integration is a separate step; the existing build script does not yet consume these generated files. Runtime development builds show `development` with unknown SHA/time, and malformed app identity stays `invalid`. The About menu and diagnostics use the same loaded identity.
++Run the identity tool with `swift scripts/generate-build-info.swift --repo /path/to/checkout --output /path/to/empty/directory [--version 1.2.3]`. The version defaults to `1.0.0`; SHA, commit count, Sources tree and UTC time come from the tool. Its `--self-test` creates independent temporary Git repositories without changing global Git configuration. `build-app.sh` consumes this identity before signing. Supply an existing shader explicitly through `MLX_METALLIB_PATH`; packaging does not install Python, download shaders/models, or search user model caches. The shader lives at `Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib`, alongside copied SwiftPM resource bundles. Runtime development builds show `development` with unknown SHA/time, and malformed app identity stays `invalid`. The About menu and diagnostics use the same loaded identity.
++
++`scripts/verify.sh --lane code` needs macOS15+/arm64/Swift6.2+ and runs build followed by the original full self-test in isolated roots. It does not package an app or use GPU/models. `--lane artifact` requires a clean nonshallow checkout, the explicit shader and a graphical session; `--lane release` runs code and artifact once each and checks matching manual/remote CI reports. Reports live under `build/verification/<UUID>/`. Fail exits1, Pending/Skip exits2, and only every required Pass exits0. Local strict ad-hoc signing is not Developer ID/notarization acceptance.
++
++Generate a new all-Pending manual template with `scripts/verify.sh --write-manual-template /absolute/new/file.json`; this refuses overwrite and performs no validation run. The [M5 acceptance ledger](docs/evidence/2026-11-03-m5-validation.md) defines all41 required leaves, fixed candidate identity and evidence fields. Actual final release, remote CI and real app/device/model acceptance remain Pending until separately recorded.
+ 
+ ## Continuing development on another machine
+ 
+ When cloning this repo on a new Mac, here's what's **not included** and what you need to do:
+ 
+ 1. **Clone & build**
+    ```bash
+    git clone -b flowtype-local https://github.com/Ethanz11-creat/Flowtype.git
+    cd Flowtype
+    swift build
+diff --git a/docs/2026-10-14-flowtype-product-validation.md b/docs/2026-10-14-flowtype-product-validation.md
+index f956492..845a0c7 100644
+--- a/docs/2026-10-14-flowtype-product-validation.md
++++ b/docs/2026-10-14-flowtype-product-validation.md
+@@ -3,20 +3,26 @@
+ Scope: the 2026-10-14 session experience plan, Tasks 1–4. This matrix records the
+ readiness, stop/cancel, final-text and recovery contracts. It can be extended with
+ the later realtime and delivery plans' cases without treating those as validated here.
+ 
+ **Manual status: every case below is Pending.** No physical microphone capture,
+ hotkey input, user-app interaction, Accessibility/CGEvent posting, or clipboard
+ read/write was performed for this task. Automated checks exercise production logic
+ through injected effects and transport fixtures; they are not evidence of live UI,
+ hardware latency, model accuracy or real provider interoperability.
+ 
++Current acceptance overlay (2026-11-03): M4 recovery and M5 validation contracts
++below supersede outdated expectations while preserving the historical row IDs and
++past notes. The [M5 ledger](evidence/2026-11-03-m5-validation.md) and its41 dotted
++leaf IDs are the required release matrix; old R1–R6 rows are session scenarios,
++not substitutes for `R1.launch10` through `R6.displays`. No manual result is promoted.
++
+ ## Reproduction record
+ 
+ For each run, record date/tester, commit (`git rev-parse HEAD`), macOS version,
+ Mac/chip/RAM, app launch method, microphone/device, permission states (microphone,
+ Speech Recognition, Accessibility), display/scale/Spaces, target app/version and
+ focused control. Record trigger key, interaction mode, audio feedback setting,
+ `polishOnStop`, max recording duration, ASR routing policy/model and LLM provider/model.
+ Do not include API keys or private dictated content in shared evidence.
+ 
+ Build with `swift build`. For a CLI launch, ensure `mlx.metallib` is alongside the
+@@ -51,23 +57,26 @@ promise that ASR plus delivery completes in 3 seconds.
+   the old session or deliver into a newer one. Idle double-tap/Toggle habits remain.
+ - Stop, including max-duration stop, uses `停止后自动整理` (`polishOnStop`, default
+   true for both new and legacy configurations). Opt-out delivers processed ASR text.
+ - Optional polish can replace the transcript only with a complete result. Empty
+   output, errors and the whole 3-second deadline preserve complete postprocessed
+   text (raw only if processed is empty); cancellation is not fallback delivery.
+ - A failed/timeout polish notice appears after delivery, with `整理失败 · 已保留识别结果`
+   or `整理超时 · 已保留识别结果`. Notices have no action buttons and dismiss after
+   about 2.2 seconds. Actionable errors persist beyond 5 seconds until explicit
+   recovery/dismissal/new recording; retry labels describe the failed stage.
+-- Normal panel size is 240×70 points; actionable error size is 320×94. The panel
++- Normal panel size is 240×70 points; current actionable error size is380×156. The panel
+   remains nonactivating, preserves its horizontal center when resized, and its
+-  visible capsule mask matches its click area.
++  visible capsule mask matches its click area. The historical actionable size
++  320×94 is superseded by M4's current **380×156** recovery card; normal is240×70.
++  Missing permissions/no engine use persistent current-blocker recovery. Granting
++  one permission refreshes remaining blockers without dismissing a different fault.
+ 
+ ## Manual matrix
+ 
+ Each row needs actual observations, evidence and a tester before its status changes.
+ For failures, record the first unexpected event and retain the diagnostic session ID.
+ 
+ | ID | Setup and reproducible steps | Acceptance observation | Status |
+ | --- | --- | --- | --- |
+ | R1 | Start from idle with a cold microphone; remain silent until readiness. Repeat 3 times. | Preparing before valid PCM; timer starts at 00:00 only after readiness; one start cue, no timer-tick cue replay or focus change. | Pending |
+ | R2 | Start, then immediately cleanly release the trigger again while still preparing (use a slow/first permission initialization if needed). Wait for any late readiness. | Panel returns idle; no start cue, timer, transcript, delivery or resurrected recording from the late callback. Record if preparation was too short to exercise. | Pending |
+@@ -75,31 +84,31 @@ For failures, record the first unexpected event and retain the diagnostic sessio
+ | R4 | Record the 60–90 second reference, stop, and compare beginning and final sentence. | Full final result once, no partial output or missing tail; timer reflects actual recording, not preparation. Record recognition differences separately from session faults. | Pending |
+ | R5 | Record 3–5 seconds of silence after readiness and stop; repeat with synthetic filler-only speech. | No invented text or partial draft; no-speech/empty result returns to idle or a brief notice without stale recovery buttons. | Pending |
+ | R6 | Set maximum duration to 10 seconds (supported minimum); speak through expiry. Repeat auto polish on/off; restore original setting. | One automatic stop at limit; same polish policy as manual stop, single final delivery/history entry, no lingering recording timer. | Pending |
+ | G1 | In Tap to Start idle, release once, then twice within 0.35 seconds in a separate attempt. In Toggle idle, release once. | Single idle tap does not start Tap to Start; double tap does. Toggle starts with one tap. Both stop with first active clean release. | Pending |
+ | G2 | Repeat a stop rapidly; press trigger while processing/polishing. | No second stop/delivery, no idle tap timer accidentally starts a new session; start requests while processing are ignored. | Pending |
+ | G3 | In idle and recording, use Command+C or the selected trigger with another modifier/key; then release it. | Chords preserve normal shortcut behavior and do not start/stop dictation. A later clean release still works. | Pending |
+ | G4 | Select a nonmodifier trigger. Hold at least 200 ms to start; hold with repeat events; stop with a short active release. | Idle hold guard works; repeats do not extend hold/start another recording; active stop does not wait for the hold threshold. | Pending |
+ | C1 | Escape separately during preparing, recording, ASR processing and polish streaming. Wait longer than provider response/deadline. | Each cancelled session returns idle and produces no final text, clipboard fallback or history entry; resources stop, late events stay ignored. | Pending |
+ | C2 | Cancel a slow session, start another, then allow the old ASR/LLM response to arrive. | Only the new session can update timer/state or deliver; old readiness/spectrum/results cannot overwrite it. | Pending |
+ | C3 | With a long synthetic final result, Escape while delivery is posting keyboard events; record the cancellation boundary. | No new event pair begins after cancellation is observed; an already posted pair stays balanced, no held Shift/key; no clipboard fallback or continued suffix. Already typed text may remain. | Pending |
+-| F1 | Start in scratch field A; switch to scratch field B while recording and again while processing. | Panel never steals focus; destination follows the existing delivery-time focus policy; complete result once. Record focused control at delivery, not just at start. | Pending |
++| F1 | Start in scratch field A; switch to scratch field B while recording and again while processing. | Panel never steals focus; capture the stop target and recheck PID/focus before events. An initially changed/unsafe target safely completes via clipboard fallback; no-event cancellation remains cancelled. A failed unsafe/notDispatched attempt with fallback disallowed may suspend as deliveryBlocked. Only genuine prior events plus unverifiable/cancelled insertion retain uncertain evidence, with no automatic repeat. Record stop/dispatch targets and actual event boundary. | Pending |
+ | F2 | During processing focus a tester-owned nontext button, then a synthetic secure field in a separate run. | Existing policy copies complete result instead of typing into those controls; no automatic paste. Inspect only the tester's scratch clipboard; later delivery-plan cases will extend this coverage. | Pending |
+-| P1 | Deny microphone permission in a dedicated test app identity/profile; attempt start, then grant in System Settings and retry a new session. | No recording/start cue or delivery on denial; understandable permission notice, no unusable retry/copy buttons. Granted permission allows a new session. Current recording denial is a nonactionable notice, not a permission-settings button. | Pending |
++| P1 | Deny microphone permission in a dedicated test app identity/profile; attempt start, then grant in System Settings and recheck/start a new session. | No recording/start cue or delivery on denial; persistent permission recovery exposes settings/recheck actions with current ownership. Repair updates remaining blockers; a new session works. Record actual recovery timing and restore the test profile. | Pending |
+ | P2 | Deny Speech Recognition permission while microphone is allowed; repeat with permission granted. | Record Apple preview availability; configured final ASR remains usable where supported; no preview appears on panel or stale callback after cancel. | Pending |
+ | P3 | Deny/revoke Accessibility in a dedicated test identity, attempt trigger/delivery; grant and relaunch as needed. | Record actual permission guidance and event-tap availability; no silent loss presented as successful typing. Restore permission and confirm a new scratch session works. | Pending |
+ | L1 | Select localOnly with provisioned Qwen model, quit/relaunch and run short reference without a prior dictation (cold app/model load). | Readiness truthfully reflects capture; local model remains usable; no cloud audio/context request. Record model-load time separately from capture readiness. | Pending |
+ | L2 | Immediately repeat L1 without relaunch (warm model), then run the long reference. | Complete result once in cold and warm runs, no stale timer/resource ownership; compare measured timings without asserting a hardware target. | Pending |
+ | L3 | Select localOnly with missing/unavailable model; start/stop; make model available and start again. | No accidental cloud request; understandable failure/notice, usable recovery only when offered; restored local model permits a fresh session. | Pending |
+ | E1 | Use a tester-controlled failing ASR service (with all configured fallback ASR paths made unavailable) to get a retryable ASR error. Wait at least 6 seconds, repair service and click retry with auto polish off. | Error persists; `重试识别` reruns preserved input with original polish opt-out, succeeds once; does not say retry polish. New recording/dismiss clears prior actions and payload. | Pending |
+ | E2 | Produce an actionable error with available raw text; click `复制原文`, inspect synthetic clipboard, then `忽略`. | Full available text copied; recovery remains actionable until explicitly dismissed; dismissal clears it and hides panel. | Pending |
+-| E3 | Enter E1/E2 error from recording; click every available button near its edge, drag panel, retry/dismiss; repeat on another display/scale/Space. | Panel grows 240×70 → 320×94 and shrinks afterward; actions uncut/clickable, mask matches bounds, horizontal center preserved; drag and actions do not activate/steal target focus. | Pending |
++| E3 | Enter E1/E2 error from recording; click every available button near its edge, drag panel, retry/dismiss; repeat on another display/scale/Space. | Current M4 panel grows240×70 → 380×156 and shrinks afterward; long copy and buttons remain visible/clickable, old cards cannot act on a new session, horizontal center and target focus remain intact. The old320×94 expectation is historical. | Pending |
+ | S1 | Tester-controlled SSE sends multiple content deltas then `data: [DONE]`; repeat with `finish_reason: "stop"` plus EOF and no `[DONE]`. | Both supported completion forms deliver full assembled polished text once, with no degradation notice or intermediate UI. | Pending |
+ | S2 | Send valid content then EOF without completion; repeat with malformed frame then `[DONE]`, and with `finish_reason: "length"` then `[DONE]`. | Each rejects incomplete polished draft; complete processed ASR text delivered once, failure notice only after delivery, history marked raw. | Pending |
+ | S3 | Send partial tokens then stall longer than 3 seconds; repeat with a stream that has only heartbeats. | Whole polish budget ends around 3 seconds from polish start; transport/producer cancels, full processed fallback delivered once, timeout notice afterward. Observe actual timing; no partial draft. | Pending |
+ | S4 | Complete with whitespace/empty output; repeat with no usable LLM key/provider and with identical-to-input output. | Complete processed text retained; missing configuration bypasses network; no unnecessary actionable error or incomplete output. | Pending |
+ | S5 | Escape during S2/S3 before fallback delivery; then allow late completion. | Nothing delivered or copied; no fallback notice/history from cancellation; underlying request ends and cannot enter provider failover. | Pending |
+ | O1 | With an incomplete onboarding profile, reach demo; dictate short reference and stop; move focus outside demo before completion. Repeat auto polish off. | Complete final text appears only in onboarding demo editor via notification, once; no injection into active external app, no intermediate editor text. | Pending |
+ | O2 | Cancel/leave onboarding demo during preparation, recording, ASR and polishing, then begin a normal session. Complete onboarding and relaunch. | Old demo results do not affect the new session; completed onboarding stays completed; saved trigger/mode/feedback/provider choices persist. | Pending |
+ 
+ ## Automated evidence and manual result sheet
+ 
+@@ -208,10 +217,27 @@ known malformed PCM produces a non-retryable recording-data error. Full original
+ short/head/tail/delayed audio and uncertain detector results retain the existing
+ recognition chain. Existing live resources are cancelled without finish on silence,
+ and scan time consumes the same stop budget. Synthetic real-controller coverage
+ also protects previous delivery summaries against silence and obsolete results.
+ See the [M3 evidence](evidence/2026-11-02-m3-validation.md) for source evidence and
+ limits. Actual microphone silence/quiet-word/noise calibration, the app matrix,
+ continuous 20 rounds and V1–V5 remain **Pending**. No synthetic waveform proves
+ human-speech accuracy, real target insertion, or zero prior realtime upload/cost.
+ 
+ M3 最终源码更新：`f7554ee`，完整自测4124/0、全 M3 修复限定复审通过；automatic 分块回退逐键对复检，真实发键后取消同步保存 uncertain。最终 app 已构建，但严格整体签名仍受既有 unsigned mlx.metallib 限制；[证据与产物身份](evidence/2026-11-02-m3-development/README.md)。全部实际应用/剪贴板/声音校准与 V1–V5 未覆盖项仍 Pending。
++
++2026-11-03 update: the preceding M3 signature note describes that historical
++candidate. M5-B3 at `c21cb25` proved a new Resources shader layout, strict/deep
++signature, moved resources, actual Metal and MLX micro-operation. It does not
++prove ASR inference or the final C candidate. C1 code validation passed24334/0;
++C2 added a code-only CI workflow, with remote execution still Pending. C3 source
++and its all-Pending manual template are awaiting review; final technical ten smoke
++and every real R/V leaf remain Pending.
++
++For every current delivery test, record whether an event actually left the process.
++Temporary clipboard staging alone is not dispatch. An initially changed/unsafe
++target completes via safe clipboard fallback; cancellation before any event is
++cancelled. `deliveryBlocked` describes a suspended delivery failure, such as an
++unsafe/notDispatched paste when fallback is disallowed or a failure that must
++preserve the existing clipboard. Only after a genuine event can unverifiable or
++cancelled insertion be `deliveryUncertain`, with explicit copy/history recovery
++and no automatic retransmission. V3/V4 must record these distinct outcomes.
+diff --git a/docs/2026-11-01-remaining-work-audit.md b/docs/2026-11-01-remaining-work-audit.md
+index ca6d6b1..d02a5f7 100644
+--- a/docs/2026-11-01-remaining-work-audit.md
++++ b/docs/2026-11-01-remaining-work-audit.md
+@@ -9,39 +9,39 @@ Owner 本轮回报「现在没问题了」，记录为修复后的实际使用
+ 此前已观察到拒绝麦克风后卡片可见、设置链接打开正确页面、精确候选重启后
+ readiness=ready / AX=granted / mic=granted。没有把这次认可扩展成所有矩阵变体通过。
+ 
+ ## 1. 明确尚未完成的主线
+ 
+ 依据：[稳定性与交付设计 §10](superpowers/specs/2026-10-22-stability-and-delivery-design.md#10-分阶段路线图)。
+ 更新（2026-11-02）：M2-A/B/C 计划与子代理执行方式已批准，按 A → B → C 实施。
+ M2-A 下载恢复已完成阶段修复与审查（eb840f8，1619/0）；M2-B 云端厂商接入已完成阶段修复与审查（6fc1973，2034/0）。
+ M2-C 已实现 Qwen3-ASR MLX / WhisperKit Core ML 检测、严格离线运行库、统一生命周期和模型库 UI；C3 检查点 63db2e9 为 2263/0。
+ C4 检查点后全 M2 审查发现三项 Important（普通重试意图、Whisper图合同、Qwen完整词表）；同一修复波次及掩码类型收紧已完成，限定范围复审确认三项 Important 和两项相关 Minor 关闭。此前源码门禁为 3a34a51、2430/0。2026-11-02 追加独立审查又确认两项 P2（Whisper 源包缺少编译衔接、Qwen 复检阻塞主线程），已在 e69d688 修复；最终顺序构建与自测 2507/0，新的独立限定复审确认两项关闭、无新增 Critical／Important。[最新证据](evidence/2026-11-02-m2-review-fixes/README.md)取代旧检查点，不能从源码通过推导真机验收通过。
+-真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3/M4 源码已完成（见下），M5 尚待实施；真实验收分列保留。
++真实模型推理、云端服务、GUI 与 V1–V5 均有未覆盖项。M3/M4 源码已完成；M5 A/B/C1/C2已实施并通过任务审查，C3源码/文档待审；最终技术候选、远端CI和真实验收分列保留。
+ [已批准设计](superpowers/specs/2026-11-01-m2-model-recovery-design.md)及[决策归档](evidence/2026-11-01-m2-rulings.md)是当前依据。
+-下表 M2/M3/M4 行更新为当前源码状态；M5 更新为2026-11-03规划状态，不代表已实施或重新验收。
++下表分列当前源码与真实验收状态，不把规划、fixture、产物检查或正常使用互相替代。
+ 
+-M5 更新（2026-11-03）：已有[独立设计](superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A 构建身份/隔离](superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B 启动/资源/签名](superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C verify/CI/验收](superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)三份实施计划，尚未开发。[规划证据](evidence/2026-11-03-m5-planning/README.md)记录3s观察不足以覆盖5s健康timer、资源bundle遗漏及shader完整签名限制；[M5台账](evidence/2026-11-03-m5-validation.md)将技术门禁、远端CI与required真机项分列Pending，V1–V5继续作为主线。
++M5 更新（2026-11-03）：按[独立设计](superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)推进。A隔离/身份、B真实timer/资源/签名、C1本地门禁和C2安全CI配置已审查通过；C3严格人工/CI schema和矩阵已实现待审。B3旧检查点strict/deep、移位资源及实际Metal/MLX已Pass；C1唯一实际code gate full24334/0，C2工具105/0；最终C源码release十次smoke还未执行。远端CI和41叶子人工全Pending；[台账](evidence/2026-11-03-m5-validation.md)与[开发索引](evidence/2026-11-03-m5-development/README.md)保留确切身份。[规划证据](evidence/2026-11-03-m5-planning/README.md)仍是历史调研，不改为执行日志。
+ 
+ M3 更新（2026-11-02）：已按 [M3 设计](superpowers/specs/2026-11-02-m3-delivery-and-silence-design.md)、[M3-A](superpowers/plans/2026-11-02-m3-a-automatic-delivery.md) → [M3-B](superpowers/plans/2026-11-02-m3-b-silence-preflight.md) 完成五项子智能体开发及任务审查。全 M3 审查的两项 Important（回退分块后目标复检、发键后取消的 uncertain 保存）已在 `f7554ee` 修复，限定复审全部关闭，无新增阻塞；顺序构建与完整自测 **4124/0**。静音是无模型的保守声音存在检查，候选阈值仍需真机校准。源码与固定产物状态见 [M3 验证清单](evidence/2026-11-02-m3-validation.md)，真实验收与 V1–V5 继续保留 Pending。
+ 
+ | 项目 | 现状与剩余工作 | 代码证据 / 边界 |
+ | --- | --- | --- |
+ | **M2 模型修复 / 云端接入 / 本地导入** | 源码修复与限定复审通过（e69d688，2507/0）；共享预检/恢复、厂商合同及配置检查、多个本地模型的静态预览/切换/重新定位/移除均已接入。源包原生编译与后台复检已补齐；真实加载/听写及 GUI 验收 Pending。 | `QwenModelState` 单一事务协调器；`ImportedASRModelActions` 只管理预览；`ImportedASRModelList` 通过 UUID 操作。静态检查不保存选择，运行成功才提交。旧基线的三次不透明重试、写死 0.6B 卡片与单路径选择已被替换。 |
+ | **M3 自动交付** | 源码完成、全 M3 修复复审通过；跨五应用、剪贴板及取消真机验收 Pending。 | 默认 automatic，显式旧值保留；真实事件 latch 与临时写板分离，严格安全回退逐键对复检；取消按事件同步保存 uncertain，最近交付摘要只含元数据。 |
+ | **M3 无语音预检** | 源码完成、审查通过；静音/轻声/短词/噪声与设备校准 Pending。 | 完整原始 PCM 可取消后台扫描，ASR 直接/重试入口均经过；静音/空音频不 finalize、预览兜底、后处理、交付或历史。实时录音中可能已有上传，不能声称零请求/计费。 |
+ | **M4 统一失败分级** | 源码完成5dc1693，顺序build/full23872/0；三项任务审查、全M4修复与限定复审通过。固定app已构建；真实验收Pending。 | 纯typed分类/安全文案、保留原始原因、当前卡动作门禁、正确刷新blocker、完整原音频显式重试与重新录音、常驻恢复、发键证据区分及同步回调归属保护；[验证清单](evidence/2026-11-02-m4-validation.md)分列源码、产物、V1–V5及已有签名限制。 |
+-| **M5 发布护栏** | 已规划A→B→C，未实施：最早role/路径与Keychain隔离、BuildInfo/日志；6s真实tick smoke、仓库外资源/Metal/MLX与strict/deep；verify/CI及required真机矩阵。 | 现有入口仍只有self-test，版本/build仍写死，共用diagnostic.log，无workflow/verify/smoke；规划没有改变这些源码事实。代码门禁与发布验收分开，V1–V5/真实模型/GUI/远端CI未执行均Pending。 |
++| **M5 发布护栏** | A/B/C1/C2源码与任务审查Pass；C3源码/fixture/文档待审，全M5源码审查与最终release技术门禁Pending。B3历史候选strict/deep/移位Metal/MLX Pass，不能代替最终C候选。 | 角色/路径/Keychain隔离、BuildInfo/角色日志、6s真实tick smoke、Resources/MLX、bounded code/artifact/release及白名单CI已接入。41required人工与远端CI全Pending；本地全绿不等于可发布。 |
+ 
+ M5 的分支远端备份也是原设计的一项，但本会话约束仍是**不 push、不 merge**，
+ 不能因文档列出就擅自执行。Developer ID / 公证、自动更新另属分发决策；现有
+-`mlx.metallib`完整签名失败已明确纳入M5-B本地产物护栏计划，尚未修复；不扩展为重做发布体系。
++历史`mlx.metallib`完整签名限制已由M5-B3标准Resources布局的真实检查关闭；仍不等于Developer ID/公证或最终C发布完成，不扩展为重做发布体系。
+ 
+ ## 2. 主线 V：真实环境验收（Owner 已要求纳入）
+ 
+ | 范围 | 仍缺的证据 |
+ | --- | --- |
+ | **M1 剩余矩阵** | 无引擎 / 受限路由修复、无 AX 的菜单录音与剪贴板交付、权限恢复 ≤5s 的精确计时、图标 / 首次点击 / 无闪断等变体。当前正常使用已获认可，不需再把麦克风恢复当作尚未解决的功能故障。 |
+ | **实时云端 ASR** | Paraformer 真实 Key / 服务握手、弱网、录音中断网、长录音背压、网络和配置切换、半开恢复、真实取消与落字。适配器及假传输回归已完成；[实时验证矩阵](2026-10-14-realtime-asr-validation.md)仍待真实服务验证。 |
+ | **交付与准确率** | TextEdit 之外的 VS Code / Cursor / 浏览器 / Terminal 等应用；多行、emoji、技术字面量、并发复制、文件/图片剪贴板、secure input、切焦点后的恢复；CER/字面量命中与 stop→delivery P50/P95。不能从一次成功推导兼容性或准确率。 |
+ | **会话与设备稳定性** | 连续二十次成功/取消混合会话；各阶段 Escape 与迟到结果；拔麦/蓝牙断开；时长上限；冷/热模型；引导中离开后的隔离。已有实现与回归，真实环境覆盖不足。 |
+ | **旧 UI / 数据任务** | SQLite 旧数据迁移、统计口径、导出与清空、明暗主题、音柱等旧计划仍有人工项；必须按当前实色 UI 验收，不应按已被替代的 Frost 设计返工。 |
+diff --git a/docs/evidence/2026-11-03-m5-development/README.md b/docs/evidence/2026-11-03-m5-development/README.md
+new file mode 100644
+index 0000000..135cdc1
+--- /dev/null
++++ b/docs/evidence/2026-11-03-m5-development/README.md
+@@ -0,0 +1,30 @@
++# M5 开发与验证证据索引
++
++当前阶段：A/B与C1/C2实现及任务审查Pass；C3源码/文档/合成fixture待审，全M5源码审查、最终release技术门禁、远端CI、人工验收及大证据归档仍Pending。当前分支/worktree保留，不push/merge/安装/发布。
++
++## 源码与检查点
++
++| 包 | 实现提交 | 已知证据与边界 |
++| --- | --- | --- |
++| A1/A2/A3 | aea7dc9 / ffd4ba4 / d6aaace | 最早role、安全根、defaults/Keychain/DB与副作用隔离、BuildInfo/日志，任务审查通过；关于菜单GUI仍Pending |
++| B1 | 7488553 | bounded进程归属/超时与真实probe/health timer，受控smoke，不运行普通AppDelegate |
++| B2 | df63cd2 | AppResources与artifact合同；focused108/0、full24334/0；fixture不冒充真实GPU |
++| B3 | c21cb25 | packaging128/0、runner17/0；一次真实build/check，strict/deep、移位资源、实际Metal及显式MLX GPU微计算均Pass；四个release资源bundle恢复，无marker遗留 |
++| C1 | 653ecb8 | RED2/38→工具71/0；共享打包128/0；一次真实code run full24334/0，全7阶段Pass，原始dirty=true |
++| C2 | 66f1e78 | RED86/7及集成97/6→工具105/0；shell/YAML语法Pass；不执行远端CI |
++| C3 | 本次源码/文档提交，待审 | RED151/36→工具193/0；严格41叶子人工/CI校验、全Pending模板、release逐叶子状态和旧schema1导出兼容；仅合成fixture，最终release尚未调度 |
++
++C1实际run `16D28FC9-F86F-4188-93B2-392D61E071AF` 在HEAD c21cb25、Sources tree `953608b60a0349dfcd2acfc4ddeef6f6d6b39288`，build22461ms/full186629ms，normal exit0/未超时；manual/CI Pending、artifact null。该precommit dirty运行不宣称涵盖任意未跟踪文件内容的精确身份；CI要求clean。其full是当时唯一code lane中的原始完整汇总。
++
++B3候选身份见[验收台账](../2026-11-03-m5-validation.md#最终候选身份)，不是最终C候选；不能把后续归档HEAD改写成被测SHA。Package.resolved blob保持 `702ce34b917f9fdf9927b1b428f431125c28970c`。
++
++Watchdog归属边界：仅向handshake确认的自有进程组发送TERM/KILL；仍留在该组的后代受控，不承诺终止Foundation Process另建独立组的所有后代。Packaging恢复必须继续检查本次journal、live owner/inner PID/group、token和指纹；活跃或冲突时Fail并保留资源，不推断“外层超时即全部结束”，不清理既有普通app。
++
++## 待后续调度的步骤
++
++1. C3任务与全M5源码独立审查；阻塞项同一波修复、限定复审。
++2. clean源码上运行一次 `scripts/verify.sh --lane release`，显式shader取当前B3标准Resources路径；code一次、packaging/check一次、固定新候选十次独立smoke。缺人工/CI时预期exit2，技术失败则exit1，不为获得0制造Pass。
++3. 保留最终manifest、verify-report、child streams、逐次UUID/tick/duration/hash和限制。后续文档归档提交与被测源码身份分列。
++4. 经controller明确归档调度后，才消费安全staging和允许的合成原始证据；本次没有归档大型日志或原始用户文件。
++
++完整41项操作/身份/证据合同与全Pending模板见[台账](../2026-11-03-m5-validation.md)；[原规划调研](../2026-11-03-m5-planning/README.md)及M1–M4历史日志原样保留。真实GUI/设备/模型/云端、权限≤5s、交付/剪贴板/V1–V5未实测项不因fixture通过而关闭。任何远端CI URL也只有被提供后作结构/身份校验，本工具不发起或证明远端执行。
+diff --git a/docs/evidence/2026-11-03-m5-manual-template.json b/docs/evidence/2026-11-03-m5-manual-template.json
+new file mode 100644
+index 0000000..0877a6e
+--- /dev/null
++++ b/docs/evidence/2026-11-03-m5-manual-template.json
+@@ -0,0 +1,175 @@
++{
++  "candidate" : {
++    "appPath" : "",
++    "binarySHA256" : "",
++    "gitSHA" : "",
++    "sourceTree" : ""
++  },
++  "cases" : [
++    {
++      "id" : "R1.launch10",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R2.sessions20",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R3.axRecovery",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R3.micRecovery",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R3.noEngine",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R3.multipleBlockers",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.metadata",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.switchSource",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.retry",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.autoFallback",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.manualSelection",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.builtin06",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.builtin17",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.importQwen",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R4.importWhisper",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R5.silence",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R5.quiet",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R5.short",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R5.noise",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R6.layout",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R6.focus",
++      "status" : "Pending"
++    },
++    {
++      "id" : "R6.displays",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V1.weak",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V1.offline",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V1.badKey",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V2.textEdit",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V2.vscode",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V2.chrome",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V2.terminal",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V2.cursor",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V2.safeTargets",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V3.formats",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V3.concurrentCopy",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V4.preparing",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V4.recording",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V4.asr",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V4.polish",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V4.injection",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V4.postEvent",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V5.unplug",
++      "status" : "Pending"
++    },
++    {
++      "id" : "V5.bluetooth",
++      "status" : "Pending"
++    }
++  ],
++  "schemaVersion" : 1
++}
+diff --git a/docs/evidence/2026-11-03-m5-validation.md b/docs/evidence/2026-11-03-m5-validation.md
+index 1014b00..c4a47b3 100644
+--- a/docs/evidence/2026-11-03-m5-validation.md
++++ b/docs/evidence/2026-11-03-m5-validation.md
+@@ -1,40 +1,52 @@
+-# M5 验证台账（规划态）
++# M5 验证与剩余验收台账
+ 
+-日期2026-11-03。当前只有[设计](../superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](../superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)实施计划，尚未实施。所有下表Pending表示未执行，不是已确认产品故障。
++日期2026-11-03。按[设计](../superpowers/specs/2026-11-03-m5-release-guardrails-design.md)及[M5-A](../superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md)实施。A/B及C1/C2源码与任务审查已通过；C3源码/文档/fixture提交后等待C3及全M5源码审查。最终release技术门禁、远端CI、全部41个人工叶子仍Pending。Pending表示未执行或缺证据，不是已确认产品故障。[开发证据索引](2026-11-03-m5-development/README.md)区分历史检查点与最终候选。
+ 
+-规划基线HEAD `b00b0a50d9c6913a91ef01c6a8c8944688add31e`；现有产品源码 `5dc1693`，Sources tree `872e9038b8def8ed720d9cc6370c57ed12d76794`。M4历史自测23872/0、旧app二进制 `ceded28e359918d8d66f8ed1090107fb4a8bffb46aa1b8b9e0278c94a5ccc250` 仅是[旧证据](2026-11-02-m4-development/README.md)，不算M5验证。旧strict/deep签名失败仍未被本轮修复。
++历史规划基线HEAD `b00b0a50d9c6913a91ef01c6a8c8944688add31e`，当时产品源码 `5dc1693`、Sources tree `872e9038b8def8ed720d9cc6370c57ed12d76794`。M4历史自测23872/0、旧app二进制 `ceded28e359918d8d66f8ed1090107fb4a8bffb46aa1b8b9e0278c94a5ccc250` 仍为[旧证据](2026-11-02-m4-development/README.md)。B3已在新检查点修复该旧strict/deep限制；不改写M4日志，也不把B3检查点当最终C验收。
+ 
+ ## 技术门禁
+ 
+ | 项目 | 所属任务/证明要求 | 状态 |
+ | --- | --- | --- |
+-| 进程role/路径/配置域隔离 | A1/A2；含legacy Keychain、DB迁移、无隐式模型/设备动作 | Pending |
+-| 构建身份/日志/关于菜单 | A3；metadata/plist一致，role/runID，flush/轮转；GUI另验 | Pending |
+-| 新源码顺序build/full | A/B各有意义变更后；本次实际计数、退出码和源码身份 | Pending |
+-| watchdog异常进程 | B1；主线程卡死、signal、子孙清理、非本run不受影响 | Pending |
+-| smoke 10/10 | B1/C1；每次≥6s、实际probe/健康tick≥1、独立根、固定候选 | Pending |
+-| standard Resources/完整签名 | B2/B3；codesign strict/deep exit0，不用ignore-resources | Pending |
+-| 仓库外资源/Metal/真实MLX | B2/B3；无开发bundle救场，独立三项，不加载ASR模型 | Pending |
+-| 本地verify聚合/失败保留 | C1；code/artifact/release、exit1/2/64准确 | Pending |
+-| CI配置/安全上传 | C2；arm64/Swift6.2预检，仅白名单 | Pending |
++| 进程role/路径/配置域隔离 | A1/A2；legacy Keychain/DB迁移与副作用预算，aea7dc9/ffd4ba4 | 源码/审查Pass |
++| 构建身份/日志/关于菜单 | A3 d6aaace；metadata/plist、role/runID、flush/轮转 | 源码Pass；菜单GUI Pending |
++| 新源码顺序build/full | B2 full24334/0；C1唯一实际code run全7阶段Pass/full24334/0 | 历史检查点Pass；最终C release Pending |
++| watchdog异常进程 | B1 7488553；主线程卡死、signal、子孙归属与真实timer | 源码/任务审查Pass |
++| 最终候选smoke 10/10 | C3最终clean源码；每次≥6s、实际probe/健康tick≥1 | Pending；尚未执行 |
++| standard Resources/完整签名 | B3 c21cb25；strict/deep exit0 | B3检查点Pass；最终C候选Pending |
++| 仓库外资源/Metal/真实MLX | B3移位check exit0，四项资源/Metal/MLX/inside均true | B3检查点Pass；无ASR模型推理 |
++| 本地verify聚合/失败保留 | C1 653ecb8；fixture71/0，实际code24334/0，恢复fixture128/0 | 源码/任务审查Pass |
++| CI配置/安全上传 | C2 66f1e78；fixture105/0，arm64/Swift6.2预检/白名单/partial/安全bootstrap | 源码/任务审查Pass；远端Pending |
+ | 远端CI实际运行 | C2/C3；最终gitSHA/sourceTree匹配的code报告；本会话不push | Pending |
+-| 人工schema/主线矩阵 | C3；每叶子required、身份匹配、证据存在 | Pending |
++| 人工schema/主线矩阵 | C3；41叶子、固定预期路径/source、CI独立、Pending模板 | 已实现；源码审查Pending；人工全Pending |
+ | 全M5源码审查与修复复审 | 任务审查后一次全量、同一修复波次与限定复审 | Pending |
+ 
++Watchdog仅控制handshake确认的自有进程组及仍在组内的后代。Foundation Process另建的独立后代组不受全局清理保证；packaging恢复另查marker/live owner/inner group及资源指纹，仍活跃或冲突就Fail并保留证据，不能把外层timeout当作安全恢复证明。
++
+ ## 最终候选身份
+ 
+-尚无M5候选。实施后填写gitSHA、sourceTree、version/buildNumber、builtAt、binarySHA256、buildInfoSHA256、shaderSHA256、architecture、固定appPath及manifest/verify-report引用。先签名再取二进制hash；任何二进制变更均使旧人工Pass不能自动沿用。后续仅文档提交需同时保留“被测源码身份”和“归档提交”，不能把新HEAD冒充当时构建SHA。
++最终C候选尚未构建；在C3/全M5源码审查后另行运行一次release并填写其gitSHA、sourceTree、version/buildNumber、builtAt、binary/buildInfo/shader hash、architecture、固定appPath及manifest/verify-report。先签名再取hash；二进制变化使旧人工Pass失效。归档提交与被测源码身份分列，不能把后续HEAD冒充被测SHA。
++
++B3历史检查点为 `c21cb25e4d37249d3d932939a6157b946b64a243`，Sources tree `953608b60a0349dfcd2acfc4ddeef6f6d6b39288`，version1.0.0/build350，arm64；binary `c59eb53b8aaec14421ef19e2c884e67cbb94f46a31ec069092051e66a38ac85f`，metadata `9ff060d015a4a3fefffb63b1378bd9e55545f7da17203cd985d5e73b42b6afc8`，shader `f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f`。固定路径为本checkout `build/FlowType.app`；shader在 `Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib`。这份候选证明B3打包，不是C最终十次smoke或人工通过。
+ 
+ ## required 真机验收
+ 
+-Pass需日期、测试人、环境、确切四身份字段、具体观察与证据；子项均通过才能聚合父项。实际JSON模板由C3生成，规划本轮不创建任何伪Pass记录。此表的详细字段合同见C3。
++Pass需日期、测试人、环境、确切四身份字段、具体观察与证据；子项均通过才能聚合父项。[实际模板](2026-11-03-m5-manual-template.json)含41个Pending和空候选，未创建任何真实Pass。
++
++schemaVersion=1，candidate为gitSHA/sourceTree/binarySHA256/appPath四个字符串。空候选加Pending叶子合法；非空身份必须完全匹配最终manifest、独立sourceIdentity及调用方明确指定的 `repo/build/FlowType.app`。不能从人工报告自己的路径或evidenceRoot推导预期app路径。每个Pass叶子重复这四字段，并包含：`testedAt` UTC `YYYY-MM-DDTHH:MM:SS[.SSS]Z`、非空`tester`、`environment`对象（macOS/hardware/target，target记录目标app版本、设备或服务标识）、`observation`对象（非空actions/result、整数count/durationMs）。R1 count≥10，R2 count≥20，其他count≥1且durationMs>0。观察必须描述实际动作/结果；结构校验不能辨别观察真假，需人工审阅。
++
++`evidence`是非空相对文件数组，根严格为所提供manual JSON的父目录；文件必须存在且无链接/逃逸。父ID仅允许R1–R6/V1–V5的可选聚合行，其状态必须等于叶子聚合；不能代替缺失叶子。未知/重复ID、坏schema、错身份、伪Pass或坏引用Fail；缺required叶子Pending，release报告始终列出41叶子的状态和闭合issue。人工JSON/截图不会进入自动上传白名单。
++
++CI JSON独立于artifact成功与否按预期gitSHA/sourceTree校验：schemaVersion1、lane code、status、精确身份、`runURL=https://github.com/OWNER/REPO/actions/runs/NUMBER`、非空evidence数组（同一run的 `.../artifacts/NUMBER` URL）。只校验已提供记录的结构/身份，不访问网络或证明服务端结果；缺报告Pending，本地日志或旧身份不能当远端Pass。全空Pending CI模板可保留Pending。没有push/远端执行授权时不能填Pass。
++
++R3.axRecovery须记录设置授权完成与首次真实热键恢复/角标消失时间差，≤5s而非目测；R2每次记录结果、idle、麦克风释放和重复次数；R4两预置及两类导入必须真实推理；V2各应用覆盖中英/多行/emoji，V3/V4分别记录零事件和已发事件的证据。需要GUI/网络/配置/设备授权的动作尚未执行。
+ 
+ | 叶子case ID | 操作与通过要求 | 状态 |
+ | --- | --- | --- |
+ | R1.launch10 | 普通app连续10次冷启动；无崩溃且每run身份header，不能用smoke代替 | Pending |
+ | R2.sessions20 | 20次成功/取消/重新录音混合；idle、无重复落字/卡processing/麦克风残留 | Pending |
+ | R3.axRecovery | 缺AX→设置授权，不重启≤5s热键恢复/角标消失，记录精确时间 | Pending |
+ | R3.micRecovery | 拒绝麦克风→设置→重检/新录音；拒绝时无录音或落字 | Pending |
+ | R3.noEngine | 三引擎不可用立即可操作常驻卡，无空录音/processing；路由约束也测 | Pending |
+ | R3.multipleBlockers | 多权限/无引擎组合，修好一个后卡片准确显示剩余blocker | Pending |
+ | R4.metadata | 元数据失败分类与安全提示正确，恢复操作有效 | Pending |
+@@ -70,11 +82,11 @@ Pass需日期、测试人、环境、确切四身份字段、具体观察与证
+ | V4.polish | 整理取消，无迟到fallback/交付/历史污染 | Pending |
+ | V4.injection | 发事件前取消，无键/剪贴板污染 | Pending |
+ | V4.postEvent | 真正发键后取消保留uncertain证据，不自动重发，显式copy/history语义正确 | Pending |
+ | V5.unplug | USB拔麦后旧会话终止/可恢复，新录音采用有效设备 | Pending |
+ | V5.bluetooth | 蓝牙断开/重连后无残留占用，新会话恢复 | Pending |
+ 
+ ## 完成口径
+ 
+ A/B/C源码完成、产物技术门禁通过、真实验收通过、远端CI通过分别记录。缺任一required真实项/CI时release仍Pending，不因full自测或正常使用反馈改成Pass。旧UI/统计/SQLite迁移人工项仍在原审计中追踪，不随M5规划自动关闭。
+ 
+-本轮仅写Markdown计划并检查文档一致性；没有新构建、自测、smoke、GUI、模型、权限、网络或发布结果。
++历史规划轮只写Markdown，无当时测试结果。后续A/B/C1/C2实施结果如上；C3本次只做源码/文档/合成fixture，最终release及大证据归档等待后续明确调度，不在此提前声称完成。
+diff --git a/docs/superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md b/docs/superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md
+index 0548624..e3f24fe 100644
+--- a/docs/superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md
++++ b/docs/superpowers/plans/2026-11-03-m5-a-build-identity-and-isolation.md
+@@ -3,24 +3,28 @@
+ > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+ 
+ **Goal:** 在任何共享对象构造前确定进程角色，使自动验证隔离于用户数据，并让日志、关于菜单与后续报告携带同一构建身份。
+ 
+ **Architecture:** 不重构业务流水线；新增不可变启动上下文和集中路径，接入现有全局边界。磁盘 BuildMetadata 与运行时 BuildIdentity 分离；构建时写入，运行时只读取。此包不实现 smoke/artifact 入口主体，B 消费它的接口。
+ 
+ **Tech Stack:** Swift 6.2、Foundation、AppKit、Security、现有内置 SelfTest；无 XCTest。
+ 
+ **Spec:** [M5 设计 §2–4](../specs/2026-11-03-m5-release-guardrails-design.md)。基线 `b00b0a5`，Sources `5dc1693`；M4 的23872/0仅为历史证据。
+ 
++## 执行状态（2026-11-03更新）
++
++A1–A3实现与任务审查通过，提交aea7dc9 / ffd4ba4 / d6aaace；以下步骤按已完成源码任务勾选。原规划基线与历史命令保持记录，当前执行索引见[开发证据](../../evidence/2026-11-03-m5-development/README.md)。A完成不等于M5发布或GUI通过。
++
+ ## Global Constraints
+ 
+ - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。
+-- 用户本轮仅要求计划；产品源码、现有构建产物与系统配置保持原状。不把规划写成已实施或验收通过。
++- 历史规划轮仅要求计划；其基线与原约束保留。后续已授权逐任务实施，当前状态见本页执行记录；未执行的真实验收仍Pending。
+ - 后续开发使用合成数据、假服务/剪贴板/输入事件和独立运行目录；不读取真实配置/词典/DB/Keychain/模型缓存，不触发授权弹窗、录音、热键输入或外部ASR/LLM请求。
+ - 普通app仍使用原用户配置/目录/启动行为；验证模式必须在任何shared/logger/AppKit初始化前确定，初始化失败退出，禁止回退到生产路径。
+ - 保留M1–M4 readiness降级、captured route/lease、原音频重试、新20s预算、新实时句柄、单次交付、剪贴板与取消/回调所有权保护；不借M5改写这些合同。
+ - 构建/运行报告只含身份、阶段、闭合枚举/计数/状态；不输出密钥、请求正文、转写、用户文档、原始配置、URL/query或任意NSError.userInfo。自动上传仅显式白名单的合成验证产物。
+ - 验证按focused→顺序swift build/full self-test；不运行swift test或重复未变全套/声学benchmark。M4的23872/0仅作历史基线，不重复一次未变baseline。
+ - 保留分支和worktree，不push、不merge、不安装到/Applications、不替换正在运行的app。V1–V5/真实模型/声学校准/GUI未执行均Pending。
+ 
+ ## Review Focus
+ 
+ 1. macOS temp 的 /var 别名与用户显式 symlink 不同：默认根可用，显式链接拒绝；A1 `testCanonicalTempAndExplicitSymlink`。
+@@ -39,51 +43,51 @@
+ 
+ **Interfaces:**
+ 
+ - `ProcessRole: String, Codable, Sendable` = app/selfTest/smokeTest；`RuntimeMode` = app/selfTest/smoke/artifact。
+ - `RuntimeContext: Sendable` 含 role、mode、runID(UUID)、paths(RuntimePaths)、defaultsSuiteName(String?)、selfTestFilter(String?)；普通 app 的 paths 无验证根。
+ - `RuntimeEnvironment.bootstrap(arguments: [String], temporaryDirectory: URL) throws -> RuntimeContext` 只成功一次；`current: RuntimeContext` 启动前访问显式失败，绝不懒建 app 上下文。启动上下文可跨 actor 安全读取。
+ - `RuntimePaths` 提供 validationRoot(URL?)、configDirectory、applicationSupportDirectory、cachesDirectory、logsDirectory、temporaryDirectory、modelsDirectory(URL)；`RuntimePaths.app(home: URL, applicationSupport: URL, caches: URL, temporaryDirectory: URL) -> RuntimePaths` 允许纯 fixture 比对旧路径，无需访问真实目录。
+ - `RuntimeEnvironment.defaults: UserDefaults` 用受保护的一次构造保持同一 suite；`finishValidation()` 只清本 run 的 suite。实例测试工厂不重置真正 current。
+ - 主选项互斥：`--self-test|--smoke-test|--artifact-check`；验证根选项 `--validation-root ABSOLUTE_PATH`。保留已存在的 self-test filters，新增 `--m5-runtime-only`，filter 仅与 self-test 配对；未知/重复/冲突 M5 参数 usage64。app 的 LaunchServices 参数须维持现有可启动行为，不能把系统 `-psn_…` 当用户验证选项。
+ 
+-- [ ] **RED：** 在 `M5RuntimeSelfTests.run(_ r: SelfTest.Reporter)` 添加 `testCanonicalTempAndExplicitSymlink`、`testRootOwnershipAndUsage`、`testAppPathCompatibility`：合成 temp 的可信别名可规范化；显式根/祖先 symlink、相对路径、home/Library及生产子目录、非空根均拒绝；普通 workspace/build 子目录可用；同根独占创建只一成功；失败不删除原文件。比较大小写和旧路径公式。用 fixture 目录与注入 home，不读取真实内容。
+-- [ ] **RED 验证：** 先接 focused 分支，`swift build` 因缺接口失败并保存编译错误；接口具备后先让上述行为断言失败。此前不运行旧完整 self-test（尚未接好全部隔离）。
+-- [ ] **GREEN：** 实现路径/参数/独占 marker；启动第一步解析，错误只写安全 stderr 并退出64/1。非 app 的 config/ApplicationSupport/Caches/Logs/Tmp 在根下；现有AppLogger的logDir/logPath先按当前role路由至隔离根，避免A2迁移测试日志仍写production。未实现的 smoke/artifact 暂以明确 unsupported 退出1，不落入普通 app。app 仍交给原 FlowTypeApp。
+-- [ ] **验证：** `swift build` 后运行 `.build/debug/FlowType --self-test --m5-runtime-only`，退出0；冲突/未知参数先用纯解析器及launch spy验证usage64，无 AppDelegate 调用。真实负例进程留B1有watchdog与全部副作用守卫后验证；不能为跑RED意外启动普通app。本任务 focused 只调用新测试，完整 runner 留给 A2。
+-- [ ] **提交：** 仅 stage 本任务文件，`git diff --cached --check`，提交 `feat: bootstrap isolated validation runtime`。
++- [x] **RED：** 在 `M5RuntimeSelfTests.run(_ r: SelfTest.Reporter)` 添加 `testCanonicalTempAndExplicitSymlink`、`testRootOwnershipAndUsage`、`testAppPathCompatibility`：合成 temp 的可信别名可规范化；显式根/祖先 symlink、相对路径、home/Library及生产子目录、非空根均拒绝；普通 workspace/build 子目录可用；同根独占创建只一成功；失败不删除原文件。比较大小写和旧路径公式。用 fixture 目录与注入 home，不读取真实内容。
++- [x] **RED 验证：** 先接 focused 分支，`swift build` 因缺接口失败并保存编译错误；接口具备后先让上述行为断言失败。此前不运行旧完整 self-test（尚未接好全部隔离）。
++- [x] **GREEN：** 实现路径/参数/独占 marker；启动第一步解析，错误只写安全 stderr 并退出64/1。非 app 的 config/ApplicationSupport/Caches/Logs/Tmp 在根下；现有AppLogger的logDir/logPath先按当前role路由至隔离根，避免A2迁移测试日志仍写production。未实现的 smoke/artifact 暂以明确 unsupported 退出1，不落入普通 app。app 仍交给原 FlowTypeApp。
++- [x] **验证：** `swift build` 后运行 `.build/debug/FlowType --self-test --m5-runtime-only`，退出0；冲突/未知参数先用纯解析器及launch spy验证usage64，无 AppDelegate 调用。真实负例进程留B1有watchdog与全部副作用守卫后验证；不能为跑RED意外启动普通app。本任务 focused 只调用新测试，完整 runner 留给 A2。
++- [x] **提交：** 仅 stage 本任务文件，`git diff --cached --check`，提交 `feat: bootstrap isolated validation runtime`。
+ 
+ ### Task 2: A2 — 接通所有自动验证可达的持久化与副作用边界
+ 
+ **Files:** Modify `Core/{ConfigurationStore,Persistence,EnvMigration,PipelineOrchestrator}.swift`、`Core/Database/AppDatabase.swift`、`Services/{AudioRecorder,KeyboardInjector}.swift`、`Utilities/{KeychainHelper,PermissionHelper}.swift`、`Services/Speech/{QwenModelState,ModelLocator,ASRRouter}.swift`、`Services/Speech/LocalModelManager/{ModelPreset,LocalModelLibrary}.swift`、`App/StatusBarController.swift`、`Testing/SelfTest.swift`及确实仍访问真实状态的既有 `Testing/*.swift`；Create `Testing/M5IsolationSelfTests.swift`。以 `rg` 的调用链确认清单，不借机整理其他代码。
+ 
+ **Interfaces:** 消费 A1 的 current/paths/defaults；`KeychainHelper.save(key:value:) -> Bool`、`load(key:) -> String?`、`delete(key:)` 保持签名，非 app 路由至锁保护的内存实现。`ConfigurationStore.shared` 显式传当前 defaults/backupDirectory，普通注入 init 保留。`SessionEffects.live.prepare` 在非 app 禁自动模型工作；smoke 的真实 probe 启动留给 B1。新增 `--m5-isolation-only` 对应 `M5IsolationSelfTests.run(_:)`。
+ 
+-- [ ] **RED：** 先在显式fixture依赖的实例上写 `testLegacyMigrationBoundaries`：旧版含合成 key 的配置及损坏字节迁移、备份、JSON→SQLite rename，fake Keychain内容正确、SecItem边界调用数0、所有改动位于fixture/run根，真实存储spy为0。RED阶段所有OS/网络边界先换deny/spy，未接通隔离前禁止构造会读取真实数据的shared；缺路径注入可先以编译失败证明缺口。`testSingletonSideEffectBudget`的实际shared集成断言在GREEN接完边界后才启用：排空任务队列，网络请求、模型扫描/下载/加载、音频设备改动、授权请求、剪贴板与输入事件均0。不以“没有观察到日志”代替spy。
+-- [ ] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-isolation-only`；应因未接通的生产路径/副作用断言失败。spy 与 fixture 从测试创建，不读取真实环境作为 baseline。
+-- [ ] **GREEN：** shared 使用 RuntimePaths/defaults，EnvMigration 非 app 在读 .env/环境前返回，Keychain 先分流后构造 SecItem query。ModelLocator 非 app 不枚举用户 cache/HF refs；测试需显式合成参数。禁止自动模型 prepare、设备 sentinel 恢复和权限引导；路由 self-test 不启真实监控。将任何旧测试对系统剪贴板/热键/模型缓存的依赖换注入，不能删掉对应语义断言。普通 app 的路径与准备动作保持。
+-- [ ] **验证：** focused退出0后，顺序 `swift build` → `.build/debug/FlowType --self-test`，完整报告0 failed；检查本 run 的数据库/备份证据。最终硬件副作用由注入计数证明，不运行普通 app 去试权限。新增后完整自测数应实际记录，不写死23872。
+-- [ ] **提交：** scoped stage/`git diff --cached --check`，提交 `fix: isolate self-test persistence and startup effects`。
++- [x] **RED：** 先在显式fixture依赖的实例上写 `testLegacyMigrationBoundaries`：旧版含合成 key 的配置及损坏字节迁移、备份、JSON→SQLite rename，fake Keychain内容正确、SecItem边界调用数0、所有改动位于fixture/run根，真实存储spy为0。RED阶段所有OS/网络边界先换deny/spy，未接通隔离前禁止构造会读取真实数据的shared；缺路径注入可先以编译失败证明缺口。`testSingletonSideEffectBudget`的实际shared集成断言在GREEN接完边界后才启用：排空任务队列，网络请求、模型扫描/下载/加载、音频设备改动、授权请求、剪贴板与输入事件均0。不以“没有观察到日志”代替spy。
++- [x] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-isolation-only`；应因未接通的生产路径/副作用断言失败。spy 与 fixture 从测试创建，不读取真实环境作为 baseline。
++- [x] **GREEN：** shared 使用 RuntimePaths/defaults，EnvMigration 非 app 在读 .env/环境前返回，Keychain 先分流后构造 SecItem query。ModelLocator 非 app 不枚举用户 cache/HF refs；测试需显式合成参数。禁止自动模型 prepare、设备 sentinel 恢复和权限引导；路由 self-test 不启真实监控。将任何旧测试对系统剪贴板/热键/模型缓存的依赖换注入，不能删掉对应语义断言。普通 app 的路径与准备动作保持。
++- [x] **验证：** focused退出0后，顺序 `swift build` → `.build/debug/FlowType --self-test`，完整报告0 failed；检查本 run 的数据库/备份证据。最终硬件副作用由注入计数证明，不运行普通 app 去试权限。新增后完整自测数应实际记录，不写死23872。
++- [x] **提交：** scoped stage/`git diff --cached --check`，提交 `fix: isolate self-test persistence and startup effects`。
+ 
+ ### Task 3: A3 — 构建身份、每 run 日志与关于菜单
+ 
+ **Files:** Create `App/BuildInfo.swift`、`Utilities/DiagnosticLogWriter.swift`、`Testing/M5BuildInfoSelfTests.swift`、`scripts/generate-build-info.swift`；Modify `Utilities/AppLogger.swift`、`App/{FlowTypeApp,StatusBarController}.swift`、`Testing/SelfTest.swift`。本任务不改写 build-app 的 bundle 布局。
+ 
+ **Interfaces:**
+ 
+ - `BuildMetadata: Codable, Equatable, Sendable`：schemaVersion(Int)=1、version/buildNumber/gitSHA/sourceTree/builtAt(String)、dirty(Bool)。version三段数字，buildNumber十进制，两个SHA40hex，builtAt UTC ISO8601。
+ - `BuildIdentity: Codable, Sendable`：origin(packaged/development/invalid)、metadata(BuildMetadata?)、failureCode(BuildInfoFailure?)；`BuildInfo.load(bundle: Bundle) -> BuildIdentity`，`BuildInfo.validate(json: Data, infoPlist: [String: Any]) -> BuildIdentity`。packaged必须与plist版本/build一致；无.app的开发运行明确development；坏app明确invalid，不能回退development。
+ - 元数据工具 CLI：`swift scripts/generate-build-info.swift --repo PATH --output EMPTY_DIRECTORY [--version X.Y.Z]`；生成 `FlowTypeBuild.json` 和含现有 bundle/用途声明的 `Info.plist`。默认VERSION=1.0.0；HEAD/count/HEAD:Sources/UTC，dirty或HEAD变化失败1，参数错64。不接受任意env覆盖SHA/time。`--self-test` 仅创建独立小git仓库测试，不改当前仓库或全局git配置。
+ - `AppLogger.configure(context: RuntimeContext, identity: BuildIdentity) throws`；`log(_:)`、`logFileURL`、`openLogInFinder()`兼容；新增同步 `flush()`。`DiagnosticLogWriter` 接收显式fileURL、role、runID、identity和可注入轮转阈值，提供 `log(_:)`/`flush()`；实际10MiB/3个轮转。启动header同步成功后才初始化shared；正常app终止与所有self-test退出均flush。
+ - 新 `--m5-buildinfo-only` → `M5BuildInfoSelfTests.run(_:)`。日志路径按spec；每行role/runID/UTC，自测[SelfTest]；关于菜单只展示同一identity，不查询git。
+ 
+-- [ ] **RED：** `testMetadataValidation` 覆盖坏JSON、缺字段、非40hex、非UTC、version/plist不一致、dirty以及开发运行；bad app不能伪装development。工具 fixture `testCleanGitIdentity` 覆盖版本注入字符/浅历史/脏树/含空格repo路径；浅历史拒绝生成release身份。`testIdentityAndConcurrentFlush` 用低阈值writer并发写与立即flush，检查每run首条header、末条sentinel、四文件上限、各行角色、不同run不串文件，队列内flush不死锁。
+-- [ ] **RED 验证：** 接 focused 后 `swift build` → `.build/debug/FlowType --self-test --m5-buildinfo-only`，先确认预期失败；`swift scripts/generate-build-info.swift --self-test` 先确认生成器负例失败。
+-- [ ] **GREEN：** 实现上述校验/工具/logger与菜单；日志无初始化前的生产路径默认值，启动失败不写旧production日志。保持现有自测汇总stdout，汇总前flush；本任务不把所有历史自由文本日志宣称为已全面脱敏，自动模式必须只运行合成输入。
+-- [ ] **验证：** 两个focused命令退出0；顺序构建/full self-test一次，stdout零失败、退出0、独立日志有header和末尾汇总。无普通app/GUI启动；菜单外观仍Pending。
+-- [ ] **提交：** scoped stage/diff check，提交 `feat: add build identity and role-scoped diagnostics`。
++- [x] **RED：** `testMetadataValidation` 覆盖坏JSON、缺字段、非40hex、非UTC、version/plist不一致、dirty以及开发运行；bad app不能伪装development。工具 fixture `testCleanGitIdentity` 覆盖版本注入字符/浅历史/脏树/含空格repo路径；浅历史拒绝生成release身份。`testIdentityAndConcurrentFlush` 用低阈值writer并发写与立即flush，检查每run首条header、末条sentinel、四文件上限、各行角色、不同run不串文件，队列内flush不死锁。
++- [x] **RED 验证：** 接 focused 后 `swift build` → `.build/debug/FlowType --self-test --m5-buildinfo-only`，先确认预期失败；`swift scripts/generate-build-info.swift --self-test` 先确认生成器负例失败。
++- [x] **GREEN：** 实现上述校验/工具/logger与菜单；日志无初始化前的生产路径默认值，启动失败不写旧production日志。保持现有自测汇总stdout，汇总前flush；本任务不把所有历史自由文本日志宣称为已全面脱敏，自动模式必须只运行合成输入。
++- [x] **验证：** 两个focused命令退出0；顺序构建/full self-test一次，stdout零失败、退出0、独立日志有header和末尾汇总。无普通app/GUI启动；菜单外观仍Pending。
++- [x] **提交：** scoped stage/diff check，提交 `feat: add build identity and role-scoped diagnostics`。
+ 
+ ## 包级完成条件与交接
+ 
+ A1–A3审查通过、隔离全套有新证据、身份工具fixture通过即可标记A源码完成；不能标记M5或发布完成。B1消费 current/BuildIdentity/logger，B2消费RuntimePaths，B3消费生成器。执行时逐任务按保留的子智能体方式实现和审查；源码验收后才进入B，未开始的任务保持空checkbox。
+ 
+ 自检：spec §3归A1/A2、§4归A3；五项Review Focus各有测试；无 Package.resolved 变更、无本轮构建。路径/role/身份类型与B/C共享，后续变更须同时修改本计划与消费者。
+diff --git a/docs/superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md b/docs/superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md
+index 3b0029e..57b485f 100644
+--- a/docs/superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md
++++ b/docs/superpowers/plans/2026-11-03-m5-b-smoke-and-artifact.md
+@@ -3,24 +3,30 @@
+ > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+ 
+ **Goal:** 捕获真实启动异步回调故障，并验证app脱离开发目录后资源、Metal/MLX和完整签名仍有效。
+ 
+ **Architecture:** smoke构造受控的真实单例和计时器，不进入普通AppDelegate。artifact-check只检查身份、资源与无模型GPU微计算。外部独立进程watchdog捕获主线程卡死；打包在staging完成，签名通过才更新build候选。
+ 
+ **Tech Stack:** Swift6.2、AppKit、Foundation.Process/Darwin、Metal、既有MLX0.31.3、bash、codesign。
+ 
+ **Spec:** [M5设计 §5–6](../specs/2026-11-03-m5-release-guardrails-design.md)；前置：[M5-A](2026-11-03-m5-a-build-identity-and-isolation.md)完成并审查。
+ 
++## 执行状态（2026-11-03更新）
++
++B1–B3实现与任务审查通过（7488553 / df63cd2 / c21cb25）。B3一次真实build/check已证明strict/deep、移位资源、Metal及实际MLX；最终C候选十次smoke未执行。步骤勾选表示B源码和该检查点，不扩展为最终发布。
++
++- [ ] 后续独立归档B原始安全证据；等待controller调度，不修改历史日志。
++
+ ## Global Constraints
+ 
+ - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。
+-- 用户本轮仅要求计划；产品源码、现有构建产物与系统配置保持原状。不把规划写成已实施或验收通过。
++- 历史规划轮仅要求计划；其基线与原约束保留。后续已授权逐任务实施，当前状态见本页执行记录；未执行的真实验收仍Pending。
+ - 后续开发使用合成数据、假服务/剪贴板/输入事件和独立运行目录；不读取真实配置/词典/DB/Keychain/模型缓存，不触发授权弹窗、录音、热键输入或外部ASR/LLM请求。
+ - 普通app仍使用原用户配置/目录/启动行为；验证模式必须在任何shared/logger/AppKit初始化前确定，初始化失败退出，禁止回退到生产路径。
+ - 保留M1–M4 readiness降级、captured route/lease、原音频重试、新20s预算、新实时句柄、单次交付、剪贴板与取消/回调所有权保护；不借M5改写这些合同。
+ - 构建/运行报告只含身份、阶段、闭合枚举/计数/状态；不输出密钥、请求正文、转写、用户文档、原始配置、URL/query或任意NSError.userInfo。自动上传仅显式白名单的合成验证产物。
+ - 验证按focused→顺序swift build/full self-test；不运行swift test或重复未变全套/声学benchmark。M4的23872/0仅作历史基线，不重复一次未变baseline。
+ - 保留分支和worktree，不push、不merge、不安装到/Applications、不替换正在运行的app。V1–V5/真实模型/声学校准/GUI未执行均Pending。
+ 
+ ## Review Focus
+ 
+ 1. 主线程卡死、SIGTRAP、子进程持有输出句柄：父runner按时失败并终止自己拥有的进程组；B1 `testTimeoutCrashAndDescendants`。
+@@ -41,60 +47,60 @@ JSON共同字段：schemaVersion=1、mode(smoke/artifact)、ok(Bool)、role="smo
+ 
+ **Interfaces:**
+ 
+ - `@MainActor StartupSmoke.run(context: RuntimeContext) async -> SmokeReport`；`SmokeReport: Codable, Sendable` 含共同字段及readiness(ready/degraded/blocked)、ax/mic/speech(granted/denied/notDetermined/unknown)、probeTimerTicks/windowHealthTicks(Int)、tap="disabledForValidation"。`exitCode`由report映射，成功0、失败1、明确无WindowServer69。
+ - Router新增线程安全只读 `probeTimerTicks: Int`，回调weak self/@Sendable，入真实callback才累加；首1s/周期30s不变。WindowManager新增 `private(set) var windowHealthTicks: Int`，在真正健康callback进入累加，周期5s不变。新增 `startValidationHealthCheck()` 只启动同一健康timer；非app install/repair/handle入口均禁止真实tap。清理重复启动/退出所有权。
+ - `BoundedCommand: Sendable` = executable(URL)、arguments([String])、workingDirectory(URL)、environment([String:String])、stdoutURL/stderrURL(URL)、timeoutSeconds(Double)。`BoundedResult: Codable, Sendable` = schemaVersion=1、exitCode(Int32?)、termination(normal/signal/launchFailure/timeout)、durationMs(Int)、timedOut(Bool)、failureCode(闭合枚举/null)。`BoundedProcess.run(_ command: BoundedCommand) throws -> BoundedResult` 在独立runner线程控制等待，不依赖被测actor。
+ - `ProcessCLI` CLI：`--timeout SECONDS --stdout FILE --stderr FILE --result FILE -- EXECUTABLE ARGS...`；不经shell拼接参数。返回child退出码、signal/launchFailure为1、timeout124、工具错误125、usage64。内部受控子模式先setpgid(0,0)，通过管道报告组就绪后exec目标；仅杀自己的组，TERM后2s KILL，不killall。启动握手失败清本次child并报告失败。stdin=/dev/null，文件输出不靠未排空pipe。
+ - `BoundedProcess.dispatchChildIfNeeded(arguments: [String]) throws` 在每个消费该runner的CLI入口首先调用：普通模式返回，受控子模式握手后exec成功不返回；失败抛错并退出。ProcessCLI、PackagingSelfTests以及C的VerificationCLI均实现同一内部子模式，避免“runner仅在某个主程序下可用”。
+ - `ProcessCLI --self-test`调用ProcessRunnerSelfTests，仅生成自己的短命fixture；新增FlowType focused `--m5-smoke-contract-only` → `M5SmokeSelfTests.run(_:)`。
+ 
+-- [ ] **RED：** `testTimeoutCrashAndDescendants` 启动fixture的主线程阻塞、signal退出、子孙忽略TERM、超长stdout，断言timeout=true/退出非0、子孙已终止、另一个独立fixture仍存活、输出完整，无无限wait。`testTimerOwnershipAndEvidence` 注入两个router，触发一个真实定时源，只有该实例计数/refresh增加；纯等待而callback未执行不能通过；重复start只一timer。focused可用短注入间隔，正式smoke仍1s/5s。
+-- [ ] **RED：** `testValidationActionGuards` 用spies覆盖tap安装/repair、热键处理、菜单录音/修复/授权及正常app门控分支。非app均无实际副作用；不能只关闭button而漏掉selector直接调用。`testSmokeReport`覆盖缺引擎/无权限仍可ok、缺任一tick必Fail、已判定无WindowServer才69，普通异常不得Skip。
+-- [ ] **RED 验证：** 接focused后 `swift build` → `.build/debug/FlowType --self-test --m5-smoke-contract-only`，先观察断言失败。编译 `swiftc -parse-as-library scripts/verification/BoundedProcess.swift scripts/verification/ProcessCLI.swift scripts/verification/ProcessRunnerSelfTests.swift -o build/m5-process`，运行 `build/m5-process --self-test`，先确认超时/归属负例失败。
+-- [ ] **GREEN：** 实现watchdog、报告和smoke。按spec顺序创建NSApplication accessory、配置/session/router/隐藏panel/statusbar/readiness；不进入AppDelegate。状态栏保持真实setup但禁全部可启动录音/授权/配置修改动作；6s最小观察，缺tick等至10s失败，Task.sleep不阻塞MainActor。禁外网probe、模型、引导及录音，退出flush并清理自身对象。
+-- [ ] **验证：** 两个focused退出0；顺序build/full self-test一次。通过runner分别验证重复主模式/未知M5选项/非法root参数的usage64；只在全部非app守卫已接好后运行，不给任何负例机会落入普通app。再用 `build/m5-process` 以15s timeout启动 `.build/debug/FlowType --smoke-test` 一次，核查stdout恰一JSON、durationMs≥6000、两tick≥1、tap禁用、development身份可见。未具备WindowServer明确记录Skip，不伪造Pass；最终十次留给C。不运行普通app。
+-- [ ] **提交：** scoped stage/diff check，提交 `feat: add bounded startup smoke with real timer evidence`。
++- [x] **RED：** `testTimeoutCrashAndDescendants` 启动fixture的主线程阻塞、signal退出、子孙忽略TERM、超长stdout，断言timeout=true/退出非0、仍在handshake自有组的子孙已终止（不保证另建独立组的后代）、另一个独立fixture仍存活、输出完整，无无限wait。`testTimerOwnershipAndEvidence` 注入两个router，触发一个真实定时源，只有该实例计数/refresh增加；纯等待而callback未执行不能通过；重复start只一timer。focused可用短注入间隔，正式smoke仍1s/5s。
++- [x] **RED：** `testValidationActionGuards` 用spies覆盖tap安装/repair、热键处理、菜单录音/修复/授权及正常app门控分支。非app均无实际副作用；不能只关闭button而漏掉selector直接调用。`testSmokeReport`覆盖缺引擎/无权限仍可ok、缺任一tick必Fail、已判定无WindowServer才69，普通异常不得Skip。
++- [x] **RED 验证：** 接focused后 `swift build` → `.build/debug/FlowType --self-test --m5-smoke-contract-only`，先观察断言失败。编译 `swiftc -parse-as-library scripts/verification/BoundedProcess.swift scripts/verification/ProcessCLI.swift scripts/verification/ProcessRunnerSelfTests.swift -o build/m5-process`，运行 `build/m5-process --self-test`，先确认超时/归属负例失败。
++- [x] **GREEN：** 实现watchdog、报告和smoke。按spec顺序创建NSApplication accessory、配置/session/router/隐藏panel/statusbar/readiness；不进入AppDelegate。状态栏保持真实setup但禁全部可启动录音/授权/配置修改动作；6s最小观察，缺tick等至10s失败，Task.sleep不阻塞MainActor。禁外网probe、模型、引导及录音，退出flush并清理自身对象。
++- [x] **验证：** 两个focused退出0；顺序build/full self-test一次。通过runner分别验证重复主模式/未知M5选项/非法root参数的usage64；只在全部非app守卫已接好后运行，不给任何负例机会落入普通app。再用 `build/m5-process` 以15s timeout启动 `.build/debug/FlowType --smoke-test` 一次，核查stdout恰一JSON、durationMs≥6000、两tick≥1、tap禁用、development身份可见。未具备WindowServer明确记录Skip，不伪造Pass；最终十次留给C。不运行普通app。
++- [x] **提交：** scoped stage/diff check，提交 `feat: add bounded startup smoke with real timer evidence`。
+ 
+ ### Task 2: B2 — 独立资源入口和无模型artifact-check
+ 
+ **Files:** Create `App/AppResources.swift`、`App/Validation/RuntimeArtifactCheck.swift`、`Testing/M5ArtifactSelfTests.swift`；Modify `App/{FlowTypeApp,StatusBarController}.swift`、`Services/Speech/ASRPostProcessor.swift`、`Testing/SelfTest.swift`、`Package.swift`（仅显式引用已有MLX）。
+ 
+ **Interfaces:**
+ 
+ - `AppResources.bundle(in application: Bundle) throws -> Bundle`：.app只找 `Contents/Resources/FlowType_FlowType.bundle`，校验规范化URL仍在app内；开发可Bundle.module。`AppResources.url(forResource name: String, withExtension ext: String) -> URL?` 为现有图标/词库共同入口。
+ - `@MainActor RuntimeArtifactCheck.run(context: RuntimeContext) async -> ArtifactReport`；`ArtifactReport: Codable, Sendable` 含共同字段及appResources/metalLibrary/mlxOperation/resolvedInsideApp(Bool)。身份必须packaged且dirty=false，不建UI/路由timer，不加载模型。
+ - 内部 `ArtifactCheckDependencies` 注入资源解析、Metal库加载、MLX微运算三个闭包供合成负例；live闭包读取app内两JSON/图标，Metal用实际 `makeLibrary(URL:)`，MLX显式GPU计算 `[1,2]+1`、eval并取回 `[2,3]`，不可CPU回退或只加载Metal却跳过MLX。
+ - 新focused `--m5-artifact-contract-only` → `M5ArtifactSelfTests.run(_:)`。新增package声明仅允许既有 mlx-swift exact0.31.3/revision61b9e011e09a62b489f6bd647958f1555bdf2896及MLX product；Package.resolved必须无diff。
+ 
+-- [ ] **RED：** `testNoDeveloperResourceFallback` 在合成.app中移除词库，即使开发Bundle.module可用也必须resourceMissing；symlink逃出app必resourceOutsideBundle；坏JSON/空词库/缺图标分别失败。`testArtifactStageTruth` 注入Metal通过/MLX失败、无GPU、错误结果和invalid身份，断言对应failureCode且ok=false；未运行步骤不报true，依赖闭包不触发模型工作。
+-- [ ] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-artifact-contract-only`，先确认上述失败，不调用真实GPU作为单元fixture。
+-- [ ] **GREEN：** 接共同AppResources及artifact入口，报告无绝对用户路径；实际Metal/MLX调用只存在于artifact live路径，不被code lane full自测执行。显式GPU微计算不能因默认设备选择而悄悄用CPU通过。
+-- [ ] **验证：** focused通过后顺序build/full一次，确认Package.resolved无改动。真实打包/MLX默认搜索验证留B3，不把fixture成功当真实GPU通过。
+-- [ ] **提交：** scoped stage/diff check，提交 `feat: validate bundled resources and MLX artifact runtime`。
++- [x] **RED：** `testNoDeveloperResourceFallback` 在合成.app中移除词库，即使开发Bundle.module可用也必须resourceMissing；symlink逃出app必resourceOutsideBundle；坏JSON/空词库/缺图标分别失败。`testArtifactStageTruth` 注入Metal通过/MLX失败、无GPU、错误结果和invalid身份，断言对应failureCode且ok=false；未运行步骤不报true，依赖闭包不触发模型工作。
++- [x] **RED 验证：** `swift build` → `.build/debug/FlowType --self-test --m5-artifact-contract-only`，先确认上述失败，不调用真实GPU作为单元fixture。
++- [x] **GREEN：** 接共同AppResources及artifact入口，报告无绝对用户路径；实际Metal/MLX调用只存在于artifact live路径，不被code lane full自测执行。显式GPU微计算不能因默认设备选择而悄悄用CPU通过。
++- [x] **验证：** focused通过后顺序build/full一次，确认Package.resolved无改动。真实打包/MLX默认搜索验证留B3，不把fixture成功当真实GPU通过。
++- [x] **提交：** scoped stage/diff check，提交 `feat: validate bundled resources and MLX artifact runtime`。
+ 
+ ### Task 3: B3 — 可迁移bundle、staging签名与独立路径验证
+ 
+ **Files:** Modify `scripts/{build-app,build-dmg}.sh`；Create `scripts/check-app.sh`、`scripts/write-artifact-manifest.swift`、`scripts/verification/ArtifactPackagingSelfTests.swift`。消费A3生成器、B1 runner、B2 artifact入口；不动依赖checkout。
+ 
+ **Interfaces:**
+ 
+ - `scripts/build-app.sh`无参，VERSION可选三段数字；`MLX_METALLIB_PATH`只接受已存在本地文件（优先显式，其次旧shader-cache只读候选）；没有shader/不合法/脏树/浅历史退出1。HEAD变动再次拒绝。用 `swift build -c release --show-bin-path` 定位实际产物（该查询不代替release build）。
+ - 私有staging只复制当前release可执行文件及所有实际 `.bundle` 到Contents/Resources；新增MLX标准bundle含 `default.metallib` 和合法Info.plist，替代MacOS/mlx.metallib。生成 `Contents/Resources/FlowTypeBuild.json`、外置 `build/FlowType.manifest.json`。shader阈值为1MiB=1048576字节；Manifest schemaVersion=1含BuildMetadata、architecture="arm64"、binarySHA256/buildInfoSHA256/shaderSHA256和相对资源路径/hash清单，不泄露shader来源用户绝对路径。
+ - manifest JSON固定键为schemaVersion、buildInfo(磁盘BuildMetadata结构)、architecture、binarySHA256、buildInfoSHA256、shaderSHA256、resources(含path/sha256的数组)。`swift scripts/write-artifact-manifest.swift --app APP --output FILE`在最终签名之后计算真实hash并写外置manifest，不能在codesign修改Mach-O之前取hash；该工具自身fixture并入PackagingSelfTests。C以自己的Codable结构读取相同schema，不import产品主程序。
+ - 只签真正code，最后签app并 `codesign --verify --deep --strict --verbose=2`；禁ignore-resources/xattr清理绕过。签名失败不替换旧build/FlowType.app。签名成功只代表候选构造成功，MLX运行是否通过另看check-app；最终更新与manifest一致，失败不得遗留看似同身份的新旧混合对。
+ - app与外置manifest更新采用同一写者锁、旧候选备份和更新journal；正常失败回滚，异常中断后下次构建先恢复或明确失败，校验器发现不匹配立即Fail。两次rename不能声称是一个原子操作。
+ - `scripts/check-app.sh --app ABSOLUTE_APP --output EMPTY_DIRECTORY`：复制候选到checkout外临时根，无关cwd、无shader定位env，记录拷贝前后binary/metadata/shader hash并验strict/deep；隐藏本worktree实际release `.bundle`，内层runner30s执行拷贝的artifact-check，再恢复。返回0需artifact三项和resolvedInsideApp全true且身份/hash匹配；其他1、参数64。报告保存在output，测试app根与日志根分开。
+ - 资源隐藏有独占锁/恢复marker，恢复者在内层watchdog之外；trap覆盖正常/TERM/INT退出，SIGKILL/断电后的下一次调用先按marker核实原路径并恢复或明确失败，绝不覆盖未知目录。不得隐藏其他worktree/依赖cache，也不得因并发构建误搬资源。
+ - build-dmg只改为读取候选plist版本及匹配身份，移除暗示自动发布的提示；本任务不执行DMG创建。
+ 
+-- [ ] **RED：** PackagingSelfTests用合成git仓库/小fixture工具运行真实脚本控制流，以显式注入的测试依赖替代swift/codesign（入口只存在测试driver，不接受release绕过变量）。`testStagingFailurePreservesCandidate` 覆盖缺/截断shader、build/sign失败、HEAD变化、空格路径；旧候选/hash保持。`testRestoreOnArtifactFailure`覆盖artifact失败/超时和恢复marker残留，确保只恢复自有文件。验证manifest对真实复制后的hash，不能仅断言文件存在。
+-- [ ] **RED 验证：** 编译独立 `ArtifactPackagingSelfTests.swift`（自身@main，仅Foundation/Process，复用BoundedProcess）到 `build/m5-packaging-tests`；先运行看到负例失败。`bash -n scripts/build-app.sh scripts/build-dmg.sh scripts/check-app.sh`验证语法。
+-- [ ] **GREEN：** 实现staging/标准资源封装/manifest/移位检查和安全恢复；任何shader定位都不调用Python/安装/下载。如果所选MLX布局实际加载失败，保留Fail并定位，不篡改依赖或降级门禁。
+-- [ ] **验证：** fixture与语法通过，提交全部源码/脚本使checkout clean后，再运行一次真实build-app→check-app（runner watchdog分别900s/30s）。严格签名、移位资源、真实GPU微计算全有证据才artifact Pass；无法取得已有shader则该项Pending/Fail，不安装补齐。签名完成后不改bundle任何资源。此任务源码若仅shell改动不重复未变full；若改了B2源码，先focused再full。
+-- [ ] **提交与证据：** scoped stage/diff check，提交 `build: package portable resources with strict signing`；真实门禁证据在独立后续docs提交归档，报告准确记录被测源码commit和binary hash。不运行现有正在使用的正常app。
++- [x] **RED：** PackagingSelfTests用合成git仓库/小fixture工具运行真实脚本控制流，以显式注入的测试依赖替代swift/codesign（入口只存在测试driver，不接受release绕过变量）。`testStagingFailurePreservesCandidate` 覆盖缺/截断shader、build/sign失败、HEAD变化、空格路径；旧候选/hash保持。`testRestoreOnArtifactFailure`覆盖artifact失败/超时和恢复marker残留，确保只恢复自有文件。验证manifest对真实复制后的hash，不能仅断言文件存在。
++- [x] **RED 验证：** 编译独立 `ArtifactPackagingSelfTests.swift`（自身@main，仅Foundation/Process，复用BoundedProcess）到 `build/m5-packaging-tests`；先运行看到负例失败。`bash -n scripts/build-app.sh scripts/build-dmg.sh scripts/check-app.sh`验证语法。
++- [x] **GREEN：** 实现staging/标准资源封装/manifest/移位检查和安全恢复；任何shader定位都不调用Python/安装/下载。如果所选MLX布局实际加载失败，保留Fail并定位，不篡改依赖或降级门禁。
++- [x] **验证：** fixture与语法通过，提交全部源码/脚本使checkout clean后，再运行一次真实build-app→check-app（runner watchdog分别900s/30s）。严格签名、移位资源、真实GPU微计算全有证据才artifact Pass；无法取得已有shader则该项Pending/Fail，不安装补齐。签名完成后不改bundle任何资源。此任务源码若仅shell改动不重复未变full；若改了B2源码，先focused再full。
++- [x] **源码提交：** scoped stage/diff check，提交 `build: package portable resources with strict signing`；真实门禁证据已在当前执行记录中审阅，最终独立docs归档仍待后续调度；报告准确记录被测源码commit和binary hash。不运行现有正在使用的正常app。
+ 
+ ## 包级完成条件与交接
+ 
+ 源码完成与artifact通过分列；完整签名/真实MLX未通过时不得称产物已修复。C消费上述report/runner/manifest/check-app CLI，负责一次最终十次smoke及完整验收聚合。M4旧app不被重新解释为通过；新候选即使技术门禁通过，也不能继承真实模型/GUI/V1–V5的旧身份结果。
+ 
+ 自检：§5.1归B1、§5.2归B2、§6归B3；五项Review Focus有归属。Metal直接加载与MLX运行分别有结果；无新ASR依赖/模型/发布。所有本计划checkbox当前未执行。
+diff --git a/docs/superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md b/docs/superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md
+index 3b77ae6..3bd9c10 100644
+--- a/docs/superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md
++++ b/docs/superpowers/plans/2026-11-03-m5-c-verification-and-acceptance.md
+@@ -3,24 +3,28 @@
+ > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+ 
+ **Goal:** 提供一条本地可复现的验证入口和CI代码门禁，让尚未完成的真实环境验收始终显式阻止“发布完成”。
+ 
+ **Architecture:** shell只负责编译/启动Swift验证工具，Swift按code/artifact/release顺序编排B的受控进程并校验报告。源代码、候选二进制、人工观察、远端CI分别保留身份与状态；最终聚合不把Pending或Skip转为Pass。
+ 
+ **Tech Stack:** Swift6.2、Foundation/Darwin、bash、GitHub Actions、JSON、现有SelfTest与B的BoundedProcess。
+ 
+ **Spec:** [M5设计 §7–8](../specs/2026-11-03-m5-release-guardrails-design.md)；前置：[M5-A](2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](2026-11-03-m5-b-smoke-and-artifact.md)。
+ 
++## 执行状态（2026-11-03更新）
++
++C1 653ecb8 / C2 66f1e78实现与独立任务审查通过；C3源码/文档/合成fixture本次提交后待审。以下C3源码步骤已执行，最终release、全M5独立审查及大型证据归档仍留空；远端CI和41个人工叶子全Pending。API的预期路径/source分离为controller已记录的内部合同澄清，避免由报告自证身份。
++
+ ## Global Constraints
+ 
+ - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。
+-- 用户本轮仅要求计划；产品源码、现有构建产物与系统配置保持原状。不把规划写成已实施或验收通过。
++- 历史规划轮仅要求计划；其基线与原约束保留。后续已授权逐任务实施，当前状态见本页执行记录；未执行的真实验收仍Pending。
+ - 后续开发使用合成数据、假服务/剪贴板/输入事件和独立运行目录；不读取真实配置/词典/DB/Keychain/模型缓存，不触发授权弹窗、录音、热键输入或外部ASR/LLM请求。
+ - 普通app仍使用原用户配置/目录/启动行为；验证模式必须在任何shared/logger/AppKit初始化前确定，初始化失败退出，禁止回退到生产路径。
+ - 保留M1–M4 readiness降级、captured route/lease、原音频重试、新20s预算、新实时句柄、单次交付、剪贴板与取消/回调所有权保护；不借M5改写这些合同。
+ - 构建/运行报告只含身份、阶段、闭合枚举/计数/状态；不输出密钥、请求正文、转写、用户文档、原始配置、URL/query或任意NSError.userInfo。自动上传仅显式白名单的合成验证产物。
+ - 验证按focused→顺序swift build/full self-test；不运行swift test或重复未变全套/声学benchmark。M4的23872/0仅作历史基线，不重复一次未变baseline。
+ - 保留分支和worktree，不push、不merge、不安装到/Applications、不替换正在运行的app。V1–V5/真实模型/声学校准/GUI未执行均Pending。
+ 
+ ## Review Focus
+ 
+ 1. 子程序exit0却给坏/多行JSON、缺tick或旧身份：门禁失败；C1 `testExitZeroCannotForgeArtifactPass`。
+@@ -43,64 +47,65 @@
+ 
+ **Interfaces:**
+ 
+ - CLI `scripts/verify.sh [--lane code|artifact|release] [--manual-report FILE] [--ci-report FILE]`，默认code；重复/未知参数64。输出 `build/verification/<parent UUID>/verify-report.json`，每child分配新的根；CLI不接收伪造runID/skip检查参数。stdout仅安全摘要/报告相对路径，原始child stdout/stderr各归档。
+ - shell从自己的绝对位置定位repo，`swiftc -parse-as-library scripts/verification/BoundedProcess.swift scripts/verification/VerificationReport.swift scripts/verification/ManualValidation.swift scripts/verification/VerificationSelfTests.swift scripts/verification/VerificationCLI.swift -o build/tools/flowtype-verify` 后执行。C1先提供ManualValidation的Pending stub，C3完成；主入口首先调用B的 `dispatchChildIfNeeded(arguments:)`。
+ - `VerificationRunner.run(lane: VerificationLane, repository: URL, output: URL, manualReport: URL?, ciReport: URL?) throws -> VerificationReport`；所有外部命令通过BoundedProcess，用argv不用shell拼接。构建工具失败仍由shell写最小安全bootstrap-failure报告/stderr并非0，不伪造完整Swift报告。
+ - code：macOS≥15/arm64/Swift≥6.2检查→`swift build`→`.build/debug/FlowType --self-test --validation-root NEW_ROOT`。build/full各900s；要求full exit0且原完整汇总唯一、passed>0、failed=0，不接收focused汇总。默认code不要求clean/shader/GPU，但记录dirty与源码身份，CI code要求checkout clean且无HEAD变化。
+ - artifact：clean/非浅历史→`scripts/build-app.sh`(900s)→strict/deep(30s)→`scripts/check-app.sh`(120s，内部artifact30s)→同一固定候选10次smoke，每次15s、观察≥6s、实际两tick≥1、tap禁用、packaged身份/hash一致。不会启动正常app。check-app有恢复marker时先恢复再继续；外层超时后也按本次marker核实恢复，冲突即Fail，不能遗留隐藏bundle却总绿。
+ - release：执行code与artifact各一次，调用C3人工/CI检查。独立可执行阶段继续收集证据；有依赖的后续阶段明确Pending/未执行，不因坏候选继续运行。Fail优先于Pending/Skip；全部required Pass才exit0，Fail1，仅Pending/Skip2，usage64。artifact lane的WindowServer Skip不可总Pass（返回2）。
+ 
+-- [ ] **RED：** `VerificationSelfTests.run()`用独立fixture可执行文件/临时repo和注入命令映射，不执行真实业务/网络。`testExitZeroCannotForgeArtifactPass`覆盖多行JSON、缺字段、mode/role错、重复runID、旧SHA/hash、5.9s、任一tick0、tap不禁用、artifact Metal真而MLX假；均Fail。`testFullRunnerRequired`禁止focused冒充full，0 passed/failed非0/缺汇总均失败。
+-- [ ] **RED：** `testPartialReportAndSkipAggregation`覆盖首build失败、full超时、签名失败、smoke69、10次第7次崩溃、parent输出写失败；必须记录已完成阶段、依赖未执行、准确exit/timeout、无总绿。参数含空格/Unicode按argv原样传递；不经shell执行内容。
+-- [ ] **RED 验证：** 实现测试入口 `build/tools/flowtype-verify --self-test`；先编译工具并运行，预期上述负例失败。`--self-test`是工具自身fixture模式，不是产品新增flag；不可通过该模式生成正式release报告。
+-- [ ] **GREEN：** 实现编排/报告、单写者锁和source identity稳定检查。C1人工/CI报告都暂返回Pending，不接受文件存在就Pass。code lane不调用build-app，artifact lane不重复full；release不能通过两个子lane递归再次构建同阶段。
+-- [ ] **验证：** 工具fixture与`bash -n scripts/verify.sh`通过。执行一次真实 `scripts/verify.sh --lane code`（其内部就是build→full，不再外围重复）；核对当前run独立日志与报告。最终十次artifact执行留C3 clean候选，fixture不能填成10次真实Pass。
+-- [ ] **提交：** scoped stage/diff check，提交 `build: add bounded code and artifact verification lanes`。
++- [x] **RED：** `VerificationSelfTests.run()`用独立fixture可执行文件/临时repo和注入命令映射，不执行真实业务/网络。`testExitZeroCannotForgeArtifactPass`覆盖多行JSON、缺字段、mode/role错、重复runID、旧SHA/hash、5.9s、任一tick0、tap不禁用、artifact Metal真而MLX假；均Fail。`testFullRunnerRequired`禁止focused冒充full，0 passed/failed非0/缺汇总均失败。
++- [x] **RED：** `testPartialReportAndSkipAggregation`覆盖首build失败、full超时、签名失败、smoke69、10次第7次崩溃、parent输出写失败；必须记录已完成阶段、依赖未执行、准确exit/timeout、无总绿。参数含空格/Unicode按argv原样传递；不经shell执行内容。
++- [x] **RED 验证：** 实现测试入口 `build/tools/flowtype-verify --self-test`；先编译工具并运行，预期上述负例失败。`--self-test`是工具自身fixture模式，不是产品新增flag；不可通过该模式生成正式release报告。
++- [x] **GREEN：** 实现编排/报告、单写者锁和source identity稳定检查。C1人工/CI报告都暂返回Pending，不接受文件存在就Pass。code lane不调用build-app，artifact lane不重复full；release不能通过两个子lane递归再次构建同阶段。
++- [x] **验证：** 工具fixture与`bash -n scripts/verify.sh`通过。执行一次真实 `scripts/verify.sh --lane code`（其内部就是build→full，不再外围重复）；核对当前run独立日志与报告。最终十次artifact执行留C3 clean候选，fixture不能填成10次真实Pass。
++- [x] **提交：** scoped stage/diff check，提交 `build: add bounded code and artifact verification lanes`。
+ 
+ ### Task 2: C2 — CI默认代码门禁与安全证据上传
+ 
+ **Files:** Create `.github/workflows/ci.yml`；Modify `scripts/verification/{VerificationReport,VerificationSelfTests,VerificationCLI}.swift`，扩展白名单证据导出；在规划证据目录记录runner选择依据（实施时核对，不猜SHA）。
+ 
+ **Interfaces:**
+ 
+ - workflow仅push/pull_request默认code，permissions contents:read，checkout fetch-depth:0；不主动push或触发workflow_dispatch。选择实施时GitHub文档明确支持的macOS15+ arm64标签，运行前sw_vers/uname/swift版本确认。Action使用核实过的完整commit固定；无provider secrets，无下载shader/安装toolchain步骤。实际runner不满足即Fail，不能改成Intel“通过”。
+ - `VerificationEvidence.exportAllowlisted(report: VerificationReport, runRoot: URL, destination: URL) throws -> [String]`只复制该run的verify-report、build/full/smoke/artifact stdout/stderr及隔离diagnostic日志，拒绝symlink/越界与未知文件；返回相对导出文件清单。工具 `--export-evidence RUN_ROOT --output EMPTY_DIRECTORY` 只处理完整/部分验证报告归属路径，不触发任何验证。
+ - CI always上传 `build/ci-evidence/` 中上述导出文件，明确排除defaults/config/DB/audio/models/production日志，不上传整个verification根。导出失败不能回退为glob全部目录。若验证工具无法编译，只上传预先约定的安全bootstrap stderr/状态。
+ - artifact CI暂不默认开启；仅后续明确预置shader和图形会话的runner执行同一artifact lane。远端CI未运行则记录Pending，不把本地fixture或yaml语法检查当CI绿。
+ 
+-- [ ] **RED：** `testEvidenceAllowlist` 在fixture根并列放diagnostic合成日志及 `.env`/SQLite/模型/外部symlink canary；导出必须只含白名单，无canary、无链接跟随，未知phase路径拒绝。失败/部分报告仍能安全导出已有文件。
+-- [ ] **RED：** `testCICapabilityAndUploadContract`对共用版本/平台解析器测试Swift6.1、Intel、macOS14拒绝；审查workflow实际命令仅code、完整checkout、read权限、always白名单上传。fixture验证导出与预检行为；不写仅比较yaml固定字符串的镜像测试。
+-- [ ] **RED/GREEN验证：** 先运行工具self-test观察导出/预检失败，再实现导出和CI配置并运行同一self-test至通过。人工逐行核对workflow/Action引用及runner文档；无新依赖时不为yaml安装linter。不重复未改产品源码的full，不调用远端CI。
+-- [ ] **提交：** scoped stage/diff check，提交 `ci: gate code validation and whitelist evidence`；远端结果明确Pending。
++- [x] **RED：** `testEvidenceAllowlist` 在fixture根并列放diagnostic合成日志及 `.env`/SQLite/模型/外部symlink canary；导出必须只含白名单，无canary、无链接跟随，未知phase路径拒绝。失败/部分报告仍能安全导出已有文件。
++- [x] **RED：** `testCICapabilityAndUploadContract`对共用版本/平台解析器测试Swift6.1、Intel、macOS14拒绝；审查workflow实际命令仅code、完整checkout、read权限、always白名单上传。fixture验证导出与预检行为；不写仅比较yaml固定字符串的镜像测试。
++- [x] **RED/GREEN验证：** 先运行工具self-test观察导出/预检失败，再实现导出和CI配置并运行同一self-test至通过。人工逐行核对workflow/Action引用及runner文档；无新依赖时不为yaml安装linter。不重复未改产品源码的full，不调用远端CI。
++- [x] **提交：** scoped stage/diff check，提交 `ci: gate code validation and whitelist evidence`；远端结果明确Pending。
+ 
+ ### Task 3: C3 — 人工schema、主线矩阵与最终交接
+ 
+ **Files:** Complete `scripts/verification/ManualValidation.swift`；Modify工具测试/CLI/报告、`docs/2026-10-14-flowtype-product-validation.md`、`docs/2026-11-01-remaining-work-audit.md`；Create/Update `docs/evidence/2026-11-03-m5-validation.md`、`2026-11-03-m5-manual-template.json`、`2026-11-03-m5-development/README.md`及任务/审查原始证据归档。不改写M1–M4历史日志。
+ 
+ **Interfaces:**
+ 
+-- `ManualValidation.evaluate(data: Data?, manifest: ArtifactManifest, evidenceRoot: URL) -> ManualValidationResult`；结果含status及缺失/不匹配的闭合case ID。无文件/合法Pending为Pending；malformed/伪Pass/身份错/引用逃逸为Fail。未知/重复ID、不全的required集合均不能聚合Pass；缺必填子项Pending，声称父项Pass但缺子项Fail。
+-- schemaVersion=1；top-level candidate含gitSHA/sourceTree/binarySHA256/appPath；cases数组每项id/status(Pending/Pass/Fail)。Pass每项还需testedAt(UTC)、tester、environment(macOS/hardware/目标app版本或设备/服务标识)、相同四身份字段、observation(具体动作/结果/次数/时间)、evidence([相对文件])。路径必须存在且在本地evidenceRoot内；不自动上传人工文件/截图。只验证结构/身份，不宣称程序能辨别人工观察真假。
+-- required叶子ID：R1.launch10；R2.sessions20；R3.axRecovery/R3.micRecovery/R3.noEngine/R3.multipleBlockers；R4.metadata/R4.switchSource/R4.retry/R4.autoFallback/R4.manualSelection/R4.builtin06/R4.builtin17/R4.importQwen/R4.importWhisper；R5.silence/R5.quiet/R5.short/R5.noise；R6.layout/R6.focus/R6.displays；V1.weak/V1.offline/V1.badKey；V2.textEdit/V2.vscode/V2.chrome/V2.terminal/V2.cursor/V2.safeTargets；V3.formats/V3.concurrentCopy；V4.preparing/V4.recording/V4.asr/V4.polish/V4.injection/V4.postEvent；V5.unplug/V5.bluetooth。每个case都required，大小写固定；父ID只显示聚合，不能覆盖叶子。
+-- `CIValidation.evaluate(data: Data?, expectedGitSHA: String, expectedSourceTree: String) -> VerificationStatus`：schemaVersion=1，status、gitSHA/sourceTree、lane="code"、runURL、evidence；Pass需要确切身份与可复核运行证据。缺报告Pending；旧身份/格式错Fail。只读用户提供或已存在的CI结果，不发起push/远程写入。
++- `ManualValidation.evaluate(data: Data?, manifest: ArtifactManifest?, expectedSourceIdentity: SourceIdentity?, expectedAppPath: URL, evidenceRoot: URL) -> ManualValidationResult`；结果含status、41闭合叶子状态及issue；release报告可选新增manualCases/manualIssues，历史schema1报告无新增字段仍可解码/导出。manifest没有路径，因此预期appPath必须由调用方明确提供repo/build/FlowType.app；sourceIdentity独立提供，CI不依赖artifact成功。证据根只取人工文件父目录。无文件/合法Pending为Pending；malformed/伪Pass/身份错/引用逃逸为Fail。未知/重复ID、不全的required集合均不能聚合Pass；缺必填子项Pending，声称父项Pass但缺子项Fail。
++- schemaVersion=1；top-level candidate含gitSHA/sourceTree/binarySHA256/appPath；cases数组每项id/status(Pending/Pass/Fail)。Pass每项还需testedAt(UTC)、tester、environment(macOS/hardware/目标app版本或设备/服务标识)、相同四身份字段、observation对象(actions/result/count/durationMs，R1 count≥10、R2≥20、其他≥1，durationMs>0)、evidence([相对文件])。路径必须存在且在本地evidenceRoot内；不自动上传人工文件/截图。只验证结构/身份，不宣称程序能辨别人工观察真假。
++- required叶子ID：R1.launch10；R2.sessions20；R3.axRecovery/R3.micRecovery/R3.noEngine/R3.multipleBlockers；R4.metadata/R4.switchSource/R4.retry/R4.autoFallback/R4.manualSelection/R4.builtin06/R4.builtin17/R4.importQwen/R4.importWhisper；R5.silence/R5.quiet/R5.short/R5.noise；R6.layout/R6.focus/R6.displays；V1.weak/V1.offline/V1.badKey；V2.textEdit/V2.vscode/V2.chrome/V2.terminal/V2.cursor/V2.safeTargets；V3.formats/V3.concurrentCopy；V4.preparing/V4.recording/V4.asr/V4.polish/V4.injection/V4.postEvent；V5.unplug/V5.bluetooth。每个case都required，大小写固定；可选父ID只允许R1–R6/V1–V5，显示叶子聚合且声明必须一致，不能覆盖或替代缺失叶子。空四字段candidate加Pending合法；非空错身份/伪Pass仍Fail。
++- `CIValidation.evaluate(data: Data?, expectedGitSHA: String, expectedSourceTree: String) -> VerificationStatus`：schemaVersion=1，status、gitSHA/sourceTree、lane="code"、runURL、evidence；Pass需要确切身份、https://github.com/OWNER/REPO/actions/runs/NUMBER及同run的artifacts/NUMBER证据URL；本地日志不能替代。只验证已提供结构，不访问网络证明结果。缺报告Pending；旧身份/格式错Fail。只读用户提供或已存在的CI结果，不发起push/远程写入。
+ - 工具模板命令 `--write-manual-template FILE`只写所有required叶子Pending及空候选，不生成任何Pass；拒绝覆盖已有文件。release报告同时记录manualStatus/ciStatus，未通过的required子项不能隐藏。
+ 
+-- [ ] **RED：** `testManualIdentityAndRequiredCases`生成临时合成Pass fixture验证结构通过（只用于测试，不写真实证据）；逐项删required叶子、改binary/SHA、父项空勾Pass、缺日期/观察/环境/证据、证据路径穿越/链接、重复ID、过期版本、任一Fail/Pending，断言对应聚合；旧CI/仅本地结果不能让ciStatus=Pass。模板必须全部Pending。
+-- [ ] **RED验证：** 编译工具并 `build/tools/flowtype-verify --self-test`，在接真实校验前观察负例失败；不得拿真实环境凑测试输入。
+-- [ ] **GREEN：** 完成两个验证器/模板和release聚合。文档矩阵写具体方法/预期/身份/evidence：R1普通app十次与smoke分开；R2二十次混合会话含idle/麦克风释放/无重复；R3权限≤5s精确计时、无引擎和多blocker；R4修复动作及自动降级/手选保留、两预置及两类HF导入均实际推理；R5零历史/无幻觉与轻声短词误拒校准；V1–V5按下方台账，不用正常使用代替异常变体。
+-- [ ] **文档更新：** 当前产品矩阵更新为M4常驻权限/恢复卡、380×156和实际事件证据区分deliveryBlocked/Uncertain；保留旧版本备注和原记录。M5审计分列源码、产物、CI与人工；模板实际全部Pending。GUI/网络/设备/真实模型操作需要相应环境和会话授权，本任务不擅改系统或调用收费服务。
+-- [ ] **验证：** 工具fixture通过；先提交工具/文档使clean，再用最终源码 `scripts/verify.sh --lane release` 执行一次完整技术门禁（code一次、build/artifact一次、十次smoke）。本轮未来执行若无真实人工/CI报告，预期exit2且明确Pending；技术失败则exit1。不要为“拿到0”填写Pass。若已在同一最终身份跑过这条完整命令，后续仅审阅其原始报告，不为文档收口重复执行；CLI本身不提供绕过阶段的resume开关。
++- [x] **RED：** `testManualIdentityAndRequiredCases`生成临时合成Pass fixture验证结构通过（只用于测试，不写真实证据）；逐项删required叶子、改binary/SHA、父项空勾Pass、缺日期/观察/环境/证据、证据路径穿越/链接、重复ID、过期版本、任一Fail/Pending，断言对应聚合；旧CI/仅本地结果不能让ciStatus=Pass。模板必须全部Pending。
++- [x] **RED验证：** 编译工具并 `build/tools/flowtype-verify --self-test`，在接真实校验前观察负例失败；不得拿真实环境凑测试输入。
++- [x] **GREEN：** 完成两个验证器/模板和release聚合。文档矩阵写具体方法/预期/身份/evidence：R1普通app十次与smoke分开；R2二十次混合会话含idle/麦克风释放/无重复；R3权限≤5s精确计时、无引擎和多blocker；R4修复动作及自动降级/手选保留、两预置及两类HF导入均实际推理；R5零历史/无幻觉与轻声短词误拒校准；V1–V5按下方台账，不用正常使用代替异常变体。
++- [x] **文档更新：** 当前产品矩阵更新为M4常驻权限/恢复卡、380×156和实际事件证据区分deliveryBlocked/Uncertain；保留旧版本备注和原记录。M5审计分列源码、产物、CI与人工；模板实际全部Pending。GUI/网络/设备/真实模型操作需要相应环境和会话授权，本任务不擅改系统或调用收费服务。
++- [x] **focused验证：** 工具fixture通过；模板全部Pending，旧schema1解码/导出与CI独立于artifact均有合成覆盖。
++- [ ] **最终技术验证（后续调度）：** 先提交工具/文档使clean，再用最终源码 `scripts/verify.sh --lane release` 执行一次完整技术门禁（code一次、build/artifact一次、十次smoke）。本轮未来执行若无真实人工/CI报告，预期exit2且明确Pending；技术失败则exit1。不要为“拿到0”填写Pass。若已在同一最终身份跑过这条完整命令，后续仅审阅其原始报告，不为文档收口重复执行；CLI本身不提供绕过阶段的resume开关。
+ - [ ] **审查/收口：** 所有任务审查后做一次全M5独立审查；同一修复波次修复阻塞项，再限定范围复审。变更源码后重跑相关focused及一次顺序full，影响产物则固定新binary并使旧manual身份失效。归档原始报告、指纹、限制和Pending，scoped提交 `docs: record M5 gates and remaining device acceptance`。不push/merge/安装/发布，保留当前分支和worktree。
+ 
+ ## 人工执行方法摘要
+ 
+ - V1：在已提供的真实云端配置/受控网络条件下覆盖弱网、录音中断网、坏key；观察完整原音频显式重试、新会话/新实时句柄、无隐藏重发和正确卡片。日志不留key/URL正文。
+ - V2：五app分别中文/英文/多行/emoji；Terminal使用无执行副作用的安全文本。密码框/secure input/非文本/无AX不发键，焦点变化不误投其他app。
+ - V3：纯文本/多item/图片/文件UTI恢复与用户并发copy；同时记录未发事件与真正发键后的行为，不只看最终剪贴板字符串。
+ - V4：五阶段取消及发键后取消；无迟到交付/剪贴板污染，真实事件后uncertain只能显式复制/查历史且不重发。
+ - V5：USB拔麦/蓝牙断开后旧会话终止/可恢复，新录音采用有效设备，不残留占用。真实设备不可用就保留对应叶子Pending。
+ - R6：长文案/各按钮边缘点击/旧卡失效/多屏与缩放，保持目标焦点；此GUI检查不能由隐藏panel几何fixture替代。
+ 
+ ## 包级完成条件
+ 
+-C工具/配置完成与远端CI/真实验收通过分开写；只有全部required Pass且最终身份匹配，才可把原治理与release ready标记完成。当前只写计划，以上没有执行。自检：§7归C1/C2、§8归C3，五项Review Focus都有负例；B/C共享进程/报告接口，源门禁不依赖GPU，产物门禁不绕过签名，所有V1–V5均主线required。
++C工具/配置完成与远端CI/真实验收通过分开写；只有全部required Pass且最终身份匹配，才可把原治理与release ready标记完成。以上最初为规划合同；当前源码进展见执行状态，不能把源码/fixture完成写成真实验收通过。自检：§7归C1/C2、§8归C3，五项Review Focus都有负例；B/C共享进程/报告接口，源门禁不依赖GPU，产物门禁不绕过签名，所有V1–V5均主线required。
+diff --git a/docs/superpowers/specs/2026-11-03-m5-release-guardrails-design.md b/docs/superpowers/specs/2026-11-03-m5-release-guardrails-design.md
+index 3316677..4e87c0c 100644
+--- a/docs/superpowers/specs/2026-11-03-m5-release-guardrails-design.md
++++ b/docs/superpowers/specs/2026-11-03-m5-release-guardrails-design.md
+@@ -1,28 +1,30 @@
+ # M5 构建身份、隔离验证与发布护栏设计
+ 
+-日期2026-11-03；规划基线b00b0a5，产品源码5dc1693/M4完整自测23872/0。用户本轮要求“先对M5做计划”，只产出设计/实施计划/验收台账；未授权本轮实施、安装、修改权限或发布。沿用后续子智能体逐项开发与独立审查偏好，开发尚未开始。
++历史规划记录：日期2026-11-03；规划基线b00b0a5，产品源码5dc1693/M4完整自测23872/0。用户该轮要求“先对M5做计划”，只产出设计/实施计划/验收台账；未授权该轮实施、安装、修改权限或发布。沿用后续子智能体逐项开发与独立审查偏好，当时开发尚未开始。
++
++执行更新（后续授权，2026-11-03）：以上为保留的历史规划轮，不是当前源码状态。A/B及C1/C2实现与任务独立审查通过；C3源码/文档/fixture待审，全M5源码审查和最终release技术门禁待后续调度。B3历史候选strict/deep、移位资源与实际Metal/MLX已Pass；远端CI、最终候选十次smoke及41个人工required叶子仍Pending。[执行索引](../../evidence/2026-11-03-m5-development/README.md)分列源码、产物、CI和人工，不更改M1–M4历史记录。
+ 
+ ## 1. 意图、方案与边界
+ 
+ 目标：任何人可判断正在运行哪份代码；自动验证不读取/改写真实配置、词典、数据库、Keychain或模型；真实启动异步回调能被进程级检查捕获；发布候选有可复核身份和门禁，未实测的行为不会被“全绿”掩盖。
+ 
+ 选择三个相依工作包：M5-A构建身份与验证隔离，M5-B启动/资源检查与可迁移app，M5-C验证脚本/CI和人工验收收口。每包可独立审查，A→B→C。只加CI无法修复本地数据/产物问题；重做完整分发系统超出需要。新设计细化/修正原总设计§4.6，冲突时以本设计为准。
+ 
+ 本轮不设计公证/Developer ID、自动更新、商店发布、远端备份或push/merge；不重写M1–M4会话/ASR路由/模型生命周期/数据库schema，不清理无关警告。现有metallib签名失败纳入本地产物门禁，不再允许以ignore-resources替代完整通过；若未修复，artifact门禁保持Fail，不阻止如实报告代码门禁通过。
+ 
+ 调研依据见[规划证据](../../evidence/2026-11-03-m5-planning/README.md)。M4合成验证与真实V1–V5的边界继续保留。
+ 
+ ## 2. 全局约束
+ 
+ - Swift6.2+、macOS15+、Apple Silicon；不新增或升级外部依赖/Package.resolved，不运行Python、不下载ASR模型或自动安装shader/toolchain。
+-- 用户本轮仅要求计划；产品源码、现有构建产物与系统配置保持原状。不把规划写成已实施或验收通过。
++- 历史规划轮仅要求计划；后续逐任务实施已获授权。源码工作完成和真实验收通过分列，当前状态见执行更新；安装、权限修改与发布未获本轮授权。
+ - 后续开发使用合成数据、假服务/剪贴板/输入事件和独立运行目录；不读取真实配置/词典/DB/Keychain/模型缓存，不触发授权弹窗、录音、热键输入或外部ASR/LLM请求。
+ - 普通app仍使用原用户配置/目录/启动行为；验证模式必须在任何shared/logger/AppKit初始化前确定，初始化失败退出，禁止回退到生产路径。
+ - 保留M1–M4 readiness降级、captured route/lease、原音频重试、新20s预算、新实时句柄、单次交付、剪贴板与取消/回调所有权保护；不借M5改写这些合同。
+ - 构建/运行报告只含身份、阶段、闭合枚举/计数/状态；不输出密钥、请求正文、转写、用户文档、原始配置、URL/query或任意NSError.userInfo。自动上传仅显式白名单的合成验证产物。
+ - 验证按focused→顺序swift build/full self-test；不运行swift test或重复未变全套/声学benchmark。M4的23872/0仅作历史基线，不重复一次未变baseline。
+ - 保留分支和worktree，不push、不merge、不安装到/Applications、不替换正在运行的app。V1–V5/真实模型/声学校准/GUI未执行均Pending。
+ 
+ ## 3. 进程角色与数据隔离（A）
+ 
+ 新增 `App/RuntimeEnvironment.swift` / `RuntimePaths.swift`，最早解析 `--self-test`、`--smoke-test`、`--artifact-check`；后二者role均smokeTest，含不同mode。互斥主模式，未知M5选项/重复冲突参数退出64（usage），绝不启动GUI。普通app为app。runID由进程生成UUID；测试可注入固定值，生产命令不可伪造其他run身份。
+@@ -62,41 +64,45 @@ AppLogger角色路由：app→原diagnostic.log；selfTest→独立run Logs/diag
+ 同样先隔离，但不创建panel/tap/timer/模型。使用新的 `AppResources` 定位 `Contents/Resources/FlowType_FlowType.bundle`；app环境只允许bundle内资源，禁止绝对.build或cwd回退；开发运行才允许Bundle.module。将StatusBar图标和ASRPostProcessor两处资源加载统一入口。检查两词库可解析/非空、图标存在，必须记录resolvedInsideApp=true。
+ 
+ SwiftPM产生的依赖.bundle按构建产物原样复制到Contents/Resources，不能仅复制app的平铺json。逐项列manifest与路径；不把列出文件视为依赖加载已验证。当前MLX静态搜索支持 `Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib`（带合法bundle plist）；优先采用该标准资源封装，删除旧MacOS/mlx.metallib。不把shader当Mach-O签名，不依赖绕过资源校验。实现时必须验证实际当前版本搜索与真实加载；不修改依赖源码。
+ 
+ artifact-check显式加载bundle内Metal library，并执行无模型的实际MLX微计算验证默认搜索链，结果 `[2,3]`（输入[1,2]+1）；若需要，Package.swift可将已锁定的mlx-swift 0.31.3（revision 61b9e011e09a62b489f6bd647958f1555bdf2896）提升为显式直接依赖并引用MLX product，这是已有依赖的声明调整，不新增包或改变Package.resolved。新操作不加载ASR权重或下载资源。shader不兼容/无Metal/GPU/搜索失败均为artifact失败（code门禁不要求GPU）；不要将Metal直接加载成功冒充MLX运行通过。
+ 
+ 输出独立一行mode="artifact"的JSON，共同字段schemaVersion=1、mode、ok、role、runID、buildInfo(BuildIdentity)、durationMs、failureCode；另含appResources/metalLibrary/mlxOperation/resolvedInsideApp布尔结果，不输出路径内用户信息。smoke沿用同一共同字段。failureCode均为闭合枚举，成功为null。外部30s watchdog；exit0/1/64。此入口不验证完整ASR推理。
+ 
+ ## 6. 可迁移app与签名（B）
+ 
+-build-app不调用Python，不安装任何内容。输入MLX_METALLIB_PATH是显式本地已存在shader文件；未设置可保留已存在cache候选只读查找，但不得导入Python或扫描模型目录。缺失/小于1MiB/无法Metal加载即不能通过artifact门禁；来源SHA256与目标SHA256写manifest。CI默认code lane不需要该文件，不能发布无shader的“成功app”。
++build-app不调用Python，不安装任何内容。当前实现要求MLX_METALLIB_PATH显式指向本地已存在shader；缺失即失败，不查用户模型/cache、不下载补齐。缺失/小于1MiB/无法Metal加载即不能通过artifact门禁；来源SHA256与目标SHA256写manifest。CI默认code lane不需要该文件，不能发布无shader的“成功app”。
+ 
+ 在build下私有staging构造完整候选，复制实际release .bundle并写身份/manifest；只签真正code，资源在标准Resources。先验证strict/deep签名，再将候选移至最终build/FlowType.app；失败保留既有最终app，staging用于诊断。不得在运行中安装、启动正常app或清quarantine来伪装签名通过。若标准资源封装不能解决，记录artifact Fail和最小原因，不能退回ignore-resources当Pass。
+ 
+ 资源脱离验证：在checkout外临时目录复制候选，临时隐藏**本worktree**的release资源bundle并由trap恢复，从无关cwd运行拷贝的artifact-check；确保本地绝对fallback无法救场。不得改依赖checkout/缓存/用户模型；同一时刻只一个构建写者。复制后codesign --verify --deep --strict仍须exit0。manifest同时记录二进制/BuildInfo/shader hash、sourceTree、architecture；验证前后hash一致。原版本/build1脚本与build-dmg中的版本冲突由build-dmg读取候选plist解决，但M5不创建/发布DMG。
+ 
+ 签名门禁仅ad-hoc本地完整性，不等于Developer ID、公证、Gatekeeper分发通过。App运行路径迁移改变TCC身份可能影响权限；V验收必须固定候选路径/真实权限并如实记录，自动smoke不改TCC。
+ 
+ ## 7. 双门禁、本地脚本与CI（C）
+ 
+-`scripts/verify.sh`显式 `--lane code|artifact|release`，默认code，输出build/verification/<runID>/。外部进程runner使用Swift Foundation Process及Darwin进程组（不用Python/依赖timeout命令）控制超时/退出；受控子包装进程先建立独立进程组再exec目标，父级接收启动握手，只终止本次所有的进程组/子进程，不killall、不触及既有app。先TERM，2s后仍存活再KILL；启动握手失败亦失败。每个验证子进程新run根，suite不复用。stdin关闭，stdout/stderr分存，异常/超时均失败。code lane: platform/toolchain检查→swift build→完整self-test，单次full watchdog900s。artifact lane: clean identity→build-app→strict/deep→移位artifact-check→10次独立smoke（每次观察6s，watchdog15s）；首次发布候选执行10次，任务迭代仅改动相关focused，避免每项重复10次。packaging watchdog900s、artifact30s。
++`scripts/verify.sh`显式 `--lane code|artifact|release`，默认code，输出build/verification/<runID>/。外部进程runner使用Swift Foundation Process及Darwin进程组（不用Python/依赖timeout命令）控制超时/退出；受控子包装进程先建立独立进程组再exec目标，父级接收启动握手，只终止该handshake确认归属的进程组（及仍在此组的后代），不killall、不触及既有app。先TERM，2s后仍存活再KILL；启动握手失败亦失败。Foundation Process可能创建独立后代进程组，runner不承诺全局终止它们；packaging的marker/live owner/inner group检查会拒绝不安全恢复并Fail，不能因外层已超时就假定全部内层结束。每个验证子进程新run根，suite不复用。stdin关闭，stdout/stderr分存，异常/超时均失败。code lane: platform/toolchain检查→swift build→完整self-test，单次full watchdog900s。artifact lane: clean identity→build-app→strict/deep→移位artifact-check→10次独立smoke（每次观察6s，watchdog15s）；首次发布候选执行10次，任务迭代仅改动相关focused，避免每项重复10次。packaging watchdog900s、artifact30s。
+ 
+ release lane运行上述两个lane一次，并消费人工验收JSON及可选 `--ci-report FILE`；任何required项Pending/Fail/未匹配最终身份返回非0（Pending为exit2），不是“代码绿所以可发布”。原总设计要求的远端CI绿继续是最终治理完成条件：ci-report须提供最终gitSHA/sourceTree对应的code lane成功与运行链接/证据；没有push或远端执行时保持Pending。每阶段phase/status/exitCode/timeout/failureCode写verify-report.json，部分成功/Skip保留，不覆盖成总绿；代码错误exit1、参数错误64。如果人工或CI报告缺失，release仍先完成有授权且可执行的code/artifact工作，再汇总Pending，不能伪造人工/CI Pass。
+ 
+ CI `.github/workflows/ci.yml`采用macOS15+ AppleSilicon/Swift6.2可用runner，先显示sw_vers/uname/swift版本并检查，unsupported失败而非静默换平台。默认只跑code（不依赖预装shader/WindowServer/私有模型/key）。Checkout完整git历史以保证buildNumber；不触发push/merge/deploy，也不注入provider secrets。CI artifact lane只在明确提供本地shader和可用图形会话的运行器启用；默认报告未执行为Pending。GitHub Action版本/commit固定并在实施时核对来源，不在规划中猜SHA或runner预装软件。
+ 
+ 只上传白名单verify-report、build stdout/stderr、自测stdout/stderr和该run独立验证日志；不上传整个根目录、defaults、SQLite、.env、production日志、音频/模型。even on failure保留安全证据；若CI无WindowServer，对其artifact smoke记Skip而不把本地artifact必过规则降格。编写CI配置≠远端CI已运行，执行中若不push，远端结果保持Pending。
+ 
+ ## 8. 人工主线与退出（C）
+ 
+ M5代码完成与“稳定性治理/发布完成”分开：A/B/C实现及源码审查、自测、候选身份可单独通过；发布需最终身份全部required人工项Pass。固定schemaVersion=1 manual-validation.json，每项id/status(Pending/Pass/Fail)、testedAt/tester/environment、gitSHA/sourceTree/binarySHA256/appPath、evidence；Pass必须有具体测试观察和证据，缺字段不能被验证器接受，不接收只勾选无身份的旧结论。旧SHA证据仍有历史价值，但不自动迁移到新二进制。验证器能检查格式/身份和路径引用，不能证明观察真实，需人工审阅。
+ 
++C3 API澄清：manual validator额外接收独立expectedSourceIdentity和明确expectedAppPath（调用方固定repo/build/FlowType.app），manifest可空以保留空Pending模板；manifest没有路径，不能用报告路径/evidenceRoot自证预期候选。CI无论artifact是否成功都对独立source身份校验。release可选扩展manualCases/manualIssues，不破坏历史schema1报告解码/导出。41叶子逐项显示；可选父ID仅R1–R6/V1–V5且必须等于叶子聚合，不能代替缺失叶子。
++
++Pass细节：environment为macOS/hardware/target对象；observation为actions/result/count/durationMs对象，R1≥10、R2≥20次，其余≥1次且耗时>0。UTC时间为秒或三位毫秒Z格式；evidence相对人工JSON父目录，存在且无链接/逃逸。CI只消费已有schema1 code结果，runURL为GitHub Actions运行URL、evidence为同run artifact URL；本地结果、错身份或不全Pass不得接受。人工文件不自动上传。完整字段和执行方法见[台账](../../evidence/2026-11-03-m5-validation.md)。
++
+ required：R1普通app冷启动10次（smoke10次另算），R2连续20次成功/取消/重新录音，R3真实权限拒绝与≤5s恢复/readiness多个blocker，R4模型修复/0.6B/1.7B及两类导入真实推理，R5静音/轻声/短词/噪声校准，V1真实云端弱网/断网/坏key→正确恢复，V2五应用中文/英文/多行/emoji与安全目标交付，V3多格式剪贴板和并发复制，V4各阶段取消/迟到结果/发键后uncertain无重发，V5拔麦/蓝牙断开→新录音恢复，R6恢复卡长文案/按钮/焦点/多显示器GUI。每项可细分subcases，required子项全部Pass才聚合Pass，不用一次正常使用覆盖所有变体。
+ 
+ 自动流程不会为完成这些项修改全局网络、权限、真实配置、外设或收费服务。后续执行在具备环境/授权的范围做可执行部分，需要真实key/物理操作时说明前提，Pending不妨碍先交付完整源码/产物报告。最终矩阵引用M1–M4现有证据并更新失效文案（M4卡380×156、权限常驻、按事件证据区分uncertain），不改历史日志为新结果。
+ 
+ ## 9. 自检与状态
+ 
+ 设计自检：所有旧M5目标有A/B/C owner；3s/5s矛盾已解决，suite并发、legacy Keychain、shared.prepare模型加载、真实tap触发、资源fallback、CI缺shader、完整签名和人工Pending均有明确合同。签名布局为依赖静态支持的选定实现，成功须运行证明，不虚记可行性已证实。
+ 
+-本轮状态：Planning only。实施计划：[M5-A](../plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../plans/2026-11-03-m5-c-verification-and-acceptance.md)，后续沿用子智能体逐项开发与独立审查。用户可直接审阅完整文档，尚未开始开发。没有本轮新构建或测试结果。
++历史规划状态为Planning only；原始基线和调研保持原样。当前[M5-A](../plans/2026-11-03-m5-a-build-identity-and-isolation.md) → [M5-B](../plans/2026-11-03-m5-b-smoke-and-artifact.md) → [M5-C](../plans/2026-11-03-m5-c-verification-and-acceptance.md)执行状态与checkbox已分别更新。C3/全M5源码审查、最终技术release和归档尚未完成，不把B3历史检查点或工具fixture当作最终通过。
+diff --git a/scripts/verification/ManualValidation.swift b/scripts/verification/ManualValidation.swift
+index a72221f..9c46570 100644
+--- a/scripts/verification/ManualValidation.swift
++++ b/scripts/verification/ManualValidation.swift
+@@ -1,8 +1,162 @@
+ import Foundation
+ 
+-/// C1 deliberately does not attest manual or remote CI evidence. C3 supplies strict validation.
++enum ManualCaseID: String, CaseIterable, Codable {
++    case launch10 = "R1.launch10", sessions20 = "R2.sessions20"
++    case axRecovery = "R3.axRecovery", micRecovery = "R3.micRecovery", noEngine = "R3.noEngine", multipleBlockers = "R3.multipleBlockers"
++    case metadata = "R4.metadata", switchSource = "R4.switchSource", retry = "R4.retry", autoFallback = "R4.autoFallback", manualSelection = "R4.manualSelection"
++    case builtin06 = "R4.builtin06", builtin17 = "R4.builtin17", importQwen = "R4.importQwen", importWhisper = "R4.importWhisper"
++    case silence = "R5.silence", quiet = "R5.quiet", short = "R5.short", noise = "R5.noise"
++    case layout = "R6.layout", focus = "R6.focus", displays = "R6.displays"
++    case weak = "V1.weak", offline = "V1.offline", badKey = "V1.badKey"
++    case textEdit = "V2.textEdit", vscode = "V2.vscode", chrome = "V2.chrome", terminal = "V2.terminal", cursor = "V2.cursor", safeTargets = "V2.safeTargets"
++    case formats = "V3.formats", concurrentCopy = "V3.concurrentCopy"
++    case preparing = "V4.preparing", recording = "V4.recording", asr = "V4.asr", polish = "V4.polish", injection = "V4.injection", postEvent = "V4.postEvent"
++    case unplug = "V5.unplug", bluetooth = "V5.bluetooth"
++}
++enum ManualValidationIssue: String, Codable { case malformed, identityMismatch, unknownCase, duplicateCase, missingDetails, invalidEvidence, falsePass, unreadableReport }
++struct ManualCaseResult: Codable { let id: ManualCaseID; let status: VerificationStatus }
++struct ManualValidationResult {
++    let status: VerificationStatus; let cases: [ManualCaseResult]; let issues: [ManualValidationIssue]
++}
++private enum AcceptanceStatus: String, Codable { case pending = "Pending", pass = "Pass", fail = "Fail" }
++private struct ManualCandidate: Codable, Equatable {
++    let gitSHA: String; let sourceTree: String; let binarySHA256: String; let appPath: String
++    static let empty = ManualCandidate(gitSHA: "", sourceTree: "", binarySHA256: "", appPath: "")
++}
++private struct ManualEnvironment: Codable { let macOS: String; let hardware: String; let target: String }
++private struct ManualObservation: Codable { let actions: String; let result: String; let count: Int; let durationMs: Int }
++private struct ManualRow: Codable {
++    let id: String; let status: AcceptanceStatus
++    let testedAt: String?; let tester: String?; let environment: ManualEnvironment?; let observation: ManualObservation?
++    let gitSHA: String?; let sourceTree: String?; let binarySHA256: String?; let appPath: String?; let evidence: [String]?
++    var identity: ManualCandidate? {
++        guard let gitSHA, let sourceTree, let binarySHA256, let appPath else { return nil }
++        return ManualCandidate(gitSHA: gitSHA, sourceTree: sourceTree, binarySHA256: binarySHA256, appPath: appPath)
++    }
++    var hasIdentity: Bool { [gitSHA, sourceTree, binarySHA256, appPath].contains { !($0 ?? "").isEmpty } }
++}
++private struct ManualDocument: Codable { let schemaVersion: Int; let candidate: ManualCandidate; let cases: [ManualRow]; let status: AcceptanceStatus? }
++private enum AcceptanceFiles {
++    static func read(_ file: URL?) throws -> Data? {
++        guard let file else { return nil }
++        let fm = FileManager.default
++        guard (try? fm.destinationOfSymbolicLink(atPath: file.path)) == nil else { throw VerificationFailure.malformedReport }
++        guard fm.fileExists(atPath: file.path) else { return nil }
++        guard try canonicalExisting(file).path == file.path,
++              try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { throw VerificationFailure.malformedReport }
++        return try Data(contentsOf: file)
++    }
++    static func evidence(_ paths: [String], root: URL) -> Bool {
++        guard !paths.isEmpty, (try? canonicalExisting(root).path) == root.path else { return false }
++        let fm = FileManager.default
++        return paths.allSatisfy { path in
++            let pieces = path.split(separator: "/", omittingEmptySubsequences: false)
++            guard !path.hasPrefix("/"), !pieces.isEmpty, pieces.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return false }
++            var current = root
++            for (index, part) in pieces.enumerated() {
++                current.appendPathComponent(String(part))
++                guard (try? fm.destinationOfSymbolicLink(atPath: current.path)) == nil,
++                      (try? canonicalExisting(current).path) == current.path,
++                      let info = try? current.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey]),
++                      index == pieces.count - 1 ? info.isRegularFile == true : info.isDirectory == true else { return false }
++            }
++            return true
++        }
++    }
++}
+ enum ManualValidation {
+-    static func evaluate(manualReport: URL?, ciReport: URL?, artifact: ArtifactManifest?) -> (VerificationStatus, VerificationStatus) {
+-        (.pending, .pending)
++    private static let parents = Set(["R1", "R2", "R3", "R4", "R5", "R6", "V1", "V2", "V3", "V4", "V5"])
++    private static func filled(_ value: String?) -> Bool { !(value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
++    private static func utc(_ value: String) -> Bool {
++        guard value.range(of: #"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{3})?Z\z"#, options: .regularExpression) != nil else { return false }
++        let formatter = ISO8601DateFormatter()
++        formatter.formatOptions = value.contains(".") ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]
++        guard let date = formatter.date(from: value) else { return false }
++        return formatter.string(from: date) == value
++    }
++    static func evaluate(data: Data?, manifest: ArtifactManifest?, expectedSourceIdentity: SourceIdentity?, expectedAppPath: URL, evidenceRoot: URL) -> ManualValidationResult {
++        var states = Dictionary(uniqueKeysWithValues: ManualCaseID.allCases.map { ($0, VerificationStatus.pending) })
++        var issues: [ManualValidationIssue] = []
++        func result() -> ManualValidationResult {
++            let status: VerificationStatus = !issues.isEmpty || states.values.contains(.fail) ? .fail : states.values.allSatisfy { $0 == .pass } ? .pass : .pending
++            return ManualValidationResult(status: status, cases: ManualCaseID.allCases.map { ManualCaseResult(id: $0, status: states[$0]!) }, issues: Array(Set(issues)).sorted { $0.rawValue < $1.rawValue })
++        }
++        guard let data else { return result() }
++        guard let document = try? JSONDecoder().decode(ManualDocument.self, from: data), document.schemaVersion == 1 else { issues.append(.malformed); return result() }
++        let expected: ManualCandidate? = {
++            guard let manifest, let source = expectedSourceIdentity,
++                  source.gitSHA == manifest.buildInfo.gitSHA, source.sourceTree == manifest.buildInfo.sourceTree else { return nil }
++            return ManualCandidate(gitSHA: source.gitSHA, sourceTree: source.sourceTree, binarySHA256: manifest.binarySHA256, appPath: expectedAppPath.path)
++        }()
++        let empty = document.candidate == .empty
++        if !empty && document.candidate != expected { issues.append(.identityMismatch) }
++        var seen: Set<String> = [], aggregateRows: [ManualRow] = []
++        for row in document.cases {
++            guard seen.insert(row.id).inserted else { issues.append(.duplicateCase); continue }
++            guard let id = ManualCaseID(rawValue: row.id) else {
++                if parents.contains(row.id) { aggregateRows.append(row) } else { issues.append(.unknownCase) }
++                continue
++            }
++            var state = VerificationStatus(rawValue: row.status.rawValue)!
++            if row.hasIdentity && row.identity != expected { state = .fail; issues.append(.identityMismatch) }
++            if let evidence = row.evidence, !evidence.isEmpty, !AcceptanceFiles.evidence(evidence, root: evidenceRoot) { state = .fail; issues.append(.invalidEvidence) }
++            if row.status == .pass {
++                if empty || row.identity == nil || row.identity != expected { state = .fail; issues.append(.identityMismatch) }
++                let minimum = id == .launch10 ? 10 : id == .sessions20 ? 20 : 1
++                guard let date = row.testedAt, utc(date), filled(row.tester),
++                      let environment = row.environment, filled(environment.macOS), filled(environment.hardware), filled(environment.target),
++                      let observation = row.observation, filled(observation.actions), filled(observation.result), observation.count >= minimum, observation.durationMs > 0,
++                      let evidence = row.evidence, AcceptanceFiles.evidence(evidence, root: evidenceRoot) else {
++                    states[id] = .fail; issues.append(.missingDetails); continue
++                }
++            }
++            states[id] = state
++        }
++        for row in aggregateRows {
++            let children = ManualCaseID.allCases.filter { $0.rawValue.hasPrefix(row.id + ".") }.map { states[$0]! }
++            let expected: VerificationStatus = children.contains(.fail) ? .fail : children.allSatisfy { $0 == .pass } ? .pass : .pending
++            if row.status.rawValue != expected.rawValue { issues.append(.falsePass) }
++        }
++        if let claimed = document.status, claimed.rawValue != result().status.rawValue { issues.append(.falsePass) }
++        return result()
++    }
++    static func templateData() throws -> Data {
++        let cases = ManualCaseID.allCases.map { ["id": $0.rawValue, "status": "Pending"] }
++        return try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "candidate": ["gitSHA": "", "sourceTree": "", "binarySHA256": "", "appPath": ""], "cases": cases], options: [.prettyPrinted, .sortedKeys]) + Data("\n".utf8)
++    }
++    static func writeTemplate(to file: URL) throws {
++        guard try canonicalExisting(file.deletingLastPathComponent()).path == file.deletingLastPathComponent().path,
++              (try? FileManager.default.destinationOfSymbolicLink(atPath: file.path)) == nil else { throw VerificationFailure.outputUnavailable }
++        try templateData().write(to: file, options: .withoutOverwriting)
++    }
++    static func evaluate(manualReport: URL?, ciReport: URL?, artifact: ArtifactManifest?, expectedSourceIdentity: SourceIdentity?, expectedAppPath: URL) -> (ManualValidationResult, VerificationStatus) {
++        var manual: ManualValidationResult
++        do { manual = evaluate(data: try AcceptanceFiles.read(manualReport), manifest: artifact, expectedSourceIdentity: expectedSourceIdentity, expectedAppPath: expectedAppPath,
++                              evidenceRoot: manualReport?.deletingLastPathComponent() ?? expectedAppPath.deletingLastPathComponent()) }
++        catch { manual = ManualValidationResult(status: .fail, cases: ManualCaseID.allCases.map { ManualCaseResult(id: $0, status: .pending) }, issues: [.unreadableReport]) }
++        let ci: VerificationStatus
++        do {
++            let data = try AcceptanceFiles.read(ciReport)
++            ci = CIValidation.evaluate(data: data, expectedGitSHA: expectedSourceIdentity?.gitSHA ?? "", expectedSourceTree: expectedSourceIdentity?.sourceTree ?? "")
++        } catch { return (manual, .fail) }
++        return (manual, ci)
++    }
++}
++enum CIValidation {
++    private struct CIReport: Decodable { let schemaVersion: Int; let status: AcceptanceStatus; let gitSHA: String; let sourceTree: String; let lane: String; let runURL: String; let evidence: [String] }
++    static func evaluate(data: Data?, expectedGitSHA: String, expectedSourceTree: String) -> VerificationStatus {
++        guard let data else { return .pending }
++        guard let report = try? JSONDecoder().decode(CIReport.self, from: data), report.schemaVersion == 1, report.lane == "code" else { return .fail }
++        if report.status == .pending, report.gitSHA.isEmpty, report.sourceTree.isEmpty, report.runURL.isEmpty, report.evidence.isEmpty { return .pending }
++        guard expectedGitSHA.range(of: #"\A[0-9a-f]{40}\z"#, options: .regularExpression) != nil,
++              expectedSourceTree.range(of: #"\A[0-9a-f]{40}\z"#, options: .regularExpression) != nil,
++              report.gitSHA == expectedGitSHA, report.sourceTree == expectedSourceTree else { return .fail }
++        if report.status == .fail { return .fail }
++        let validRun = report.runURL.range(of: #"\Ahttps://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[1-9][0-9]*\z"#, options: .regularExpression) != nil
++        guard report.runURL.isEmpty || validRun else { return .fail }
++        let prefix = report.runURL + "/artifacts/"
++        guard report.evidence.allSatisfy({ $0.hasPrefix(prefix) && String($0.dropFirst(prefix.count)).range(of: #"\A[1-9][0-9]*\z"#, options: .regularExpression) != nil }) else { return .fail }
++        if report.status == .pass { return validRun && !report.evidence.isEmpty ? .pass : .fail }
++        return .pending
+     }
+ }
+diff --git a/scripts/verification/VerificationCLI.swift b/scripts/verification/VerificationCLI.swift
+index 11b3473..188ad9b 100644
+--- a/scripts/verification/VerificationCLI.swift
++++ b/scripts/verification/VerificationCLI.swift
+@@ -34,20 +34,26 @@ struct VerificationExportOptions {
+         announce("build/verification/\(output.lastPathComponent)/verify-report.json")
+         let report = try VerificationRunner.run(lane: options.lane, repository: repository, output: output, manualReport: options.manual, ciReport: options.ci, dependencies: dependencies)
+         return report
+     }
+     static func main() {
+         let arguments = Array(CommandLine.arguments.dropFirst())
+         do { try BoundedProcess.dispatchChildIfNeeded(arguments: arguments) }
+         catch { FileHandle.standardError.write(Data("FlowType verification: child control failed\n".utf8)); exit(125) }
+         if arguments == ["--self-test"] { exit(VerificationSelfTests.run()) }
+         do {
++            if arguments.first == "--write-manual-template" {
++                guard arguments.count == 2, !arguments[1].isEmpty, !arguments[1].hasPrefix("--") else { throw VerificationFailure.usage }
++                try ManualValidation.writeTemplate(to: URL(fileURLWithPath: arguments[1]))
++                print("Manual template: 41 Pending")
++                exit(0)
++            }
+             if arguments.first == "--export-evidence" {
+                 let options = try VerificationExportOptions.parse(arguments)
+                 let files = try VerificationEvidence.exportRun(runRoot: options.root, destination: options.output)
+                 print("Evidence export: \(files.count) files")
+                 exit(0)
+             }
+             let options = try VerificationOptions.parse(arguments)
+             try packagingCancellation.install()
+             let repository = try canonicalExisting(URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+             let report = try verify(options, repository: repository)
+diff --git a/scripts/verification/VerificationReport.swift b/scripts/verification/VerificationReport.swift
+index 0d15ca9..d171e3a 100644
+--- a/scripts/verification/VerificationReport.swift
++++ b/scripts/verification/VerificationReport.swift
+@@ -29,27 +29,30 @@ struct VerificationPhase: Codable {
+     func encode(to encoder: Encoder) throws {
+         var c = encoder.container(keyedBy: CodingKeys.self)
+         try c.encode(name, forKey: .name); try c.encode(status, forKey: .status); try c.encode(exitCode, forKey: .exitCode)
+         try c.encode(timedOut, forKey: .timedOut); try c.encode(failureCode, forKey: .failureCode); try c.encode(evidence, forKey: .evidence)
+     }
+ }
+ struct VerificationReport: Codable {
+     let schemaVersion: Int; let runID: String; let lane: VerificationLane
+     var status: VerificationStatus; var sourceIdentity: SourceIdentity?; var artifactIdentity: ArtifactManifest?
+     var phases: [VerificationPhase]; var manualStatus: VerificationStatus; var ciStatus: VerificationStatus
++    var manualCases: [ManualCaseResult]? = nil
++    var manualIssues: [ManualValidationIssue]? = nil
+     var exitCode: Int32 { status == .pass ? 0 : status == .fail ? 1 : 2 }
+-    enum CodingKeys: String, CodingKey { case schemaVersion, runID, lane, status, sourceIdentity, artifactIdentity, phases, manualStatus, ciStatus }
++    enum CodingKeys: String, CodingKey { case schemaVersion, runID, lane, status, sourceIdentity, artifactIdentity, phases, manualStatus, ciStatus, manualCases, manualIssues }
+     func encode(to encoder: Encoder) throws {
+         var c = encoder.container(keyedBy: CodingKeys.self)
+         try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(runID, forKey: .runID); try c.encode(lane, forKey: .lane)
+         try c.encode(status, forKey: .status); try c.encode(sourceIdentity, forKey: .sourceIdentity); try c.encode(artifactIdentity, forKey: .artifactIdentity)
+         try c.encode(phases, forKey: .phases); try c.encode(manualStatus, forKey: .manualStatus); try c.encode(ciStatus, forKey: .ciStatus)
++        try c.encode(manualCases, forKey: .manualCases); try c.encode(manualIssues, forKey: .manualIssues)
+     }
+ }
+ struct VerificationCommand {
+     let phase: String; let command: BoundedCommand; let childRoot: URL; let validationRoot: URL; let checkOutput: URL
+ }
+ struct VerificationDependencies {
+     let execute: (VerificationCommand) throws -> BoundedResult
+     let snapshot: (URL, URL) throws -> SourceSnapshot
+     let manifest: (URL) throws -> ArtifactManifest
+     let recover: (URL) throws -> Void
+@@ -480,15 +483,16 @@ enum VerificationRunner {
+                 }
+             }
+             if report.phases.first(where: { $0.name == "artifact-recovery-after" })?.status == .pending {
+                 _ = try internalPhase("artifact-recovery-after") { _ in try dependencies.recover(repository) }
+             }
+         }
+         _ = try internalPhase("source-end") { logs in
+             let end = try dependencies.snapshot(repository, logs)
+             guard let start, end == start else { throw VerificationFailure.sourceChanged }
+         }
+-        let statuses = ManualValidation.evaluate(manualReport: manualReport, ciReport: ciReport, artifact: report.artifactIdentity)
+-        report.manualStatus = statuses.0; report.ciStatus = statuses.1
++        let statuses = ManualValidation.evaluate(manualReport: manualReport, ciReport: ciReport, artifact: report.artifactIdentity,
++            expectedSourceIdentity: report.sourceIdentity, expectedAppPath: repository.appendingPathComponent("build/FlowType.app"))
++        report.manualStatus = statuses.0.status; report.manualCases = statuses.0.cases; report.manualIssues = statuses.0.issues; report.ciStatus = statuses.1
+         try persist(); return report
+     }
+ }
+diff --git a/scripts/verification/VerificationSelfTests.swift b/scripts/verification/VerificationSelfTests.swift
+index 28e244f..e83fd7e 100644
+--- a/scripts/verification/VerificationSelfTests.swift
++++ b/scripts/verification/VerificationSelfTests.swift
+@@ -355,33 +355,127 @@ enum VerificationSelfTests {
+                 if scenario == "late-write" {
+                     let partial = try JSONDecoder().decode(VerificationReport.self, from: Data(contentsOf: destination.appendingPathComponent("verify-report.partial.json")))
+                     check(partial.status == .fail && partial.phases.last?.name == "report-write", "CLI plus helper uploads genuine late partial failure")
+                     check(!fm.fileExists(atPath: destination.appendingPathComponent("verify-report.json").path), "CI helper excludes stale full report")
+                 } else {
+                     check(Set(try fm.contentsOfDirectory(atPath: destination.path)) == Set(["bootstrap-failure.json", "bootstrap.stderr"]), "compile-unavailable fallback contains only safe status stderr")
+                 }
+             }
+         }
+     }
++    static func manualObject(app: URL) -> [String: Any] {
++        let identity: [String: Any] = ["gitSHA": metadata.gitSHA, "sourceTree": metadata.sourceTree, "binarySHA256": manifest.binarySHA256, "appPath": app.path]
++        let rows = ManualCaseID.allCases.map { id -> [String: Any] in
++            var row = identity
++            row.merge(["id": id.rawValue, "status": "Pass", "testedAt": "2026-11-03T01:02:03Z", "tester": "Synthetic fixture only",
++                "environment": ["macOS": "15.8.2", "hardware": "synthetic arm64", "target": "synthetic app1.0"],
++                "observation": ["actions": "Synthetic action fixture", "result": "Synthetic expected result", "count": id == .sessions20 ? 20 : 10, "durationMs": 6000], "evidence": ["observation.txt"]]) { _, value in value }
++            return row
++        }
++        return ["schemaVersion": 1, "candidate": identity, "cases": rows]
++    }
++    static func testManualIdentityAndRequiredCases() throws {
++        let fm = FileManager.default, evidence = root.appendingPathComponent("manual fixture")
++        try fm.createDirectory(at: evidence, withIntermediateDirectories: false)
++        try Data("synthetic observation only".utf8).write(to: evidence.appendingPathComponent("observation.txt"))
++        let app = root.appendingPathComponent("fixed/FlowType.app"), source = SourceIdentity(gitSHA: metadata.gitSHA, sourceTree: metadata.sourceTree, dirty: false)
++        let good = manualObject(app: app)
++        func evaluate(_ object: [String: Any]) -> ManualValidationResult {
++            ManualValidation.evaluate(data: try! JSONSerialization.data(withJSONObject: object), manifest: manifest, expectedSourceIdentity: source, expectedAppPath: app, evidenceRoot: evidence)
++        }
++        check(ManualCaseID.allCases.count == 41, "manual contract contains exactly41 required leaves")
++        check(evaluate(good).status == .pass, "synthetic complete manual structure passes only fixture validation")
++        let rows = good["cases"] as! [[String: Any]]
++        for index in rows.indices {
++            var changed = good; var missing = rows; missing.remove(at: index); changed["cases"] = missing
++            let result = evaluate(changed)
++            check(result.status == .pending && result.cases.contains(where: { $0.id.rawValue == rows[index]["id"] as? String && $0.status == .pending }), "missing required leaf remains visible Pending")
++        }
++        for key in ["gitSHA", "sourceTree", "binarySHA256", "appPath"] {
++            var changed = good, candidate = good["candidate"] as! [String: Any]; candidate[key] = "wrong"; changed["candidate"] = candidate
++            check(evaluate(changed).status == .fail, "wrong top candidate identity fails")
++            var leaves = rows; leaves[0][key] = "wrong"; changed = good; changed["cases"] = leaves
++            check(evaluate(changed).status == .fail, "wrong leaf identity fails")
++        }
++        for key in ["testedAt", "tester", "environment", "observation", "evidence"] {
++            var changed = good, leaves = rows; leaves[0].removeValue(forKey: key); changed["cases"] = leaves
++            check(evaluate(changed).status == .fail, "Pass without required details fails")
++        }
++        for (name, value) in [("testedAt", "2026-11-03T01:02:03+08:00" as Any), ("testedAt", "2026-02-30T00:00:00Z"), ("environment", ["macOS": "", "hardware": "synthetic", "target": "fixture"]), ("observation", ["actions": "", "result": "ok", "count": 1, "durationMs": 1]), ("evidence", ["../observation.txt"]), ("evidence", ["/tmp/outside"]), ("evidence", ["missing.txt"])] {
++            var changed = good, leaves = rows; leaves[0][name] = value; changed["cases"] = leaves
++            check(evaluate(changed).status == .fail, "malformed Pass detail or escaped evidence fails")
++        }
++        let linked = evidence.appendingPathComponent("linked.txt"); try fm.createSymbolicLink(at: linked, withDestinationURL: evidence.appendingPathComponent("observation.txt"))
++        var changed = good, leaves = rows; leaves[0]["evidence"] = ["linked.txt"]; changed["cases"] = leaves
++        check(evaluate(changed).status == .fail, "linked manual evidence fails")
++        changed = good; changed["cases"] = rows + [rows[0]]; check(evaluate(changed).status == .fail, "duplicate manual ID fails")
++        changed = good; leaves = rows; leaves[0]["id"] = "R1.unknown"; changed["cases"] = leaves; check(evaluate(changed).status == .fail, "unknown manual ID fails")
++        changed = good; changed["schemaVersion"] = 0; check(evaluate(changed).status == .fail, "old manual schema fails")
++        changed = good; changed["cases"] = [["id": "R1", "status": "Pass"]]; check(evaluate(changed).status == .fail, "parent Pass cannot replace missing leaves")
++        for status in ["Fail", "Pending"] {
++            changed = good; leaves = rows; leaves[0]["status"] = status; changed["cases"] = leaves
++            check(evaluate(changed).status == (status == "Fail" ? .fail : .pending), "any required Fail or Pending prevents Pass")
++        }
++        let template = try ManualValidation.templateData()
++        let pending = ManualValidation.evaluate(data: template, manifest: manifest, expectedSourceIdentity: source, expectedAppPath: app, evidenceRoot: evidence)
++        check(pending.status == .pending && pending.cases.count == 41 && pending.cases.allSatisfy { $0.status == .pending }, "empty candidate template remains all41 Pending")
++        let decoded = try JSONSerialization.jsonObject(with: template) as? [String: Any]
++        check((decoded?["cases"] as? [[String: Any]])?.count == 41 && (decoded?["cases"] as? [[String: Any]])?.allSatisfy { $0["status"] as? String == "Pending" } == true, "written template contains41 actual Pending rows")
++        let templateFile = evidence.appendingPathComponent("template.json"); try ManualValidation.writeTemplate(to: templateFile)
++        do { try ManualValidation.writeTemplate(to: templateFile); check(false, "manual template refuses existing file") } catch { check(true, "manual template refuses existing file") }
++        let ci: [String: Any] = ["schemaVersion": 1, "status": "Pass", "gitSHA": metadata.gitSHA, "sourceTree": metadata.sourceTree, "lane": "code",
++            "runURL": "https://github.com/synthetic/repo/actions/runs/123", "evidence": ["https://github.com/synthetic/repo/actions/runs/123/artifacts/456"]]
++        func ciStatus(_ object: [String: Any]) -> VerificationStatus { CIValidation.evaluate(data: try! JSONSerialization.data(withJSONObject: object), expectedGitSHA: metadata.gitSHA, expectedSourceTree: metadata.sourceTree) }
++        check(ciStatus(ci) == .pass, "synthetic matching remote CI structure passes")
++        for (key, value) in [("gitSHA", "old" as Any), ("sourceTree", "old"), ("schemaVersion", 0), ("lane", "artifact"), ("runURL", "file:///tmp/local"), ("evidence", ["local-selftest.stdout"]), ("evidence", [] as [String])] {
++            var changed = ci; changed[key] = value; check(ciStatus(changed) == .fail, "old or local CI evidence cannot attest remote Pass")
++        }
++        check(CIValidation.evaluate(data: nil, expectedGitSHA: metadata.gitSHA, expectedSourceTree: metadata.sourceTree) == .pending, "missing remote CI remains Pending")
++        for (index, count) in [(0, 9), (1, 19)] {
++            var changed = good, leaves = rows, observation = rows[index]["observation"] as! [String: Any]
++            observation["count"] = count; leaves[index]["observation"] = observation; changed["cases"] = leaves
++            check(evaluate(changed).status == .fail, "launch/session minimum repeat counts are required")
++        }
++        check(ManualValidation.evaluate(data: template, manifest: nil, expectedSourceIdentity: source, expectedAppPath: app, evidenceRoot: evidence).status == .pending, "empty Pending template needs no artifact")
++        let ciFile = evidence.appendingPathComponent("ci.json"); try JSONSerialization.data(withJSONObject: ci).write(to: ciFile)
++        let independent = ManualValidation.evaluate(manualReport: nil, ciReport: ciFile, artifact: nil, expectedSourceIdentity: source, expectedAppPath: app)
++        check(independent.0.status == .pending && independent.1 == .pass, "CI identity validation remains independent of artifact availability")
++        let repo = root.appendingPathComponent("manual-release-repo")
++        try fm.createDirectory(at: repo, withIntermediateDirectories: false)
++        let manualFile = repo.appendingPathComponent("manual.json"), remoteFile = repo.appendingPathComponent("ci.json")
++        try Data("synthetic release observation".utf8).write(to: repo.appendingPathComponent("observation.txt"))
++        try JSONSerialization.data(withJSONObject: manualObject(app: repo.appendingPathComponent("build/FlowType.app"))).write(to: manualFile)
++        try JSONSerialization.data(withJSONObject: ci).write(to: remoteFile)
++        let output = try VerificationPaths.prepare(repository: repo).appendingPathComponent(UUID().uuidString)
++        try fm.createDirectory(at: output, withIntermediateDirectories: false)
++        let release = try VerificationRunner.run(lane: .release, repository: repo, output: output, manualReport: manualFile, ciReport: remoteFile, dependencies: dependencies("good"))
++        check(release.status == .pass && release.manualStatus == .pass && release.ciStatus == .pass && release.manualCases?.count == 41, "synthetic release requires all technical/manual/CI stages")
++        let (oldRoot, oldOut, oldReport, _) = try evidenceFixture()
++        var historical = try JSONSerialization.jsonObject(with: JSONEncoder().encode(oldReport)) as! [String: Any]
++        historical.removeValue(forKey: "manualCases"); historical.removeValue(forKey: "manualIssues")
++        try JSONSerialization.data(withJSONObject: historical).write(to: oldRoot.appendingPathComponent("verify-report.json"))
++        do { let files = try VerificationEvidence.exportRun(runRoot: oldRoot, destination: oldOut); check(files.contains("verify-report.json"), "historical schema1 reports without manual detail remain exportable") }
++        catch { check(false, "historical schema1 reports without manual detail remain exportable") }
++    }
+     static func run() -> Int32 {
+         let fm = FileManager.default
+         root = fm.temporaryDirectory.appendingPathComponent("flowtype-verification-\(UUID())")
+         do {
+             try fm.createDirectory(at: root, withIntermediateDirectories: false)
+             root = try canonicalExisting(root) // macOS /var is an OS alias; owned fixtures use the canonical root.
+             fixture = root.appendingPathComponent("fixture-tool"); config = root.appendingPathComponent("metadata.json")
+             try JSONEncoder().encode(metadata).write(to: config)
+             let source = URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("scripts/verification/VerificationFixture.swift")
+             let compiled = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/usr/bin/swiftc"), arguments: ["-parse-as-library", source.path, "-o", fixture.path], workingDirectory: root,
+                 environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("compile.stdout"), stderrURL: root.appendingPathComponent("compile.stderr"), timeoutSeconds: 30))
+             guard compiled.cliExitCode == 0 else { throw VerificationFailure.toolFailed }
+-            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks] {
++            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks, testManualIdentityAndRequiredCases] {
+                 do { try test() } catch { failed += 1; print("FAIL: fixture \((error as? VerificationFailure)?.rawValue ?? String((error as NSError).code))") }
+             }
+             testFullRunnerRequired()
+             testCICapabilityAndUploadContract()
+         } catch { failed += 1; print("FAIL: fixture setup") }
+         print("=== verification self-test: \(passed) passed, \(failed) failed ===")
+         if failed == 0 { try? fm.removeItem(at: root) } else { print("Retained synthetic evidence: \(root.path)") }
+         return failed == 0 ? 0 : 1
+     }
+ }

@@ -229,9 +229,14 @@ M3 最终源码更新：`f7554ee`，完整自测4124/0、全 M3 修复限定复�
 candidate. M5-B3 at `c21cb25` proved a new Resources shader layout, strict/deep
 signature, moved resources, actual Metal and MLX micro-operation. It does not
 prove ASR inference or the final C candidate. C1 code validation passed24334/0;
-C2 added a code-only CI workflow, with remote execution still Pending. C3 source
-and its all-Pending manual template are awaiting review; final technical ten smoke
-and every real R/V leaf remain Pending.
+C2 added a code-only CI workflow, with remote execution still Pending. C3 task
+and whole-M5 source reviews approved `4cdfaf4`. Its single final release run
+`3683D6F7-2BD5-4F54-A3EF-5F80A38020D0` passed all24 technical phases, full24334/0
+and ten independent smoke checks for 1.0.0/build353. Overall exit2/Pending preserves
+all41 real R/V leaves and remote CI as Pending. The all-Pending manual template
+is unchanged; [archived evidence](evidence/2026-11-03-m5-development/README.md)
+records the tested SHA separately from later documentation commits. Actual MLX
+GPU micro-operation success does not establish ASR model inference or manual acceptance.
 
 For every current delivery test, record whether an event actually left the process.
 Temporary clipboard staging alone is not dispatch. An initially changed/unsafe

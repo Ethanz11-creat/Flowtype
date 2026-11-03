@@ -1,0 +1,21 @@
+  ✗ FAIL: M5 same-root race has exactly one owner — got 0, want 1
+  ✗ FAIL: M5 creates isolated config
+  ✗ FAIL: M5 creates isolated ApplicationSupport
+  ✗ FAIL: M5 creates isolated Caches
+  ✗ FAIL: M5 creates isolated Logs
+  ✗ FAIL: M5 creates isolated Tmp
+  ✗ FAIL: M5 runtime fixture operation failed
+  ✗ FAIL: M5 invalid arguments fail before launch
+  ✗ FAIL: M5 invalid arguments never reach app launch
+  ✗ FAIL: M5 invalid arguments fail before launch
+  ✗ FAIL: M5 invalid arguments never reach app launch
+  ✗ FAIL: M5 invalid arguments fail before launch
+  ✗ FAIL: M5 invalid arguments never reach app launch
+  ✗ FAIL: M5 invalid arguments usage64 — got 1, want 64
+  ✗ FAIL: M5 invalid arguments fail before launch
+  ✗ FAIL: M5 invalid arguments never reach app launch
+  ✗ FAIL: M5 invalid arguments fail before launch
+  ✗ FAIL: M5 invalid arguments never reach app launch
+  ✗ FAIL: M5 argument fixture operation failed
+=== FlowType --self-test ===
+=== M5 runtime self-test: 49 passed, 19 failed ===

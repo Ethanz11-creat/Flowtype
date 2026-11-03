@@ -1,0 +1,9 @@
+FAIL: allowlisted failed report exports available evidence
+FAIL: newer partial report exports
+FAIL: partial failed run tolerates missing permitted files
+FAIL: bootstrap export accepts actual wrapper schema
+FAIL: CI supports documented macOS capability
+FAIL: CI refuses Intel capability
+FAIL: CI requires actual Swift6.2 capability
+=== verification self-test: 86 passed, 7 failed ===
+Retained synthetic evidence: /var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-verification-63F17309-046D-446F-8B55-F23A2CC8E2C9

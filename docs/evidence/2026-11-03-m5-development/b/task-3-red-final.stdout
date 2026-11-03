@@ -1,0 +1,19 @@
+FAIL: reject missing
+FAIL: preserve candidate after missing
+FAIL: reject short
+FAIL: preserve candidate after short
+FAIL: reject invalid
+FAIL: preserve candidate after invalid
+FAIL: preserve candidate after sign
+FAIL: reject HEAD
+FAIL: preserve candidate after HEAD
+FAIL: reject inUse
+FAIL: preserve candidate after inUse
+FAIL: reject artifact artifact
+FAIL: restore owned resources after artifact
+FAIL: reject artifact timeout
+FAIL: restore owned resources after timeout
+FAIL: build emits a parseable manifest
+FAIL: build emits a parseable manifest
+FAIL: build emits a parseable manifest
+=== packaging self-test: 10 passed, 18 failed ===

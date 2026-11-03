@@ -1,0 +1,51 @@
+Sources/flowtype/Services/AudioRecorder.swift:77:        guard ValidationEffects.live.allow(.permissionRequest) else { return false }
+Sources/flowtype/Services/AudioRecorder.swift:105:        guard ValidationEffects.live.allow(.audioDevice) else { throw AudioRecorderError.permissionDenied }
+Sources/flowtype/Services/AudioRecorder.swift:423:        guard RuntimeEnvironment.current.role == .app else { return }
+Sources/flowtype/Services/AudioRecorder.swift:441:        guard ValidationEffects.live.allow(.audioDevice) else { return -1 }
+Sources/flowtype/Services/KeyboardInjector.swift:75:            guard ValidationEffects.live.allow(.inputEvent) else { throw InjectionError.eventSourceCreationFailed }
+Sources/flowtype/Services/KeyboardInjector.swift:190:        guard ValidationEffects.live.allow(.foregroundContext) else {
+Sources/flowtype/Services/KeyboardInjector.swift:207:        guard ValidationEffects.live.allow(.foregroundContext) else {
+Sources/flowtype/Services/KeyboardInjector.swift:277:        guard ValidationEffects.live.allow(.clipboard) else { return nil }
+Sources/flowtype/Services/KeyboardInjector.swift:397:        guard ValidationEffects.live.allow(.clipboard) else { return }
+Sources/flowtype/Services/KeyboardInjector.swift:402:        guard ValidationEffects.live.allow(.inputEvent) else { throw InjectionError.eventSourceCreationFailed }
+Sources/flowtype/Services/LLMService.swift:206:            guard ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+Sources/flowtype/Services/LLMService.swift:239:        guard injectedSession || ValidationEffects.live.allow(.network) else {
+Sources/flowtype/Services/Context/AXContextProvider.swift:12:        guard ValidationEffects.live.allow(.foregroundContext) else { return nil }
+Sources/flowtype/Services/Speech/ModelProvisioning/ModelMetadataPreflight.swift:41:                guard injectedSession || ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+Sources/flowtype/Services/Speech/WebSocketTransport.swift:33:        guard ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+Sources/flowtype/Services/Speech/ModelLocator.swift:38:        guard ValidationEffects.live.allow(.modelScan) else { return [] }
+Sources/flowtype/Services/Speech/ModelLocator.swift:107:        guard ValidationEffects.live.allow(.modelScan) else { return nil }
+Sources/flowtype/Services/Speech/QwenASRProvider.swift:94:        guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
+Sources/flowtype/App/StatusBarController.swift:218:        guard ValidationEffects.live.allow(.window) else { return }
+Sources/flowtype/Services/Speech/WhisperModelPreparation.swift:68:        guard ValidationEffects.live.allow(.modelLoad) else { throw OfflineWhisperError.invalidLocalDirectory }
+Sources/flowtype/WindowManager.swift:171:        guard ValidationEffects.live.allow(.inputEvent) else { return }
+Sources/flowtype/WindowManager.swift:188:        guard ValidationEffects.live.allow(.inputEvent) else { return }
+Sources/flowtype/WindowManager.swift:225:        guard ValidationEffects.live.allow(.inputEvent) else { return }
+Sources/flowtype/WindowManager.swift:263:        guard ValidationEffects.live.allow(.inputEvent) else { return false }
+Sources/flowtype/WindowManager.swift:478:        guard ValidationEffects.live.allow(.window) else { return }
+Sources/flowtype/WindowManager.swift:541:        guard ValidationEffects.live.allow(.window) else { return }
+Sources/flowtype/Utilities/SoundFeedback.swift:8:        guard RuntimeEnvironment.current.role == .app else { return false }
+Sources/flowtype/Utilities/SoundFeedback.swift:9:        return ConfigurationStore.shared.current.enableAudioFeedback && ValidationEffects.live.allow(.sound)
+Sources/flowtype/Utilities/PermissionHelper.swift:49:        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+Sources/flowtype/Utilities/PermissionHelper.swift:55:        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+Sources/flowtype/Utilities/PermissionHelper.swift:66:        guard ValidationEffects.live.allow(.inputEvent) else { return false }
+Sources/flowtype/Utilities/PermissionHelper.swift:92:        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+Sources/flowtype/Utilities/PermissionHelper.swift:99:        guard ValidationEffects.live.allow(.permissionRequest) else { return }
+Sources/flowtype/Services/Speech/ASRRouter.swift:249:    static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
+Sources/flowtype/Services/Speech/ASRRouter.swift:280:        guard startMonitoring, ValidationEffects.live.allow(.pathMonitor) else { return }
+Sources/flowtype/Services/Speech/ASRRouter.swift:326:        guard RuntimeEnvironment.current.role == .app else { return }
+Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:66:        guard ValidationEffects.live.allow(.modelLoad) else { throw SpeechProviderError.notAvailable }
+Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:131:        guard ValidationEffects.live.allow(.permissionRequest) else { return AsyncStream { $0.finish() } }
+Sources/flowtype/Services/Speech/LocalModelManager/LocalModelLibrary.swift:49:        if RuntimeEnvironment.current.role != .app {
+Sources/flowtype/Services/Speech/OfflineWhisperKit.swift:181:        guard ValidationEffects.live.allow(.modelLoad) else { throw OfflineWhisperError.invalidLocalDirectory }
+Sources/flowtype/Services/Speech/CloudASRProvider.swift:187:        guard injectedSession || ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
+Sources/flowtype/Services/Speech/QwenModelState.swift:38:        guard ValidationEffects.live.allow(.environment) else { return nil }
+Sources/flowtype/Services/Speech/QwenModelState.swift:41:        guard ValidationEffects.live.allow(.environment) else { return }
+Sources/flowtype/Services/Speech/QwenModelState.swift:101:            guard ValidationEffects.live.allow(.modelDownload) else { throw ModelProvisionError.loadFailed() }
+Sources/flowtype/Services/Speech/QwenModelState.swift:120:            guard ValidationEffects.live.allow(.modelScan) else { throw ModelProvisionError.incompleteLocal() }
+Sources/flowtype/Services/Speech/QwenModelState.swift:134:            guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
+Sources/flowtype/Core/EnvMigration.swift:11:        guard ValidationEffects.live.allow(.environment) else { return }
+Sources/flowtype/Services/Speech/CloudProbe.swift:22:        guard ValidationEffects.live.allow(.network) else { return nil }
+Sources/flowtype/Core/PipelineOrchestrator.swift:59:        guard RuntimeEnvironment.current.role == .app else { return }
+Sources/flowtype/Core/PipelineOrchestrator.swift:67:        guard ValidationEffects.live.allow(.window) else { return }
+Sources/flowtype/Core/PipelineOrchestrator.swift:70:        guard ValidationEffects.live.allow(.window) else { return }

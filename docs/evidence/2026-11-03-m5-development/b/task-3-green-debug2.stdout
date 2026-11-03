@@ -1,0 +1,5 @@
+Retained synthetic fixture: /var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/m5 packaging F6737507-8BA6-4755-81EF-DF8DDFE6DFAF
+FAIL: fixture operation journalInvalid
+Retained synthetic fixture: /var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/m5 packaging 5AA22D6E-660B-42A4-90FA-45330AAA0191
+FAIL: fixture operation journalInvalid
+=== packaging self-test: 21 passed, 2 failed ===

@@ -1,0 +1,151 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/7] Write sources
+[3/7] Write swift-version--1AB21518FC5DEDBE.txt
+error: emit-module command failed with exit code 1 (use -v to see invocation)
+[5/10] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:27:47: error: cannot find type 'RuntimeBootstrap' in scope
+ 25 |     }
+ 26 | 
+ 27 |     private static func runtime(home: URL) -> RuntimeBootstrap {
+    |                                               `- error: cannot find type 'RuntimeBootstrap' in scope
+ 28 |         RuntimeBootstrap(home: home,
+ 29 |                          applicationSupport: home.appendingPathComponent("Library/Application Support"),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:27:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 25 |     }()
+ 26 | 
+ 27 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 28 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 29 | 
+[6/10] Compiling FlowType M5RuntimeSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:27:47: error: cannot find type 'RuntimeBootstrap' in scope
+ 25 |     }
+ 26 | 
+ 27 |     private static func runtime(home: URL) -> RuntimeBootstrap {
+    |                                               `- error: cannot find type 'RuntimeBootstrap' in scope
+ 28 |         RuntimeBootstrap(home: home,
+ 29 |                          applicationSupport: home.appendingPathComponent("Library/Application Support"),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:38:30: error: cannot find type 'RuntimeBootstrapError' in scope
+ 36 |             try body()
+ 37 |             r.check(false, "M5 rejects \(name)")
+ 38 |         } catch let error as RuntimeBootstrapError {
+    |                              `- error: cannot find type 'RuntimeBootstrapError' in scope
+ 39 |             r.eq(error.exitCode, exitCode, "M5 rejection status: \(name)")
+ 40 |         } catch {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:114:21: error: cannot find 'RuntimePaths' in scope
+112 |     // Catches changing legacy FlowType/Flowtype casing or app's base cache/temp semantics.
+113 |     static func testAppPathCompatibility(_ r: SelfTest.Reporter) {
+114 |         let paths = RuntimePaths.app(home: URL(fileURLWithPath: "/fixture/home"),
+    |                     `- error: cannot find 'RuntimePaths' in scope
+115 |                                      applicationSupport: URL(fileURLWithPath: "/fixture/support"),
+116 |                                      caches: URL(fileURLWithPath: "/fixture/cache"),
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:139:22: error: cannot find 'RuntimeEnvironment' in scope
+137 |             ["--m5-unknown"], ["--self-test=1"], ["--validation-root=/fixture/root"]
+138 |         ]
+139 |         let before = RuntimeEnvironment.current.runID
+    |                      `- error: cannot find 'RuntimeEnvironment' in scope
+140 |         for arguments in invalid {
+141 |             var launched = false
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:147:34: error: cannot find type 'RuntimeBootstrapError' in scope
+145 |                                        temporaryDirectory: URL(fileURLWithPath: "/fixture/temp")) { _ in launched = true }
+146 |                 r.check(false, "M5 invalid arguments fail before launch")
+147 |             } catch let error as RuntimeBootstrapError {
+    |                                  `- error: cannot find type 'RuntimeBootstrapError' in scope
+148 |                 r.eq(error.exitCode, 64, "M5 invalid arguments usage64")
+149 |             }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:152:23: error: cannot find 'RuntimeOptions' in scope
+150 |             r.check(!launched, "M5 invalid arguments never reach app launch")
+151 |         }
+152 |         let app = try RuntimeOptions.parse(arguments: ["FlowType", "-psn_0_12345", "-NSDocumentRevisionsDebugMode", "YES"])
+    |                       `- error: cannot find 'RuntimeOptions' in scope
+153 |         r.eq(app.mode, .app, "M5 preserves LaunchServices app arguments")
+154 |         for filter in RuntimeOptions.selfTestFilters {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:153:25: error: type 'Equatable' has no member 'app'
+151 |         }
+152 |         let app = try RuntimeOptions.parse(arguments: ["FlowType", "-psn_0_12345", "-NSDocumentRevisionsDebugMode", "YES"])
+153 |         r.eq(app.mode, .app, "M5 preserves LaunchServices app arguments")
+    |                         `- error: type 'Equatable' has no member 'app'
+154 |         for filter in RuntimeOptions.selfTestFilters {
+155 |             let options = try RuntimeOptions.parse(arguments: ["FlowType", "--self-test", filter])
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:154:23: error: cannot find 'RuntimeOptions' in scope
+152 |         let app = try RuntimeOptions.parse(arguments: ["FlowType", "-psn_0_12345", "-NSDocumentRevisionsDebugMode", "YES"])
+153 |         r.eq(app.mode, .app, "M5 preserves LaunchServices app arguments")
+154 |         for filter in RuntimeOptions.selfTestFilters {
+    |                       `- error: cannot find 'RuntimeOptions' in scope
+155 |             let options = try RuntimeOptions.parse(arguments: ["FlowType", "--self-test", filter])
+156 |             r.eq(options.selfTestFilter, filter, "M5 preserves self-test filter")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:155:31: error: cannot find 'RuntimeOptions' in scope
+153 |         r.eq(app.mode, .app, "M5 preserves LaunchServices app arguments")
+154 |         for filter in RuntimeOptions.selfTestFilters {
+155 |             let options = try RuntimeOptions.parse(arguments: ["FlowType", "--self-test", filter])
+    |                               `- error: cannot find 'RuntimeOptions' in scope
+156 |             r.eq(options.selfTestFilter, filter, "M5 preserves self-test filter")
+157 |             rejected(r, "filter without self-test", exitCode: 64) {
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:158:25: error: cannot find 'RuntimeOptions' in scope
+156 |             r.eq(options.selfTestFilter, filter, "M5 preserves self-test filter")
+157 |             rejected(r, "filter without self-test", exitCode: 64) {
+158 |                 _ = try RuntimeOptions.parse(arguments: ["FlowType", filter])
+    |                         `- error: cannot find 'RuntimeOptions' in scope
+159 |             }
+160 |         }
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:161:51: error: cannot find 'RuntimeMode' in scope
+159 |             }
+160 |         }
+161 |         for (argument, mode) in [("--smoke-test", RuntimeMode.smoke), ("--artifact-check", .artifact)] {
+    |                                                   `- error: cannot find 'RuntimeMode' in scope
+162 |             let options = try RuntimeOptions.parse(arguments: ["FlowType", argument])
+163 |             r.eq(options.mode, mode, "M5 non-GUI validation mode")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:162:31: error: cannot find 'RuntimeOptions' in scope
+160 |         }
+161 |         for (argument, mode) in [("--smoke-test", RuntimeMode.smoke), ("--artifact-check", .artifact)] {
+162 |             let options = try RuntimeOptions.parse(arguments: ["FlowType", argument])
+    |                               `- error: cannot find 'RuntimeOptions' in scope
+163 |             r.eq(options.mode, mode, "M5 non-GUI validation mode")
+164 |             r.eq(options.role, .smokeTest, "M5 smoke/artifact process role")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:164:33: error: type 'Equatable' has no member 'smokeTest'
+162 |             let options = try RuntimeOptions.parse(arguments: ["FlowType", argument])
+163 |             r.eq(options.mode, mode, "M5 non-GUI validation mode")
+164 |             r.eq(options.role, .smokeTest, "M5 smoke/artifact process role")
+    |                                 `- error: type 'Equatable' has no member 'smokeTest'
+165 |         }
+166 |         r.eq(RuntimeEnvironment.current.runID, before, "M5 instance fixtures never replace process context")
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:166:14: error: cannot find 'RuntimeEnvironment' in scope
+164 |             r.eq(options.role, .smokeTest, "M5 smoke/artifact process role")
+165 |         }
+166 |         r.eq(RuntimeEnvironment.current.runID, before, "M5 instance fixtures never replace process context")
+    |              `- error: cannot find 'RuntimeEnvironment' in scope
+167 |     }
+168 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:190:18: error: cannot find 'RuntimeEnvironment' in scope
+188 |             r.eq(first.current.runID, context.runID, "M5 failed rebootstrap preserves context")
+189 |             r.eq(AppLogger.logFileURL.path,
+190 |                  RuntimeEnvironment.current.paths.logsDirectory.appendingPathComponent("diagnostic-selftest.log").path,
+    |                  `- error: cannot find 'RuntimeEnvironment' in scope
+191 |                  "M5 logger is routed to isolated self-test root")
+192 |         }
+[7/10] Compiling FlowType SelfTest.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:286:13: error: cannot find 'RuntimeEnvironment' in scope
+ 284 |         if CommandLine.arguments.contains("--m5-runtime-only") {
+ 285 |             await M5RuntimeSelfTests.run(r)
+ 286 |             RuntimeEnvironment.finishValidation()
+     |             `- error: cannot find 'RuntimeEnvironment' in scope
+ 287 |             print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
+ 288 |             exit(r.failed == 0 ? 0 : 1)

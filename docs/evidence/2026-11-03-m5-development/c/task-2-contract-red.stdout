@@ -1,0 +1,8 @@
+FAIL: genuine Fail partial takes precedence even with older timestamp
+FAIL: newer partial report exports
+FAIL: bootstrap rejects Boolean schema masquerading as integer
+FAIL: partial conflicts with original lane are rejected
+FAIL: CLI emits owned path once even on late write failure
+FAIL: actual CI helper exports late-write evidence
+=== verification self-test: 97 passed, 6 failed ===
+Retained synthetic evidence: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-verification-7145F45F-45FF-4F7B-A0D3-28CC7DB17478

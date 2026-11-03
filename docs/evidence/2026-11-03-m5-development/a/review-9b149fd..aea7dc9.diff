@@ -1,0 +1,644 @@
+# Review package: 9b149fd..aea7dc9
+
+## Commits
+aea7dc9 feat: bootstrap isolated validation runtime
+
+## Files changed
+ Sources/flowtype/App/FlowTypeApp.swift            |  24 ++-
+ Sources/flowtype/App/RuntimeEnvironment.swift     | 153 ++++++++++++++++
+ Sources/flowtype/App/RuntimePaths.swift           | 129 +++++++++++++
+ Sources/flowtype/Testing/M5RuntimeSelfTests.swift | 214 ++++++++++++++++++++++
+ Sources/flowtype/Testing/SelfTest.swift           |   6 +
+ Sources/flowtype/Utilities/AppLogger.swift        |  12 +-
+ 6 files changed, 530 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/Sources/flowtype/App/FlowTypeApp.swift b/Sources/flowtype/App/FlowTypeApp.swift
+index 6b22f4c..35a8a19 100644
+--- a/Sources/flowtype/App/FlowTypeApp.swift
++++ b/Sources/flowtype/App/FlowTypeApp.swift
+@@ -1,23 +1,37 @@
+ import SwiftUI
+ import AppKit
+ 
+-/// Process entry point. Intercepts `--self-test` (runnable without Xcode/XCTest)
+-/// before launching the GUI; otherwise hands off to the SwiftUI app.
++/// Establishes the runtime before any shared services or SwiftUI app initialization.
+ @main
+ enum FlowTypeMain {
+     @MainActor
+     static func main() async {
+-        if CommandLine.arguments.contains("--self-test") {
+-            await SelfTest.runAndExit()
++        do {
++            try await RuntimeEnvironment.run(arguments: CommandLine.arguments,
++                                             temporaryDirectory: FileManager.default.temporaryDirectory) { context in
++                switch context.mode {
++                case .selfTest:
++                    await SelfTest.runAndExit()
++                case .smoke, .artifact:
++                    RuntimeEnvironment.finishValidation()
++                    FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))
++                    exit(1)
++                case .app:
++                    FlowTypeApp.main()
++                }
++            }
++        } catch {
++            let failure = (error as? RuntimeBootstrapError) ?? .rootPreparation
++            FileHandle.standardError.write(Data("FlowType: runtime bootstrap \(failure.rawValue)\n".utf8))
++            exit(failure.exitCode)
+         }
+-        FlowTypeApp.main()
+     }
+ }
+ 
+ struct FlowTypeApp: App {
+     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+ 
+     var body: some Scene {
+         WindowGroup {
+             EmptyView()
+                 .frame(width: 0, height: 0)
+diff --git a/Sources/flowtype/App/RuntimeEnvironment.swift b/Sources/flowtype/App/RuntimeEnvironment.swift
+new file mode 100644
+index 0000000..ef54441
+--- /dev/null
++++ b/Sources/flowtype/App/RuntimeEnvironment.swift
+@@ -0,0 +1,153 @@
++import Foundation
++
++enum ProcessRole: String, Codable, Sendable { case app, selfTest, smokeTest }
++enum RuntimeMode: Sendable { case app, selfTest, smoke, artifact }
++
++struct RuntimeContext: Sendable {
++    let role: ProcessRole
++    let mode: RuntimeMode
++    let runID: UUID
++    let paths: RuntimePaths
++    let defaultsSuiteName: String?
++    let selfTestFilter: String?
++}
++
++enum RuntimeBootstrapError: String, Error {
++    case usage, invalidRoot, rootPreparation, alreadyBootstrapped, defaultsUnavailable
++    var exitCode: Int32 { self == .usage ? 64 : 1 }
++}
++
++struct RuntimeOptions: Sendable {
++    let mode: RuntimeMode
++    let validationRoot: String?
++    let selfTestFilter: String?
++    var role: ProcessRole {
++        switch mode { case .app: .app; case .selfTest: .selfTest; case .smoke, .artifact: .smokeTest }
++    }
++    static let selfTestFilters = ["--m5-runtime-only", "--m4-recovery-only", "--m3-silence-benchmark-only",
++                                  "--m3-silence-only", "--m3-asr-regression-only", "--m3-delivery-only",
++                                  "--m2-review-inspection-only", "--m2-review-packages-only", "--m2-fix-only"]
++
++    static func parse(arguments: [String]) throws -> RuntimeOptions {
++        var mode: RuntimeMode?
++        var root: String?
++        var filter: String?
++        var index = 1 // argv[0] is the executable, never an option.
++        while index < arguments.count {
++            let argument = arguments[index]
++            let selected: RuntimeMode?
++            switch argument {
++            case "--self-test": selected = .selfTest
++            case "--smoke-test": selected = .smoke
++            case "--artifact-check": selected = .artifact
++            default: selected = nil
++            }
++            if let selected {
++                guard mode == nil else { throw RuntimeBootstrapError.usage }
++                mode = selected
++            } else if argument == "--validation-root" {
++                guard root == nil, index + 1 < arguments.count,
++                      !arguments[index + 1].hasPrefix("-") else { throw RuntimeBootstrapError.usage }
++                index += 1
++                root = arguments[index]
++            } else if selfTestFilters.contains(argument) {
++                guard filter == nil else { throw RuntimeBootstrapError.usage }
++                filter = argument
++            } else if argument.hasPrefix("--") {
++                // Long options belong to this CLI; AppKit/LaunchServices use single-dash options.
++                throw RuntimeBootstrapError.usage
++            }
++            index += 1
++        }
++        let resolvedMode = mode ?? .app
++        guard filter == nil || resolvedMode == .selfTest,
++              root == nil || resolvedMode != .app else { throw RuntimeBootstrapError.usage }
++        return RuntimeOptions(mode: resolvedMode, validationRoot: root, selfTestFilter: filter)
++    }
++}
++
++/// Owns one successful bootstrap. Independent instances support injected filesystem roots.
++final class RuntimeBootstrap: @unchecked Sendable {
++    private let lock = NSLock()
++    private let home: URL
++    private let applicationSupport: URL
++    private let caches: URL
++    private let runID: UUID
++    private var context: RuntimeContext?
++    private var storedDefaults: UserDefaults?
++
++    init(home: URL, applicationSupport: URL, caches: URL, runID: UUID = UUID()) {
++        self.home = home; self.applicationSupport = applicationSupport; self.caches = caches
++        self.runID = runID
++    }
++
++    var current: RuntimeContext {
++        lock.lock(); defer { lock.unlock() }
++        guard let context else { preconditionFailure("RuntimeEnvironment accessed before bootstrap") }
++        return context
++    }
++
++    var defaults: UserDefaults {
++        lock.lock(); defer { lock.unlock() }
++        guard let storedDefaults else { preconditionFailure("RuntimeEnvironment defaults accessed before bootstrap") }
++        return storedDefaults
++    }
++
++    func bootstrap(arguments: [String], temporaryDirectory: URL) throws -> RuntimeContext {
++        lock.lock(); defer { lock.unlock() }
++        guard context == nil else { throw RuntimeBootstrapError.alreadyBootstrapped }
++        let options = try RuntimeOptions.parse(arguments: arguments)
++        let paths: RuntimePaths
++        let suite: String?
++        let defaults: UserDefaults
++        if options.mode == .app {
++            paths = .app(home: home, applicationSupport: applicationSupport, caches: caches,
++                         temporaryDirectory: temporaryDirectory)
++            suite = nil
++            defaults = .standard
++        } else {
++            paths = try RuntimePaths.prepareValidation(explicitPath: options.validationRoot,
++                                                       temporaryDirectory: temporaryDirectory,
++                                                       home: home, runID: runID)
++            let name = "com.flowtype.validation.\(options.role.rawValue).\(runID.uuidString)"
++            guard let isolated = UserDefaults(suiteName: name) else { throw RuntimeBootstrapError.defaultsUnavailable }
++            suite = name
++            defaults = isolated
++        }
++        let prepared = RuntimeContext(role: options.role, mode: options.mode, runID: runID, paths: paths,
++                                      defaultsSuiteName: suite, selfTestFilter: options.selfTestFilter)
++        storedDefaults = defaults
++        context = prepared
++        return prepared
++    }
++
++    @MainActor
++    func run(arguments: [String], temporaryDirectory: URL,
++             launch: (RuntimeContext) async -> Void) async throws {
++        let context = try bootstrap(arguments: arguments, temporaryDirectory: temporaryDirectory)
++        await launch(context)
++    }
++
++    func finishValidation() {
++        lock.lock(); defer { lock.unlock() }
++        if let suite = context?.defaultsSuiteName { storedDefaults?.removePersistentDomain(forName: suite) }
++    }
++}
++
++enum RuntimeEnvironment {
++    private static let process = RuntimeBootstrap(
++        home: FileManager.default.homeDirectoryForCurrentUser,
++        applicationSupport: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!,
++        caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!)
++    static var current: RuntimeContext { process.current }
++    static var defaults: UserDefaults { process.defaults }
++    static func bootstrap(arguments: [String], temporaryDirectory: URL) throws -> RuntimeContext {
++        try process.bootstrap(arguments: arguments, temporaryDirectory: temporaryDirectory)
++    }
++    @MainActor
++    static func run(arguments: [String], temporaryDirectory: URL,
++                    launch: (RuntimeContext) async -> Void) async throws {
++        try await process.run(arguments: arguments, temporaryDirectory: temporaryDirectory, launch: launch)
++    }
++    static func finishValidation() { process.finishValidation() }
++}
+diff --git a/Sources/flowtype/App/RuntimePaths.swift b/Sources/flowtype/App/RuntimePaths.swift
+new file mode 100644
+index 0000000..e4480a5
+--- /dev/null
++++ b/Sources/flowtype/App/RuntimePaths.swift
+@@ -0,0 +1,129 @@
++import Foundation
++import Darwin
++
++struct RuntimePaths: Sendable {
++    let validationRoot: URL?
++    let configDirectory: URL
++    let applicationSupportDirectory: URL
++    let cachesDirectory: URL
++    let logsDirectory: URL
++    let temporaryDirectory: URL
++    let modelsDirectory: URL
++
++    static func app(home: URL, applicationSupport: URL, caches: URL,
++                    temporaryDirectory: URL) -> RuntimePaths {
++        RuntimePaths(validationRoot: nil,
++                     configDirectory: applicationSupport.appendingPathComponent("FlowType"),
++                     applicationSupportDirectory: applicationSupport.appendingPathComponent("FlowType"),
++                     cachesDirectory: caches,
++                     logsDirectory: home.appendingPathComponent("Library/Logs/flowtype"),
++                     temporaryDirectory: temporaryDirectory,
++                     modelsDirectory: applicationSupport.appendingPathComponent("Flowtype/models"))
++    }
++
++    static func validation(root: URL) -> RuntimePaths {
++        RuntimePaths(validationRoot: root,
++                     configDirectory: root.appendingPathComponent("config"),
++                     applicationSupportDirectory: root.appendingPathComponent("ApplicationSupport"),
++                     cachesDirectory: root.appendingPathComponent("Caches"),
++                     logsDirectory: root.appendingPathComponent("Logs"),
++                     temporaryDirectory: root.appendingPathComponent("Tmp"),
++                     modelsDirectory: root.appendingPathComponent("ApplicationSupport/models"))
++    }
++
++    /// Only the OS-provided temporary base is allowed to resolve trusted aliases such as /var.
++    /// Explicit roots are traversed from / using descriptor-relative, no-follow operations.
++    static func prepareValidation(explicitPath: String?, temporaryDirectory: URL,
++                                  home: URL, runID: UUID) throws -> RuntimePaths {
++        let path: String
++        if let explicitPath {
++            guard explicitPath.hasPrefix("/"), !explicitPath.utf8.contains(0),
++                  !explicitPath.split(separator: "/").contains(where: { $0 == "." || $0 == ".." }) else {
++                throw RuntimeBootstrapError.invalidRoot
++            }
++            // Do not use standardizedFileURL: Foundation may turn an existing
++            // /private/var path back into /var and erase the explicit-path distinction.
++            path = "/" + explicitPath.split(separator: "/").joined(separator: "/")
++        } else {
++            guard temporaryDirectory.isFileURL else { throw RuntimeBootstrapError.invalidRoot }
++            // Foundation may preserve the /var alias even in resolvingSymlinksInPath().
++            guard let resolved = realpath(temporaryDirectory.path, nil) else {
++                throw RuntimeBootstrapError.invalidRoot
++            }
++            defer { free(resolved) }
++            path = URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
++                .appendingPathComponent("flowtype-validation/\(runID.uuidString)").path
++        }
++        let candidate = path.lowercased()
++        var homePaths = [home.path]
++        if let resolvedHome = realpath(home.path, nil) {
++            homePaths.append(String(cString: resolvedHome))
++            free(resolvedHome)
++        }
++        guard candidate != "/", homePaths.allSatisfy({ homePath in
++            let protectedHome = homePath.lowercased()
++            let library = protectedHome + "/library"
++            return candidate != protectedHome && !protectedHome.hasPrefix(candidate + "/")
++                && candidate != library && !candidate.hasPrefix(library + "/")
++        }) else { throw RuntimeBootstrapError.invalidRoot }
++
++        let descriptor = try openDirectoryTree(path)
++        defer { close(descriptor) }
++        var info = stat()
++        guard fstat(descriptor, &info) == 0, info.st_uid == getuid() else {
++            throw RuntimeBootstrapError.invalidRoot
++        }
++        let duplicate = dup(descriptor)
++        guard duplicate >= 0 else { throw RuntimeBootstrapError.rootPreparation }
++        guard let entries = fdopendir(duplicate) else {
++            close(duplicate)
++            throw RuntimeBootstrapError.rootPreparation
++        }
++        defer { closedir(entries) }
++        errno = 0
++        while let entry = readdir(entries) {
++            let name = withUnsafePointer(to: entry.pointee.d_name) {
++                String(cString: UnsafeRawPointer($0).assumingMemoryBound(to: CChar.self))
++            }
++            guard name == "." || name == ".." else { throw RuntimeBootstrapError.invalidRoot }
++        }
++        guard errno == 0 else { throw RuntimeBootstrapError.rootPreparation }
++
++        let marker = openat(descriptor, ".flowtype-validation-run", O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
++        guard marker >= 0 else { throw RuntimeBootstrapError.rootPreparation }
++        defer { close(marker) }
++        let identity = Array(runID.uuidString.utf8)
++        let written = identity.withUnsafeBytes { Darwin.write(marker, $0.baseAddress, $0.count) }
++        guard written == identity.count else { throw RuntimeBootstrapError.rootPreparation }
++        // Retain the marker on all later failures. Never delete an existing root or its contents.
++        for directory in ["config", "ApplicationSupport", "Caches", "Logs", "Tmp"] {
++            guard mkdirat(descriptor, directory, 0o700) == 0 else { throw RuntimeBootstrapError.rootPreparation }
++        }
++        return validation(root: URL(fileURLWithPath: path, isDirectory: true))
++    }
++
++    private static func openDirectoryTree(_ path: String) throws -> Int32 {
++        let flags = O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
++        var descriptor = open("/", flags)
++        guard descriptor >= 0 else { throw RuntimeBootstrapError.rootPreparation }
++        do {
++            for component in path.split(separator: "/") {
++                let name = String(component)
++                var child = openat(descriptor, name, flags)
++                if child < 0, errno == ENOENT {
++                    guard mkdirat(descriptor, name, 0o700) == 0 || errno == EEXIST else {
++                        throw RuntimeBootstrapError.rootPreparation
++                    }
++                    child = openat(descriptor, name, flags)
++                }
++                guard child >= 0 else { throw RuntimeBootstrapError.invalidRoot }
++                close(descriptor)
++                descriptor = child
++            }
++            return descriptor
++        } catch {
++            close(descriptor)
++            throw error
++        }
++    }
++}
+diff --git a/Sources/flowtype/Testing/M5RuntimeSelfTests.swift b/Sources/flowtype/Testing/M5RuntimeSelfTests.swift
+new file mode 100644
+index 0000000..8476120
+--- /dev/null
++++ b/Sources/flowtype/Testing/M5RuntimeSelfTests.swift
+@@ -0,0 +1,214 @@
++import Foundation
++import os
++import Darwin
++
++/// Synthetic filesystem/defaults fixtures only; no legacy shared services are constructed.
++enum M5RuntimeSelfTests {
++    @MainActor
++    static func run(_ r: SelfTest.Reporter) async {
++        for test in [testCanonicalTempAndExplicitSymlink, testRootOwnershipAndUsage,
++                     testDefaultsAndBootstrapOwnership] {
++            do { try test(r) }
++            catch { r.check(false, "M5 runtime fixture operation failed") }
++        }
++        testAppPathCompatibility(r)
++        do { try await testArgumentsAndLaunchGate(r) }
++        catch { r.check(false, "M5 argument fixture operation failed") }
++    }
++
++    private static func fixture(_ body: (URL, URL) throws -> Void) throws {
++        let base = try fixtureTemporaryDirectory()
++            .appendingPathComponent("flowtype-m5-fixture-\(UUID().uuidString)")
++        let home = base.appendingPathComponent("home")
++        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: base) }
++        try body(base, home)
++    }
++
++    private static func fixtureTemporaryDirectory() throws -> URL {
++        guard let resolved = realpath(FileManager.default.temporaryDirectory.path, nil) else {
++            throw RuntimeBootstrapError.rootPreparation
++        }
++        defer { free(resolved) }
++        return URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
++    }
++
++    private static func runtime(home: URL, runID: UUID = UUID()) -> RuntimeBootstrap {
++        RuntimeBootstrap(home: home,
++                         applicationSupport: home.appendingPathComponent("Library/Application Support"),
++                         caches: home.appendingPathComponent("Library/Caches"), runID: runID)
++    }
++
++    private static func rejected(_ r: SelfTest.Reporter, _ name: String,
++                                 exitCode: Int32 = 1, _ body: () throws -> Void) {
++        do {
++            try body()
++            r.check(false, "M5 rejects \(name)")
++        } catch let error as RuntimeBootstrapError {
++            r.eq(error.exitCode, exitCode, "M5 rejection status: \(name)")
++        } catch {
++            r.check(false, "M5 returns a closed error for \(name)")
++        }
++    }
++
++    // Catches trusting explicit symlinks or rejecting the OS's trusted temp alias.
++    static func testCanonicalTempAndExplicitSymlink(_ r: SelfTest.Reporter) throws {
++        try fixture { base, home in
++            let temp = base.appendingPathComponent("temp")
++            let alias = base.appendingPathComponent("temp-alias")
++            try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
++            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: temp)
++            let context = try runtime(home: home).bootstrap(arguments: ["FlowType", "--self-test"], temporaryDirectory: alias)
++            r.eq(context.paths.validationRoot?.deletingLastPathComponent().path,
++                 temp.appendingPathComponent("flowtype-validation").path, "M5 canonical trusted temp")
++            r.eq(context.role, .selfTest, "M5 self-test role")
++            r.eq(context.mode, .selfTest, "M5 self-test mode")
++            let links = [alias.path, alias.appendingPathComponent("child").path]
++            for path in links {
++                rejected(r, "explicit symlink or ancestor") {
++                    _ = try runtime(home: home).bootstrap(arguments: ["FlowType", "--self-test", "--validation-root", path], temporaryDirectory: temp)
++                }
++            }
++            r.check(!FileManager.default.fileExists(atPath: temp.appendingPathComponent("child").path),
++                    "M5 rejected symlink ancestor creates no child")
++        }
++    }
++
++    // Catches shared validation roots, destructive cleanup, and overbroad home rejection.
++    static func testRootOwnershipAndUsage(_ r: SelfTest.Reporter) throws {
++        try fixture { base, home in
++            let forbidden = ["relative-root", "/", base.path, home.path,
++                             home.appendingPathComponent("Library").path,
++                             home.appendingPathComponent("Library/Application Support/FlowType").path,
++                             home.appendingPathComponent("Library/Application Support/Flowtype/models").path,
++                             home.appendingPathComponent("Library/Caches/new-run").path,
++                             home.appendingPathComponent("Library/Logs/flowtype").path]
++            for path in forbidden {
++                rejected(r, "unsafe validation root") {
++                    _ = try runtime(home: home).bootstrap(arguments: ["FlowType", "--self-test", "--validation-root", path], temporaryDirectory: base)
++                }
++            }
++            let occupied = base.appendingPathComponent("occupied")
++            try FileManager.default.createDirectory(at: occupied, withIntermediateDirectories: true)
++            let original = occupied.appendingPathComponent("keep.txt")
++            try Data("synthetic-original".utf8).write(to: original)
++            rejected(r, "nonempty validation root") {
++                _ = try runtime(home: home).bootstrap(arguments: ["FlowType", "--self-test", "--validation-root", occupied.path], temporaryDirectory: base)
++            }
++            r.eq(try String(contentsOf: original, encoding: .utf8), "synthetic-original", "M5 failed root preserves original")
++            let root = home.appendingPathComponent("workspace/build/validation")
++            let results = OSAllocatedUnfairLock(initialState: [Bool]())
++            DispatchQueue.concurrentPerform(iterations: 2) { _ in
++                let succeeded = (try? runtime(home: home).bootstrap(
++                    arguments: ["FlowType", "--self-test", "--validation-root", root.path], temporaryDirectory: base)) != nil
++                results.withLock { $0.append(succeeded) }
++            }
++            r.eq(results.withLock { $0.filter { $0 }.count }, 1, "M5 same-root race has exactly one owner")
++            for directory in ["config", "ApplicationSupport", "Caches", "Logs", "Tmp"] {
++                var isDirectory: ObjCBool = false
++                r.check(FileManager.default.fileExists(atPath: root.appendingPathComponent(directory).path,
++                                                      isDirectory: &isDirectory) && isDirectory.boolValue,
++                        "M5 creates isolated \(directory)")
++            }
++            let empty = base.appendingPathComponent("empty")
++            try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
++            let context = try runtime(home: home).bootstrap(arguments: ["FlowType", "--self-test", "--validation-root", empty.path], temporaryDirectory: base)
++            r.eq(context.paths.validationRoot?.path, empty.path, "M5 accepts existing empty real root")
++            r.eq(context.paths.modelsDirectory.path, empty.path + "/ApplicationSupport/models", "M5 validation models stay in root")
++        }
++    }
++
++    // Catches changing legacy FlowType/Flowtype casing or app's base cache/temp semantics.
++    static func testAppPathCompatibility(_ r: SelfTest.Reporter) {
++        let paths = RuntimePaths.app(home: URL(fileURLWithPath: "/fixture/home"),
++                                     applicationSupport: URL(fileURLWithPath: "/fixture/support"),
++                                     caches: URL(fileURLWithPath: "/fixture/cache"),
++                                     temporaryDirectory: URL(fileURLWithPath: "/fixture/temp"))
++        r.eq(paths.validationRoot, nil, "M5 app has no validation root")
++        r.eq(paths.configDirectory.path, "/fixture/support/FlowType", "M5 legacy config path")
++        r.eq(paths.applicationSupportDirectory.path, "/fixture/support/FlowType", "M5 legacy database/store path")
++        r.eq(paths.modelsDirectory.path, "/fixture/support/Flowtype/models", "M5 legacy model path casing")
++        r.eq(paths.cachesDirectory.path, "/fixture/cache", "M5 legacy cache base")
++        r.eq(paths.logsDirectory.path, "/fixture/home/Library/Logs/flowtype", "M5 legacy logger path")
++        r.eq(paths.temporaryDirectory.path, "/fixture/temp", "M5 legacy temp base")
++    }
++
++    // Catches permissive parsing that reaches the app launch callback on invalid M5 input.
++    @MainActor
++    private static func testArgumentsAndLaunchGate(_ r: SelfTest.Reporter) async throws {
++        let base = try fixtureTemporaryDirectory()
++            .appendingPathComponent("flowtype-m5-arguments-\(UUID().uuidString)")
++        let home = base.appendingPathComponent("home")
++        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
++        defer { try? FileManager.default.removeItem(at: base) }
++        let invalid = [
++            ["--self-test", "--smoke-test"], ["--artifact-check", "--self-test"],
++            ["--smoke-test", "--artifact-check"], ["--self-test", "--self-test"],
++            ["--validation-root"], ["--validation-root", "/fixture/root"],
++            ["--self-test", "--validation-root", "/fixture/a", "--validation-root", "/fixture/b"],
++            ["--m5-runtime-only"], ["--smoke-test", "--m5-runtime-only"],
++            ["--self-test", "--m5-runtime-only", "--m5-runtime-only"],
++            ["--self-test", "--m4-recovery-only", "--m5-runtime-only"],
++            ["--m5-unknown"], ["--self-test=1"], ["--validation-root=/fixture/root"]
++        ]
++        let before = RuntimeEnvironment.current.runID
++        for arguments in invalid {
++            var launched = false
++            do {
++                let isolated = runtime(home: home)
++                defer { isolated.finishValidation() }
++                try await isolated.run(arguments: ["FlowType"] + arguments,
++                                       temporaryDirectory: base) { _ in launched = true }
++                r.check(false, "M5 invalid arguments fail before launch")
++            } catch let error as RuntimeBootstrapError {
++                r.eq(error.exitCode, 64, "M5 invalid arguments usage64")
++            }
++            r.check(!launched, "M5 invalid arguments never reach app launch")
++        }
++        let app = try RuntimeOptions.parse(arguments: ["FlowType", "-psn_0_12345", "-NSDocumentRevisionsDebugMode", "YES"])
++        r.eq(app.mode, .app, "M5 preserves LaunchServices app arguments")
++        for filter in RuntimeOptions.selfTestFilters {
++            let options = try RuntimeOptions.parse(arguments: ["FlowType", "--self-test", filter])
++            r.eq(options.selfTestFilter, filter, "M5 preserves self-test filter")
++            rejected(r, "filter without self-test", exitCode: 64) {
++                _ = try RuntimeOptions.parse(arguments: ["FlowType", filter])
++            }
++        }
++        for (argument, mode) in [("--smoke-test", RuntimeMode.smoke), ("--artifact-check", .artifact)] {
++            let options = try RuntimeOptions.parse(arguments: ["FlowType", argument])
++            r.eq(options.mode, mode, "M5 non-GUI validation mode")
++            r.eq(options.role, .smokeTest, "M5 smoke/artifact process role")
++        }
++        r.eq(RuntimeEnvironment.current.runID, before, "M5 instance fixtures never replace process context")
++    }
++
++    // Catches defaults recreation, suite collisions, or cleanup affecting a different run.
++    private static func testDefaultsAndBootstrapOwnership(_ r: SelfTest.Reporter) throws {
++        try fixture { base, home in
++            let fixedID = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
++            let first = runtime(home: home, runID: fixedID)
++            let context = try first.bootstrap(arguments: ["FlowType", "--self-test"], temporaryDirectory: base)
++            let second = runtime(home: home)
++            let other = try second.bootstrap(arguments: ["FlowType", "--self-test"], temporaryDirectory: base)
++            defer { first.finishValidation(); second.finishValidation() }
++            r.eq(context.runID, fixedID, "M5 instance factory supports deterministic run identity")
++            r.eq(context.defaultsSuiteName, "com.flowtype.validation.selfTest.11111111-2222-3333-4444-555555555555",
++                 "M5 fixed fixture suite identity")
++            r.check(context.runID != other.runID, "M5 assigns unique run IDs")
++            r.eq(context.defaultsSuiteName, "com.flowtype.validation.selfTest.\(context.runID.uuidString)", "M5 suite bound to role/run")
++            r.check(first.defaults === first.defaults, "M5 defaults constructed once")
++            first.defaults.set("first", forKey: "synthetic-m5")
++            second.defaults.set("second", forKey: "synthetic-m5")
++            first.finishValidation()
++            r.eq(first.defaults.string(forKey: "synthetic-m5"), nil, "M5 cleanup removes own suite")
++            r.eq(second.defaults.string(forKey: "synthetic-m5"), "second", "M5 cleanup preserves another run")
++            rejected(r, "second bootstrap") {
++                _ = try first.bootstrap(arguments: ["FlowType", "--self-test"], temporaryDirectory: base)
++            }
++            r.eq(first.current.runID, context.runID, "M5 failed rebootstrap preserves context")
++            r.eq(AppLogger.logFileURL.path,
++                 RuntimeEnvironment.current.paths.logsDirectory.appendingPathComponent("diagnostic-selftest.log").path,
++                 "M5 logger is routed to isolated self-test root")
++        }
++    }
++}
+diff --git a/Sources/flowtype/Testing/SelfTest.swift b/Sources/flowtype/Testing/SelfTest.swift
+index 7cc345e..b395d6b 100644
+--- a/Sources/flowtype/Testing/SelfTest.swift
++++ b/Sources/flowtype/Testing/SelfTest.swift
+@@ -274,20 +274,26 @@ enum SelfTest {
+         r.eq(h7.last?.date, "2026-06-03", "heatmap: last cell is today")
+         r.eq(h7.filter { $0.chars > 0 }.count, 1, "heatmap: only the one data day is non-zero")
+         r.eq(StatsEngine.denseHeatmap([], range: .d30, now: now, cal: cal).count, 30, "heatmap: 30d empty → 30 zero cells")
+         r.check((0...6).contains(h7[0].weekday), "heatmap: weekday in 0...6")
+     }
+ 
+     @MainActor
+     static func runAndExit() async -> Never {
+         let r = Reporter()
+         print("=== FlowType --self-test ===")
++        if CommandLine.arguments.contains("--m5-runtime-only") {
++            await M5RuntimeSelfTests.run(r)
++            RuntimeEnvironment.finishValidation()
++            print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
++            exit(r.failed == 0 ? 0 : 1)
++        }
+         if CommandLine.arguments.contains("--m4-recovery-only") {
+             M4RecoveryPolicySelfTests.run(r)
+             await M4StageFailureSelfTests.run(r)
+             await M4RecoveryControllerSelfTests.run(r)
+             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+             exit(r.failed == 0 ? 0 : 1)
+         }
+         if CommandLine.arguments.contains("--m3-silence-benchmark-only") {
+             await M3SpeechPreflightSelfTests.benchmark(r)
+             print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+diff --git a/Sources/flowtype/Utilities/AppLogger.swift b/Sources/flowtype/Utilities/AppLogger.swift
+index ff819e7..33790d3 100644
+--- a/Sources/flowtype/Utilities/AppLogger.swift
++++ b/Sources/flowtype/Utilities/AppLogger.swift
+@@ -1,23 +1,29 @@
+ import Foundation
+ import AppKit
+ 
+-/// File-based logger that writes to ~/Library/Logs/flowtype/diagnostic.log.
++/// File-based logger routed through the bootstrapped runtime's role and directories.
+ /// Use this instead of `print()` for persistent diagnostics — stdout is lost
+ /// inside .app bundles.
+ enum AppLogger {
+     private static let logDir: String = {
+-        (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/flowtype")
++        RuntimeEnvironment.current.paths.logsDirectory.path
+     }()
+ 
+     private static let logPath: String = {
+-        (logDir as NSString).appendingPathComponent("diagnostic.log")
++        let filename: String
++        switch RuntimeEnvironment.current.role {
++        case .app: filename = "diagnostic.log"
++        case .selfTest: filename = "diagnostic-selftest.log"
++        case .smokeTest: filename = "diagnostic-smoke.log"
++        }
++        return (logDir as NSString).appendingPathComponent(filename)
+     }()
+ 
+     /// Security: maximum log file size (10 MB) before rotation
+     private static let maxLogSize: UInt64 = 10 * 1024 * 1024
+     /// Security: maximum number of rotated log files to keep
+     private static let maxRotatedFiles = 3
+ 
+     private nonisolated(unsafe) static let formatter: ISO8601DateFormatter = {
+         let f = ISO8601DateFormatter()
+         f.formatOptions = [.withFullDate, .withTime, .withColonSeparatorInTime]

@@ -1,0 +1,5 @@
+[flowtype-local aea7dc9] feat: bootstrap isolated validation runtime
+ 6 files changed, 530 insertions(+), 8 deletions(-)
+ create mode 100644 Sources/flowtype/App/RuntimeEnvironment.swift
+ create mode 100644 Sources/flowtype/App/RuntimePaths.swift
+ create mode 100644 Sources/flowtype/Testing/M5RuntimeSelfTests.swift

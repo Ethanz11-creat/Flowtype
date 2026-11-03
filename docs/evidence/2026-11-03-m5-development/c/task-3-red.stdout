@@ -1,0 +1,38 @@
+FAIL: synthetic complete manual structure passes only fixture validation
+FAIL: wrong top candidate identity fails
+FAIL: wrong leaf identity fails
+FAIL: wrong top candidate identity fails
+FAIL: wrong leaf identity fails
+FAIL: wrong top candidate identity fails
+FAIL: wrong leaf identity fails
+FAIL: wrong top candidate identity fails
+FAIL: wrong leaf identity fails
+FAIL: Pass without required details fails
+FAIL: Pass without required details fails
+FAIL: Pass without required details fails
+FAIL: Pass without required details fails
+FAIL: Pass without required details fails
+FAIL: malformed Pass detail or escaped evidence fails
+FAIL: malformed Pass detail or escaped evidence fails
+FAIL: malformed Pass detail or escaped evidence fails
+FAIL: malformed Pass detail or escaped evidence fails
+FAIL: malformed Pass detail or escaped evidence fails
+FAIL: malformed Pass detail or escaped evidence fails
+FAIL: malformed Pass detail or escaped evidence fails
+FAIL: linked manual evidence fails
+FAIL: duplicate manual ID fails
+FAIL: unknown manual ID fails
+FAIL: old manual schema fails
+FAIL: parent Pass cannot replace missing leaves
+FAIL: any required Fail or Pending prevents Pass
+FAIL: written template contains41 actual Pending rows
+FAIL: synthetic matching remote CI structure passes
+FAIL: old or local CI evidence cannot attest remote Pass
+FAIL: old or local CI evidence cannot attest remote Pass
+FAIL: old or local CI evidence cannot attest remote Pass
+FAIL: old or local CI evidence cannot attest remote Pass
+FAIL: old or local CI evidence cannot attest remote Pass
+FAIL: old or local CI evidence cannot attest remote Pass
+FAIL: old or local CI evidence cannot attest remote Pass
+=== verification self-test: 151 passed, 36 failed ===
+Retained synthetic evidence: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-verification-6584459B-1A0F-445B-8E67-623F903789E6

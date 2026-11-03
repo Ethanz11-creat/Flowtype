@@ -12,7 +12,7 @@
 
 ## 执行状态（2026-11-03更新）
 
-C1 653ecb8 / C2 66f1e78实现与独立任务审查通过；C3源码/文档/合成fixture本次提交后待审。以下C3源码步骤已执行，最终release、全M5独立审查及大型证据归档仍留空；远端CI和41个人工叶子全Pending。API的预期路径/source分离为controller已记录的内部合同澄清，避免由报告自证身份。
+C1 653ecb8 / C2 66f1e78 / C3 4cdfaf4实现与独立任务审查通过，全M5源码审查通过，无阻塞项。唯一最终release run3683D6F7-2BD5-4F54-A3EF-5F80A38020D0在clean4cdfaf4上通过全部24技术阶段、full24334/0及十次独立smoke；候选1.0.0/build353。整体exit2/Pending，远端CI和41个人工叶子全Pending。原始安全证据已归档；归档提交和被测源码身份分列。API的预期路径/source分离为controller已记录的内部合同澄清，避免由报告自证身份。
 
 ## Global Constraints
 
@@ -94,8 +94,8 @@ C1 653ecb8 / C2 66f1e78实现与独立任务审查通过；C3源码/文档/合�
 - [x] **GREEN：** 完成两个验证器/模板和release聚合。文档矩阵写具体方法/预期/身份/evidence：R1普通app十次与smoke分开；R2二十次混合会话含idle/麦克风释放/无重复；R3权限≤5s精确计时、无引擎和多blocker；R4修复动作及自动降级/手选保留、两预置及两类HF导入均实际推理；R5零历史/无幻觉与轻声短词误拒校准；V1–V5按下方台账，不用正常使用代替异常变体。
 - [x] **文档更新：** 当前产品矩阵更新为M4常驻权限/恢复卡、380×156和实际事件证据区分deliveryBlocked/Uncertain；保留旧版本备注和原记录。M5审计分列源码、产物、CI与人工；模板实际全部Pending。GUI/网络/设备/真实模型操作需要相应环境和会话授权，本任务不擅改系统或调用收费服务。
 - [x] **focused验证：** 工具fixture通过；模板全部Pending，旧schema1解码/导出与CI独立于artifact均有合成覆盖。
-- [ ] **最终技术验证（后续调度）：** 先提交工具/文档使clean，再用最终源码 `scripts/verify.sh --lane release` 执行一次完整技术门禁（code一次、build/artifact一次、十次smoke）。本轮未来执行若无真实人工/CI报告，预期exit2且明确Pending；技术失败则exit1。不要为“拿到0”填写Pass。若已在同一最终身份跑过这条完整命令，后续仅审阅其原始报告，不为文档收口重复执行；CLI本身不提供绕过阶段的resume开关。
-- [ ] **审查/收口：** 所有任务审查后做一次全M5独立审查；同一修复波次修复阻塞项，再限定范围复审。变更源码后重跑相关focused及一次顺序full，影响产物则固定新binary并使旧manual身份失效。归档原始报告、指纹、限制和Pending，scoped提交 `docs: record M5 gates and remaining device acceptance`。不push/merge/安装/发布，保留当前分支和worktree。
+- [x] **最终技术验证（已按后续授权执行）：** 先提交工具/文档使clean，再用最终源码 `scripts/verify.sh --lane release` 执行一次完整技术门禁（code一次、build/artifact一次、十次smoke）。本轮未来执行若无真实人工/CI报告，预期exit2且明确Pending；技术失败则exit1。不要为“拿到0”填写Pass。若已在同一最终身份跑过这条完整命令，后续仅审阅其原始报告，不为文档收口重复执行；CLI本身不提供绕过阶段的resume开关。
+- [x] **审查/收口：** 所有任务审查后做一次全M5独立审查；同一修复波次修复阻塞项，再限定范围复审。变更源码后重跑相关focused及一次顺序full，影响产物则固定新binary并使旧manual身份失效。归档原始报告、指纹、限制和Pending，scoped提交 `docs: record M5 gates and remaining device acceptance`。不push/merge/安装/发布，保留当前分支和worktree。
 
 ## 人工执行方法摘要
 

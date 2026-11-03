@@ -1,0 +1,4 @@
+  ✗ FAIL: M5 development identity encodes explicit null metadata and failure
+  ✗ FAIL: M5 packaged identity encodes null failure
+=== FlowType --self-test ===
+=== M5 build info self-test: 114 passed, 2 failed ===

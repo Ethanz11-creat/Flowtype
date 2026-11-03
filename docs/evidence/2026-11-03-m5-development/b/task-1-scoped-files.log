@@ -1,0 +1,12 @@
+Sources/flowtype/App/FlowTypeApp.swift
+Sources/flowtype/App/RuntimeEnvironment.swift
+Sources/flowtype/App/StatusBarController.swift
+Sources/flowtype/App/Validation/StartupSmoke.swift
+Sources/flowtype/App/Validation/ValidationReport.swift
+Sources/flowtype/Services/Speech/ASRRouter.swift
+Sources/flowtype/Testing/M5SmokeSelfTests.swift
+Sources/flowtype/Testing/SelfTest.swift
+Sources/flowtype/WindowManager.swift
+scripts/verification/BoundedProcess.swift
+scripts/verification/ProcessCLI.swift
+scripts/verification/ProcessRunnerSelfTests.swift

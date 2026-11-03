@@ -1,0 +1,13 @@
+FAIL: reject missing
+FAIL: preserve candidate after missing
+FAIL: reject short
+FAIL: preserve candidate after short
+FAIL: reject invalid
+FAIL: preserve candidate after invalid
+FAIL: preserve candidate after sign
+FAIL: reject HEAD
+FAIL: preserve candidate after HEAD
+FAIL: reject inUse
+FAIL: preserve candidate after inUse
+FAIL: fixture operation
+=== packaging self-test: 10 passed, 12 failed ===

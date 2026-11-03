@@ -1,0 +1,38 @@
+[
+  {
+    "id": "modes",
+    "expectedExit": 64,
+    "runnerExit": 64,
+    "childExit": 64,
+    "termination": "normal",
+    "timedOut": false,
+    "stdoutEmpty": true
+  },
+  {
+    "id": "unknown",
+    "expectedExit": 64,
+    "runnerExit": 64,
+    "childExit": 64,
+    "termination": "normal",
+    "timedOut": false,
+    "stdoutEmpty": true
+  },
+  {
+    "id": "root-argument",
+    "expectedExit": 64,
+    "runnerExit": 64,
+    "childExit": 64,
+    "termination": "normal",
+    "timedOut": false,
+    "stdoutEmpty": true
+  },
+  {
+    "id": "relative-root",
+    "expectedExit": 1,
+    "runnerExit": 1,
+    "childExit": 1,
+    "termination": "normal",
+    "timedOut": false,
+    "stdoutEmpty": true
+  }
+]

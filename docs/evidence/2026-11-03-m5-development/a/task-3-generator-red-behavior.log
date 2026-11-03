@@ -1,0 +1,19 @@
+FAIL: full commit count identity
+FAIL: committed HEAD and Sources tree identity
+FAIL: generator records UTC
+FAIL: bundle identity and existing usage declarations
+FAIL: reject invalid version with usage64
+FAIL: invalid version writes nothing
+FAIL: reject invalid version with usage64
+FAIL: invalid version writes nothing
+FAIL: reject invalid version with usage64
+FAIL: invalid version writes nothing
+FAIL: reject invalid version with usage64
+FAIL: invalid version writes nothing
+FAIL: reject invalid version with usage64
+FAIL: invalid version writes nothing
+FAIL: reject occupied output
+FAIL: dirty tracked tree rejected without output
+FAIL: untracked source rejected
+FAIL: shallow release identity rejected
+=== build-info generator self-test: 6 passed, 18 failed ===

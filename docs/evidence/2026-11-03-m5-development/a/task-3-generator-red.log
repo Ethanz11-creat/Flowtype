@@ -1,0 +1,17 @@
+scripts/generate-build-info.swift:115:26: error: operator can throw but expression is not marked with 'try'
+113 |         try Data("dirty\n".utf8).write(to: repo.appendingPathComponent("Sources/main.swift"))
+114 |         let (dirty, dirtyOutput) = try run()
+115 |         check(dirty == 1 && (try fm.contentsOfDirectory(atPath: dirtyOutput.path)).isEmpty, "dirty tracked tree rejected without output")
+    |                          |  `- note: call is to 'rethrows' function, but argument function can throw
+    |                          `- error: operator can throw but expression is not marked with 'try'
+116 |         _ = try command(["checkout", "--", "Sources/main.swift"], directory: repo)
+117 |         try Data("untracked".utf8).write(to: repo.appendingPathComponent("untracked"))
+
+scripts/generate-build-info.swift:124:34: error: operator can throw but expression is not marked with 'try'
+122 |         _ = try command(["clone", "--quiet", "--depth", "1", repo.absoluteString, shallow.path], directory: root)
+123 |         let (shallowStatus, shallowOutput) = try run(source: shallow)
+124 |         check(shallowStatus == 1 && (try fm.contentsOfDirectory(atPath: shallowOutput.path)).isEmpty, "shallow release identity rejected")
+    |                                  |  `- note: call is to 'rethrows' function, but argument function can throw
+    |                                  `- error: operator can throw but expression is not marked with 'try'
+125 |         check(try command(["status", "--porcelain"], directory: repo).isEmpty, "fixture source remains clean")
+126 |     } catch { failed += 1; print("FAIL: fixture operation") }

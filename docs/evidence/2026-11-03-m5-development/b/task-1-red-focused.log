@@ -1,0 +1,36 @@
+  ✗ FAIL: M5 smoke succeeds with absent engines and permissions
+  ✗ FAIL: M5 smoke retains read-only permission state — got unknown, want notDetermined
+  ✗ FAIL: M5 smoke requires duration plus both actual timer callbacks
+  ✗ FAIL: M5 smoke requires duration plus both actual timer callbacks
+  ✗ FAIL: M5 smoke requires duration plus both actual timer callbacks
+  ✗ FAIL: M5 only explicit WindowServer absence is Skip69 — got 0, want 69
+  ✗ FAIL: M5 ordinary startup failures never Skip
+  ✗ FAIL: M5 ordinary startup failures never Skip
+  ✗ FAIL: M5 successful smoke emits explicit null failure
+  ✗ FAIL: M5 validation action denied: tapInstall
+  ✗ FAIL: M5 validation action denied: tapRepair
+  ✗ FAIL: M5 validation action denied: hotkey
+  ✗ FAIL: M5 validation action denied: dictation
+  ✗ FAIL: M5 validation action denied: menuWindow
+  ✗ FAIL: M5 validation action denied: repair
+  ✗ FAIL: M5 validation action denied: permission
+  ✗ FAIL: M5 validation action denied: configuration
+  ✗ FAIL: M5 validation action denied: quit
+  ✗ FAIL: M5 forced menu selector cannot start capture in validation — got 2, want 0
+  ✗ FAIL: M5 validation action denied: tapInstall
+  ✗ FAIL: M5 validation action denied: tapRepair
+  ✗ FAIL: M5 validation action denied: hotkey
+  ✗ FAIL: M5 validation action denied: dictation
+  ✗ FAIL: M5 validation action denied: menuWindow
+  ✗ FAIL: M5 validation action denied: repair
+  ✗ FAIL: M5 validation action denied: permission
+  ✗ FAIL: M5 validation action denied: configuration
+  ✗ FAIL: M5 validation action denied: quit
+  ✗ FAIL: M5 forced menu selector cannot start capture in validation — got 2, want 0
+  ✗ FAIL: M5 no downstream action in non-app roles — got 18, want 0
+  ✗ FAIL: M5 app positive control reaches action observer — got 27, want 9
+  ✗ FAIL: M5 duplicate probe start owns one real timer — got 0, want 1
+  ✗ FAIL: M5 real probe callback refreshes owning instance
+  ✗ FAIL: M5 actual health timer advances once per interval
+=== FlowType --self-test ===
+=== M5 smoke contract self-test: 15 passed, 34 failed ===

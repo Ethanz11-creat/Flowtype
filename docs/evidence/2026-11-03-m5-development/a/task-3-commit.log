@@ -1,0 +1,6 @@
+[flowtype-local d6aaace] feat: add build identity and role-scoped diagnostics
+ 10 files changed, 652 insertions(+), 105 deletions(-)
+ create mode 100644 Sources/flowtype/App/BuildInfo.swift
+ create mode 100644 Sources/flowtype/Testing/M5BuildInfoSelfTests.swift
+ create mode 100644 Sources/flowtype/Utilities/DiagnosticLogWriter.swift
+ create mode 100644 scripts/generate-build-info.swift

@@ -1,0 +1,8 @@
+FAIL: allowlisted failed report exports available evidence
+FAIL: newer partial report exports
+FAIL: partial failed run tolerates missing permitted files
+FAIL: bootstrap export accepts actual wrapper schema
+FAIL: CLI emits owned path once even on late write failure
+FAIL: actual CI helper exports late-write evidence
+=== verification self-test: 93 passed, 6 failed ===
+Retained synthetic evidence: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-verification-C216B6B6-68A5-4E32-98EE-C42F0CDE2B36

@@ -1,0 +1,50 @@
+Sources/flowtype/Services/KeyboardInjector.swift:45:            guard let value = CGEventSource(stateID: .hidSystemState) else {
+Sources/flowtype/Services/KeyboardInjector.swift:276:    private var board: NSPasteboard? {
+Sources/flowtype/Services/KeyboardInjector.swift:278:        return NSPasteboard.general
+Sources/flowtype/Services/KeyboardInjector.swift:298:        var items: [NSPasteboardItem] = []
+Sources/flowtype/Services/KeyboardInjector.swift:300:            let item = NSPasteboardItem()
+Sources/flowtype/Services/KeyboardInjector.swift:352:        let owned: PasteboardContents = [[NSPasteboard.PasteboardType.string.rawValue: Data(text.utf8)]]
+Sources/flowtype/Services/KeyboardInjector.swift:398:        NSPasteboard.general.clearContents()
+Sources/flowtype/Services/KeyboardInjector.swift:399:        NSPasteboard.general.setString(text, forType: .string)
+Sources/flowtype/Services/KeyboardInjector.swift:403:        guard let source = CGEventSource(stateID: .hidSystemState) else { throw InjectionError.eventSourceCreationFailed }
+Sources/flowtype/Services/LLMService.swift:207:            let (data, response) = try await URLSession.shared.data(for: request)
+Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:83:        let tmpDir = RuntimeEnvironment.current.paths.temporaryDirectory
+Sources/flowtype/WindowManager.swift:269:        guard let tap = CGEvent.tapCreate(
+Sources/flowtype/Services/Speech/ModelLocator.swift:40:        let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first
+Sources/flowtype/Services/Speech/ModelLocator.swift:41:        let home = fm.homeDirectoryForCurrentUser
+Sources/flowtype/App/FlowTypeApp.swift:11:                                             temporaryDirectory: FileManager.default.temporaryDirectory) { context in
+Sources/flowtype/App/RuntimeEnvironment.swift:139:        home: FileManager.default.homeDirectoryForCurrentUser,
+Sources/flowtype/App/RuntimeEnvironment.swift:140:        applicationSupport: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!,
+Sources/flowtype/App/RuntimeEnvironment.swift:141:        caches: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!)
+Sources/flowtype/Services/Speech/WhisperModelPreparation.swift:49:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-whisper-runtime-" + UUID().uuidString)
+Sources/flowtype/Core/ConfigurationStore.swift:167:    // The data-protection keychain needs an entitlement unsigned apps lack (SecItemAdd -34018), which is
+Sources/flowtype/Settings/QwenModelStatusCard.swift:150:        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
+Sources/flowtype/Core/Configuration.swift:350:    /// needs an entitlement we don't have (SecItemAdd returns -34018). Trade-off: keys live in the
+Sources/flowtype/Settings/HistoryPage.swift:153:                    NSPasteboard.general.clearContents()
+Sources/flowtype/Settings/HistoryPage.swift:154:                    NSPasteboard.general.setString(session.finalText, forType: .string)
+Sources/flowtype/Settings/HistoryPage.swift:207:                                NSPasteboard.general.clearContents()
+Sources/flowtype/Settings/HistoryPage.swift:208:                                NSPasteboard.general.setString(session.finalText, forType: .string)
+Sources/flowtype/Settings/SettingsPage+ASR.swift:89:                    NSPasteboard.general.clearContents()
+Sources/flowtype/Settings/SettingsPage+ASR.swift:90:                    NSPasteboard.general.setString(report, forType: .string)
+Sources/flowtype/Testing/LocalModelImportSelfTests.swift:12:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-import-\(UUID())")
+Sources/flowtype/Testing/M5RuntimeSelfTests.swift:29:        guard let resolved = realpath(RuntimeEnvironment.current.paths.temporaryDirectory.path, nil) else {
+Sources/flowtype/Testing/M5RuntimeSelfTests.swift:133:        r.eq(paths.temporaryDirectory.path, "/fixture/temp", "M5 legacy temp base")
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:10:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preparation-test-\(UUID())")
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:191:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preparation-failures-\(UUID())")
+Sources/flowtype/Testing/M2ReviewFixSelfTests.swift:250:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-compilation-lifecycle-\(UUID())")
+Sources/flowtype/Testing/ImportedModelUISelfTests.swift:7:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-import-ui-\(UUID())")
+Sources/flowtype/Testing/ModelProvisionSelfTests.swift:157:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-preflight-\(UUID())")
+Sources/flowtype/Utilities/KeychainHelper.swift:15:    /// UNSIGNED, which makes SecItemAdd fail with errSecMissingEntitlement (-34018) — that's exactly why
+Sources/flowtype/Utilities/KeychainHelper.swift:29:        SecItemDelete(deleteQuery as CFDictionary)
+Sources/flowtype/Utilities/KeychainHelper.swift:37:        let status = SecItemAdd(addQuery as CFDictionary, nil)
+Sources/flowtype/Utilities/KeychainHelper.swift:51:        let status = SecItemCopyMatching(query as CFDictionary, &result)
+Sources/flowtype/Utilities/KeychainHelper.swift:62:        SecItemDelete(query as CFDictionary)
+Sources/flowtype/Testing/M5IsolationSelfTests.swift:14:    // Catches migrations escaping an injected directory or using SecItem instead of injected keys.
+Sources/flowtype/Testing/M5IsolationSelfTests.swift:16:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("m5-isolation-\(UUID())")
+Sources/flowtype/Testing/M5IsolationSelfTests.swift:62:        r.eq(systemCalls.withLock { $0 }, 0, "M5 SecItem downstream spy remains zero")
+Sources/flowtype/Utilities/PermissionHelper.swift:71:        guard let tap = CGEvent.tapCreate(
+Sources/flowtype/Testing/WhisperRuntimeSelfTests.swift:156:        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-whisper-\(UUID())")
+Sources/flowtype/Testing/SelfTest.swift:159:        let dir = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-modeltest-\(UUID().uuidString)")
+Sources/flowtype/Testing/SelfTest.swift:2297:        let tmp = RuntimeEnvironment.current.paths.temporaryDirectory
+Sources/flowtype/Testing/SelfTest.swift:2319:        let tmp2 = RuntimeEnvironment.current.paths.temporaryDirectory
+Sources/flowtype/Testing/SelfTest.swift:3592:        let base = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("flowtype-scannertest-\(UUID().uuidString)", isDirectory: true)

@@ -1,0 +1,22 @@
+{
+  "stdoutLines": 1,
+  "exactReportKeys": true,
+  "ok": true,
+  "role": "smokeTest",
+  "runID": "045F0331-879C-40E9-8EDC-1544F3A2D703",
+  "durationMs": 6356,
+  "probeTimerTicks": 1,
+  "windowHealthTicks": 1,
+  "tap": "disabledForValidation",
+  "failureNull": true,
+  "development": true,
+  "logLineCount": 3,
+  "headerMatchesIdentity": true,
+  "reportMatchesLastLog": true,
+  "allLinesOwned": true,
+  "allLinesUTC": true,
+  "stderrBytes": 0,
+  "runnerExit": 0,
+  "runnerDurationMs": 6499,
+  "timedOut": false
+}

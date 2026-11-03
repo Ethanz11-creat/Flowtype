@@ -1,0 +1,45 @@
+{
+  "artifact" : {
+    "appResources" : true,
+    "buildInfo" : {
+      "failureCode" : null,
+      "metadata" : {
+        "buildNumber" : "350",
+        "builtAt" : "2026-11-03T04:57:15Z",
+        "dirty" : false,
+        "gitSHA" : "c21cb25e4d37249d3d932939a6157b946b64a243",
+        "schemaVersion" : 1,
+        "sourceTree" : "953608b60a0349dfcd2acfc4ddeef6f6d6b39288",
+        "version" : "1.0.0"
+      },
+      "origin" : "packaged"
+    },
+    "durationMs" : 843,
+    "failureCode" : null,
+    "metalLibrary" : true,
+    "mlxOperation" : true,
+    "mode" : "artifact",
+    "ok" : true,
+    "resolvedInsideApp" : true,
+    "role" : "smokeTest",
+    "runID" : "908DDA1F-0B66-42D2-BCF6-0B15E2BD5D9C",
+    "schemaVersion" : 1
+  },
+  "failureCode" : null,
+  "hashesAfter" : {
+    "binary" : "c59eb53b8aaec14421ef19e2c884e67cbb94f46a31ec069092051e66a38ac85f",
+    "metadata" : "9ff060d015a4a3fefffb63b1378bd9e55545f7da17203cd985d5e73b42b6afc8",
+    "shader" : "f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f"
+  },
+  "hashesBefore" : {
+    "binary" : "c59eb53b8aaec14421ef19e2c884e67cbb94f46a31ec069092051e66a38ac85f",
+    "metadata" : "9ff060d015a4a3fefffb63b1378bd9e55545f7da17203cd985d5e73b42b6afc8",
+    "shader" : "f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f"
+  },
+  "ok" : true,
+  "resourcesHidden" : true,
+  "resourcesRestored" : true,
+  "schemaVersion" : 1,
+  "signature" : true,
+  "sourceCommit" : "c21cb25e4d37249d3d932939a6157b946b64a243"
+}

@@ -1,0 +1,231 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/14] Compiling FlowType M5RuntimeSelfTests.swift
+[6/14] Compiling FlowType M5IsolationSelfTests.swift
+[7/14] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:33:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 31 |     }()
+ 32 | 
+ 33 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 34 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 35 | 
+[8/14] Compiling FlowType WindowManager.swift
+[9/14] Compiling FlowType ConfigurationStore.swift
+[10/14] Compiling FlowType LocalModelLibrary.swift
+[11/14] Compiling FlowType ValidationEffects.swift
+[12/14] Compiling FlowType SelfTest.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:384:39: error: sending 'r' risks causing data races [#SendingRisksDataRace]
+ 382 |         testModelLocator(r)        // ModelLocator completeness validation
+ 383 |         LocalModelImportSelfTests.runInspection(r)
+ 384 |         await WhisperRuntimeSelfTests.run(r)
+     |                                       |- error: sending 'r' risks causing data races [#SendingRisksDataRace]
+     |                                       `- note: sending main actor-isolated 'r' to nonisolated static method 'run' risks causing data races between nonisolated and main actor-isolated uses
+ 385 |         await M2ReviewFixSelfTests.packages(r)
+ 386 |         await ModelProvisionSelfTests.runPreflight(r)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:385:36: error: sending 'r' risks causing data races [#SendingRisksDataRace]
+ 383 |         LocalModelImportSelfTests.runInspection(r)
+ 384 |         await WhisperRuntimeSelfTests.run(r)
+ 385 |         await M2ReviewFixSelfTests.packages(r)
+     |                                    |- error: sending 'r' risks causing data races [#SendingRisksDataRace]
+     |                                    `- note: sending main actor-isolated 'r' to nonisolated static method 'packages' risks causing data races between nonisolated and main actor-isolated uses
+ 386 |         await ModelProvisionSelfTests.runPreflight(r)
+ 387 |         testStatsDataModel(r)      // stats data model: language tag + legacy decode
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:386:39: error: sending 'r' risks causing data races [#SendingRisksDataRace]
+ 384 |         await WhisperRuntimeSelfTests.run(r)
+ 385 |         await M2ReviewFixSelfTests.packages(r)
+ 386 |         await ModelProvisionSelfTests.runPreflight(r)
+     |                                       |- error: sending 'r' risks causing data races [#SendingRisksDataRace]
+     |                                       `- note: sending main actor-isolated 'r' to nonisolated static method 'runPreflight' risks causing data races between nonisolated and main actor-isolated uses
+ 387 |         testStatsDataModel(r)      // stats data model: language tag + legacy decode
+ 388 |         testStatsEngine(r)         // StatsEngine: metrics, streaks, heatmap
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:397:38: error: sending 'r' risks causing data races [#SendingRisksDataRace]
+ 395 |         testASRConfig(r)           // ASR engine config: round-trip + legacy default
+ 396 |         CloudProviderSelfTests.runConfiguration(r)
+ 397 |         await CloudProviderSelfTests.runTransport(r)
+     |                                      |- error: sending 'r' risks causing data races [#SendingRisksDataRace]
+     |                                      `- note: sending main actor-isolated 'r' to nonisolated static method 'runTransport' risks causing data races between nonisolated and main actor-isolated uses
+ 398 |         testRealtimeASRContracts(r)
+ 399 |         testRealtimeAudioIngress(r)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:400:15: error: sending 'r' risks causing data races [#SendingRisksDataRace]
+ 398 |         testRealtimeASRContracts(r)
+ 399 |         testRealtimeAudioIngress(r)
+ 400 |         await testRealtimeIngressWakeups(r)
+     |               |- error: sending 'r' risks causing data races [#SendingRisksDataRace]
+     |               `- note: sending main actor-isolated 'r' to nonisolated static method 'testRealtimeIngressWakeups' risks causing data races between nonisolated and main actor-isolated uses
+ 401 |         await testDashScopeRealtimeAdapter(r)
+ 402 |         await testRealtimePipelineIntegration(r)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/SelfTest.swift:401:15: error: sending 'r' risks causing data races [#SendingRisksDataRace]
+ 399 |         testRealtimeAudioIngress(r)
+ 400 |         await testRealtimeIngressWakeups(r)
+ 401 |         await testDashScopeRealtimeAdapter(r)
+     |               |- error: sending 'r' risks causing data races [#SendingRisksDataRace]
+     |               `- note: sending main actor-isolated 'r' to nonisolated static method 'testDashScopeRealtimeAdapter' risks causing data races between nonisolated and main actor-isolated uses
+ 402 |         await testRealtimePipelineIntegration(r)
+ 403 |         testASRRouting(r)          // unified ASR routing: pure chain selection
+
+[#SendingRisksDataRace]: <https://docs.swift.org/compiler/documentation/diagnostics/sending-risks-data-race>
+[13/41] Compiling FlowType QwenModelState.swift
+[14/41] Compiling FlowType WebSocketTransport.swift
+[15/41] Compiling FlowType WhisperModelPreparation.swift
+[16/41] Compiling FlowType AXContextProvider.swift
+[17/41] Compiling FlowType KeyboardInjector.swift
+[18/41] Compiling FlowType LLMService.swift
+[19/41] Compiling FlowType ASRRouter.swift
+[20/41] Compiling FlowType KeychainHelper.swift
+[21/41] Compiling FlowType PermissionHelper.swift
+[22/41] Compiling FlowType SoundFeedback.swift
+[23/41] Compiling FlowType StatusBarController.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[24/41] Compiling FlowType EnvMigration.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[25/41] Compiling FlowType PipelineOrchestrator.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[26/41] Compiling FlowType AudioRecorder.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[27/41] Compiling FlowType ModelMetadataPreflight.swift
+[28/41] Compiling FlowType OfflineWhisperKit.swift
+[29/41] Compiling FlowType QwenASRProvider.swift
+[30/41] Compiling FlowType AppleSpeechProvider.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[31/41] Compiling FlowType CloudASRProvider.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[32/41] Compiling FlowType CloudProbe.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[33/41] Compiling FlowType ModelLocator.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[34/41] Compiling FlowType M2ReviewFixSelfTests.swift
+[35/41] Compiling FlowType ModelProvisionSelfTests.swift
+[36/41] Compiling FlowType WholeM2FixSelfTests.swift
+[37/41] Compiling FlowType OnboardingView.swift
+[38/41] Compiling FlowType ImportedLifecycleSelfTests.swift
+[39/41] Compiling FlowType ImportedModelUISelfTests.swift

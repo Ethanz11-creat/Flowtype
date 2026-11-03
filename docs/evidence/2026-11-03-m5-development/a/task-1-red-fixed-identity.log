@@ -1,0 +1,22 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/8] Emitting module FlowType
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Utilities/AppLogger.swift:33:13: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 31 |     }()
+ 32 | 
+ 33 |     private nonisolated(unsafe) static let queue = DispatchQueue(label: "com.flowtype.logger", qos: .utility)
+    |             `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DispatchQueue', consider removing it
+ 34 |     private nonisolated(unsafe) static var fileHandle: FileHandle?
+ 35 | 
+[6/8] Compiling FlowType M5RuntimeSelfTests.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Testing/M5RuntimeSelfTests.swift:39:88: error: extra argument 'runID' in call
+ 37 |         RuntimeBootstrap(home: home,
+ 38 |                          applicationSupport: home.appendingPathComponent("Library/Application Support"),
+ 39 |                          caches: home.appendingPathComponent("Library/Caches"), runID: runID)
+    |                                                                                        `- error: extra argument 'runID' in call
+ 40 |     }
+ 41 | 

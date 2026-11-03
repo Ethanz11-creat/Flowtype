@@ -1,0 +1,1132 @@
+# Review package: df63cd2f903cd6de33e5a79db4d1956adef6ced5..c21cb25e4d37249d3d932939a6157b946b64a243
+
+## Commits
+c21cb25 build: package portable resources with strict signing
+
+## Files changed
+ scripts/build-app.sh                               | 117 +------
+ scripts/build-dmg.sh                               |  63 ++--
+ scripts/check-app.sh                               |  11 +
+ scripts/verification/ArtifactPackaging.swift       | 376 +++++++++++++++++++++
+ scripts/verification/ArtifactPackagingCLI.swift    |  97 ++++++
+ .../verification/ArtifactPackagingSelfTests.swift  | 278 +++++++++++++++
+ scripts/verification/BoundedProcess.swift          |   9 +-
+ scripts/write-artifact-manifest.swift              |  55 +++
+ 8 files changed, 857 insertions(+), 149 deletions(-)
+
+## Diff
+diff --git a/scripts/build-app.sh b/scripts/build-app.sh
+index eda5f66..9b279d4 100755
+--- a/scripts/build-app.sh
++++ b/scripts/build-app.sh
+@@ -1,108 +1,11 @@
+ #!/bin/bash
+-set -e
+-
+-APP_NAME="FlowType"
+-BUNDLE_ID="com.flowtype.app"
+-VERSION="1.0.0"
+-BUILD_NUMBER="1"
+-
+-echo "Building FlowType.app..."
+-
+-# Build release binary
+-swift build -c release
+-
+-# Create app bundle structure
+-mkdir -p build/${APP_NAME}.app/Contents/MacOS
+-mkdir -p build/${APP_NAME}.app/Contents/Resources
+-
+-# Copy binary
+-cp .build/release/FlowType build/${APP_NAME}.app/Contents/MacOS/
+-
+-# Copy resources
+-cp Sources/flowtype/Resources/*.json build/${APP_NAME}.app/Contents/Resources/ 2>/dev/null || true
+-cp Sources/flowtype/Resources/*.icns build/${APP_NAME}.app/Contents/Resources/ 2>/dev/null || true
+-cp Sources/flowtype/Resources/status_bar_icon*.png build/${APP_NAME}.app/Contents/Resources/ 2>/dev/null || true
+-
+-# Copy MLX Metal shader library (required for Qwen3-ASR GPU inference).
+-# SPM cannot compile .metal shaders; we use the pre-compiled metallib from
+-# the Python mlx-metal wheel cached by pip/uv.
+-MLX_METALLIB=""
+-for candidate in \
+-    "$HOME/.cache/uv/archive-v0/"*/mlx/lib/mlx.metallib \
+-    "$HOME/.cache/pip/"*/mlx/lib/mlx.metallib \
+-    "$(python3 -c 'import mlx, pathlib; print(pathlib.Path(mlx.__file__).parent / "lib" / "mlx.metallib")' 2>/dev/null)"; do
+-    if [ -f "$candidate" ]; then
+-        MLX_METALLIB="$candidate"
+-        break
+-    fi
+-done
+-if [ -z "$MLX_METALLIB" ]; then
+-    echo "❌ ERROR: mlx.metallib not found. Qwen3-ASR would crash at runtime."
+-    echo "   Install it with: pip install mlx   (or: uv pip install mlx)"
+-    echo "   Refusing to build a broken .app bundle."
+-    exit 1
+-fi
+-cp "$MLX_METALLIB" build/${APP_NAME}.app/Contents/MacOS/mlx.metallib
+-# Verify the copy landed and is a real metallib (the wheel ships a ~100MB+ file),
+-# so a truncated/partial copy can never ship silently.
+-BUNDLED_METALLIB="build/${APP_NAME}.app/Contents/MacOS/mlx.metallib"
+-METALLIB_SIZE=$(stat -f%z "$BUNDLED_METALLIB" 2>/dev/null || echo 0)
+-if [ "$METALLIB_SIZE" -lt 1000000 ]; then
+-    echo "❌ ERROR: bundled mlx.metallib is only ${METALLIB_SIZE} bytes (expected >1MB). Aborting."
+-    exit 1
+-fi
+-echo "✅ MLX metallib copied from $MLX_METALLIB (${METALLIB_SIZE} bytes)"
+-
+-# Generate Info.plist
+-cat > build/${APP_NAME}.app/Contents/Info.plist << 'EOF'
+-<?xml version="1.0" encoding="UTF-8"?>
+-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+-<plist version="1.0">
+-<dict>
+-    <key>CFBundleIdentifier</key>
+-    <string>com.flowtype.app</string>
+-    <key>CFBundleName</key>
+-    <string>FlowType</string>
+-    <key>CFBundleDisplayName</key>
+-    <string>FlowType</string>
+-    <key>CFBundleExecutable</key>
+-    <string>FlowType</string>
+-    <key>CFBundleIconFile</key>
+-    <string>AppIcon</string>
+-    <key>CFBundlePackageType</key>
+-    <string>APPL</string>
+-    <key>CFBundleShortVersionString</key>
+-    <string>1.0.0</string>
+-    <key>CFBundleVersion</key>
+-    <string>1</string>
+-    <key>LSMinimumSystemVersion</key>
+-    <string>15.0</string>
+-    <key>LSUIElement</key>
+-    <true/>
+-    <key>NSHighResolutionCapable</key>
+-    <true/>
+-    <key>NSMicrophoneUsageDescription</key>
+-    <string>FlowType needs microphone access to record your voice input.</string>
+-    <key>NSSpeechRecognitionUsageDescription</key>
+-    <string>FlowType needs speech recognition access to convert voice to text.</string>
+-    <key>NSAccessibilityUsageDescription</key>
+-    <string>FlowType needs accessibility access to detect global hotkeys and inject text into other applications.</string>
+-</dict>
+-</plist>
+-EOF
+-
+-# Ad-hoc code sign the app bundle (required on macOS to avoid SIGKILL for invalid signature)
+-# Note: do NOT use --options runtime for ad-hoc signed apps; it enables Hardened Runtime
+-# which can silently block permission requests (mic, camera, etc.) on unsigned builds.
+-codesign --force --deep --sign - build/${APP_NAME}.app
+-
+-# Clear quarantine attribute so macOS doesn't gate permission dialogs
+-xattr -cr build/${APP_NAME}.app 2>/dev/null || true
+-
+-echo "✅ build/${APP_NAME}.app created successfully"
+-echo ""
+-echo "📦 App bundle: $(pwd)/build/${APP_NAME}.app"
+-echo "⚠️  IMPORTANT: This is an ad-hoc signed build."
+-echo "   - First-time users: right-click the app → Open, or run: xattr -cr build/${APP_NAME}.app"
+-echo "   - Microphone permission dialog may require quitting and relaunching the app."
+-echo "   - Accessibility permission must be granted manually in System Settings."
++set -euo pipefail
++[ "$#" -eq 0 ] || exit 64
++ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
++mkdir -p "$ROOT/build"
++TOOLS=$(mktemp -d "$ROOT/build/.m5-tools-XXXXXX")
++trap 'rm -rf "$TOOLS"' EXIT
++trap 'exit 143' TERM
++trap 'exit 130' INT
++/usr/bin/swiftc "$ROOT/scripts/verification/BoundedProcess.swift" "$ROOT/scripts/verification/ArtifactPackaging.swift" "$ROOT/scripts/verification/ArtifactPackagingCLI.swift" -o "$TOOLS/m5-artifact-tool"
++"$TOOLS/m5-artifact-tool" build "$ROOT"
+diff --git a/scripts/build-dmg.sh b/scripts/build-dmg.sh
+index 8aa6d9a..b5cfbcc 100755
+--- a/scripts/build-dmg.sh
++++ b/scripts/build-dmg.sh
+@@ -1,41 +1,24 @@
+ #!/bin/bash
+-set -e
+-
+-APP_NAME="FlowType"
+-VERSION="1.0.0"
+-DMG_NAME="${APP_NAME}-${VERSION}.dmg"
+-BUILD_DIR="build"
+-
+-echo "Building DMG..."
+-
+-# Ensure .app exists
+-if [ ! -d "${BUILD_DIR}/${APP_NAME}.app" ]; then
+-    echo "Error: ${BUILD_DIR}/${APP_NAME}.app not found. Run build-app.sh first."
+-    exit 1
+-fi
+-
+-# Clean up old DMG
+-rm -f "${BUILD_DIR}/${DMG_NAME}"
+-
+-# Create a temporary directory for DMG contents
+-TMP_DIR=$(mktemp -d)
+-cp -R "${BUILD_DIR}/${APP_NAME}.app" "${TMP_DIR}/"
+-
+-# Create a symlink to /Applications for drag-and-drop install
+-ln -s /Applications "${TMP_DIR}/Applications"
+-
+-# Create the DMG
+-hdiutil create \
+-    -volname "${APP_NAME}" \
+-    -srcfolder "${TMP_DIR}" \
+-    -ov \
+-    -format UDZO \
+-    "${BUILD_DIR}/${DMG_NAME}"
+-
+-# Clean up temp directory
+-rm -rf "${TMP_DIR}"
+-
+-echo "✅ ${BUILD_DIR}/${DMG_NAME} created successfully"
+-echo ""
+-echo "Upload to GitHub Releases:"
+-echo "  gh release create v${VERSION} ${BUILD_DIR}/${DMG_NAME} --title 'Flowtype v${VERSION}' --notes 'Release notes here'"
++set -euo pipefail
++[ "$#" -eq 0 ] || exit 64
++ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
++APP="$ROOT/build/FlowType.app"
++MANIFEST="$ROOT/build/FlowType.manifest.json"
++[ -d "$APP" ] && [ -f "$MANIFEST" ] || { echo 'Matching candidate and manifest required' >&2; exit 1; }
++VERSION=$(/usr/bin/plutil -extract CFBundleShortVersionString raw -o - "$APP/Contents/Info.plist")
++NUMBER=$(/usr/bin/plutil -extract CFBundleVersion raw -o - "$APP/Contents/Info.plist")
++[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
++[ "$VERSION" = "$(/usr/bin/plutil -extract buildInfo.version raw -o - "$MANIFEST")" ] || exit 1
++[ "$NUMBER" = "$(/usr/bin/plutil -extract buildInfo.buildNumber raw -o - "$MANIFEST")" ] || exit 1
++TEMP=$(mktemp -d)
++trap 'rm -rf "$TEMP"' EXIT
++trap 'exit 143' TERM
++trap 'exit 130' INT
++/usr/bin/swift "$ROOT/scripts/write-artifact-manifest.swift" --app "$APP" --output "$TEMP/verified.json"
++/usr/bin/cmp -s "$MANIFEST" "$TEMP/verified.json" || { echo 'Candidate identity/hash mismatch' >&2; exit 1; }
++/usr/bin/codesign --verify --deep --strict --verbose=2 "$APP"
++mkdir "$TEMP/image"
++cp -R "$APP" "$TEMP/image/"
++ln -s /Applications "$TEMP/image/Applications"
++/usr/bin/hdiutil create -volname FlowType -srcfolder "$TEMP/image" -ov -format UDZO "$ROOT/build/FlowType-$VERSION.dmg"
++echo "FlowType-$VERSION.dmg created locally"
+diff --git a/scripts/check-app.sh b/scripts/check-app.sh
+new file mode 100755
+index 0000000..088efea
+--- /dev/null
++++ b/scripts/check-app.sh
+@@ -0,0 +1,11 @@
++#!/bin/bash
++set -euo pipefail
++[ "$#" -eq 4 ] && [ "$1" = --app ] && [ "$3" = --output ] && [[ "$2" = /* ]] && [[ "$4" = /* ]] || exit 64
++ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
++mkdir -p "$ROOT/build"
++TOOLS=$(mktemp -d "$ROOT/build/.m5-tools-XXXXXX")
++trap 'rm -rf "$TOOLS"' EXIT
++trap 'exit 143' TERM
++trap 'exit 130' INT
++/usr/bin/swiftc "$ROOT/scripts/verification/BoundedProcess.swift" "$ROOT/scripts/verification/ArtifactPackaging.swift" "$ROOT/scripts/verification/ArtifactPackagingCLI.swift" -o "$TOOLS/m5-artifact-tool"
++"$TOOLS/m5-artifact-tool" check "$ROOT" "$@"
+diff --git a/scripts/verification/ArtifactPackaging.swift b/scripts/verification/ArtifactPackaging.swift
+new file mode 100644
+index 0000000..5b860f4
+--- /dev/null
++++ b/scripts/verification/ArtifactPackaging.swift
+@@ -0,0 +1,376 @@
++import Foundation
++import Darwin
++import CryptoKit
++
++enum PackagingFailure: String, Error { case usage, sourceInvalid, shaderInvalid, buildFailed, signFailed, inUse, journalInvalid, restoreFailed, manifestInvalid, artifactFailed, interrupted, toolFailed }
++struct PackagingMetadata: Codable, Equatable {
++    let schemaVersion: Int; let version: String; let buildNumber: String; let gitSHA: String
++    let sourceTree: String; let builtAt: String; let dirty: Bool
++}
++struct ResourceDigest: Codable, Equatable { let path: String; let sha256: String }
++struct PackagingManifest: Codable, Equatable {
++    let schemaVersion: Int; let buildInfo: PackagingMetadata; let architecture: String
++    let binarySHA256: String; let buildInfoSHA256: String; let shaderSHA256: String
++    let resources: [ResourceDigest]
++}
++func packagingHash(_ url: URL) throws -> String {
++    let file = try FileHandle(forReadingFrom: url); defer { try? file.close() }
++    var hash = SHA256()
++    while let data = try file.read(upToCount: 1_048_576), !data.isEmpty { hash.update(data: data) }
++    return hash.finalize().map { String(format: "%02x", $0) }.joined()
++}
++func packagingFingerprint(_ input: URL) throws -> String {
++    let url = try canonicalExisting(input)
++    var rows: [String] = []
++    let fm = FileManager.default
++    let isDirectory = try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
++    if !isDirectory { return try packagingHash(url) }
++    let e = fm.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey])!
++    while let file = e.nextObject() as? URL {
++        let v = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
++        guard v.isSymbolicLink != true else { throw PackagingFailure.manifestInvalid }
++        if v.isRegularFile == true { rows.append(String(file.path.dropFirst(url.path.count)) + ":" + (try packagingHash(file))) }
++    }
++    return SHA256.hash(data: Data(rows.sorted().joined(separator: "\n").utf8)).map { String(format: "%02x", $0) }.joined()
++}
++struct PackagingAdapters {
++    let releaseBuild: (URL, URL) throws -> URL
++    let releaseDirectory: (URL, URL) throws -> URL
++    let generateIdentity: (URL, URL, String, URL) throws -> Void
++    let writeManifest: (URL, URL, URL) throws -> Void
++    let sign: (URL, URL) throws -> Void
++    let verify: (URL, URL) throws -> Void
++    let inUse: (URL, URL) throws -> Bool
++    let artifact: (URL, URL, URL, (Int32) throws -> Void) throws -> BoundedResult
++}
++// Written once before handlers are installed, then read only by the handler.
++// Cancellation state travels through the pipe; no Swift lock/allocation occurs in the handler.
++nonisolated(unsafe) private var packagingSignalWriteFD: Int32 = -1
++private func packagingSignalHandler(_ number: Int32) {
++    let saved = errno
++    var byte: UInt8 = 1
++    _ = Darwin.write(packagingSignalWriteFD, &byte, 1)
++    errno = saved
++}
++final class PackagingCancellation {
++    private let lock = NSLock()
++    private var readFD: Int32 = -1
++    private var observed = false
++    func install() throws {
++        guard readFD == -1 else { return }
++        var descriptors: [Int32] = [-1, -1]
++        guard pipe(&descriptors) == 0 else { throw PackagingFailure.toolFailed }
++        for fd in descriptors { _ = fcntl(fd, F_SETFD, FD_CLOEXEC); _ = fcntl(fd, F_SETFL, O_NONBLOCK) }
++        readFD = descriptors[0]; packagingSignalWriteFD = descriptors[1]
++        signal(SIGTERM, packagingSignalHandler); signal(SIGINT, packagingSignalHandler)
++    }
++    func isCancelled() -> Bool {
++        lock.lock(); defer { lock.unlock() }
++        if readFD >= 0 {
++            var byte: UInt8 = 0
++            if Darwin.read(readFD, &byte, 1) > 0 { observed = true }
++        }
++        return observed
++    }
++}
++let packagingCancellation = PackagingCancellation()
++func packagingCommand(_ executable: String, _ args: [String], cwd: URL, logs: URL, timeout: Double = 60,
++                      onLaunch: (Int32) throws -> Void = { _ in }) throws -> (BoundedResult, Data) {
++    let id = UUID().uuidString
++    let out = logs.appendingPathComponent(id + ".stdout"), err = logs.appendingPathComponent(id + ".stderr")
++    var env = ProcessInfo.processInfo.environment.filter { !$0.key.hasPrefix("GIT_") }
++    env["GIT_CONFIG_GLOBAL"] = "/dev/null"; env["GIT_CONFIG_SYSTEM"] = "/dev/null"; env["GIT_CONFIG_NOSYSTEM"] = "1"
++    let result = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: executable), arguments: args,
++        workingDirectory: cwd, environment: env, stdoutURL: out, stderrURL: err, timeoutSeconds: timeout),
++        shouldCancel: { packagingCancellation.isCancelled() }, onLaunch: onLaunch)
++    guard !packagingCancellation.isCancelled() else { throw PackagingFailure.interrupted }
++    return (result, try Data(contentsOf: out))
++}
++func packagingGit(_ args: [String], repo: URL, logs: URL) throws -> String {
++    let (result, bytes) = try packagingCommand("/usr/bin/git", ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"] + args, cwd: repo, logs: logs)
++    guard result.cliExitCode == 0 else { throw PackagingFailure.sourceInvalid }
++    return String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .newlines)
++}
++func packagingSnapshot(repo: URL, logs: URL) throws -> String {
++    guard try packagingGit(["rev-parse", "--is-shallow-repository"], repo: repo, logs: logs) == "false",
++          try packagingGit(["status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none"], repo: repo, logs: logs).isEmpty else { throw PackagingFailure.sourceInvalid }
++    return try packagingGit(["rev-parse", "HEAD"], repo: repo, logs: logs)
++}
++func canonicalExisting(_ url: URL) throws -> URL {
++    guard let value = realpath(url.path, nil) else { throw PackagingFailure.restoreFailed }
++    defer { free(value) }
++    return URL(fileURLWithPath: String(cString: value))
++}
++func resourceDigests(_ input: URL) throws -> [ResourceDigest] {
++    let app = try canonicalExisting(input)
++    let root = app.appendingPathComponent("Contents/Resources")
++    guard let e = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { throw PackagingFailure.manifestInvalid }
++    var rows: [ResourceDigest] = []
++    while let file = e.nextObject() as? URL {
++        let v = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
++        guard v.isSymbolicLink != true else { throw PackagingFailure.manifestInvalid }
++        if v.isRegularFile == true { rows.append(ResourceDigest(path: String(file.path.dropFirst(app.path.count + 1)), sha256: try packagingHash(file))) }
++    }
++    return rows.sorted { $0.path < $1.path }
++}
++func validateManifest(app: URL, file: URL) throws -> PackagingManifest {
++    let m = try JSONDecoder().decode(PackagingManifest.self, from: Data(contentsOf: file))
++    let infoURL = app.appendingPathComponent("Contents/Resources/FlowTypeBuild.json")
++    let metadata = try JSONDecoder().decode(PackagingMetadata.self, from: Data(contentsOf: infoURL))
++    let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")), format: nil) as? [String: Any]
++    guard m.schemaVersion == 1, m.architecture == "arm64", metadata == m.buildInfo, !metadata.dirty, metadata.schemaVersion == 1,
++          plist?["CFBundleShortVersionString"] as? String == metadata.version,
++          plist?["CFBundleVersion"] as? String == metadata.buildNumber,
++          try m.binarySHA256 == packagingHash(app.appendingPathComponent("Contents/MacOS/FlowType")),
++          try m.buildInfoSHA256 == packagingHash(infoURL),
++          try m.shaderSHA256 == packagingHash(app.appendingPathComponent("Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib")),
++          m.resources.allSatisfy({ $0.path.hasPrefix("Contents/Resources/") && !$0.path.split(separator: "/").contains("..") }),
++          try m.resources == resourceDigests(app) else { throw PackagingFailure.manifestInvalid }
++    return m
++}
++struct PublicationJournal: Codable {
++    let token: String; var committed: Bool
++    let oldApp: String?; let oldManifest: String?; let newApp: String; let newManifest: String
++}
++struct HiddenResource: Codable { let name: String; let fingerprint: String }
++struct HidingJournal: Codable {
++    let token: String; let releaseDirectory: String; let ownerPID: Int32
++    var innerPID: Int32?; let resources: [HiddenResource]
++}
++struct PackagingArtifactIdentity: Decodable {
++    let origin: String; let metadata: PackagingMetadata?; let failureCode: String?
++}
++struct PackagingArtifactReport: Decodable {
++    let schemaVersion: Int; let mode: String; let ok: Bool; let role: String; let runID: String
++    let buildInfo: PackagingArtifactIdentity; let durationMs: Int; let failureCode: String?
++    let appResources: Bool; let metalLibrary: Bool; let mlxOperation: Bool; let resolvedInsideApp: Bool
++}
++final class PackagingLock {
++    private let fd: Int32
++    init(_ build: URL) throws {
++        try FileManager.default.createDirectory(at: build, withIntermediateDirectories: true)
++        guard try build.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else { throw PackagingFailure.journalInvalid }
++        fd = open(build.appendingPathComponent(".m5-artifact.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
++        guard fd >= 0 else { throw PackagingFailure.journalInvalid }
++        _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
++        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { close(fd); throw PackagingFailure.inUse }
++    }
++    deinit { _ = flock(fd, LOCK_UN); close(fd) }
++}
++struct ArtifactPackager {
++    let repo: URL
++    let adapters: PackagingAdapters
++    var build: URL { repo.appendingPathComponent("build") }
++    var publicationURL: URL { build.appendingPathComponent(".m5-publication.json") }
++    var hidingURL: URL { build.appendingPathComponent(".m5-resources.json") }
++    private let fm = FileManager.default
++    func write<T: Encodable>(_ value: T, to url: URL) throws { try JSONEncoder().encode(value).write(to: url, options: .atomic) }
++    func exists(_ url: URL) -> Bool { fm.fileExists(atPath: url.path) || (try? fm.destinationOfSymbolicLink(atPath: url.path)) != nil }
++    func stage(_ token: String) -> URL { build.appendingPathComponent(".m5-stage-" + token) }
++    func requireReleaseDirectory(_ directory: URL) throws {
++        let repository = try canonicalExisting(repo).path
++        guard try canonicalExisting(repo.appendingPathComponent(".build")).path == repository + "/.build",
++              try canonicalExisting(directory).path.hasPrefix(repository + "/.build/"), directory.lastPathComponent == "release" else {
++            throw PackagingFailure.journalInvalid
++        }
++    }
++    func cleanupStage(_ token: String) throws {
++        let directory = stage(token)
++        if exists(directory) {
++            guard try String(contentsOf: directory.appendingPathComponent(".owner"), encoding: .utf8) == token else { throw PackagingFailure.journalInvalid }
++            try fm.removeItem(at: directory)
++        }
++    }
++    func recoverPublication() throws {
++        guard exists(publicationURL) else { return }
++        let j = try JSONDecoder().decode(PublicationJournal.self, from: Data(contentsOf: publicationURL))
++        guard UUID(uuidString: j.token) != nil else { throw PackagingFailure.journalInvalid }
++        let app = build.appendingPathComponent("FlowType.app"), manifest = build.appendingPathComponent("FlowType.manifest.json")
++        let backupApp = build.appendingPathComponent(".m5-backup-\(j.token).app")
++        let backupManifest = build.appendingPathComponent(".m5-backup-\(j.token).manifest.json")
++        func hash(_ url: URL) throws -> String { try packagingFingerprint(url) }
++        func restore(_ current: URL, _ backup: URL, old: String?, new: String) throws {
++            func retainNew() throws {
++                let owned = stage(j.token)
++                if !exists(owned) {
++                    try fm.createDirectory(at: owned, withIntermediateDirectories: false)
++                    try Data(j.token.utf8).write(to: owned.appendingPathComponent(".owner"))
++                }
++                guard try String(contentsOf: owned.appendingPathComponent(".owner"), encoding: .utf8) == j.token else { throw PackagingFailure.journalInvalid }
++                let target = owned.appendingPathComponent(current.lastPathComponent)
++                guard !exists(target) else { throw PackagingFailure.restoreFailed }
++                try fm.moveItem(at: current, to: target)
++            }
++            if exists(backup) {
++                guard let old, try hash(backup) == old else { throw PackagingFailure.journalInvalid }
++                if exists(current) { guard try hash(current) == new else { throw PackagingFailure.restoreFailed }; try retainNew() }
++                try fm.moveItem(at: backup, to: current)
++            } else if let old {
++                guard exists(current), try hash(current) == old else { throw PackagingFailure.restoreFailed }
++            } else if exists(current) {
++                guard try hash(current) == new else { throw PackagingFailure.restoreFailed }; try retainNew()
++            }
++        }
++        if j.committed {
++            guard try hash(app) == j.newApp, try hash(manifest) == j.newManifest else { throw PackagingFailure.manifestInvalid }
++            for (backup, expected) in [(backupApp, j.oldApp), (backupManifest, j.oldManifest)] where exists(backup) {
++                guard let expected, try hash(backup) == expected else { throw PackagingFailure.journalInvalid }; try fm.removeItem(at: backup)
++            }
++        } else {
++            try restore(app, backupApp, old: j.oldApp, new: j.newApp)
++            try restore(manifest, backupManifest, old: j.oldManifest, new: j.newManifest)
++        }
++        if j.committed { try cleanupStage(j.token) }
++        try fm.removeItem(at: publicationURL)
++    }
++    func recoverResources() throws {
++        guard exists(hidingURL) else { return }
++        let j = try JSONDecoder().decode(HidingJournal.self, from: Data(contentsOf: hidingURL))
++        guard UUID(uuidString: j.token) != nil, j.ownerPID > 1,
++              j.ownerPID == getpid() || kill(j.ownerPID, 0) != 0 else { throw PackagingFailure.restoreFailed }
++        if let pid = j.innerPID { guard pid > 1, kill(pid, 0) != 0, kill(-pid, 0) != 0 else { throw PackagingFailure.restoreFailed } }
++        let directory = URL(fileURLWithPath: j.releaseDirectory)
++        try requireReleaseDirectory(directory)
++        for row in j.resources {
++            guard row.name.hasSuffix(".bundle"), !row.name.contains("/"), !row.name.hasPrefix(".") else { throw PackagingFailure.journalInvalid }
++            let original = directory.appendingPathComponent(row.name)
++            let hidden = directory.appendingPathComponent(".m5-hidden-\(j.token)-\(row.name)")
++            if exists(hidden) {
++                guard !exists(original), try packagingFingerprint(hidden) == row.fingerprint else { throw PackagingFailure.restoreFailed }
++                try fm.moveItem(at: hidden, to: original)
++            } else { guard exists(original), try packagingFingerprint(original) == row.fingerprint else { throw PackagingFailure.restoreFailed } }
++        }
++        try fm.removeItem(at: hidingURL)
++    }
++    func recoverUnlocked() throws { try recoverResources(); try recoverPublication() }
++    func recover() throws { let lock = try PackagingLock(build); defer { withExtendedLifetime(lock) {} }; try recoverUnlocked() }
++    func buildApp(shader: URL?, version: String) throws {
++        let lock = try PackagingLock(build); defer { withExtendedLifetime(lock) {} }
++        try recoverUnlocked()
++        let logs = build.appendingPathComponent("packaging-\(UUID())"); try fm.createDirectory(at: logs, withIntermediateDirectories: true)
++        guard version.range(of: #"\A[0-9]+\.[0-9]+\.[0-9]+\z"#, options: .regularExpression) != nil else { throw PackagingFailure.sourceInvalid }
++        let before = try packagingSnapshot(repo: repo, logs: logs)
++        guard let shader, let size = try? shader.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]), size.isRegularFile == true,
++              (size.fileSize ?? 0) >= 1_048_576 else { throw PackagingFailure.shaderInvalid }
++        let input = try FileHandle(forReadingFrom: shader); let magic = try input.read(upToCount: 4); try input.close()
++        guard magic == Data("MTLB".utf8) else { throw PackagingFailure.shaderInvalid }
++        let final = build.appendingPathComponent("FlowType.app"), finalManifest = build.appendingPathComponent("FlowType.manifest.json")
++        guard try !adapters.inUse(final, logs) else { throw PackagingFailure.inUse }
++        let token = UUID().uuidString
++        let directory = stage(token)
++        try fm.createDirectory(at: directory, withIntermediateDirectories: false)
++        try Data(token.utf8).write(to: directory.appendingPathComponent(".owner"))
++        do {
++            let app = directory.appendingPathComponent("FlowType.app"), resources = app.appendingPathComponent("Contents/Resources")
++            try fm.createDirectory(at: resources, withIntermediateDirectories: true)
++            try fm.createDirectory(at: app.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
++            let mlx = resources.appendingPathComponent("mlx-swift_Cmlx.bundle")
++            try fm.createDirectory(at: mlx, withIntermediateDirectories: false)
++            // Copy the explicit existing shader before any candidate rename (it may come from that candidate).
++            try fm.copyItem(at: shader, to: mlx.appendingPathComponent("default.metallib"))
++            try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": "org.mlx-swift.Cmlx", "CFBundleName": "mlx-swift_Cmlx", "CFBundlePackageType": "BNDL"], format: .xml, options: 0).write(to: mlx.appendingPathComponent("Info.plist"))
++            let bin = try adapters.releaseBuild(repo, logs)
++            try requireReleaseDirectory(bin)
++            guard try packagingSnapshot(repo: repo, logs: logs) == before else { throw PackagingFailure.sourceInvalid }
++            try fm.copyItem(at: bin.appendingPathComponent("FlowType"), to: app.appendingPathComponent("Contents/MacOS/FlowType"))
++            for bundle in try fm.contentsOfDirectory(at: bin, includingPropertiesForKeys: [.isDirectoryKey]).filter({ $0.pathExtension == "bundle" }) {
++                // Cmlx's standard wrapper was just populated from the explicit shader input.
++                if bundle.lastPathComponent == "mlx-swift_Cmlx.bundle" {
++                    for file in try fm.contentsOfDirectory(at: bundle, includingPropertiesForKeys: nil) where !["default.metallib", "Info.plist"].contains(file.lastPathComponent) {
++                        try fm.copyItem(at: file, to: mlx.appendingPathComponent(file.lastPathComponent))
++                    }
++                } else { try fm.copyItem(at: bundle, to: resources.appendingPathComponent(bundle.lastPathComponent)) }
++            }
++            let generated = directory.appendingPathComponent("identity"); try fm.createDirectory(at: generated, withIntermediateDirectories: false)
++            try adapters.generateIdentity(repo, generated, version, logs)
++            try fm.copyItem(at: generated.appendingPathComponent("Info.plist"), to: app.appendingPathComponent("Contents/Info.plist"))
++            try fm.copyItem(at: generated.appendingPathComponent("FlowTypeBuild.json"), to: resources.appendingPathComponent("FlowTypeBuild.json"))
++            let icon = resources.appendingPathComponent("FlowType_FlowType.bundle/AppIcon.icns")
++            if exists(icon) { try fm.copyItem(at: icon, to: resources.appendingPathComponent("AppIcon.icns")) }
++            try adapters.sign(app, logs); try adapters.verify(app, logs)
++            let manifest = directory.appendingPathComponent("FlowType.manifest.json")
++            try adapters.writeManifest(app, manifest, logs)
++            _ = try validateManifest(app: app, file: manifest)
++            guard !packagingCancellation.isCancelled(), try packagingSnapshot(repo: repo, logs: logs) == before,
++                  try !adapters.inUse(final, logs) else { throw PackagingFailure.sourceInvalid }
++            var journal = try PublicationJournal(token: token, committed: false,
++                oldApp: exists(final) ? packagingFingerprint(final) : nil, oldManifest: exists(finalManifest) ? packagingFingerprint(finalManifest) : nil,
++                newApp: packagingFingerprint(app), newManifest: packagingFingerprint(manifest))
++            try write(journal, to: publicationURL)
++            if exists(final) { try fm.moveItem(at: final, to: build.appendingPathComponent(".m5-backup-\(token).app")) }
++            if exists(finalManifest) { try fm.moveItem(at: finalManifest, to: build.appendingPathComponent(".m5-backup-\(token).manifest.json")) }
++            try fm.moveItem(at: app, to: final); try fm.moveItem(at: manifest, to: finalManifest)
++            _ = try validateManifest(app: final, file: finalManifest)
++            journal.committed = true; try write(journal, to: publicationURL)
++            try recoverPublication()
++        } catch {
++            // Preserve failed, owned staging contents for diagnosis. Rollback also retains new bytes there.
++            if exists(publicationURL) { try recoverPublication() }
++            throw error
++        }
++    }
++    func checkApp(app: URL, output: URL) throws {
++        let lock = try PackagingLock(build); defer { withExtendedLifetime(lock) {} }
++        try recoverUnlocked()
++        guard app.path.hasPrefix("/"), try output.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]).isDirectory == true,
++              try output.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true,
++              try fm.contentsOfDirectory(atPath: output.path).isEmpty else { throw PackagingFailure.usage }
++        let temporary = fm.temporaryDirectory.appendingPathComponent("flowtype-moved-\(UUID())")
++        try fm.createDirectory(at: temporary, withIntermediateDirectories: false)
++        defer { try? fm.removeItem(at: temporary) }
++        guard try !canonicalExisting(temporary).path.hasPrefix(canonicalExisting(repo).path + "/") else { throw PackagingFailure.manifestInvalid }
++        var restored = true
++        do {
++            let manifestFile = app.deletingLastPathComponent().appendingPathComponent("FlowType.manifest.json")
++            let manifest = try validateManifest(app: app, file: manifestFile)
++            func actualHashes(_ target: URL) throws -> [String: String] {
++                ["binary": try packagingHash(target.appendingPathComponent("Contents/MacOS/FlowType")),
++                 "metadata": try packagingHash(target.appendingPathComponent("Contents/Resources/FlowTypeBuild.json")),
++                 "shader": try packagingHash(target.appendingPathComponent("Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"))]
++            }
++            let hashesBefore = try actualHashes(app)
++            try adapters.verify(app, output)
++            let moved = temporary.appendingPathComponent("FlowType.app")
++            try fm.copyItem(at: app, to: moved)
++            _ = try validateManifest(app: moved, file: manifestFile); try adapters.verify(moved, output)
++            let bin = try adapters.releaseDirectory(repo, output)
++            try requireReleaseDirectory(bin)
++            let bundles = try fm.contentsOfDirectory(at: bin, includingPropertiesForKeys: [.isDirectoryKey]).filter { $0.pathExtension == "bundle" }
++            guard !bundles.isEmpty else { throw PackagingFailure.manifestInvalid }
++            let token = UUID().uuidString
++            var marker = try HidingJournal(token: token, releaseDirectory: bin.path, ownerPID: getpid(), innerPID: nil,
++                resources: bundles.map { HiddenResource(name: $0.lastPathComponent, fingerprint: try packagingFingerprint($0)) })
++            try write(marker, to: hidingURL); restored = false
++            for bundle in bundles { try fm.moveItem(at: bundle, to: bin.appendingPathComponent(".m5-hidden-\(token)-\(bundle.lastPathComponent)")) }
++            let validation = output.appendingPathComponent("validation-root")
++            let result = try adapters.artifact(moved, validation, output) { pid in marker.innerPID = pid; try write(marker, to: hidingURL) }
++            try recoverResources(); restored = true
++            guard result.cliExitCode == 0, !result.timedOut else { throw PackagingFailure.artifactFailed }
++            let bytes = try Data(contentsOf: output.appendingPathComponent("artifact.stdout"))
++            let line = String(decoding: bytes, as: UTF8.self).split(separator: "\n", omittingEmptySubsequences: false)
++            let report: PackagingArtifactReport
++            do { report = try JSONDecoder().decode(PackagingArtifactReport.self, from: bytes) } catch { throw PackagingFailure.artifactFailed }
++            guard line.count == 2, line.last == "", report.schemaVersion == 1, report.mode == "artifact", report.role == "smokeTest",
++                  report.ok, report.failureCode == nil, UUID(uuidString: report.runID) != nil, report.durationMs >= 0,
++                  report.appResources, report.metalLibrary, report.mlxOperation, report.resolvedInsideApp,
++                  report.buildInfo.origin == "packaged", report.buildInfo.failureCode == nil,
++                  report.buildInfo.metadata == manifest.buildInfo else { throw PackagingFailure.artifactFailed }
++            let reportObject = try JSONSerialization.jsonObject(with: bytes) as! [String: Any]
++            guard reportObject["failureCode"] is NSNull, (reportObject["buildInfo"] as? [String: Any])?["failureCode"] is NSNull else { throw PackagingFailure.artifactFailed }
++            _ = try validateManifest(app: moved, file: manifestFile); _ = try validateManifest(app: app, file: manifestFile)
++            try adapters.verify(moved, output)
++            let hashesAfter = try actualHashes(moved)
++            guard hashesBefore == hashesAfter else { throw PackagingFailure.manifestInvalid }
++            let evidence: [String: Any] = ["schemaVersion": 1, "ok": true, "failureCode": NSNull(), "signature": true,
++                "resourcesHidden": true, "resourcesRestored": true, "hashesBefore": hashesBefore, "hashesAfter": hashesAfter,
++                "sourceCommit": manifest.buildInfo.gitSHA, "artifact": reportObject]
++            try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("check-result.json"))
++        } catch {
++            var failure = (error as? PackagingFailure) ?? .toolFailed
++            if !restored { do { try recoverResources(); restored = true } catch { failure = .restoreFailed } }
++            let evidence: [String: Any] = ["schemaVersion": 1, "ok": false, "failureCode": failure.rawValue, "resourcesRestored": restored]
++            try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("check-result.json"))
++            throw failure
++        }
++    }
++}
+diff --git a/scripts/verification/ArtifactPackagingCLI.swift b/scripts/verification/ArtifactPackagingCLI.swift
+new file mode 100644
+index 0000000..c03f898
+--- /dev/null
++++ b/scripts/verification/ArtifactPackagingCLI.swift
+@@ -0,0 +1,97 @@
++import Foundation
++import Darwin
++
++@main enum ArtifactPackagingCLI {
++    static func main() {
++        do {
++            let args = Array(CommandLine.arguments.dropFirst())
++            try BoundedProcess.dispatchChildIfNeeded(arguments: args)
++            try packagingCancellation.install()
++            guard args.count >= 2, args[1].hasPrefix("/") else { throw PackagingFailure.usage }
++            let repo = try canonicalExisting(URL(fileURLWithPath: args[1]))
++            let scripts = repo.appendingPathComponent("scripts")
++            func required(_ executable: String, _ args: [String], cwd: URL, logs: URL, timeout: Double = 60) throws -> Data {
++                let (r, data) = try packagingCommand(executable, args, cwd: cwd, logs: logs, timeout: timeout)
++                guard r.cliExitCode == 0 else { throw PackagingFailure.toolFailed }; return data
++            }
++            func releaseDirectory(_ repo: URL, _ logs: URL) throws -> URL {
++                let bytes = try required("/usr/bin/swift", ["build", "-c", "release", "--show-bin-path"], cwd: repo, logs: logs, timeout: 120)
++                let path = String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
++                guard path.hasPrefix("/"), !path.contains("\n") else { throw PackagingFailure.buildFailed }
++                return URL(fileURLWithPath: path)
++            }
++            let adapters = PackagingAdapters(releaseBuild: { repo, logs in
++                _ = try required("/usr/bin/swift", ["build", "-c", "release"], cwd: repo, logs: logs, timeout: 800)
++                let directory = try releaseDirectory(repo, logs)
++                let architectures = try required("/usr/bin/lipo", ["-archs", directory.appendingPathComponent("FlowType").path], cwd: repo, logs: logs)
++                guard String(decoding: architectures, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines) == "arm64" else { throw PackagingFailure.buildFailed }
++                return directory
++            }, releaseDirectory: releaseDirectory, generateIdentity: { repo, output, version, logs in
++                _ = try required("/usr/bin/swift", [scripts.appendingPathComponent("generate-build-info.swift").path, "--repo", repo.path, "--output", output.path, "--version", version], cwd: repo, logs: logs)
++            }, writeManifest: { app, output, logs in
++                _ = try required("/usr/bin/swift", [scripts.appendingPathComponent("write-artifact-manifest.swift").path, "--app", app.path, "--output", output.path], cwd: repo, logs: logs)
++            }, sign: { app, logs in
++                // Resource-only bundles are sealed by the final app signature. Sign actual Mach-O code inside out.
++                let e = FileManager.default.enumerator(at: app, includingPropertiesForKeys: [.isRegularFileKey])!
++                var code: [URL] = []
++                while let file = e.nextObject() as? URL {
++                    if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
++                        let h = try FileHandle(forReadingFrom: file); let bytes = try h.read(upToCount: 4); try h.close()
++                        let magic = bytes.map(Array.init) ?? []
++                        if [[0xcf,0xfa,0xed,0xfe], [0xce,0xfa,0xed,0xfe], [0xca,0xfe,0xba,0xbe], [0xbe,0xba,0xfe,0xca]].contains(magic) { code.append(file) }
++                    }
++                }
++                for file in code.sorted(by: { $0.path.count > $1.path.count }) {
++                    _ = try required("/usr/bin/codesign", ["--force", "--sign", "-", file.path], cwd: repo, logs: logs)
++                }
++                _ = try required("/usr/bin/codesign", ["--force", "--sign", "-", app.path], cwd: repo, logs: logs)
++            }, verify: { app, logs in
++                _ = try required("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", app.path], cwd: repo, logs: logs)
++            }, inUse: { app, logs in
++                let binary = app.appendingPathComponent("Contents/MacOS/FlowType")
++                guard FileManager.default.fileExists(atPath: binary.path) else { return false }
++                let (result, _) = try packagingCommand("/usr/sbin/lsof", ["-t", binary.path], cwd: repo, logs: logs)
++                guard result.termination == .normal, result.exitCode == 0 || result.exitCode == 1 else { throw PackagingFailure.inUse }
++                return result.exitCode == 0
++            }, artifact: { app, validation, logs, launched in
++                var env = ProcessInfo.processInfo.environment.filter {
++                    !$0.key.hasPrefix("MLX_") && !$0.key.hasPrefix("DYLD_") && !$0.key.hasPrefix("SWIFTPM_")
++                }
++                env["PWD"] = app.deletingLastPathComponent().path
++                return try BoundedProcess.run(BoundedCommand(executable: app.appendingPathComponent("Contents/MacOS/FlowType"),
++                    arguments: ["--artifact-check", "--validation-root", validation.path], workingDirectory: app.deletingLastPathComponent(), environment: env,
++                    stdoutURL: logs.appendingPathComponent("artifact.stdout"), stderrURL: logs.appendingPathComponent("artifact.stderr"), timeoutSeconds: 30),
++                    shouldCancel: { packagingCancellation.isCancelled() }, onLaunch: launched)
++            })
++            let packager = ArtifactPackager(repo: repo, adapters: adapters)
++            switch args[0] {
++            case "build":
++                guard args.count == 2 else { throw PackagingFailure.usage }
++                let environment = ProcessInfo.processInfo.environment
++                // Explicit existing input wins. Only the legacy shader-cache roots are fallback candidates; no Python/tool installation.
++                var shader: URL?
++                if let explicit = environment["MLX_METALLIB_PATH"] { shader = URL(fileURLWithPath: explicit) }
++                else {
++                    for relative in [".cache/uv/archive-v0", ".cache/pip"] where shader == nil {
++                        let cache = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(relative)
++                        for directory in (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? [] {
++                            let candidate = directory.appendingPathComponent("mlx/lib/mlx.metallib")
++                            if FileManager.default.fileExists(atPath: candidate.path) { shader = candidate; break }
++                        }
++                    }
++                }
++                try packager.buildApp(shader: shader, version: environment["VERSION"] ?? "1.0.0")
++                print("FlowType candidate and manifest staged, signed, and published")
++            case "check":
++                guard args.count == 6, args[2] == "--app", args[3].hasPrefix("/"), args[4] == "--output", args[5].hasPrefix("/") else { throw PackagingFailure.usage }
++                try packager.checkApp(app: URL(fileURLWithPath: args[3]), output: URL(fileURLWithPath: args[5]))
++                print("FlowType moved artifact check passed")
++            default: throw PackagingFailure.usage
++            }
++        } catch {
++            let failure = (error as? PackagingFailure) ?? .toolFailed
++            FileHandle.standardError.write(Data("FlowType packaging: \(failure.rawValue)\n".utf8))
++            exit(failure == .usage ? 64 : 1)
++        }
++    }
++}
+diff --git a/scripts/verification/ArtifactPackagingSelfTests.swift b/scripts/verification/ArtifactPackagingSelfTests.swift
+new file mode 100644
+index 0000000..50c167d
+--- /dev/null
++++ b/scripts/verification/ArtifactPackagingSelfTests.swift
+@@ -0,0 +1,278 @@
++import Foundation
++import Darwin
++
++@main enum ArtifactPackagingSelfTests {
++    static var passed = 0; static var failed = 0
++    static func check(_ value: Bool, _ name: String) {
++        if value { passed += 1 } else { failed += 1; print("FAIL: \(name)") }
++    }
++    static func run(_ executable: String, _ arguments: [String], cwd: URL, logs: URL, timeout: Double = 30) throws -> BoundedResult {
++        let id = UUID().uuidString
++        return try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: executable), arguments: arguments, workingDirectory: cwd,
++            environment: ProcessInfo.processInfo.environment, stdoutURL: logs.appendingPathComponent(id + ".out"), stderrURL: logs.appendingPathComponent(id + ".err"), timeoutSeconds: timeout))
++    }
++    static func fixture(_ body: (URL, URL, URL, URL) throws -> Void) throws {
++        let fm = FileManager.default
++        let root = fm.temporaryDirectory.appendingPathComponent("m5 packaging \(UUID())")
++        let repo = root.appendingPathComponent("repo with spaces")
++        let bin = repo.appendingPathComponent(".build/arm64-apple-macosx/release")
++        let build = repo.appendingPathComponent("build")
++        try fm.createDirectory(at: bin.appendingPathComponent("FlowType_FlowType.bundle"), withIntermediateDirectories: true)
++        try fm.createDirectory(at: repo.appendingPathComponent("Sources"), withIntermediateDirectories: true)
++        try fm.createDirectory(at: build.appendingPathComponent("FlowType.app/Contents/MacOS"), withIntermediateDirectories: true)
++        var completed = false
++        defer { if completed { try? fm.removeItem(at: root) } else { print("Retained synthetic fixture: \(root.path)") } }
++        try Data("old binary".utf8).write(to: build.appendingPathComponent("FlowType.app/Contents/MacOS/FlowType"))
++        try Data("old manifest".utf8).write(to: build.appendingPathComponent("FlowType.manifest.json"))
++        try Data("new binary".utf8).write(to: bin.appendingPathComponent("FlowType"))
++        try Data("resource".utf8).write(to: bin.appendingPathComponent("FlowType_FlowType.bundle/resource"))
++        try Data("source".utf8).write(to: repo.appendingPathComponent("Sources/main.swift"))
++        try Data("build/\n.build/\n".utf8).write(to: repo.appendingPathComponent(".gitignore"))
++        for args in [["init", "--quiet"], ["add", "."], ["-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", "commit", "--quiet", "-m", "fixture"]] {
++            guard try run("/usr/bin/git", args, cwd: repo, logs: root).cliExitCode == 0 else { throw PackagingFailure.toolFailed }
++        }
++        var data = Data("MTLB".utf8); data.append(Data(repeating: 0, count: 1_048_576 - 4))
++        let shader = root.appendingPathComponent("local shader.metallib"); try data.write(to: shader)
++        try body(repo, bin, shader, root)
++        completed = true
++    }
++    static func adapters(repo: URL, bin: URL, root: URL, scenario: String = "good") -> PackagingAdapters {
++        let source = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
++        return PackagingAdapters(releaseBuild: { _, _ in
++            if scenario == "build" { throw PackagingFailure.buildFailed }
++            if scenario == "HEAD" {
++                _ = try run("/usr/bin/git", ["-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", "commit", "--allow-empty", "--quiet", "-m", "changed"], cwd: repo, logs: root)
++            }
++            return bin
++        }, releaseDirectory: { _, _ in bin }, generateIdentity: { repo, out, version, logs in
++            let r = try run("/usr/bin/swift", [source.appendingPathComponent("scripts/generate-build-info.swift").path, "--repo", repo.path, "--output", out.path, "--version", version], cwd: repo, logs: logs)
++            guard r.cliExitCode == 0 else { throw PackagingFailure.sourceInvalid }
++        }, writeManifest: { app, output, logs in
++            let r = try run("/usr/bin/swift", [source.appendingPathComponent("scripts/write-artifact-manifest.swift").path, "--app", app.path, "--output", output.path], cwd: root, logs: logs)
++            guard r.cliExitCode == 0 else { throw PackagingFailure.manifestInvalid }
++        }, sign: { app, _ in
++            if scenario == "sign" { throw PackagingFailure.signFailed }
++            let file = app.appendingPathComponent("Contents/MacOS/FlowType")
++            var data = try Data(contentsOf: file); data.append(Data(" signed".utf8)); try data.write(to: file)
++        }, verify: { _, _ in }, inUse: { _, _ in scenario == "inUse" }, artifact: { app, validation, logs, launched in
++            let result = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: CommandLine.arguments[0]),
++                arguments: ["--fixture-artifact", scenario, app.path], workingDirectory: root,
++                environment: ProcessInfo.processInfo.environment, stdoutURL: logs.appendingPathComponent("artifact.stdout"),
++                stderrURL: logs.appendingPathComponent("artifact.stderr"), timeoutSeconds: scenario == "timeout" ? 0.15 : 3),
++                shouldCancel: { packagingCancellation.isCancelled() }, onLaunch: launched)
++            _ = validation
++            return result
++        })
++    }
++    static func testStagingFailurePreservesCandidate() throws {
++        for scenario in ["missing", "short", "invalid", "build", "sign", "HEAD", "inUse"] {
++            try fixture { repo, bin, shader, root in
++                if scenario == "short" { try Data("MTLB".utf8).write(to: shader) }
++                if scenario == "invalid" { try Data(repeating: 1, count: 1_048_576).write(to: shader) }
++                let final = repo.appendingPathComponent("build/FlowType.app")
++                let manifest = repo.appendingPathComponent("build/FlowType.manifest.json")
++                let before = try packagingFingerprint(final); let oldManifest = try packagingHash(manifest)
++                let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root, scenario: scenario))
++                do { try packager.buildApp(shader: scenario == "missing" ? nil : shader, version: "1.2.3"); check(false, "reject \(scenario)") }
++                catch {
++                    let expected: PackagingFailure = ["missing", "short", "invalid"].contains(scenario) ? .shaderInvalid :
++                        scenario == "build" ? .buildFailed : scenario == "sign" ? .signFailed : scenario == "inUse" ? .inUse : .sourceInvalid
++                    check((error as? PackagingFailure) == expected, "reject correct stage \(scenario)")
++                }
++                check(try packagingFingerprint(final) == before, "preserve candidate after \(scenario)")
++                check(try packagingHash(manifest) == oldManifest, "preserve manifest after \(scenario)")
++                if ["build", "sign", "HEAD"].contains(scenario) {
++                    let stages = try FileManager.default.contentsOfDirectory(at: repo.appendingPathComponent("build"), includingPropertiesForKeys: nil).filter { $0.lastPathComponent.hasPrefix(".m5-stage-") }
++                    check(stages.count == 1 && FileManager.default.fileExists(atPath: stages[0].appendingPathComponent(".owner").path), "failed staging retained for diagnosis")
++                }
++            }
++        }
++    }
++    static func testManifestAndRestore() throws {
++        for scenario in ["good", "artifact", "timeout", "schemaBool", "stageInt"] {
++            try fixture { repo, bin, shader, root in
++                let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root, scenario: scenario))
++                try packager.buildApp(shader: shader, version: "1.2.3")
++                let app = repo.appendingPathComponent("build/FlowType.app")
++                guard let manifest = try? JSONDecoder().decode(PackagingManifest.self, from: Data(contentsOf: repo.appendingPathComponent("build/FlowType.manifest.json"))) else {
++                    check(false, "build emits a parseable manifest"); return
++                }
++                check(try manifest.binarySHA256 == packagingHash(app.appendingPathComponent("Contents/MacOS/FlowType")), "manifest uses post-sign bytes")
++                check(try manifest.shaderSHA256 == packagingHash(shader), "manifest shader bytes match copied source")
++                let independent = try packagingCommand("/usr/bin/shasum", ["-a", "256", app.appendingPathComponent("Contents/MacOS/FlowType").path], cwd: root, logs: root)
++                check(independent.0.cliExitCode == 0 && String(decoding: independent.1, as: UTF8.self).hasPrefix(manifest.binarySHA256 + " "), "manifest matches independent SHA256 of signed binary")
++                check(manifest.architecture == "arm64" && manifest.buildInfo.version == "1.2.3", "manifest schema identity")
++                for row in manifest.resources {
++                    check(row.path.hasPrefix("Contents/Resources/"), "manifest relative resource path")
++                    check(try row.sha256 == packagingHash(app.appendingPathComponent(row.path)), "manifest resource digest \(row.path)")
++                }
++                let before = try packagingFingerprint(bin.appendingPathComponent("FlowType_FlowType.bundle"))
++                let output = root.appendingPathComponent("check output"); try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
++                do { try packager.checkApp(app: app, output: output); check(scenario == "good", "artifact failure gate") }
++                catch { check(scenario != "good" && (error as? PackagingFailure) == .artifactFailed, "artifact failure gate") }
++                check(FileManager.default.fileExists(atPath: bin.appendingPathComponent("FlowType_FlowType.bundle").path), "restore bundle after \(scenario)")
++                if FileManager.default.fileExists(atPath: bin.appendingPathComponent("FlowType_FlowType.bundle").path) {
++                    check(try packagingFingerprint(bin.appendingPathComponent("FlowType_FlowType.bundle")) == before, "restore exact resource bytes")
++                }
++            }
++        }
++    }
++    static func testRestoreOnArtifactFailure() throws {
++        for scenario in ["artifact", "timeout"] {
++            try fixture { repo, bin, shader, root in
++                try ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root)).buildApp(shader: shader, version: "1.2.3")
++                let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root, scenario: scenario))
++                let output = root.appendingPathComponent("restore output")
++                try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
++                do { try packager.checkApp(app: repo.appendingPathComponent("build/FlowType.app"), output: output); check(false, "reject artifact \(scenario)") }
++                catch { check(true, "reject artifact \(scenario)") }
++                check(FileManager.default.fileExists(atPath: bin.appendingPathComponent("FlowType_FlowType.bundle/resource").path), "restore owned resources after \(scenario)")
++            }
++        }
++    }
++    static func testRecoveryAndConflicts() throws {
++        try fixture { repo, bin, _, root in
++            let fm = FileManager.default
++            let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root))
++            let original = bin.appendingPathComponent("FlowType_FlowType.bundle")
++            let before = try packagingFingerprint(original)
++            // A real killed child leaves its marker and hidden files for the next invocation.
++            let killed = try run(CommandLine.arguments[0], ["--fixture-abandon", repo.path, bin.path], cwd: root, logs: root)
++            check(killed.termination == .signal, "abandoned fixture actually killed")
++            try packager.recover()
++            check(try packagingFingerprint(original) == before, "recover exact owned bytes after SIGKILL")
++            check(!packager.exists(packager.hidingURL), "successful recovery removes marker")
++            let token = UUID().uuidString
++            let hidden = bin.appendingPathComponent(".m5-hidden-\(token)-FlowType_FlowType.bundle")
++            let marker = HidingJournal(token: token, releaseDirectory: bin.path, ownerPID: getpid(), innerPID: nil,
++                resources: [HiddenResource(name: "FlowType_FlowType.bundle", fingerprint: before)])
++            try fm.moveItem(at: original, to: hidden); try packager.write(marker, to: packager.hidingURL)
++            try fm.createDirectory(at: original, withIntermediateDirectories: false)
++            try Data("unknown".utf8).write(to: original.appendingPathComponent("unknown"))
++            do { try packager.recover(); check(false, "conflicting original fails") } catch { check(true, "conflicting original fails") }
++            check(try Data(contentsOf: original.appendingPathComponent("unknown")) == Data("unknown".utf8), "recovery never overwrites unknown original")
++            check(try packagingFingerprint(hidden) == before, "conflict retains owned backup")
++            try fm.removeItem(at: original)
++            var active = marker; active.innerPID = getpid(); try packager.write(active, to: packager.hidingURL)
++            do { try packager.recover(); check(false, "active inner ownership fails") } catch { check(true, "active inner ownership fails") }
++            check(packager.exists(hidden), "live-group conflict preserves hidden resources")
++            try packager.write(marker, to: packager.hidingURL); try packager.recover()
++            check(try packagingFingerprint(original) == before, "recover once conflict resolved")
++            let lock = try PackagingLock(packager.build)
++            do { _ = try PackagingLock(packager.build); check(false, "exclusive writer lock") } catch { check(true, "exclusive writer lock") }
++            withExtendedLifetime(lock) {}
++        }
++        try fixture { repo, bin, _, root in
++            let fm = FileManager.default
++            let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root))
++            let token = UUID().uuidString
++            let app = packager.build.appendingPathComponent("FlowType.app")
++            let manifest = packager.build.appendingPathComponent("FlowType.manifest.json")
++            let oldApp = try packagingFingerprint(app), oldManifest = try packagingFingerprint(manifest)
++            try fm.moveItem(at: app, to: packager.build.appendingPathComponent(".m5-backup-\(token).app"))
++            try fm.moveItem(at: manifest, to: packager.build.appendingPathComponent(".m5-backup-\(token).manifest.json"))
++            try fm.createDirectory(at: app, withIntermediateDirectories: false)
++            try Data("new".utf8).write(to: app.appendingPathComponent("new"))
++            try Data("new manifest".utf8).write(to: manifest)
++            let j = try PublicationJournal(token: token, committed: false, oldApp: oldApp, oldManifest: oldManifest,
++                newApp: packagingFingerprint(app), newManifest: packagingFingerprint(manifest))
++            try packager.write(j, to: packager.publicationURL)
++            try packager.recover()
++            check(try packagingFingerprint(app) == oldApp, "recover interrupted candidate rename")
++            check(try packagingFingerprint(manifest) == oldManifest, "recover matching old manifest")
++            check(!packager.exists(packager.publicationURL), "publication recovery removes journal")
++            check(packager.exists(packager.stage(token).appendingPathComponent("FlowType.app/new")), "rollback retains failed new candidate for diagnosis")
++        }
++    }
++    static func testExternalBuildAndTerm() throws {
++        try fixture { repo, bin, shader, root in
++            let fm = FileManager.default
++            let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root))
++            try packager.buildApp(shader: shader, version: "1.2.3")
++            let external = root.appendingPathComponent("external build")
++            try fm.moveItem(at: repo.appendingPathComponent(".build"), to: external)
++            try fm.createSymbolicLink(at: repo.appendingPathComponent(".build"), withDestinationURL: external)
++            let original = external.appendingPathComponent("arm64-apple-macosx/release/FlowType_FlowType.bundle")
++            let before = try packagingFingerprint(original)
++            let output = root.appendingPathComponent("external output"); try fm.createDirectory(at: output, withIntermediateDirectories: false)
++            do { try packager.checkApp(app: repo.appendingPathComponent("build/FlowType.app"), output: output); check(false, "reject external .build") }
++            catch { check((error as? PackagingFailure) == .journalInvalid, "reject external .build") }
++            check(try packagingFingerprint(original) == before, "external worktree resources never moved")
++        }
++        try fixture { repo, bin, shader, root in
++            let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root))
++            try packager.buildApp(shader: shader, version: "1.2.3")
++            let output = root.appendingPathComponent("term output"); try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
++            var owner: Int32 = 0; var sent = false
++            let result = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: CommandLine.arguments[0]), arguments: ["--fixture-term", repo.path, bin.path, root.path, output.path],
++                workingDirectory: root, environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("term.out"), stderrURL: root.appendingPathComponent("term.err"), timeoutSeconds: 5),
++                shouldCancel: {
++                    if !sent, owner > 1, let data = try? Data(contentsOf: packager.hidingURL), let marker = try? JSONDecoder().decode(HidingJournal.self, from: data), marker.innerPID != nil {
++                        sent = true; kill(owner, SIGTERM)
++                    }
++                    return false
++                }, onLaunch: { owner = $0 })
++            check(sent && result.termination == .normal && result.exitCode == 1, "TERM observed by signal-safe owner")
++            check(packager.exists(bin.appendingPathComponent("FlowType_FlowType.bundle/resource")), "TERM owner restores resources outside inner watchdog")
++            check(!packager.exists(packager.hidingURL), "TERM recovery clears owned marker")
++        }
++    }
++    static func testBoundedCancellation() throws {
++        try fixture { _, _, _, root in
++            let start = DispatchTime.now().uptimeNanoseconds
++            var pid: Int32 = 0
++            let command = BoundedCommand(executable: URL(fileURLWithPath: CommandLine.arguments[0]), arguments: ["--fixture-artifact", "timeout", root.path], workingDirectory: root,
++                environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("cancel.out"), stderrURL: root.appendingPathComponent("cancel.err"), timeoutSeconds: 5)
++            let result = try BoundedProcess.run(command, shouldCancel: { DispatchTime.now().uptimeNanoseconds - start > 150_000_000 }, onLaunch: { pid = $0 })
++            check(result.termination == .signal && result.failureCode == .childSignaled, "cancellation returns closed signal result")
++            check(pid > 1 && kill(pid, 0) != 0 && kill(-pid, 0) != 0, "cancelled owned process and group reaped")
++            let failCommand = BoundedCommand(executable: command.executable, arguments: command.arguments, workingDirectory: root, environment: command.environment,
++                stdoutURL: root.appendingPathComponent("launch.out"), stderrURL: root.appendingPathComponent("launch.err"), timeoutSeconds: 5)
++            do { _ = try BoundedProcess.run(failCommand, onLaunch: { pid = $0; throw PackagingFailure.interrupted }); check(false, "launch-journal failure propagates") }
++            catch { check(true, "launch-journal failure propagates") }
++            check(kill(pid, 0) != 0 && kill(-pid, 0) != 0, "launch-journal failure cleans owned child")
++            let early = BoundedCommand(executable: command.executable, arguments: command.arguments, workingDirectory: root, environment: command.environment,
++                stdoutURL: root.appendingPathComponent("early.out"), stderrURL: root.appendingPathComponent("early.err"), timeoutSeconds: 5)
++            let earlyResult = try BoundedProcess.run(early, shouldCancel: { true }, onLaunch: { pid = $0 })
++            check(earlyResult.termination == .signal && earlyResult.failureCode == .childSignaled, "handshake cancellation retains closed cleanup result")
++            check(kill(pid, 0) != 0 && kill(-pid, 0) != 0, "handshake cancellation reaps owned child")
++        }
++    }
++    static func main() throws {
++        let args = Array(CommandLine.arguments.dropFirst())
++        try BoundedProcess.dispatchChildIfNeeded(arguments: args)
++        if args.first == "--fixture-term" {
++            try packagingCancellation.install()
++            let repo = URL(fileURLWithPath: args[1]), bin = URL(fileURLWithPath: args[2]), root = URL(fileURLWithPath: args[3])
++            let packager = ArtifactPackager(repo: repo, adapters: adapters(repo: repo, bin: bin, root: root, scenario: "waitterm"))
++            do { try packager.checkApp(app: repo.appendingPathComponent("build/FlowType.app"), output: URL(fileURLWithPath: args[4])); exit(0) }
++            catch { exit(1) }
++        }
++        if args.first == "--fixture-abandon" {
++            let repo = URL(fileURLWithPath: args[1]), bin = URL(fileURLWithPath: args[2])
++            let bundle = bin.appendingPathComponent("FlowType_FlowType.bundle"), token = UUID().uuidString
++            let marker = try HidingJournal(token: token, releaseDirectory: bin.path, ownerPID: getpid(), innerPID: nil,
++                resources: [HiddenResource(name: bundle.lastPathComponent, fingerprint: packagingFingerprint(bundle))])
++            try JSONEncoder().encode(marker).write(to: repo.appendingPathComponent("build/.m5-resources.json"))
++            try FileManager.default.moveItem(at: bundle, to: bin.appendingPathComponent(".m5-hidden-\(token)-\(bundle.lastPathComponent)"))
++            kill(getpid(), SIGKILL); exit(1)
++        }
++        if args.first == "--fixture-artifact" {
++            if args[1] == "timeout" || args[1] == "waitterm" { Thread.sleep(forTimeInterval: 5); exit(0) }
++            if args[1] == "artifact" { exit(1) }
++            let app = URL(fileURLWithPath: args[2])
++            let metadata = try JSONSerialization.jsonObject(with: Data(contentsOf: app.appendingPathComponent("Contents/Resources/FlowTypeBuild.json")))
++            var object: [String: Any] = ["schemaVersion": 1, "mode": "artifact", "ok": true, "role": "smokeTest", "runID": UUID().uuidString,
++                "durationMs": 1, "failureCode": NSNull(), "buildInfo": ["origin": "packaged", "metadata": metadata, "failureCode": NSNull()],
++                "appResources": true, "metalLibrary": true, "mlxOperation": true, "resolvedInsideApp": true]
++            if args[1] == "schemaBool" { object["schemaVersion"] = true }
++            if args[1] == "stageInt" { object["metalLibrary"] = 1 }
++            FileHandle.standardOutput.write(try JSONSerialization.data(withJSONObject: object) + Data("\n".utf8)); return
++        }
++        for test in [testStagingFailurePreservesCandidate, testRestoreOnArtifactFailure, testManifestAndRestore, testRecoveryAndConflicts, testExternalBuildAndTerm, testBoundedCancellation] {
++            do { try test() } catch { failed += 1; print("FAIL: fixture operation \((error as? PackagingFailure)?.rawValue ?? String((error as NSError).code))") }
++        }
++        print("=== packaging self-test: \(passed) passed, \(failed) failed ===")
++        exit(failed == 0 ? 0 : 1)
++    }
++}
+diff --git a/scripts/verification/BoundedProcess.swift b/scripts/verification/BoundedProcess.swift
+index ec7fff2..4e5a33b 100644
+--- a/scripts/verification/BoundedProcess.swift
++++ b/scripts/verification/BoundedProcess.swift
+@@ -56,21 +56,22 @@ enum BoundedProcess {
+         let strings = target.map { strdup($0) }
+         defer { for string in strings { free(string) } }
+         var argv = strings + [nil]
+         argv.withUnsafeMutableBufferPointer { buffer in _ = execv(target[0], buffer.baseAddress!) }
+         let failure = Array("EXECFAIL\n".utf8)
+         _ = failure.withUnsafeBytes { Darwin.write(control, $0.baseAddress, $0.count) }
+         throw BoundedProcessError.childControl
+     }
+ 
+     /// Synchronous, external process watchdog. No target actor/run loop participates in its deadline.
+-    static func run(_ command: BoundedCommand, runnerExecutableURL: URL? = nil) throws -> BoundedResult {
++    static func run(_ command: BoundedCommand, runnerExecutableURL: URL? = nil,
++                    shouldCancel: () -> Bool = { false }, onLaunch: (Int32) throws -> Void = { _ in }) throws -> BoundedResult {
+         guard command.timeoutSeconds.isFinite, command.timeoutSeconds > 0,
+               command.stdoutURL.standardizedFileURL != command.stderrURL.standardizedFileURL,
+               !([command.executable.path] + command.arguments).contains(where: { $0.utf8.contains(0) }) else {
+             throw BoundedProcessError.invalidCommand
+         }
+         let started = DispatchTime.now().uptimeNanoseconds
+         func elapsed() -> Double { Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000_000 }
+         func result(_ termination: BoundedTermination, _ failure: BoundedFailure?, _ exit: Int32? = nil) -> BoundedResult {
+             BoundedResult(schemaVersion: 1, exitCode: exit, termination: termination, durationMs: Int(elapsed() * 1000),
+                           timedOut: termination == .timeout, failureCode: failure)
+@@ -105,42 +106,46 @@ enum BoundedProcess {
+             let ownGroup = pid > 1 && pid != getpgrp() && (ready || getpgid(pid) == pid)
+             let target = ownGroup ? -pid : pid
+             if process.isRunning || (ownGroup && groupExists()) { kill(target, SIGTERM) }
+             let grace = elapsed() + 2
+             while elapsed() < grace && (process.isRunning || (ownGroup && groupExists())) { Thread.sleep(forTimeInterval: 0.01) }
+             if process.isRunning || (ownGroup && groupExists()) { kill(target, SIGKILL) }
+             let reap = elapsed() + 1
+             while elapsed() < reap && (process.isRunning || (ownGroup && groupExists())) { Thread.sleep(forTimeInterval: 0.01) }
+             return !process.isRunning && (!ownGroup || !groupExists())
+         }
++        do { try onLaunch(pid) }
++        catch { _ = stopOwned(); throw error }
+         var received = Data()
+         var execConfirmed = false
+         let handshakeLimit = min(command.timeoutSeconds, 5)
+         while elapsed() < handshakeLimit {
++            if shouldCancel() { let clean = stopOwned(); return result(.signal, clean ? .childSignaled : .cleanupFailed) }
+             var buffer = [UInt8](repeating: 0, count: 256)
+             let count = Darwin.read(parent, &buffer, buffer.count)
+             if count > 0 {
+                 received.append(contentsOf: buffer.prefix(count))
+                 if received.count > 512 { break }
+                 ready = String(decoding: received, as: UTF8.self).hasPrefix("READY \(pid)\n")
+                 if String(decoding: received, as: UTF8.self).contains("EXECFAIL") { break }
+             } else if count == 0 {
+                 execConfirmed = received == Data("READY \(pid)\n".utf8)
+                 break
+             } else if errno != EAGAIN && errno != EINTR { break }
+             else { Thread.sleep(forTimeInterval: 0.005) }
+         }
+         guard ready, execConfirmed else {
+             let clean = stopOwned()
+             return result(.launchFailure, !clean ? .cleanupFailed : String(decoding: received, as: UTF8.self).contains("EXECFAIL") ? .launchFailed : .handshakeFailed)
+         }
+-        while process.isRunning && elapsed() < command.timeoutSeconds { Thread.sleep(forTimeInterval: 0.01) }
++        while process.isRunning && elapsed() < command.timeoutSeconds && !shouldCancel() { Thread.sleep(forTimeInterval: 0.01) }
++        if shouldCancel() { let clean = stopOwned(); return result(.signal, clean ? .childSignaled : .cleanupFailed) }
+         if process.isRunning {
+             let clean = stopOwned()
+             return result(.timeout, clean ? .deadlineExceeded : .cleanupFailed)
+         }
+         let reason = process.terminationReason
+         let status = process.terminationStatus
+         // A normally exiting parent may leave helpers in this owned group; clean that group too.
+         guard stopOwned() else { return result(.launchFailure, .cleanupFailed) }
+         if reason == .uncaughtSignal { return result(.signal, .childSignaled) }
+         return result(.normal, status == 0 ? nil : .childFailed, status)
+diff --git a/scripts/write-artifact-manifest.swift b/scripts/write-artifact-manifest.swift
+new file mode 100644
+index 0000000..7fdad37
+--- /dev/null
++++ b/scripts/write-artifact-manifest.swift
+@@ -0,0 +1,55 @@
++#!/usr/bin/env swift
++import Foundation
++import CryptoKit
++import Darwin
++
++struct ManifestMetadata: Codable {
++    let schemaVersion: Int; let version: String; let buildNumber: String; let gitSHA: String
++    let sourceTree: String; let builtAt: String; let dirty: Bool
++}
++func canonical(_ path: String) throws -> URL {
++    guard let resolved = realpath(path, nil) else { throw NSError(domain: "path", code: 1) }
++    defer { free(resolved) }
++    return URL(fileURLWithPath: String(cString: resolved))
++}
++
++func digest(_ url: URL) throws -> String {
++    let handle = try FileHandle(forReadingFrom: url); defer { try? handle.close() }
++    var hash = SHA256()
++    while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty { hash.update(data: chunk) }
++    return hash.finalize().map { String(format: "%02x", $0) }.joined()
++}
++func execute(_ args: [String]) throws {
++    guard args.count == 4, args[0] == "--app", args[2] == "--output", args[1].hasPrefix("/"), args[3].hasPrefix("/") else {
++        throw NSError(domain: "usage", code: 64)
++    }
++    let app = try canonical(args[1])
++    let requestedOutput = URL(fileURLWithPath: args[3])
++    let output = try canonical(requestedOutput.deletingLastPathComponent().path).appendingPathComponent(requestedOutput.lastPathComponent)
++    guard !output.path.hasPrefix(app.path + "/"), !FileManager.default.fileExists(atPath: output.path) else { throw NSError(domain: "output", code: 1) }
++    let metadataURL = app.appendingPathComponent("Contents/Resources/FlowTypeBuild.json")
++    let metadata = try JSONDecoder().decode(ManifestMetadata.self, from: Data(contentsOf: metadataURL))
++    func matches(_ value: String, _ pattern: String) -> Bool { value.range(of: pattern, options: .regularExpression) != nil }
++    guard metadata.schemaVersion == 1, !metadata.dirty,
++          matches(metadata.version, #"\A[0-9]+\.[0-9]+\.[0-9]+\z"#), matches(metadata.buildNumber, #"\A[0-9]+\z"#),
++          matches(metadata.gitSHA, #"\A[0-9a-f]{40}\z"#), matches(metadata.sourceTree, #"\A[0-9a-f]{40}\z"#),
++          matches(metadata.builtAt, #"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\z"#) else { throw NSError(domain: "identity", code: 1) }
++    let resourcesRoot = app.appendingPathComponent("Contents/Resources")
++    guard let files = FileManager.default.enumerator(at: resourcesRoot, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else { throw NSError(domain: "resources", code: 1) }
++    var resources: [[String: String]] = []
++    while let file = files.nextObject() as? URL {
++        let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
++        guard values.isSymbolicLink != true else { throw NSError(domain: "resourceLink", code: 1) }
++        if values.isRegularFile == true {
++            resources.append(["path": String(file.path.dropFirst(app.path.count + 1)), "sha256": try digest(file)])
++        }
++    }
++    resources.sort { $0["path"]! < $1["path"]! }
++    let manifest: [String: Any] = ["schemaVersion": 1, "buildInfo": try JSONSerialization.jsonObject(with: JSONEncoder().encode(metadata)), "architecture": "arm64",
++        "binarySHA256": try digest(app.appendingPathComponent("Contents/MacOS/FlowType")),
++        "buildInfoSHA256": try digest(metadataURL),
++        "shaderSHA256": try digest(app.appendingPathComponent("Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib")), "resources": resources]
++    try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]).write(to: output, options: .withoutOverwriting)
++}
++do { try execute(Array(CommandLine.arguments.dropFirst())) }
++catch { FileHandle.standardError.write(Data("FlowType manifest generation failed\n".utf8)); exit((error as NSError).code == 64 ? 64 : 1) }

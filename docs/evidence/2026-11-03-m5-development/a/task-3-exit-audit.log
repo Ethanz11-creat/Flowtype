@@ -1,0 +1,92 @@
+Sources/flowtype/App/FlowTypeApp.swift-15-                    FileHandle.standardError.write(Data("FlowType: diagnostic logger configuration failed\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:16:                    AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift:17:                    exit(1)
+Sources/flowtype/App/FlowTypeApp.swift-18-                }
+Sources/flowtype/App/FlowTypeApp.swift-19-                switch context.mode {
+--
+Sources/flowtype/App/FlowTypeApp.swift-23-                    RuntimeEnvironment.finishValidation()
+Sources/flowtype/App/FlowTypeApp.swift:24:                    AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-25-                    FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:26:                    exit(1)
+Sources/flowtype/App/FlowTypeApp.swift-27-                case .app:
+Sources/flowtype/App/FlowTypeApp.swift-28-                    FlowTypeApp.main()
+--
+Sources/flowtype/App/FlowTypeApp.swift-31-        } catch {
+Sources/flowtype/App/FlowTypeApp.swift:32:            AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-33-            let failure = (error as? RuntimeBootstrapError) ?? .rootPreparation
+Sources/flowtype/App/FlowTypeApp.swift-34-            FileHandle.standardError.write(Data("FlowType: runtime bootstrap \(failure.rawValue)\n".utf8))
+Sources/flowtype/App/FlowTypeApp.swift:35:            exit(failure.exitCode)
+Sources/flowtype/App/FlowTypeApp.swift-36-        }
+Sources/flowtype/App/FlowTypeApp.swift-37-    }
+--
+Sources/flowtype/App/FlowTypeApp.swift-120-        AppLogger.log("[AppDelegate] App will terminate")
+Sources/flowtype/App/FlowTypeApp.swift:121:        AppLogger.flush()
+Sources/flowtype/App/FlowTypeApp.swift-122-    }
+Sources/flowtype/App/FlowTypeApp.swift-123-
+--
+Sources/flowtype/Testing/SelfTest.swift-39-    private static func finish(_ r: Reporter) -> Never {
+Sources/flowtype/Testing/SelfTest.swift:40:        AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-41-        RuntimeEnvironment.finishValidation()
+Sources/flowtype/Testing/SelfTest.swift:42:        exit(r.failed == 0 ? 0 : 1)
+Sources/flowtype/Testing/SelfTest.swift-43-    }
+Sources/flowtype/Testing/SelfTest.swift-44-
+--
+Sources/flowtype/Testing/SelfTest.swift-294-            AppLogger.log("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:295:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-296-            print("=== M5 build info self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-297-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-301-            AppLogger.log("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:302:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-303-            print("=== M5 isolation self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-304-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-308-            AppLogger.log("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:309:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-310-            print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-311-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-317-            AppLogger.log("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:318:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-319-            print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-320-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-324-            AppLogger.log("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:325:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-326-            print("=== M3 silence benchmark: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-327-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-333-            AppLogger.log("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:334:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-335-            print("=== M3 silence self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-336-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-342-            AppLogger.log("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:343:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-344-            print("=== M3 ASR regression self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-345-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-352-            AppLogger.log("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:353:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-354-            print("=== M3 delivery self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-355-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-359-            AppLogger.log("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:360:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-361-            print("=== M2 inspection self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-362-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-367-            AppLogger.log("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:368:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-369-            print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-370-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-377-            AppLogger.log("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:378:            AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-379-            print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-380-            finish(r)
+--
+Sources/flowtype/Testing/SelfTest.swift-514-        AppLogger.log("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift:515:        AppLogger.flush()
+Sources/flowtype/Testing/SelfTest.swift-516-        print("=== self-test: \(r.passed) passed, \(r.failed) failed ===")
+Sources/flowtype/Testing/SelfTest.swift-517-        finish(r)

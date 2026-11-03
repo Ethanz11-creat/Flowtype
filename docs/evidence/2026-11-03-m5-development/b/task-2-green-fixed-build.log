@@ -1,0 +1,16 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/9] Compiling FlowType RuntimeArtifactCheck.swift
+[6/9] Emitting module FlowType
+[7/9] Compiling FlowType AppResources.swift
+[8/12] Compiling FlowType ASRPostProcessor.swift
+[9/12] Compiling FlowType M5ArtifactSelfTests.swift
+[10/12] Compiling FlowType StatusBarController.swift
+[10/13] Write Objects.LinkFileList
+[11/13] Linking FlowType
+[12/13] Applying FlowType
+Build complete! (46.86s)

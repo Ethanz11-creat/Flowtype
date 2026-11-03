@@ -1,0 +1,365 @@
+[0/1] Planning build
+[1/1] Compiling plugin GenerateManual
+[2/2] Compiling plugin GenerateDoccReference
+Building for debugging...
+[2/6] Write sources
+[3/6] Write swift-version--1AB21518FC5DEDBE.txt
+[5/13] Compiling FlowType FlowTypeApp.swift
+[6/13] Compiling FlowType SelfTest.swift
+[7/13] Compiling FlowType BuildInfo.swift
+[8/13] Compiling FlowType DiagnosticLogWriter.swift
+[9/13] Compiling FlowType AppLogger.swift
+[10/13] Emitting module FlowType
+[11/13] Compiling FlowType StatusBarController.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/App/StatusBarController.swift:183:28: error: expected member name or initializer call after type name
+181 |         menu.addItem(aboutItem)
+182 | 
+183 |         let viewLogsItem = NSMenuItem
+    |                            |- error: expected member name or initializer call after type name
+    |                            |- note: add arguments after the type to construct a value of the type
+    |                            `- note: use '.self' to reference the type object
+184 | (title: "查看日志...", action: #selector(openLogs), keyEquivalent: "")
+185 |         viewLogsItem.target = self
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/App/StatusBarController.swift:184:1: warning: expression of type '(title: String, action: Selector, keyEquivalent: String)' is unused [#no-usage]
+182 | 
+183 |         let viewLogsItem = NSMenuItem
+184 | (title: "查看日志...", action: #selector(openLogs), keyEquivalent: "")
+    | `- warning: expression of type '(title: String, action: Selector, keyEquivalent: String)' is unused [#no-usage]
+185 |         viewLogsItem.target = self
+186 |         menu.addItem(viewLogsItem)
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/App/StatusBarController.swift:185:9: error: instance member 'target' cannot be used on type 'NSMenuItem'
+183 |         let viewLogsItem = NSMenuItem
+184 | (title: "查看日志...", action: #selector(openLogs), keyEquivalent: "")
+185 |         viewLogsItem.target = self
+    |         `- error: instance member 'target' cannot be used on type 'NSMenuItem'
+186 |         menu.addItem(viewLogsItem)
+187 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/App/StatusBarController.swift:186:22: error: cannot convert value of type 'NSMenuItem.Type' to expected argument type 'NSMenuItem'
+184 | (title: "查看日志...", action: #selector(openLogs), keyEquivalent: "")
+185 |         viewLogsItem.target = self
+186 |         menu.addItem(viewLogsItem)
+    |                      `- error: cannot convert value of type 'NSMenuItem.Type' to expected argument type 'NSMenuItem'
+187 | 
+188 |         let reloadItem = NSMenuItem(title: "重新加载配置", action: #selector(reloadConfiguration), keyEquivalent: "")
+[12/45] Compiling FlowType AudioRecorder.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[13/45] Compiling FlowType KeyboardInjector.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[14/45] Compiling FlowType LLMService.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[15/45] Compiling FlowType ASRPostProcessor.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:154:21: warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+152 |                 }
+153 |                 // Set requested device
+154 |                 var deviceIDSize = UInt32(MemoryLayout<AudioObjectID>.size)
+    |                     `- warning: variable 'deviceIDSize' was never mutated; consider changing to 'let' constant
+155 |                 var mutableAudioDeviceID = audioDeviceID
+156 |                 let setResult = AudioObjectSetPropertyData(
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:263:25: warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+261 |                 var inputConsumed = false
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+    |                         `- warning: reference to captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+264 |                         inputConsumed = true
+265 |                         outStatus.pointee = .haveData
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioRecorder.swift:264:25: warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+262 |                 converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+263 |                     if !inputConsumed {
+264 |                         inputConsumed = true
+    |                         `- warning: mutation of captured var 'inputConsumed' in concurrently-executing code [#SendableClosureCaptures]
+265 |                         outStatus.pointee = .haveData
+266 |                         return inputBuffer
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[16/49] Compiling FlowType ConfigurationStore.swift
+[17/49] Compiling FlowType AppDatabase.swift
+[18/49] Compiling FlowType JSONMigration.swift
+[19/49] Compiling FlowType StatsRepository.swift
+[20/49] Compiling FlowType DictationHistory.swift
+[21/49] Compiling FlowType PostProcessStage.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:17: warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                 `- warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:84:97: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 82 |             var uidSize = UInt32(MemoryLayout<CFString?>.size)
+ 83 |             var uid: CFString?
+ 84 |             let uidResult = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                                 `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 85 |             guard uidResult == noErr, let deviceUID = uid as String? else { continue }
+ 86 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:100: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                                                                                                    `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:130:90: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+128 |         var uidSize = UInt32(MemoryLayout<CFString?>.size)
+129 |         var uid: CFString?
+130 |         let result = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                          `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+131 |         guard result == noErr, let deviceUID = uid as String? else {
+132 |             AppLogger.log("[AudioDevice] Failed to get UID for device \(deviceID): \(result)")
+[22/49] Compiling FlowType RecordingStage.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:17: warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                 `- warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:84:97: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 82 |             var uidSize = UInt32(MemoryLayout<CFString?>.size)
+ 83 |             var uid: CFString?
+ 84 |             let uidResult = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                                 `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 85 |             guard uidResult == noErr, let deviceUID = uid as String? else { continue }
+ 86 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:100: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                                                                                                    `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:130:90: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+128 |         var uidSize = UInt32(MemoryLayout<CFString?>.size)
+129 |         var uid: CFString?
+130 |         let result = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                          `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+131 |         guard result == noErr, let deviceUID = uid as String? else {
+132 |             AppLogger.log("[AudioDevice] Failed to get UID for device \(deviceID): \(result)")
+[23/49] Compiling FlowType PipelineOrchestrator.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:17: warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                 `- warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:84:97: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 82 |             var uidSize = UInt32(MemoryLayout<CFString?>.size)
+ 83 |             var uid: CFString?
+ 84 |             let uidResult = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                                 `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 85 |             guard uidResult == noErr, let deviceUID = uid as String? else { continue }
+ 86 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:100: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                                                                                                    `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:130:90: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+128 |         var uidSize = UInt32(MemoryLayout<CFString?>.size)
+129 |         var uid: CFString?
+130 |         let result = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                          `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+131 |         guard result == noErr, let deviceUID = uid as String? else {
+132 |             AppLogger.log("[AudioDevice] Failed to get UID for device \(deviceID): \(result)")
+[24/49] Compiling FlowType ReadinessMonitor.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:17: warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                 `- warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:84:97: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 82 |             var uidSize = UInt32(MemoryLayout<CFString?>.size)
+ 83 |             var uid: CFString?
+ 84 |             let uidResult = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                                 `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 85 |             guard uidResult == noErr, let deviceUID = uid as String? else { continue }
+ 86 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:100: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                                                                                                    `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:130:90: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+128 |         var uidSize = UInt32(MemoryLayout<CFString?>.size)
+129 |         var uid: CFString?
+130 |         let result = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                          `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+131 |         guard result == noErr, let deviceUID = uid as String? else {
+132 |             AppLogger.log("[AudioDevice] Failed to get UID for device \(deviceID): \(result)")
+[25/49] Compiling FlowType AudioDevice.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:17: warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                 `- warning: initialization of immutable value 'nameResult' was never used; consider replacing with assignment to '_' or removing it [#no-usage]
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:84:97: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 82 |             var uidSize = UInt32(MemoryLayout<CFString?>.size)
+ 83 |             var uid: CFString?
+ 84 |             let uidResult = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                                 `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 85 |             guard uidResult == noErr, let deviceUID = uid as String? else { continue }
+ 86 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:95:100: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 93 |             var nameSize = UInt32(MemoryLayout<CFString?>.size)
+ 94 |             var name: CFString?
+ 95 |             let nameResult = AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &nameSize, &name)
+    |                                                                                                    `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+ 96 |             let deviceName = (name as String?) ?? deviceUID
+ 97 | 
+
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/AudioDevice.swift:130:90: warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+128 |         var uidSize = UInt32(MemoryLayout<CFString?>.size)
+129 |         var uid: CFString?
+130 |         let result = AudioObjectGetPropertyData(deviceID, &uidAddress, 0, nil, &uidSize, &uid)
+    |                                                                                          `- warning: forming 'UnsafeMutableRawPointer' to a variable of type 'Optional<CFString>'; this is likely incorrect because 'Optional<CFString>' may contain an object reference.
+131 |         guard result == noErr, let deviceUID = uid as String? else {
+132 |             AppLogger.log("[AudioDevice] Failed to get UID for device \(deviceID): \(result)")
+[26/49] Compiling FlowType M5BuildInfoSelfTests.swift
+[27/49] Compiling FlowType ASRProviderRegistry.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[28/49] Compiling FlowType ASRRouter.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[29/49] Compiling FlowType AppleSpeechProvider.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[30/49] Compiling FlowType CloudASRProvider.swift
+/Users/yiheng/pycode/flowtype-local/Sources/flowtype/Services/Speech/AppleSpeechProvider.swift:198:32: warning: result of call to 'withLock' is unused [#no-usage]
+196 |                 self.stateLock.withLock { $0.finalResult = transcript }
+197 |                 AppLogger.log("[AppleSpeechProvider] Partial result: \(transcript.count) chars isFinal=\(result.isFinal)")
+198 |                 self.stateLock.withLock { $0.previewContinuation?.yield(transcript) }
+    |                                `- warning: result of call to 'withLock' is unused [#no-usage]
+199 | 
+200 |                 if result.isFinal {
+[31/49] Compiling FlowType Dictionary.swift
+[32/49] Compiling FlowType EnvMigration.swift
+[33/49] Compiling FlowType Persistence.swift
+[34/49] Compiling FlowType ASRStage.swift
+[35/49] Compiling FlowType PolishStage.swift
+[36/49] Compiling FlowType OnboardingView.swift
+[37/49] Compiling FlowType SettingsPage+ASR.swift
+[38/49] Compiling FlowType SettingsPage+Diagnostics.swift
+[39/49] Compiling FlowType SettingsView.swift
+[40/49] Compiling FlowType QwenASRProvider.swift
+[41/49] Compiling FlowType CloudASRConnectionCheck.swift
+[42/49] Compiling FlowType CloudASRProviderList.swift
+[43/49] Compiling FlowType HistoryPage.swift
+[44/49] Compiling FlowType StylePage.swift
+[45/49] Compiling FlowType M5RuntimeSelfTests.swift
+[46/49] Compiling FlowType KeychainHelper.swift
+[47/49] Compiling FlowType WindowManager.swift

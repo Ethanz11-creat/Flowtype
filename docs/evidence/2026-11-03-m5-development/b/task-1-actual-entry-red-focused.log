@@ -1,0 +1,8 @@
+  ✗ FAIL: M5 actual install entry respects role — got true, want false
+  ✗ FAIL: M5 actual window install repair reload and hotkey downstream guarded — got 1, want 0
+  ✗ FAIL: M5 direct menu repair permission configuration and window selectors guard downstream — got 2, want 0
+  ✗ FAIL: M5 actual install entry respects role — got true, want false
+  ✗ FAIL: M5 actual window install repair reload and hotkey downstream guarded — got 1, want 0
+  ✗ FAIL: M5 direct menu repair permission configuration and window selectors guard downstream — got 2, want 0
+=== FlowType --self-test ===
+=== M5 smoke contract self-test: 52 passed, 6 failed ===
