@@ -21,11 +21,11 @@ enum PolishMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-struct DictationSession: Codable, Identifiable {
+struct DictationSession: Codable, Identifiable, Equatable {
     let id: String
     let createdAt: Date
-    let rawTranscript: String
-    let finalText: String
+    var rawTranscript: String
+    var finalText: String
     let polishMode: PolishMode
     let durationMs: UInt64?          // legacy end-to-end wall clock (kept for fallback)
     let recordingMs: UInt64?         // pure recording time (the speed fix)
@@ -111,6 +111,10 @@ final class HistoryStore: ObservableObject {
     static let shared = HistoryStore(database: AppDatabaseProvider.shared,
                                      refreshStats: { DailyStatsStore.shared.refresh() })
     @Published private(set) var sessions: [DictationSession] = []
+    // Actions consult committed state, including during @Published's willSet notifications.
+    private(set) var currentSessions: [DictationSession] = []
+    private var publishingSessions = false
+    private var readGeneration = 0
     @Published private(set) var readState: HistoryReadState = .loading
     private let db: AppDatabase
     private let readSessions: @MainActor () throws -> [DictationSession]
@@ -134,13 +138,21 @@ final class HistoryStore: ObservableObject {
     }
 
     func reload() {
+        readGeneration += 1
+        let generation = readGeneration
         readState = .loading
+        guard generation == readGeneration else { return }
         do {
-            sessions = try readSessions()
+            let updated = try readSessions()
+            guard generation == readGeneration else { return }
+            replaceSessions(updated)
+            // A publication subscriber may have committed a mutation and reloaded.
+            guard generation == readGeneration else { return }
             readState = .loaded
         } catch {
+            guard generation == readGeneration else { return }
             AppLogger.log("[History] reload failed: \(error)")
-            // Keep the last successful snapshot available for selection, copying and export.
+            // Keep the latest committed snapshot, including successful privacy mutations.
             readState = .failed(error.localizedDescription)
         }
     }
@@ -153,23 +165,64 @@ final class HistoryStore: ObservableObject {
         refreshStats()
     }
 
-    func delete(id: String) {
-        try? db.dbQueue.write { _ = try SessionRecord.deleteOne($0, key: id) }
-        reload(); refreshStats()
+    @discardableResult
+    func delete(id: String) -> Bool {
+        do {
+            try db.dbQueue.write { _ = try SessionRecord.deleteOne($0, key: id) }
+        } catch {
+            AppLogger.log("[History] delete failed: \(error)")
+            return false
+        }
+        replaceSessions(currentSessions.filter { $0.id != id })
+        reload()
+        refreshStats()
+        return true
     }
 
     /// 清空历史 (privacy): erase transcripts, keep metadata rows → stats/streaks survive.
-    func clearTranscripts() {
-        try? db.dbQueue.write { try $0.execute(sql: "UPDATE session SET rawTranscript=NULL, finalText=NULL") }
+    @discardableResult
+    func clearTranscripts() -> Bool {
+        do {
+            try db.dbQueue.write { try $0.execute(sql: "UPDATE session SET rawTranscript=NULL, finalText=NULL") }
+        } catch {
+            AppLogger.log("[History] clear transcripts failed: \(error)")
+            return false
+        }
+        replaceSessions(currentSessions.map { session in
+            var session = session
+            session.rawTranscript = ""
+            session.finalText = ""
+            return session
+        })
         reload()
+        return true
     }
 
     /// 重置统计 (destruction): delete all rows incl. frozen legacy aggregates.
-    func resetAllStats() {
-        try? db.dbQueue.write { d in
-            try d.execute(sql: "DELETE FROM session")
-            try d.execute(sql: "DELETE FROM daily_legacy")
+    @discardableResult
+    func resetAllStats() -> Bool {
+        do {
+            try db.dbQueue.write { d in
+                try d.execute(sql: "DELETE FROM session")
+                try d.execute(sql: "DELETE FROM daily_legacy")
+            }
+        } catch {
+            AppLogger.log("[History] reset failed: \(error)")
+            return false
         }
-        reload(); refreshStats()
+        replaceSessions([])
+        reload()
+        refreshStats()
+        return true
+    }
+
+    private func replaceSessions(_ updated: [DictationSession]) {
+        currentSessions = updated
+        guard !publishingSessions else { return }
+        publishingSessions = true
+        // A subscriber may perform another mutation. Its committed snapshot wins over
+        // the outer @Published assignment, without exposing pre-mutation action data.
+        repeat { sessions = currentSessions } while sessions != currentSessions
+        publishingSessions = false
     }
 }

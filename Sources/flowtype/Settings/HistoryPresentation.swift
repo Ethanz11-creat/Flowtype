@@ -80,40 +80,41 @@ final class HistoryPageModel: ObservableObject {
     }
 
     var filteredSessions: [DictationSession] {
-        store.sessions.filter { session in
+        store.currentSessions.filter { session in
             (filterMode == nil || session.polishMode == filterMode)
                 && (searchText.isEmpty || session.finalText.localizedCaseInsensitiveContains(searchText)
                     || session.rawTranscript.localizedCaseInsensitiveContains(searchText))
         }
     }
 
-    var selectedSession: DictationSession? { store.sessions.first { $0.id == selectedID } }
+    var selectedSession: DictationSession? { store.currentSessions.first { $0.id == selectedID } }
 
     func consume(_ request: NavigationRequest?) {
         guard let request, request.id != navigationRequestID,
               case .history(let id) = request.destination else { return }
         navigationRequestID = request.id
-        guard let id, store.sessions.contains(where: { $0.id == id }) else { return }
+        guard let id, store.currentSessions.contains(where: { $0.id == id }) else { return }
         searchText = ""
         filterMode = nil
         selectedID = id
     }
 
     func copy(_ session: DictationSession) {
-        guard HistoryPresentation.canCopy(session) else { return }
-        copyText(session.finalText)
+        guard let current = store.currentSessions.first(where: { $0.id == session.id }),
+              HistoryPresentation.canCopy(current) else { return }
+        copyText(current.finalText)
     }
 
     func exportText(_ session: DictationSession) {
-        guard HistoryPresentation.canExportText(session) else { return }
-        export(.text(session))
+        guard let current = store.currentSessions.first(where: { $0.id == session.id }),
+              HistoryPresentation.canExportText(current) else { return }
+        export(.text(current))
     }
 
     func exportCSV() { if !filteredSessions.isEmpty { export(.csv(filteredSessions)) } }
     func exportJSON() { if !filteredSessions.isEmpty { export(.json(filteredSessions)) } }
     func delete(_ session: DictationSession) {
-        if selectedID == session.id { selectedID = nil }
-        store.delete(id: session.id)
+        if store.delete(id: session.id), selectedID == session.id { selectedID = nil }
     }
     func requestReset() { resetConfirmation = .first }
     func continueReset() { if resetConfirmation == .first { resetConfirmation = .final } }
@@ -121,7 +122,6 @@ final class HistoryPageModel: ObservableObject {
     func confirmReset() {
         guard resetConfirmation == .final else { return }
         resetConfirmation = .none
-        selectedID = nil
-        store.resetAllStats()
+        if store.resetAllStats() { selectedID = nil }
     }
 }
