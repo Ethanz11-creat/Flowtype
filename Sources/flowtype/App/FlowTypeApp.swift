@@ -1,16 +1,30 @@
 import SwiftUI
 import AppKit
 
-/// Process entry point. Intercepts `--self-test` (runnable without Xcode/XCTest)
-/// before launching the GUI; otherwise hands off to the SwiftUI app.
+/// Establishes the runtime before any shared services or SwiftUI app initialization.
 @main
 enum FlowTypeMain {
     @MainActor
     static func main() async {
-        if CommandLine.arguments.contains("--self-test") {
-            await SelfTest.runAndExit()
+        do {
+            try await RuntimeEnvironment.run(arguments: CommandLine.arguments,
+                                             temporaryDirectory: FileManager.default.temporaryDirectory) { context in
+                switch context.mode {
+                case .selfTest:
+                    await SelfTest.runAndExit()
+                case .smoke, .artifact:
+                    RuntimeEnvironment.finishValidation()
+                    FileHandle.standardError.write(Data("FlowType: validation mode unsupported\n".utf8))
+                    exit(1)
+                case .app:
+                    FlowTypeApp.main()
+                }
+            }
+        } catch {
+            let failure = (error as? RuntimeBootstrapError) ?? .rootPreparation
+            FileHandle.standardError.write(Data("FlowType: runtime bootstrap \(failure.rawValue)\n".utf8))
+            exit(failure.exitCode)
         }
-        FlowTypeApp.main()
     }
 }
 

@@ -281,6 +281,12 @@ enum SelfTest {
     static func runAndExit() async -> Never {
         let r = Reporter()
         print("=== FlowType --self-test ===")
+        if CommandLine.arguments.contains("--m5-runtime-only") {
+            await M5RuntimeSelfTests.run(r)
+            RuntimeEnvironment.finishValidation()
+            print("=== M5 runtime self-test: \(r.passed) passed, \(r.failed) failed ===")
+            exit(r.failed == 0 ? 0 : 1)
+        }
         if CommandLine.arguments.contains("--m4-recovery-only") {
             M4RecoveryPolicySelfTests.run(r)
             await M4StageFailureSelfTests.run(r)

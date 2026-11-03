@@ -1,16 +1,22 @@
 import Foundation
 import AppKit
 
-/// File-based logger that writes to ~/Library/Logs/flowtype/diagnostic.log.
+/// File-based logger routed through the bootstrapped runtime's role and directories.
 /// Use this instead of `print()` for persistent diagnostics — stdout is lost
 /// inside .app bundles.
 enum AppLogger {
     private static let logDir: String = {
-        (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/flowtype")
+        RuntimeEnvironment.current.paths.logsDirectory.path
     }()
 
     private static let logPath: String = {
-        (logDir as NSString).appendingPathComponent("diagnostic.log")
+        let filename: String
+        switch RuntimeEnvironment.current.role {
+        case .app: filename = "diagnostic.log"
+        case .selfTest: filename = "diagnostic-selftest.log"
+        case .smokeTest: filename = "diagnostic-smoke.log"
+        }
+        return (logDir as NSString).appendingPathComponent(filename)
     }()
 
     /// Security: maximum log file size (10 MB) before rotation
