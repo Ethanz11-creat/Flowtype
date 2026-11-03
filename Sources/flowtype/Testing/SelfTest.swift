@@ -291,6 +291,7 @@ enum SelfTest {
         print("=== FlowType --self-test ===")
         if CommandLine.arguments.contains("--capsule-presentation-only") {
             await CapsulePresentationSelfTests.run(r)
+            testStableSessionPresentation(r)
             print("=== Capsule presentation self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -1263,7 +1264,7 @@ enum SelfTest {
     }
 
     static func testStableSessionPresentation(_ r: Reporter) {
-        r.eq(SessionState.processing(provider: "private-provider").statusTitle, "处理中...",
+        r.eq(SessionState.processing(provider: "private-provider").statusTitle, "正在处理",
              "presentation: ASR provider identity does not leak into processing title")
         r.eq(SessionState.polishing(preview: "unfinished draft").statusTitle,
              SessionState.processing(provider: "cloud").statusTitle,
