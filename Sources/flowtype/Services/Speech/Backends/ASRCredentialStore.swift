@@ -131,7 +131,18 @@ final class KeychainASRCredentialStore: ASRCredentialStore, @unchecked Sendable 
 }
 
 extension CloudASRProviderConfig {
-    var credentialID: String { "asr.cloud." + id.uuidString }
+    var credentialID: String { credentialReferenceID ?? "asr.cloud." + id.uuidString }
+
+    /// Persisted references cannot cross profile, service or HF credential namespaces.
+    func validatedCredentialID() throws -> String {
+        guard let credentialReferenceID else { return credentialID }
+        let prefix = "asr.cloud." + id.uuidString + "."
+        guard credentialReferenceID.hasPrefix(prefix),
+              UUID(uuidString: String(credentialReferenceID.dropFirst(prefix.count))) != nil else {
+            throw ASRCredentialError.invalidData
+        }
+        return credentialReferenceID
+    }
     /// Display/activation edits do not change the call revision.
     func hasSameCallConfiguration(as other: Self) -> Bool {
         baseURL == other.baseURL && model == other.model && protocolKind == other.protocolKind
@@ -153,9 +164,13 @@ enum ASRCredentialMigration {
         var pending: [String] = []
         for (legacyID, value) in configuration.cloudASRConfig.providerAPIKeys.sorted(by: { $0.key < $1.key }) {
             guard let uuid = UUID(uuidString: legacyID) else { pending.append("asr.cloud." + legacyID); continue }
-            let id = "asr.cloud." + uuid.uuidString
+            var id = "asr.cloud." + uuid.uuidString
             do {
+                let profile = configuration.cloudASRConfig.providers.first(where: { $0.id == uuid })
+                id = try profile?.validatedCredentialID() ?? id
                 let existing = try store.read(id: id)
+                // Never populate a selected immutable version with an old backup.
+                if profile?.credentialReferenceID != nil && existing == nil { pending.append(id); continue }
                 guard existing == nil || existing == value else { pending.append(id); continue }
                 if existing == nil { try store.write(value, id: id) }
                 guard try store.read(id: id) == value else { pending.append(id); continue }

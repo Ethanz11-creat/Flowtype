@@ -255,10 +255,13 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
     var vendorID: CloudASRVendorID
     /// Used only for custom compatible services; optional fields require explicit opt-in.
     var customFieldCapabilities: CloudASRFieldCapabilities
+    /// Nil reads the legacy profile-scoped key; new references select immutable versions.
+    var credentialReferenceID: String?
 
     init(id: UUID = UUID(), revision: UUID = UUID(), name: String, provider: String, baseURL: String, model: String,
          isActive: Bool = false, protocolKind: CloudASRProtocolKind = .openAICompatible,
-         vendorID: CloudASRVendorID? = nil, customFieldCapabilities: CloudASRFieldCapabilities = .init()) {
+         vendorID: CloudASRVendorID? = nil, customFieldCapabilities: CloudASRFieldCapabilities = .init(),
+         credentialReferenceID: String? = nil) {
         self.id = id
         self.revision = revision
         self.name = name
@@ -269,10 +272,11 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
         self.protocolKind = protocolKind
         self.vendorID = vendorID ?? CloudASRVendor.legacyVendorID(for: provider)
         self.customFieldCapabilities = customFieldCapabilities
+        self.credentialReferenceID = credentialReferenceID
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, revision, name, provider, baseURL, model, isActive, protocolKind, vendorID, customFieldCapabilities
+        case id, revision, name, provider, baseURL, model, isActive, protocolKind, vendorID, customFieldCapabilities, credentialReferenceID
     }
 
     init(from decoder: Decoder) throws {
@@ -287,6 +291,7 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
         protocolKind = try c.decodeIfPresent(CloudASRProtocolKind.self, forKey: .protocolKind) ?? .openAICompatible
         vendorID = try c.decodeIfPresent(CloudASRVendorID.self, forKey: .vendorID) ?? CloudASRVendor.legacyVendorID(for: provider)
         customFieldCapabilities = try c.decodeIfPresent(CloudASRFieldCapabilities.self, forKey: .customFieldCapabilities) ?? .init()
+        credentialReferenceID = try c.decodeIfPresent(String.self, forKey: .credentialReferenceID)
     }
 
     static func defaultParaformer(id: UUID = UUID(), isActive: Bool = false) -> CloudASRProviderConfig {
@@ -481,7 +486,15 @@ struct Configuration: Codable, Equatable {
     }
 
     func cloudASRCredential(profileID: UUID, store: any ASRCredentialStore) throws -> ASRCredentialSnapshot {
-        let snapshot = try store.snapshot(id: "asr.cloud." + profileID.uuidString)
+        let profile = cloudASRConfig.providers.first(where: { $0.id == profileID })
+        let id = try profile?.validatedCredentialID() ?? "asr.cloud." + profileID.uuidString
+        let snapshot = try store.snapshot(id: id)
+        if profile?.credentialReferenceID != nil {
+            // A selected immutable version must never fall back to an older legacy key,
+            // even if its item was removed outside the application.
+            guard snapshot.value != nil else { throw ASRCredentialError.invalidData }
+            return snapshot
+        }
         return .init(value: snapshot.value ?? cloudASRConfig.providerAPIKeys[profileID.uuidString], generation: snapshot.generation)
     }
 

@@ -158,51 +158,63 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         try current.cloudASRCredential(profileID: profileID, store: asrCredentials)
     }
 
-    /// Persist staged references first, then credential, then scrubbed configuration.
-    /// Empty values are removal tombstones: nil alone permits legacy fallback.
+    /// A committed profile's credential is immutable during a draft transaction.
+    /// Stage a fresh credential version, then commit its reference and call fields
+    /// together in one config blob. Every restart sees a matching endpoint/key pair.
     func saveASRDraft(_ draft: ASRProviderDraft) throws {
         saveWorkItem?.cancel()
         saveWorkItem = nil
         var candidate = current
         try ProviderDraftCommit.apply(draft, to: &candidate)
-        let id = "asr.cloud." + draft.target.id.uuidString
-        let old = current
-        let snapshot = try current.cloudASRCredential(profileID: draft.target.id, store: asrCredentials)
+        guard let index = candidate.cloudASRConfig.providers.firstIndex(where: { $0.id == draft.target.id }) else {
+            throw ProviderDraftCommitError.deleted
+        }
+        let oldID = try candidate.cloudASRConfig.providers[index].validatedCredentialID()
+        let stored = try asrCredentials.snapshot(id: oldID)
+        let snapshot: ASRCredentialSnapshot
+        if candidate.cloudASRConfig.providers[index].credentialReferenceID != nil {
+            // Missing selected versions never read legacy backups. An explicit
+            // replace/remove may repair the missing item; preserve must fail.
+            snapshot = stored
+        } else {
+            snapshot = try current.cloudASRCredential(profileID: draft.target.id, store: asrCredentials)
+        }
         let editedValue: String?
         switch draft.keyEdit {
         case .preserve: editedValue = snapshot.value
         case .replace(let value): editedValue = value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? snapshot.value : value
         case .remove: editedValue = ""
         }
-        if editedValue != snapshot.value, let index = candidate.cloudASRConfig.providers.firstIndex(where: { $0.id == draft.target.id }) {
-            candidate.cloudASRConfig.providers[index].revision = UUID()
+        if candidate.cloudASRConfig.providers[index].credentialReferenceID != nil && editedValue == nil {
+            throw ASRCredentialError.invalidData
         }
-        // Never serialize newly typed keys. Only an already persisted legacy backup
-        // may survive until the credential has been written and verified.
+        let credentialChanged = editedValue != snapshot.value
+        if credentialChanged { candidate.cloudASRConfig.providers[index].revision = UUID() }
         candidate.cloudASRConfig.providerAPIKeys.removeValue(forKey: draft.target.id.uuidString)
-        var staged = candidate
-        staged.cloudASRConfig.providerAPIKeys[draft.target.id.uuidString] = old.cloudASRConfig.providerAPIKeys[draft.target.id.uuidString]
-        try persist(staged)
+
+        // This first durable write contains only the previously committed call pair
+        // and its recovery copies. It cannot publish any draft endpoint/model changes.
+        try persist(current)
         do {
-            if let editedValue {
-                try asrCredentials.write(editedValue, id: id)
-                guard try asrCredentials.read(id: id) == editedValue else { throw ASRCredentialError.unavailable }
+            if let editedValue, credentialChanged || stored.value == nil {
+                let reference = "asr.cloud." + draft.target.id.uuidString + "." + UUID().uuidString
+                try asrCredentials.write(editedValue, id: reference)
+                guard try asrCredentials.read(id: reference) == editedValue else { throw ASRCredentialError.unavailable }
+                candidate.cloudASRConfig.providers[index].credentialReferenceID = reference
             }
         } catch {
-            try? persist(old)
             asrPersistenceError = ASRCredentialError.unavailable.localizedDescription
             throw ASRCredentialError.unavailable
         }
-        // If scrubbing fails, retain staged backup + updated revision and surface retry.
-        current = staged
         do { try persist(candidate) }
         catch {
-            pendingASRCredentialIDs = staged.cloudASRConfig.providerAPIKeys.keys.sorted().map { "asr.cloud." + $0 }
+            // Old config/key remain usable. An unreferenced staged item can be
+            // collected later; deleting or overwriting committed keys is unsafe.
             asrPersistenceError = ASRCredentialError.persistence.localizedDescription
             throw ASRCredentialError.persistence
         }
         current = candidate
-        pendingASRCredentialIDs.removeAll { $0 == id }
+        pendingASRCredentialIDs.removeAll { $0 == oldID }
         asrPersistenceError = nil
     }
 

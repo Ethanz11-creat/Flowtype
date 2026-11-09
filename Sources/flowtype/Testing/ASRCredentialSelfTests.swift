@@ -14,6 +14,9 @@ enum ASRCredentialSelfTests {
         testExplicitRemovalTombstoneSurvivesFailedSave(r)
         testGuardedASRCredentialAccess(r)
         testConcurrentSnapshots(r)
+        testDraftCredentialTransactionRestartBoundaries(r)
+        testCredentialReferenceNamespace(r)
+        testMissingVersionRepairAndStaleEditor(r)
     }
 
     // A delete-before-add implementation loses the existing value on these failures.
@@ -156,40 +159,175 @@ enum ASRCredentialSelfTests {
         r.check(config.providers[0].revision != revision, "credential edit rotates call revision")
     }
 
-    // A crash after deleting Keychain but before removing legacy JSON must not revive a key.
+    // A failed config commit preserves the old pair; a committed tombstone never falls back.
     static func testExplicitRemovalTombstoneSurvivesFailedSave(_ r: SelfTest.Reporter) {
         let suite = "com.flowtype.validation.asr.remove.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let fixture = CredentialFixture()
-        let credentials = KeychainASRCredentialStore(access: fixture.access)
+        let credentials = KeychainASRCredentialStore(access: .memory())
         var config = Configuration()
         let profile = CloudASRProviderConfig.defaultSiliconFlow()
         config.cloudASRConfig.providers = [profile]
-        config.cloudASRConfig.providerAPIKeys[profile.id.uuidString] = "fixture-remove"
+        config.asrBackendSelection = .init(primary: .init(rawValue: "cloud:" + profile.id.uuidString), fallback: nil, allowsCloudFallback: false)
         do {
+            try credentials.write("fixture-remove", id: profile.credentialID)
             defaults.set(try JSONEncoder().encode(config), forKey: "flowtype.config")
             defaults.set(5, forKey: "flowtype.migrationVersion")
-            fixture.state.withLock { $0.failRead = true }
-            var failScrub = false
+            var failFinal = false
             var writes = 0
             let store = ConfigurationStore(defaults: defaults, asrCredentials: credentials, persistence: { data in
                 writes += 1
-                if failScrub && writes.isMultiple(of: 2) { throw ASRCredentialError.persistence }
+                if failFinal && writes == 2 { throw ASRCredentialError.persistence }
                 defaults.set(data, forKey: "flowtype.config")
             })
-            fixture.state.withLock { $0.failRead = false }
             writes = 0
-            failScrub = true
+            failFinal = true
             var draft = ASRProviderDraft(target: .existing(profile.id), profile: profile)
             draft.keyEdit = .remove
-            r.check((try? store.saveASRDraft(draft)) == nil, "failed removal scrub reports failure")
-            r.eq(try credentials.read(id: profile.credentialID), "", "explicit removal writes durable tombstone")
+            r.check((try? store.saveASRDraft(draft)) == nil, "failed removal config commit reports failure")
             let restarted = ConfigurationStore(defaults: defaults, asrCredentials: credentials)
-            r.eq(try restarted.cloudASRCredential(profileID: profile.id).value, "", "restart never resurrects removed legacy credential")
-            r.eq(restarted.current.cloudASRConfig.providerAPIKeys[profile.id.uuidString], "fixture-remove", "failed scrub retains recoverable legacy copy")
-            r.eq(restarted.pendingASRCredentialIDs, [profile.credentialID], "tombstone conflict remains visible for recovery")
+            r.eq(try restarted.cloudASRCredential(profileID: profile.id).value, "fixture-remove", "failed removal preserves committed key on restart")
+            try restarted.saveASRDraft(draft)
+            r.eq(try restarted.cloudASRCredential(profileID: profile.id).value, "", "committed removal resolves empty tombstone")
+            r.check(restarted.current.cloudASRConfig.providers[0].credentialID != profile.credentialID, "removal commits a distinct credential reference")
+            var stale = restarted.current
+            stale.cloudASRConfig.providerAPIKeys[profile.id.uuidString] = "fixture-remove"
+            defaults.set(try JSONEncoder().encode(stale), forKey: "flowtype.config")
+            let tombstoneRestart = ConfigurationStore(defaults: defaults, asrCredentials: credentials)
+            r.eq(try tombstoneRestart.cloudASRCredential(profileID: profile.id).value, "", "restart never resurrects committed removal from stale legacy backup")
+            r.eq(tombstoneRestart.pendingASRCredentialIDs, [stale.cloudASRConfig.providers[0].credentialID], "tombstone migration conflict remains visible")
+            r.eq(try credentials.read(id: profile.credentialID), "fixture-remove", "old snapshot credential remains intact after removal commit")
         } catch { r.check(false, "removal fixture unexpectedly threw") }
+    }
+
+    // Mutating a shared credential ID before config commit mismatches endpoint/key after restart.
+    static func testDraftCredentialTransactionRestartBoundaries(_ r: SelfTest.Reporter) {
+        enum Interruption: CaseIterable { case afterStage, credentialAndRollbackFailure, finalSaveFailure }
+        for interruption in Interruption.allCases {
+            let suite = "com.flowtype.validation.asr.transaction.\(UUID())"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let fixture = CredentialFixture()
+            let credentials = KeychainASRCredentialStore(access: fixture.access)
+            var original = Configuration()
+            var profile = CloudASRProviderConfig.defaultSiliconFlow()
+            profile.baseURL = "https://original.invalid/v1"
+            profile.model = "original-model"
+            original.cloudASRConfig.providers = [profile]
+            original.asrBackendSelection = .init(primary: .init(rawValue: "cloud:" + profile.id.uuidString), fallback: nil, allowsCloudFallback: false)
+            do {
+                try credentials.write("fixture-original-key", id: profile.credentialID)
+                let captured = try credentials.snapshot(id: profile.credentialID)
+                defaults.set(try JSONEncoder().encode(original), forKey: "flowtype.config")
+                defaults.set(5, forKey: "flowtype.migrationVersion")
+                var armed = false
+                var writes = 0
+                let store = ConfigurationStore(defaults: defaults, asrCredentials: credentials, persistence: { data in
+                    if armed {
+                        writes += 1
+                        if writes > 1 { throw ASRCredentialError.persistence }
+                    }
+                    defaults.set(data, forKey: "flowtype.config")
+                    if armed && interruption == .afterStage { throw ASRCredentialError.persistence }
+                })
+                var draft = ASRProviderDraft(target: .existing(profile.id), profile: profile)
+                draft.profile.baseURL = "wss://changed.invalid/asr"
+                draft.profile.model = "changed-model"
+                draft.profile.protocolKind = .dashScopeRealtime
+                draft.profile.vendorID = .dashScope
+                draft.keyEdit = .replace("fixture-changed-key")
+                armed = true
+                if interruption == .credentialAndRollbackFailure {
+                    fixture.state.withLock { $0.failAdd = true; $0.failUpdate = true }
+                }
+                r.check((try? store.saveASRDraft(draft)) == nil, "interrupted transaction reports failure")
+                fixture.state.withLock { $0.failAdd = false; $0.failUpdate = false }
+                let disk = try JSONDecoder().decode(Configuration.self, from: defaults.data(forKey: "flowtype.config")!)
+                let diskPair = try disk.effectiveCloudASRConfig(store: credentials)
+                r.eq(diskPair?.provider.baseURL, "https://original.invalid/v1", "interrupted save keeps original disk endpoint")
+                r.eq(diskPair?.provider.model, "original-model", "interrupted save keeps original disk model")
+                r.eq(diskPair?.provider.protocolKind, .openAICompatible, "interrupted save keeps original disk protocol")
+                r.eq(diskPair?.apiKey, "fixture-original-key", "interrupted save keeps matching original disk key")
+                let livePair = try store.current.effectiveCloudASRConfig(store: credentials)
+                r.eq(livePair?.provider.baseURL, "https://original.invalid/v1", "interrupted save keeps live endpoint")
+                r.eq(livePair?.apiKey, "fixture-original-key", "interrupted save keeps matching live key")
+                let restarted = ConfigurationStore(defaults: defaults, asrCredentials: credentials)
+                let restartedPair = try restarted.current.effectiveCloudASRConfig(store: credentials)
+                r.eq(restartedPair?.provider.baseURL, "https://original.invalid/v1", "restart resolves original endpoint after interruption")
+                r.eq(restartedPair?.apiKey, "fixture-original-key", "restart resolves matching original key after interruption")
+                r.eq(restarted.current.asrBackendSelection, original.asrBackendSelection, "interruption preserves selection")
+                try restarted.saveASRDraft(draft)
+                let committed = ConfigurationStore(defaults: defaults, asrCredentials: credentials)
+                let committedPair = try committed.current.effectiveCloudASRConfig(store: credentials)
+                r.eq(committedPair?.provider.id, profile.id, "transaction preserves stable profile UUID")
+                r.eq(committedPair?.provider.baseURL, "wss://changed.invalid/asr", "committed restart resolves edited endpoint")
+                r.eq(committedPair?.provider.model, "changed-model", "committed restart resolves edited model")
+                r.eq(committedPair?.provider.protocolKind, .dashScopeRealtime, "committed restart resolves edited protocol")
+                r.eq(committedPair?.apiKey, "fixture-changed-key", "committed restart resolves matching edited key")
+                r.check(committedPair?.provider.credentialID != profile.credentialID, "committed edit selects a new immutable credential ID")
+                r.eq(try credentials.snapshot(id: profile.credentialID), captured, "old credential and generation survive for captured sessions")
+                r.check(!String(decoding: defaults.data(forKey: "flowtype.config")!, as: UTF8.self).contains("fixture-changed-key"), "committed config contains no credential contents")
+            } catch { r.check(false, "transaction interruption fixture unexpectedly threw") }
+        }
+    }
+
+    static func testCredentialReferenceNamespace(_ r: SelfTest.Reporter) {
+        let credentials = KeychainASRCredentialStore(access: .memory())
+        let profile = CloudASRProviderConfig.defaultSiliconFlow()
+        do {
+            try credentials.write("fixture-private", id: profile.credentialID)
+            let encoded = try JSONEncoder().encode(profile)
+            for badReference in ["asr.hf.official", "asr.service." + UUID().uuidString,
+                "asr.cloud." + UUID().uuidString + "." + UUID().uuidString,
+                profile.credentialID + ".not-a-uuid", profile.credentialID,
+                profile.credentialID + "." + UUID().uuidString] {
+                var object = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+                object["credentialReferenceID"] = badReference
+                let decoded = try JSONDecoder().decode(CloudASRProviderConfig.self, from: JSONSerialization.data(withJSONObject: object))
+                var config = Configuration()
+                config.cloudASRConfig.providers = [decoded]
+                config.cloudASRConfig.providerAPIKeys[profile.id.uuidString] = "fixture-stale-legacy"
+                r.check((try? config.cloudASRCredential(profileID: profile.id, store: credentials)) == nil, "foreign or malformed credential reference rejected")
+                r.check((try? config.effectiveCloudASRConfig(store: credentials)) == nil, "effective resolver rejects foreign or malformed reference")
+            }
+        } catch { r.check(false, "credential namespace fixture unexpectedly threw") }
+    }
+
+    static func testMissingVersionRepairAndStaleEditor(_ r: SelfTest.Reporter) {
+        let suite = "com.flowtype.validation.asr.repair.\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let credentials = KeychainASRCredentialStore(access: .memory())
+        var original = Configuration()
+        var profile = CloudASRProviderConfig.defaultSiliconFlow()
+        let canonicalID = profile.credentialID
+        profile.credentialReferenceID = canonicalID + "." + UUID().uuidString
+        original.cloudASRConfig.providers = [profile]
+        original.cloudASRConfig.providerAPIKeys[profile.id.uuidString] = "fixture-legacy-older"
+        do {
+            try credentials.write("fixture-legacy-older", id: canonicalID)
+            let proposal = ASRCredentialMigration.migrate(configuration: original, store: credentials)
+            r.eq(proposal.configuration.cloudASRConfig.providerAPIKeys[profile.id.uuidString], "fixture-legacy-older", "missing immutable version keeps legacy backup pending")
+            r.eq(try credentials.read(id: profile.credentialID), nil, "migration never fills missing immutable version from older backup")
+            r.check((try? original.effectiveCloudASRConfig(store: credentials)) == nil, "missing immutable version never falls back to older key")
+            defaults.set(try JSONEncoder().encode(original), forKey: "flowtype.config")
+            defaults.set(5, forKey: "flowtype.migrationVersion")
+            let store = ConfigurationStore(defaults: defaults, asrCredentials: credentials)
+            var replacement = ASRProviderDraft(target: .existing(profile.id), profile: profile)
+            replacement.keyEdit = .replace("fixture-repaired-key")
+            try store.saveASRDraft(replacement)
+            let repaired = try store.current.effectiveCloudASRConfig(store: credentials)
+            r.eq(repaired?.apiKey, "fixture-repaired-key", "explicit replacement repairs externally missing credential version")
+            let repairedID = store.current.cloudASRConfig.providers[0].credentialID
+            var stale = ASRProviderDraft(target: .existing(profile.id), profile: profile)
+            stale.profile.name = "Renamed by older editor"
+            try store.saveASRDraft(stale)
+            let restarted = ConfigurationStore(defaults: defaults, asrCredentials: credentials)
+            let pair = try restarted.current.effectiveCloudASRConfig(store: credentials)
+            r.eq(pair?.apiKey, "fixture-repaired-key", "stale editor preserve uses latest committed credential")
+            r.eq(pair?.provider.credentialID, repairedID, "stale editor cannot restore old credential reference")
+            r.eq(pair?.provider.name, "Renamed by older editor", "stale editor still commits its display edit")
+        } catch { r.check(false, "missing-version repair fixture unexpectedly threw") }
     }
 
     static func testGuardedASRCredentialAccess(_ r: SelfTest.Reporter) {

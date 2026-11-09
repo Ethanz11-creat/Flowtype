@@ -70,7 +70,7 @@ r.eq(selection.fallback, nil, "cloud-only never gains local fallback")
 **Interfaces:**
 - Consume A1 profile identity。
 - Produce `ASRCredentialStore: Sendable`，`read(id: String) throws -> String?`、`generation(id: String) -> UUID`、`snapshot(id: String) throws -> ASRCredentialSnapshot`、`write(_ value: String, id: String) throws`、`remove(id: String) throws`；snapshot字段value:String?、generation:UUID，二者原子读取；`KeychainASRCredentialStore` 与注入内存 fixture。
-- Produce `ASRCredentialMigration.migrate(configuration: Configuration, store: any ASRCredentialStore) -> ASRCredentialMigrationResult`，result 包含 configuration 与 pendingIDs:[String]。credential ID 为 `asr.cloud.<UUID>` / `asr.service.<UUID>` / `asr.hf.official`。
+- Produce `ASRCredentialMigration.migrate(configuration: Configuration, store: any ASRCredentialStore) -> ASRCredentialMigrationResult`，result 包含 configuration 与 pendingIDs:[String]。credential ID 旧引用为 `asr.cloud.<profile UUID>`；A2 评审 I1 原子提交修订新增 `CloudASRProviderConfig.credentialReferenceID: String?`（缺失为 nil），新不可变版本为 `asr.cloud.<profile UUID>.<fresh UUID>`；service/HF 仍为 `asr.service.<UUID>` / `asr.hf.official`。`credentialID: String` 为计算引用，读前通过 `validatedCredentialID()` 验证显式引用属于本 profile 且后缀为 UUID。显式引用缺失不得回退旧 key。先保存旧配置恢复源、写新引用并读回，最后单个配置 blob 同时提交 URL/model/protocol/revision + credential reference；失败不覆盖旧配对，不依赖回滚。删除使用新引用的空值 tombstone，提交前失败保留旧配对。旧引用与未提交 staged 项保留，安全清理后续处理；不持久化密钥正文到配置/journal。详见后端设计 §5 修订。
 
 - [ ] **Step 1: 写失败回归。** `testWriteFailurePreservesPreviousCredential` 注入 update/add 错误；`testPartialMigrationRetriesWithoutLoss` 使用两个 key，第二个写失败；`testCredentialLockDoesNotClearSelection` 注入读拒绝；`testSerializedNewConfigHasReferencesOnly` 检查新 service/token 字段无正文。
 

@@ -45,10 +45,13 @@ enum ProviderDraftCommit {
             // Activation is a separate action; a stale editor never changes the latest choice.
             let previous = latest.cloudASRConfig.providers[index]
             profile.isActive = previous.isActive
+            // An editor cannot restore an older credential reference over a newer commit.
+            profile.credentialReferenceID = previous.credentialReferenceID
             profile.revision = previous.hasSameCallConfiguration(as: profile) ? previous.revision : UUID()
             latest.cloudASRConfig.providers[index] = profile
         } else {
             profile.isActive = latest.cloudASRConfig.providers.isEmpty
+            profile.credentialReferenceID = nil
             latest.cloudASRConfig.providers.append(profile)
         }
         apply(draft.keyEdit, id: profile.id, keys: &latest.cloudASRConfig.providerAPIKeys)

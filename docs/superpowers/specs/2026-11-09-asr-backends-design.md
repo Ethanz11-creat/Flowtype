@@ -102,6 +102,12 @@ protocol ASRServiceAdapter: Sendable {
 
 ## 5. 凭据与迁移
 
+**A2 原子提交修订（评审 I1）**：`CloudASRProviderConfig` 新增可选 `credentialReferenceID: String?`，旧配置 decode 缺失时为 nil。nil 继续读取 `asr.cloud.<profile UUID>`；新凭据版本使用 `asr.cloud.<profile UUID>.<fresh UUID>`。计算属性 `credentialID: String` 给出引用；调用存储前必须以 `validatedCredentialID()` 校验显式引用的本 profile 命名空间与 UUID 后缀，不得跨 profile、service 或 HF 读取。显式引用缺失/不可读时禁止回退旧 JSON 密钥。
+
+编辑保存先持久化旧配置作为恢复源，把变更密钥（删除用空字符串 tombstone）写入新的不可变引用并读回验证，最后通过**单个配置 blob**同时提交新 URL/model/protocol/revision 和新 credential reference。旧已提交 Keychain 项始终不覆盖/删除；崩溃、凭据失败、最终配置保存失败都保留旧调用配置与旧凭据配对，无需跨存储回滚。若写入已完成但保存确认失败，磁盘可能是旧或新完整 blob，二者均引用各自匹配的凭据。未提交的 staged Keychain 项可能成为孤立项，其清理延后处理，不把密钥正文或待提交事务密钥写入配置/journal。未修改密钥时保留最新已提交引用，旧编辑器不能回写过时引用。
+
+显式引用的空字符串表示已提交删除，不能用遗留 key 复活；提交前失败的删除保留旧可用配对。迁移尊重显式引用：不得向丢失的不可变引用填入旧备份；冲突/丢失保留备份与 pending 状态。此修订替代早期仅固定 `asr.cloud.<profile UUID>` 允许原地覆盖的约束；稳定 profile UUID 与在途快照保持不变。
+
 新增 `ASRCredentialStore: Sendable`，`read(id:) throws -> String?`、`generation(id:) -> UUID`、`write(_:id:) throws`、`remove(id:) throws`；生产使用传统 Keychain，测试只用注入内存 store。generation 在当前进程中按 ID 稳定，成功写入不同值/删除时更换，失败不变；它是不可逆推出密钥的随机身份，不是密钥摘要。捕获 read 与 generation 需同一 store 临界区提供一致视图，生产另实现 `snapshot(id:) throws -> ASRCredentialSnapshot`（value:String?、generation:UUID）供路由使用。写入采用 update-existing / add-if-missing，不复用先删后写造成失败丢值的路径。
 
 新 service/HF 使用 credential ID；旧 `cloudASRConfig.providerAPIKeys` 按 profile ID 可重试迁移：写入并读回相同才从旧持久化字段移除该 key，失败保留旧值与原选择。当前 code 的 LLM provider key 存储不在本子项目迁移范围。Keychain 锁定/拒绝显示可恢复状态，不降级为空密钥或删除原记录。配置 revision 在凭据变更后失效；凭据移除需等待使用它的快照排空后清理，或已捕获值继续仅存会话内存。
