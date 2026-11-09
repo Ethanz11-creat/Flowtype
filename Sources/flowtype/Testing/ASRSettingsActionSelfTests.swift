@@ -44,6 +44,7 @@ import Foundation
         func transcribe(_ request: ASRRequest) async throws -> ASRResult { .init(text: "fixture", providerID: id, latencyMs: 1) }
     }
     static func run(_ r: SelfTest.Reporter) async {
+        await pendingNativeIntentSurvivesCloudActions(r)
         let f = Fixture()
         defer { f.cleanUp() }
         let router = f.router()
@@ -142,4 +143,59 @@ import Foundation
         r.eq(failing.current.cloudASRConfig.providers.map(\.isActive), flagsBefore, "I1 failed persistence retains old selected presentation")
 
     }
+    // Unrelated cloud edits must not turn unresolved legacy native intent into explicit clear.
+    private static func pendingNativeIntentSurvivesCloudActions(_ r: SelfTest.Reporter) async {
+        for (policy, deletePrimary) in [(ASRRoutingPolicy.auto, false), (.localOnly, false), (.auto, true)] {
+            let fixture = Fixture(); defer { fixture.cleanUp() }
+            var legacy = fixture.store.current
+            legacy.asrRoutingPolicy = policy
+            legacy.selectedLocalModelID = nil
+            legacy.activeImportedASRModelID = nil
+            legacy.localModelPath = "/nonexistent/legacy-path-only"
+            legacy.asrBackendSelection = nil
+            legacy.pendingLegacyNativeResolution = false
+            fixture.store.save(legacy); fixture.store.flushPendingSave()
+            let migrated = fixture.restored()
+            r.check(migrated.current.pendingLegacyNativeResolution, "N1 migrated path-only intent starts pending \(policy)")
+            try? migrated.applyASRSettingsAction(.deleteCloud(deletePrimary ? fixture.first.id : fixture.second.id,
+                confirmSelected: deletePrimary))
+            r.check(migrated.current.pendingLegacyNativeResolution, "N1 unrelated cloud deletion preserves pending intent \(policy)")
+            let restarted = fixture.restored()
+            r.check(restarted.current.pendingLegacyNativeResolution, "N1 unrelated deletion preserves pending across restart \(policy)")
+            let router = ASRRouter(startMonitoring: false, internetAvailable: { true }, credentials: fixture.credentials,
+                persistNativeResolution: { restarted.resolveLegacyNativeSelection(lease: $0) },
+                configuration: { restarted.current }, localAvailable: { true }, localLease: { fixture.lease })
+            r.eq((await router.captureStartRoute()).candidateIDs,
+                policy == .auto && !deletePrimary ? [fixture.firstID.rawValue, fixture.nativeID.rawValue] : [fixture.nativeID.rawValue],
+                "N1 later actual lease resolves exact native route after deletion \(policy)")
+            let resolved = fixture.restored().current
+            r.eq(policy == .auto ? resolved.asrBackendSelection?.fallback : resolved.asrBackendSelection?.primary,
+                fixture.nativeID, "N1 native identity resolution persists across restart \(policy)")
+            r.check(!resolved.pendingLegacyNativeResolution, "N1 successful native resolution retires pending intent \(policy)")
+        }
+        let activation = Fixture(); defer { activation.cleanUp() }
+        var legacy = activation.store.current
+        legacy.selectedLocalModelID = nil
+        legacy.asrBackendSelection = nil
+        legacy.pendingLegacyNativeResolution = false
+        activation.store.save(legacy); activation.store.flushPendingSave()
+        let migrated = activation.restored()
+        try? migrated.applyASRSettingsAction(.activateCloud(activation.second.id))
+        r.check(migrated.current.pendingLegacyNativeResolution, "N1 cloud activation preserves unresolved native fallback")
+        let restarted = activation.restored()
+        let router = ASRRouter(startMonitoring: false, internetAvailable: { true }, credentials: activation.credentials,
+            persistNativeResolution: { restarted.resolveLegacyNativeSelection(lease: $0) },
+            configuration: { restarted.current }, localAvailable: { true }, localLease: { activation.lease })
+        r.eq((await router.captureStartRoute()).candidateIDs, [activation.secondID.rawValue, activation.nativeID.rawValue],
+            "N1 activated cloud and later exact native lease both survive restart")
+        try? restarted.setASRBackendSelection(.init())
+        try? restarted.applyASRSettingsAction(.deleteCloud(activation.other.id, confirmSelected: false))
+        let cleared = activation.restored()
+        let clearedRouter = ASRRouter(startMonitoring: false, internetAvailable: { true }, credentials: activation.credentials,
+            persistNativeResolution: { cleared.resolveLegacyNativeSelection(lease: $0) },
+            configuration: { cleared.current }, localAvailable: { true }, localLease: { activation.lease })
+        r.check(!cleared.current.pendingLegacyNativeResolution, "N1 deletion after explicit clear cannot restore pending intent")
+        r.eq((await clearedRouter.captureStartRoute()).candidateIDs, [], "N1 explicit clear still prevents later native resurrection")
+    }
+
 }

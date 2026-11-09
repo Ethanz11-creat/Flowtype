@@ -32,7 +32,8 @@ enum ASRSettingsAction {
 
     func apply(to config: inout Configuration, activeNativeID: ASRBackendID? = nil) throws {
         var updated = config
-        var selection = ASRBackendMigration.selection(from: config)
+        let previousSelection = ASRBackendMigration.selection(from: config)
+        var selection = previousSelection
         func isCloud(_ id: ASRBackendID) -> Bool { id.rawValue.hasPrefix("cloud:") }
         func isLocal(_ id: ASRBackendID) -> Bool {
             id.rawValue.hasPrefix("native:") || id.rawValue.hasPrefix("service:")
@@ -88,7 +89,19 @@ enum ASRSettingsAction {
                 }
             }
         }
-        updated.setASRBackendSelection(selection)
+        let unresolvedNativeRoleIsRetained = config.pendingLegacyNativeResolution
+            && config.asrRoutingPolicy == updated.asrRoutingPolicy
+            && ((config.asrRoutingPolicy == .auto && previousSelection.fallback == nil && selection.fallback == nil)
+                || (config.asrRoutingPolicy == .localOnly && previousSelection.primary == nil && selection.primary == nil))
+        switch self {
+        case .deleteCloud where unresolvedNativeRoleIsRetained,
+             .activateCloud where unresolvedNativeRoleIsRetained:
+            // These actions leave the unresolved native role intact. Preserve its
+            // migration marker instead of treating the cloud edit as an explicit clear.
+            updated.asrBackendSelection = selection
+        default:
+            updated.setASRBackendSelection(selection)
+        }
         config = updated
     }
 }
