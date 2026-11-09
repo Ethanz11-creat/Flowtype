@@ -1,0 +1,219 @@
+{
+  "schemaVersion": 1,
+  "retrievedAtUTC": "2026-11-09T04:32:09.914849+00:00",
+  "sourceCommit": "288aa9a6d02ce966a05dbd3fe71a6e26f6a9ad21",
+  "kind": "public documentation and metadata research; not runtime verification",
+  "noModelWeightsDownloaded": true,
+  "sources": [
+    {
+      "name": "hf-download",
+      "url": "https://raw.githubusercontent.com/huggingface/huggingface_hub/main/docs/source/en/guides/download.md",
+      "status": 200,
+      "bytes": 13891,
+      "sha256": "faee488495395bd2451041d508cfa1bca6b11eee2ac41da2fd54c91f13043a06"
+    },
+    {
+      "name": "hf-openapi",
+      "url": "https://huggingface.co/.well-known/openapi.json",
+      "status": 200,
+      "bytes": 1215005,
+      "sha256": "22d5e10167fae70fd00673ed837dcaca1627b43bd6b11f40bcd56b3c04a7c1de"
+    },
+    {
+      "name": "hf-gated",
+      "url": "https://huggingface.co/docs/hub/models-gated",
+      "status": 200,
+      "bytes": 236413,
+      "sha256": "7bf021571a757afbbd46975da2f93267430ffd0b536aaa49872cc41a65907ef0"
+    },
+    {
+      "name": "qwen-small",
+      "url": "https://huggingface.co/api/models/aufklarer/Qwen3-ASR-0.6B-MLX-4bit?blobs=true",
+      "status": 200,
+      "bytes": 2062,
+      "sha256": "f59fd047adf0a17b0f85ffc976dec5530da193548e2bef40b9091bdc0f5ce71c",
+      "repoID": "aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+      "commit": "bc441bd1e4295c1f42d9879f056049a925b6e013",
+      "pipelineTag": null,
+      "libraryName": "mlx",
+      "license": "apache-2.0",
+      "fileCount": 8,
+      "files": [
+        {
+          "rfilename": ".gitattributes",
+          "blobId": "a6344aac8c09253b3b630fb776ae94478aa0275b",
+          "size": 1519
+        },
+        {
+          "rfilename": "README.md",
+          "blobId": "4481be15bfb39a7d40a8681d4af18ed6d02988b7",
+          "size": 1065
+        },
+        {
+          "rfilename": "config.json",
+          "blobId": "049989ad1e19719b99c2f374eb7067040aa4c830",
+          "size": 7187
+        },
+        {
+          "rfilename": "merges.txt",
+          "blobId": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+          "size": 1671853
+        },
+        {
+          "rfilename": "model.safetensors",
+          "blobId": "7421526c273013a7eb16dec9bb77abd1c2c2c611",
+          "size": 708236945,
+          "lfs": {
+            "sha256": "70c7e67e588062adce4f10796e47ad42ead51c6671eda61a0987eae38ca95ddf",
+            "size": 708236945,
+            "pointerSize": 134
+          }
+        },
+        {
+          "rfilename": "model.safetensors.index.json",
+          "blobId": "b507ef4ee5b57e6147c4bda5d9db05992477030d",
+          "size": 71814
+        },
+        {
+          "rfilename": "tokenizer_config.json",
+          "blobId": "b93109843922a40c6654c5449d3bf95372267c66",
+          "size": 12487
+        },
+        {
+          "rfilename": "vocab.json",
+          "blobId": "4783fe10ac3adce15ac8f358ef5462739852c569",
+          "size": 2776833
+        }
+      ]
+    },
+    {
+      "name": "qwen-large",
+      "url": "https://huggingface.co/api/models/aufklarer/Qwen3-ASR-1.7B-MLX-4bit?blobs=true",
+      "status": 200,
+      "bytes": 2034,
+      "sha256": "67064197bf32598bfcefc90dceb3e900edac587e1966186d69f6528387a0fa6d",
+      "repoID": "aufklarer/Qwen3-ASR-1.7B-MLX-4bit",
+      "commit": "d4f9fa3bb45489219f0fcbec671c92d9c1a68fb6",
+      "pipelineTag": "automatic-speech-recognition",
+      "libraryName": "mlx",
+      "license": "apache-2.0",
+      "fileCount": 7
+    },
+    {
+      "name": "whisper-coreml",
+      "url": "https://huggingface.co/api/models/argmaxinc/whisperkit-coreml?blobs=true",
+      "status": 200,
+      "bytes": 117856,
+      "sha256": "c2405f78990c3801688ccd89ce9e76b6cd07ff518bc6e08b906a39763507a5be",
+      "repoID": "argmaxinc/whisperkit-coreml",
+      "commit": "0f63a7800b00dd0226abd051b906c246e1907482",
+      "pipelineTag": "automatic-speech-recognition",
+      "libraryName": "whisperkit",
+      "license": "mit",
+      "fileCount": 550,
+      "variants": [
+        "distil-whisper_distil-large-v3",
+        "distil-whisper_distil-large-v3_594MB",
+        "distil-whisper_distil-large-v3_turbo",
+        "distil-whisper_distil-large-v3_turbo_600MB",
+        "openai_whisper-base",
+        "openai_whisper-base.en",
+        "openai_whisper-large-v2",
+        "openai_whisper-large-v2_949MB",
+        "openai_whisper-large-v2_turbo",
+        "openai_whisper-large-v2_turbo_955MB",
+        "openai_whisper-large-v3",
+        "openai_whisper-large-v3-v20240930",
+        "openai_whisper-large-v3-v20240930_547MB",
+        "openai_whisper-large-v3-v20240930_626MB",
+        "openai_whisper-large-v3-v20240930_turbo",
+        "openai_whisper-large-v3-v20240930_turbo_632MB",
+        "openai_whisper-large-v3_947MB",
+        "openai_whisper-large-v3_turbo",
+        "openai_whisper-large-v3_turbo_954MB",
+        "openai_whisper-medium",
+        "openai_whisper-medium.en",
+        "openai_whisper-small",
+        "openai_whisper-small.en",
+        "openai_whisper-small.en_217MB",
+        "openai_whisper-small_216MB",
+        "openai_whisper-tiny",
+        "openai_whisper-tiny.en"
+      ],
+      "tokenizerFiles": []
+    },
+    {
+      "name": "whisper-tokenizer",
+      "url": "https://huggingface.co/api/models/openai/whisper-tiny?blobs=true",
+      "status": 200,
+      "bytes": 9807,
+      "sha256": "5f989a046beb13fa398bb6ef68472cb07695861870dcdbca6b69950a5294c264",
+      "repoID": "openai/whisper-tiny",
+      "commit": "169d4a4341b33bc18d8881c4b69c2e104e1cc0af",
+      "pipelineTag": "automatic-speech-recognition",
+      "libraryName": "transformers",
+      "license": "apache-2.0",
+      "fileCount": 16
+    },
+    {
+      "name": "openai-speech-md",
+      "url": "https://developers.openai.com/api/docs/guides/speech-to-text.md",
+      "status": 200,
+      "bytes": 39328,
+      "sha256": "bffa0b8c1fca2ac545a311cb32f7ae082898853a1347700f149462119017e4bb"
+    },
+    {
+      "name": "openai-deprecations",
+      "url": "https://developers.openai.com/api/docs/deprecations",
+      "status": 200,
+      "bytes": 521399,
+      "sha256": "69ee81de12ee3eb105d49af0a16766c803cc2fda9528c76dd6cf8fa365585a61"
+    },
+    {
+      "name": "silicon-en",
+      "url": "https://docs.siliconflow.com/en/api-reference/audio/create-audio-transcriptions",
+      "status": 200,
+      "bytes": 230642,
+      "sha256": "ff32308498f3794559e04b10cf853f161803c2639ec9a08b84df2a7839c08628"
+    },
+    {
+      "name": "whispercpp-pinned-readme",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/f92e1e4d1056700c39d4e86c1140f0a088fe1ab6/examples/server/README.md",
+      "status": 200,
+      "bytes": 6398,
+      "sha256": "b7169626761bcf679c495620f1ae335497fcf83088f5b1384a2ead993f30e563"
+    },
+    {
+      "name": "whispercpp-pinned-server",
+      "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/f92e1e4d1056700c39d4e86c1140f0a088fe1ab6/examples/server/server.cpp",
+      "status": 200,
+      "bytes": 61832,
+      "sha256": "939a4278be131f534097425267044feb51e811ebd83a1b9cab9400accfaa71fc"
+    },
+    {
+      "name": "mlx-audio-pinned-server",
+      "url": "https://raw.githubusercontent.com/Blaizzy/mlx-audio/5dbe43bdacccdf17a930a2787a39acae7a44d1a0/mlx_audio/server.py",
+      "status": 200,
+      "bytes": 81348,
+      "sha256": "09380283ef78548a10ae78a62bc3e3cb3277a72f00acda493005c4d797cdbfd5"
+    },
+    {
+      "name": "whisperkit-pinned-readme",
+      "url": "https://raw.githubusercontent.com/argmaxinc/WhisperKit/e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef/README.md",
+      "status": 200,
+      "bytes": 22478,
+      "sha256": "7ff8b6bf4dcf5f6941bc6d00f8eb7e891b120170341124dea96635d98b109dd8"
+    }
+  ],
+  "failedURLs": [
+    {
+      "url": "https://docs.siliconflow.cn/cn/api-reference/audio/create-audio-transcriptions",
+      "status": 404
+    },
+    {
+      "url": "https://docs.siliconflow.cn/llms.txt",
+      "status": 404
+    }
+  ],
+  "transportNote": "Python default CA path was missing; requests used verified TLS with /etc/ssl/cert.pem. No TLS verification bypass."
+}
