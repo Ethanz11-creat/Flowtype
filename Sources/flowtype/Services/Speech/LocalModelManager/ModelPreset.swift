@@ -10,6 +10,8 @@ struct ModelPreset: Identifiable, Hashable {
     let minMemoryBytes: Int64
     let modelDescription: String
 
+    var installationRecipe: ASRModelRecipe? { ASRModelRecipes.all.first { $0.id == id } }
+
     static let modelsDirectory: URL = {
         let fm = FileManager.default
         let dir = RuntimeEnvironment.current.paths.modelsDirectory

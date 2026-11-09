@@ -111,6 +111,17 @@ actor HFRepositoryClient {
         return repository
     }
 
+    /// Read-only, nonsensitive captured metadata. Reject missing original resolver identities or altered result fields.
+    func preflightContext(for repository: HFResolvedRepository) throws -> HFRepositoryPreflightContext {
+        guard let id = repository.resolutionContextID, let context = contexts[id],
+              context.repository.selection == repository.selection, context.repository.commit == repository.commit,
+              context.repository.downloadEndpoint == repository.downloadEndpoint,
+              context.repository.files == repository.files, context.repository.licenseURL == repository.licenseURL else {
+            throw HFRepositoryError.fileNotInRepository
+        }
+        return .init(credentialID: context.credentialID, receivedBytes: context.budget.received)
+    }
+
     func readMetadata(file: HFRepositoryFile, repository: HFResolvedRepository) async throws -> Data {
         guard let id = repository.resolutionContextID, let context = contexts[id],
               context.repository.selection == repository.selection, context.repository.commit == repository.commit,

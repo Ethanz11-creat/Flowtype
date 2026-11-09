@@ -2,17 +2,19 @@ import Foundation
 
 /// Package completeness only. C2 must load and verify graph inputs/outputs, vocabulary and variant offline.
 enum WhisperModelInspector {
-    private static let components = ["MelSpectrogram", "AudioEncoder", "TextDecoder"]
+    static let components = ["MelSpectrogram", "AudioEncoder", "TextDecoder"]
+    static let allComponents = components + ["TextDecoderContextPrefill"]
+    static let packageExtensions = ["mlmodelc", "mlpackage"]
     static func hasModelComponents(_ directory: URL) -> Bool {
-        components.contains { name in ["mlmodelc","mlpackage"].contains { ext in
+        components.contains { name in packageExtensions.contains { ext in
             FileManager.default.fileExists(atPath: directory.appendingPathComponent(name + "." + ext).path)
         } }
     }
     static func inspect(directory: URL) throws -> ImportedASRModel {
         let files = LocalInspectionFiles()
         var size: Int64 = 0
-        for name in components + ["TextDecoderContextPrefill"] {
-            let packages = ["mlmodelc","mlpackage"].map { directory.appendingPathComponent(name + "." + $0) }
+        for name in allComponents {
+            let packages = packageExtensions.map { directory.appendingPathComponent(name + "." + $0) }
                 .filter { FileManager.default.fileExists(atPath: $0.path) }
             if packages.isEmpty && name == "TextDecoderContextPrefill" { continue }
             guard packages.count == 1, let package = packages.first else { throw failure(.incompleteModel, "缺少或重复的 Core ML 组件：\(name)") }

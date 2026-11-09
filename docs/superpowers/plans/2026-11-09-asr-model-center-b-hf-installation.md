@@ -67,7 +67,7 @@ r.eq(headersToMirror["Authorization"], nil, "HF token stays official-origin only
 - Consume B1 metadata/readMetadata；produce spec 的 `ASRInstallPlan`。
 - Produce `NativeASRFormatSupport.assessMetadata(config: Data?, paths: [String]) throws -> LocalASREngine`，从现有 detector 抽取共享 metadata 规则；仅预检候选，不代替完整 tensor 检查。
 - Produce spec §6 的LocalASREngineAdapter/LocalASRRuntimeRegistry，registry的 `.engine(config: Data?, paths: [String]) throws -> LocalASREngine` / `.load(_ model: ImportedASRModel) async throws -> LocalASRLease`；NativeASRFormatSupport委托registry。LocalASRRuntimeFactory保留统一重检后委托具体adapter加载；Qwen具体检查入口改为内部可调用，避免adapter回调总dispatcher造成递归。
-- Produce `ASRInstallPlanner.plan(repository: HFResolvedRepository, variant: String?, tokenizer: HFResolvedRepository?) async throws -> ASRInstallPlan`。
+- Produce `ASRInstallPlanner.plan(repository: HFResolvedRepository, variant: String?, tokenizer: HFResolvedRepository?, credentialID: String? = nil) async throws -> ASRInstallPlan`。
 - Produce `ASRModelRecipe`（id:String、version:Int、displayName:String、sources:[HFRepositorySelection]、variant:String?、engine:LocalASREngine、verified:Bool）与 `ASRModelRecipes.all`。候选 revision 来源见研究快照，执行时读取当前指定 commit 元数据，不能使用浮动 main 作为最终 plan。
 
 - [ ] **Step 1: 写 `testMinimalModelFileClosure` / `testWhisperTokenizerRecipe` / `testVariantAndBudgetRejections` / `testNativeEngineRegistration`。** 合成 Qwen 单文件/分片索引，闭包包含所有权重+必要配置；Whisper 根多个变体必须选择，tiny只包含tiny的图与对应tokenizer来源。未知 Whisper 缺 tokenizer 需补选，不能自动配tiny；误传PyTorch/GGUF/不兼容MLX拒绝。总预检超32MiB、目标路径碰撞/绝对路径失败。两个同engine adapter注册失败，未知/多匹配metadata不靠顺序选，注入stub adapter的load能被工厂调用，核心stage不感知具体engine。
