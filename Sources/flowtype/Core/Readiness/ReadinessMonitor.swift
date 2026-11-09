@@ -67,45 +67,55 @@ enum ReadinessSnapshotBuilder {
     static func make(config: Configuration, modelStatus: QwenModelStatus,
                      accessibility: PermissionState, microphone: PermissionState,
                      speechRecognition: PermissionState, networkReachable: Bool,
-                     appleAvailable: Bool, computedAt: Date, localUsable: Bool = false) -> ReadinessSnapshot {
-        let local: EngineReadiness
-        if config.asrRoutingPolicy == .cloudOnly {
-            local = .unavailable(reason: "仅云端模式")
-        } else if localUsable {
-            local = .ready
-        } else {
-            switch modelStatus {
-            case .ready: local = .ready
-            case .downloading(let progress, _, _): local = .provisioning(progress: progress)
-            case .loading, .stalled: local = .provisioning(progress: 0)
-            case .notLoaded:
-                local = .unavailable(reason: "本地模型未加载")
-            case .error(let reason, _): local = .unavailable(reason: reason)
+                     appleAvailable: Bool, computedAt: Date,
+                     backends: [ASRBackendDescriptor] = [], availableIDs: Set<ASRBackendID> = []) -> ReadinessSnapshot {
+        var projected = config
+        projected.migrateASRBackendSelectionIfNeeded()
+        var selection = ASRBackendMigration.selection(from: projected)
+        // Pending legacy intent may use only the actual loaded native identity
+        // supplied by the caller. Explicit cleared/unknown selections stay intact.
+        let loadedNativeBackends = backends.filter { $0.location == .native && availableIDs.contains($0.id) }
+        if projected.pendingLegacyNativeResolution, loadedNativeBackends.count == 1,
+           let loaded = loadedNativeBackends.first {
+            if config.asrRoutingPolicy == .localOnly { selection.primary = loaded.id }
+            else if config.asrRoutingPolicy == .auto { selection.fallback = loaded.id }
+        }
+        let eligible = ASRBackendRouting.order(selection: selection, policy: config.asrRoutingPolicy,
+            descriptors: backends, availableIDs: Set(backends.map(\.id)), internetAvailable: true, degradedIDs: [])
+        let ready = ASRBackendRouting.order(selection: selection, policy: config.asrRoutingPolicy,
+            descriptors: backends, availableIDs: availableIDs, internetAvailable: networkReachable, degradedIDs: [])
+        var states: [ASRBackendID: EngineReadiness] = [:]
+        for descriptor in backends where eligible.contains(descriptor.id) {
+            if ready.contains(descriptor.id) { states[descriptor.id] = .ready; continue }
+            switch descriptor.location {
+            case .native:
+                switch modelStatus {
+                case .downloading(let progress, _, _): states[descriptor.id] = .provisioning(progress: progress)
+                case .loading, .stalled: states[descriptor.id] = .provisioning(progress: 0)
+                case .error(let reason, _): states[descriptor.id] = .unavailable(reason: reason)
+                case .ready, .notLoaded: states[descriptor.id] = .unavailable(reason: "本地模型未加载")
+                }
+            case .loopbackService: states[descriptor.id] = .unavailable(reason: "本机服务尚未验证或不可用")
+            case .cloud: states[descriptor.id] = .unavailable(reason: descriptor.requiresInternet && !networkReachable
+                ? "网络不可达" : "云端未配置或凭据不可用")
             }
         }
-
-        let cloud: EngineReadiness
-        if config.asrRoutingPolicy == .localOnly {
-            cloud = .unavailable(reason: "仅本地模式")
-        } else if let cloudConfig = config.effectiveCloudASRConfig,
-                  (try? CloudTranscriptionRequestBuilder.validate(provider: cloudConfig.provider,
-                                                                 apiKey: cloudConfig.apiKey)) != nil {
-            cloud = networkReachable ? .ready : .unavailable(reason: "网络不可达")
-        } else {
-            cloud = .unavailable(reason: "云端未配置")
+        func aggregate(cloud: Bool) -> EngineReadiness {
+            let candidates = backends.filter { ($0.location == .cloud) == cloud }.compactMap { states[$0.id] }
+            if candidates.contains(.ready) { return .ready }
+            if let preparing = candidates.first(where: { if case .provisioning = $0 { return true }; return false }) { return preparing }
+            return candidates.first ?? .unavailable(reason: cloud
+                ? (config.asrRoutingPolicy == .localOnly ? "仅本地模式" : "云端未配置")
+                : (config.asrRoutingPolicy == .cloudOnly ? "仅云端模式" : "本地模型未加载"))
         }
-
         let apple: EngineReadiness
-        if config.asrRoutingPolicy != .auto {
-            apple = .unavailable(reason: "当前路由未启用 Apple 识别")
-        } else if speechRecognition != .granted {
-            apple = .unavailable(reason: "语音识别权限未开启")
-        } else {
-            apple = appleAvailable ? .ready : .unavailable(reason: "Apple 识别不可用")
-        }
+        if config.asrRoutingPolicy != .auto { apple = .unavailable(reason: "当前路由未启用 Apple 识别") }
+        else if speechRecognition != .granted { apple = .unavailable(reason: "语音识别权限未开启") }
+        else { apple = appleAvailable ? .ready : .unavailable(reason: "Apple 识别不可用") }
         return ReadinessSnapshot(accessibility: accessibility, microphone: microphone,
-                                 speechRecognition: speechRecognition, localModel: local,
-                                 cloudASR: cloud, appleSpeech: apple, computedAt: computedAt)
+            speechRecognition: speechRecognition, localModel: aggregate(cloud: false), cloudASR: aggregate(cloud: true),
+            appleSpeech: apple, computedAt: computedAt, backends: backends, backendStates: states,
+            readyBackendIDs: ready, selectedBackendID: selection.primary ?? selection.fallback)
     }
 
     static func logLine(level: ReadinessLevel, snapshot: ReadinessSnapshot) -> String {
@@ -141,6 +151,9 @@ final class ReadinessMonitor: ObservableObject {
     private var permissionWatchOwnership = PermissionWatchOwnership()
     private var permissionWatchTask: Task<Void, Never>?
     private var snapshotProvider: (() -> ReadinessSnapshot)?
+    /// Current-process successful recognition only. C4 owns invalidation and refresh;
+    /// persisted historical validation records must never be supplied after restart.
+    private var currentValidatedServices: () -> [ASRServiceValidationRecord] = { [] }
 
     /// Explicit isolated source for previews/tests; never initializes shared services.
     init(snapshot: ReadinessSnapshot, refresh: (() -> ReadinessSnapshot)? = nil) {
@@ -151,8 +164,9 @@ final class ReadinessMonitor: ObservableObject {
         snapshotProvider = refresh ?? { snapshot }
     }
 
-    init() {
-        let snapshot = Self.makeSnapshot()
+    init(currentValidatedServices: @escaping () -> [ASRServiceValidationRecord] = { [] }) {
+        self.currentValidatedServices = currentValidatedServices
+        let snapshot = Self.makeSnapshot(currentValidatedServices: currentValidatedServices())
         let level = classifyReadiness(snapshot)
         self.snapshot = snapshot
         self.level = level
@@ -180,7 +194,7 @@ final class ReadinessMonitor: ObservableObject {
 
     func refresh() {
         let oldAccessibility = snapshot.accessibility
-        snapshot = snapshotProvider?() ?? Self.makeSnapshot()
+        snapshot = snapshotProvider?() ?? Self.makeSnapshot(currentValidatedServices: currentValidatedServices())
         publishIfChanged(rawLevel)
         if oldAccessibility != .granted, snapshot.accessibility == .granted {
             stopPermissionWatch()
@@ -238,15 +252,17 @@ final class ReadinessMonitor: ObservableObject {
         }
     }
 
-    private static func makeSnapshot() -> ReadinessSnapshot {
+    private static func makeSnapshot(currentValidatedServices: [ASRServiceValidationRecord]) -> ReadinessSnapshot {
         let config = ConfigurationStore.shared.current
         let speechRecognition = PermissionHelper.speechRecognitionState()
         let appleAvailable = config.asrRoutingPolicy == .auto && speechRecognition == .granted
             && SFSpeechRecognizer(locale: Locale(identifier: config.asrLanguage.appleLocaleIdentifier))?.isAvailable == true
+        let backendAvailability = ASRRouter.shared.readinessBackends(currentValidatedServices: currentValidatedServices)
         return ReadinessSnapshotBuilder.make(
             config: config, modelStatus: QwenModelState.shared.status,
             accessibility: PermissionHelper.accessibilityState(), microphone: PermissionHelper.microphoneState(),
             speechRecognition: speechRecognition, networkReachable: ASRRouter.shared.snapshot().networkReachable,
-            appleAvailable: appleAvailable, computedAt: Date(), localUsable: QwenModelState.shared.activeLease != nil)
+            appleAvailable: appleAvailable, computedAt: Date(), backends: backendAvailability.backends,
+            availableIDs: backendAvailability.availableIDs)
     }
 }

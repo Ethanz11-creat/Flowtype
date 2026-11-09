@@ -99,6 +99,13 @@ final class AppDatabase: @unchecked Sendable {
                 t.add(column: "stopToDeliveryMs", .integer)
             }
         }
+        m.registerMigration("v6_asr_backend_identity") { db in
+            try db.alter(table: "session") { t in
+                t.add(column: "asrBackendID", .text)
+                t.add(column: "asrModelID", .text)
+                t.add(column: "asrLocation", .text)
+            }
+        }
         return m
     }
 }

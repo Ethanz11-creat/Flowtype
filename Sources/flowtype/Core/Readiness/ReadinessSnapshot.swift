@@ -18,6 +18,10 @@ struct ReadinessSnapshot: Equatable, Sendable {
     let cloudASR: EngineReadiness
     let appleSpeech: EngineReadiness
     let computedAt: Date
+    var backends: [ASRBackendDescriptor] = []
+    var backendStates: [ASRBackendID: EngineReadiness] = [:]
+    var readyBackendIDs: [ASRBackendID] = []
+    var selectedBackendID: ASRBackendID? = nil
 }
 
 enum ReadinessIssue: Equatable, Sendable {
@@ -90,6 +94,15 @@ func readinessMenuTitle(_ s: ReadinessSnapshot) -> String {
     case .degraded(let issue):
         return "识别：\(issue.reason)"
     case .ready:
+        if let id = s.readyBackendIDs.first, let backend = s.backends.first(where: { $0.id == id }) {
+            let location: String
+            switch backend.location {
+            case .native: location = "本地模型"
+            case .loopbackService: location = "本机服务"
+            case .cloud: location = "云端"
+            }
+            return "识别：\(location) · \(backend.displayName)"
+        }
         if s.cloudASR == .ready && s.localModel == .ready { return "识别：云端 → 本地模型" }
         if s.cloudASR == .ready { return "识别：云端" }
         if s.localModel == .ready { return "识别：本地模型" }

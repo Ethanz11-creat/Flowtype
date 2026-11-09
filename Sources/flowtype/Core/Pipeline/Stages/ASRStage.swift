@@ -157,9 +157,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                     firstFailure = error
                     firstFailureKind = kind
                     if case .configuration = kind {
-                        firstFailureDestination = binding.descriptor.location == .native
-                            ? .settings(.speech, .localModels)
-                            : binding.cloudConfiguration.map { .settings(.speech, .provider($0.provider.id)) }
+                        firstFailureDestination = .settings(.speech, .asrBackend(binding.descriptor.id))
                     }
                 }
                 usedFallback = true
@@ -181,6 +179,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             await MainActor.run {
                 guard !context.isCancelled else { return }
                 context.usedProviderID = finalProviderID
+                context.usedBackendDescriptor = route.bindings.first { $0.descriptor.id.rawValue == finalProviderID }?.descriptor
                 context.asrMs = ms
                 context.rawTranscript = result.text
                 context.usedFallback = usedFallback
@@ -192,6 +191,8 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         // An expired stop budget cannot promote provisional/partial preview.
         if !budget.isExpired, !preview.isEmpty {
             await MainActor.run {
+                context.usedProviderID = nil
+                context.usedBackendDescriptor = nil
                 context.usedFallback = true
                 context.fallbackReason = "preview"
             }

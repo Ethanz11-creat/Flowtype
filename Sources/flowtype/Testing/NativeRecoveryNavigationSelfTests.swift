@@ -30,7 +30,7 @@ enum NativeRecoveryNavigationSelfTests {
             let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { FailedProvider(id: $0) },
                 speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
             if case .suspend(let recovery) = await stage.execute(payload: .audio(samples: [0.2, -0.1], previewText: ""), context: context) {
-                r.eq(recovery.destination, first == ASRProviderID.cloud ? .settings(.speech, .provider(profile.id)) : .settings(.speech, .localModels),
+                r.eq(recovery.destination, .settings(.speech, .asrBackend(.init(rawValue: first))),
                     "ASR destination follows represented first cause through later fallback failure")
                 r.eq(recovery.failureKind, first == ASRProviderID.cloud ? .configuration(.credentials) : .configuration(.endpointOrModel),
                     "ASR destination and reported failure share the same candidate")
@@ -42,7 +42,7 @@ enum NativeRecoveryNavigationSelfTests {
         let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { FailedProvider(id: $0) },
             speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
         if case .suspend(let recovery) = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: noIdentity) {
-            r.check(recovery.destination == nil, "ASR unknown profile keeps generic speech destination")
+            r.eq(recovery.destination, .settings(.speech, .asrBackend(.init(rawValue: ASRProviderID.cloud))), "ASR unknown profile retains safe identity target")
         } else { r.check(false, "ASR unknown profile suspends") }
     }
 
@@ -63,7 +63,9 @@ enum NativeRecoveryNavigationSelfTests {
              .history, "injected navigator initial selection matches existing tab")
         let provider = UUID()
         for destination: ClientDestination in [.settings(.speech), .settings(.speech, .localModels),
-                                               .settings(.speech, .provider(provider))] {
+                                               .settings(.speech, .provider(provider)),
+                                               .settings(.speech, .asrBackend(.init(rawValue: "service:fixture"))),
+                                               .settings(.speech, .asrBackend(.init(rawValue: "future:unknown")))] {
             var recovery = ErrorRecoveryContext(failedStage: "ASR", error: CloudASRError.noAPIKey,
                 rawText: nil, retryable: false, failureKind: .configuration(.credentials))
             recovery.destination = destination

@@ -145,6 +145,7 @@ final class SessionContext {
     }
 
     /// 本轮实际使用的 ASR provider id（由 ASRStage 写入），用于历史与指标。
+    var usedBackendDescriptor: ASRBackendDescriptor?
     var usedProviderID: String?
 
     /// 前台上下文文本（由 ContextStage / ContextProvider 写入；nil 表示未采集）。

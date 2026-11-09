@@ -35,6 +35,9 @@ struct DictationSession: Codable, Identifiable, Equatable {
     let sttBackend: String?
 
     // MARK: - Metrics (no content)
+    var asrBackendID: String?
+    var asrModelID: String?
+    var asrLocation: String?
     var asrProviderID: String?
     var usedFallback: Bool?
     var fallbackReason: String?

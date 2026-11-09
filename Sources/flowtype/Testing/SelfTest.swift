@@ -1865,14 +1865,24 @@ enum SelfTest {
     static func testReadinessSnapshotBuilder(_ r: Reporter) {
         var config = Configuration.default
         config.cloudASRConfig = CloudASRConfig()
+        config.selectedLocalModelID = "fixture"
+        let native = ASRBackendRoutingSelfTests.descriptor("native:preset:fixture", .native)
         let date = Date(timeIntervalSince1970: 123)
         func snapshot(_ status: QwenModelStatus = .notLoaded,
                       speech: PermissionState = .granted,
                       network: Bool = true, apple: Bool = true) -> ReadinessSnapshot {
-            ReadinessSnapshotBuilder.make(config: config, modelStatus: status,
+            var backends = [native]
+            var available: Set<ASRBackendID> = status == .ready ? [native.id] : []
+            if let provider = config.cloudASRConfig.activeProvider {
+                let cloud = ASRBackendRoutingSelfTests.descriptor("cloud:" + provider.id.uuidString, .cloud)
+                backends.append(cloud)
+                if (try? CloudTranscriptionRequestBuilder.validate(provider: provider,
+                    apiKey: config.cloudASRConfig.providerAPIKeys[provider.id.uuidString] ?? "")) != nil { available.insert(cloud.id) }
+            }
+            return ReadinessSnapshotBuilder.make(config: config, modelStatus: status,
                                           accessibility: .denied, microphone: .notDetermined,
                                           speechRecognition: speech, networkReachable: network,
-                                          appleAvailable: apple, computedAt: date)
+                                          appleAvailable: apple, computedAt: date, backends: backends, availableIDs: available)
         }
         let initial = snapshot()
         r.eq(initial.accessibility, .denied, "snapshot: AX probe is preserved")
@@ -1902,16 +1912,16 @@ enum SelfTest {
         let provider = CloudASRProviderConfig(name: "test", provider: "test", baseURL: "https://example.invalid",
                                              model: "test", isActive: true)
         config.cloudASRConfig = CloudASRConfig(providers: [provider])
-        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置"), "snapshot: empty cloud key is unavailable")
+        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置或凭据不可用"), "snapshot: empty cloud key is unavailable")
         config.cloudASRConfig.providerAPIKeys[provider.id.uuidString] = "synthetic-key"
         r.eq(snapshot().cloudASR, .ready, "snapshot: configured reachable cloud is ready")
         r.eq(snapshot(network: false).cloudASR, .unavailable(reason: "网络不可达"),
              "snapshot: configured unreachable cloud is unavailable")
         config.cloudASRConfig.providers[0].baseURL = ""
-        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置"), "snapshot: empty cloud endpoint is unavailable")
+        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置或凭据不可用"), "snapshot: empty cloud endpoint is unavailable")
         config.cloudASRConfig.providers[0] = provider
         config.cloudASRConfig.providers[0].model = ""
-        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置"), "snapshot: empty cloud model is unavailable")
+        r.eq(snapshot().cloudASR, .unavailable(reason: "云端未配置或凭据不可用"), "snapshot: empty cloud model is unavailable")
         config.cloudASRConfig.providers[0] = provider
         config.asrRoutingPolicy = .localOnly
         r.eq(snapshot().cloudASR, .unavailable(reason: "仅本地模式"), "snapshot: local-only excludes configured cloud")
@@ -2014,12 +2024,14 @@ enum SelfTest {
         var config = Configuration.default
         config.hasCompletedOnboarding = true
         config.asrRoutingPolicy = .localOnly
+        config.selectedLocalModelID = "fixture"
+        let native = ASRBackendRoutingSelfTests.descriptor("native:preset:fixture", .native)
         let fixture = config
         func snapshot() -> ReadinessSnapshot {
             ReadinessSnapshotBuilder.make(config: fixture, modelStatus: model.status,
                                           accessibility: .granted, microphone: .granted,
                                           speechRecognition: .granted, networkReachable: true,
-                                          appleAvailable: true, computedAt: Date(timeIntervalSince1970: 123))
+                                          appleAvailable: true, computedAt: Date(timeIntervalSince1970: 123), backends: [native], availableIDs: [])
         }
         r.eq(snapshot().localModel, .unavailable(reason: "本地模型未加载"),
              "terminal model: idle notLoaded truthfully stays unavailable")
@@ -3928,10 +3940,10 @@ enum SelfTest {
     // MARK: - ASR backend label mapping (replaces the old `as? QwenASRProvider` branches)
 
     static func testASRBackendLabel(_ r: Reporter) {
-        r.eq(SessionController.backendLabel(forProviderID: "qwen-local"), "qwen", "backend: qwen-local → qwen")
+        r.eq(SessionController.backendLabel(forProviderID: "qwen-local"), "local", "backend: legacy local without known brand stays local")
         r.eq(SessionController.backendLabel(forProviderID: "cloud-asr"), "cloud", "backend: cloud-asr → cloud")
         r.eq(SessionController.backendLabel(forProviderID: nil), "apple", "backend: nil → apple (preview fallback)")
-        r.eq(SessionController.backendLabel(forProviderID: "unknown"), "apple", "backend: unknown id → apple")
+        r.eq(SessionController.backendLabel(forProviderID: "unknown"), "unknown", "backend: unknown id stays unknown")
     }
 
     // MARK: - Provider failure → aggregatable fallback reason (pure)

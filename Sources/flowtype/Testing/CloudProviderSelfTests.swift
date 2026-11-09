@@ -156,9 +156,13 @@ enum CloudProviderSelfTests {
         var readiness = Configuration.default
         readiness.cloudASRConfig = CloudASRConfig(providers: [missingModel], providerAPIKeys: [first.id.uuidString: "synthetic-key"])
         func cloudReadiness() -> EngineReadiness {
-            ReadinessSnapshotBuilder.make(config: readiness, modelStatus: .notLoaded, accessibility: .granted,
+            let router = ASRRouter(startMonitoring: false, internetAvailable: { true },
+                credentials: KeychainASRCredentialStore(access: .memory()), configuration: { readiness },
+                localAvailable: { false }, localLease: { nil })
+            let availability = router.readinessBackends()
+            return ReadinessSnapshotBuilder.make(config: readiness, modelStatus: .notLoaded, accessibility: .granted,
                 microphone: .granted, speechRecognition: .denied, networkReachable: true,
-                appleAvailable: false, computedAt: Date()).cloudASR
+                appleAvailable: false, computedAt: Date(), backends: availability.backends, availableIDs: availability.availableIDs).cloudASR
         }
         r.check(cloudReadiness() != .ready, "ownership: whitespace model cannot be ready")
         readiness.cloudASRConfig.providers[0] = first

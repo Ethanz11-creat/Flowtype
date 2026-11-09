@@ -598,9 +598,11 @@ extension ModelProvisionSelfTests {
              "deferred setup never invents a provisioning operation")
         r.eq(classifyReadiness(deferred), .blocked(.noEngine), "deferred local-only setup remains unready")
 
+        let native = ASRBackendRoutingSelfTests.descriptor("native:preset:fixture", .native)
+        config.asrBackendSelection = .init(primary: native.id)
         let usable = ReadinessSnapshotBuilder.make(config: config, modelStatus: .error(reason: "candidate failed", retryable: true),
             accessibility: .granted, microphone: .granted, speechRecognition: .granted,
-            networkReachable: false, appleAvailable: true, computedAt: Date(), localUsable: true)
+            networkReachable: false, appleAvailable: true, computedAt: Date(), backends: [native], availableIDs: [native.id])
         r.eq(classifyReadiness(usable), .ready, "candidate failure cannot hide a usable lease")
         r.eq(deferred.appleSpeech, .unavailable(reason: "当前路由未启用 Apple 识别"), "Apple basic stays disabled in local-only")
         config.asrRoutingPolicy = .auto
@@ -611,7 +613,7 @@ extension ModelProvisionSelfTests {
         config.asrRoutingPolicy = .cloudOnly
         let cloudOnly = ReadinessSnapshotBuilder.make(config: config, modelStatus: .ready,
             accessibility: .granted, microphone: .granted, speechRecognition: .granted,
-            networkReachable: false, appleAvailable: true, computedAt: Date(), localUsable: true)
+            networkReachable: false, appleAvailable: true, computedAt: Date(), backends: [native], availableIDs: [native.id])
         r.eq(classifyReadiness(cloudOnly), .blocked(.noEngine), "forced cloud never enables local or Apple basic")
 
         let p17 = ModelRecoveryPresentation.make(active: nil, target: .qwen317B, failure: .metadataInvalid(),

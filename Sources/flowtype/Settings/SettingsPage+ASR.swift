@@ -106,8 +106,8 @@ struct ASRSettingsContent: View {
         revealTarget()
     }
     private func revealTarget() {
-        if target == .localModels { localExpanded = true }
-        if case .provider = target { cloudExpanded = true }
+        if target?.legacyASRTarget == .localModels { localExpanded = true }
+        if case .provider = target?.legacyASRTarget { cloudExpanded = true }
     }
     private var modeDescription: String {
         switch store.current.asrRoutingPolicy {

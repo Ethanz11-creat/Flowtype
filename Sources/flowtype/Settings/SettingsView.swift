@@ -76,8 +76,8 @@ struct SettingsPage: View {
                 // Wait for the selected group's layout before resolving a row anchor.
                 await Task.yield()
                 guard !Task.isCancelled else { return }
-                if case .provider(let id) = location.target { proxy.scrollTo(id, anchor: .top) }
-                else if let target = location.target { proxy.scrollTo(target, anchor: .top) }
+                if case .provider(let id) = location.target?.legacyASRTarget { proxy.scrollTo(id, anchor: .top) }
+                else if let target = location.target?.legacyASRTarget { proxy.scrollTo(target, anchor: .top) }
                 else { proxy.scrollTo("settings-top", anchor: .top) }
             }
         }

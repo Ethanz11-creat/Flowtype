@@ -15,6 +15,9 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
     var sttBackend: String
     var rawTranscript: String?
     var finalText: String?
+    var asrBackendID: String?
+    var asrModelID: String?
+    var asrLocation: String?
     var asrProviderID: String?
     var usedFallback: Bool
     var fallbackReason: String?
@@ -41,6 +44,9 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
         self.sttBackend = s.sttBackend ?? "legacy"   // migrated old rows have no backend
         self.rawTranscript = storeText ? s.rawTranscript : nil
         self.finalText = storeText ? s.finalText : nil
+        self.asrBackendID = s.asrBackendID
+        self.asrModelID = s.asrModelID
+        self.asrLocation = s.asrLocation
         self.asrProviderID = s.asrProviderID
         self.usedFallback = s.usedFallback ?? false
         self.fallbackReason = s.fallbackReason
@@ -62,6 +68,9 @@ struct SessionRecord: Codable, FetchableRecord, MutablePersistableRecord, Equata
                          recordingMs: recordingMs > 0 ? UInt64(recordingMs) : nil,
                          appName: appName, appBundleID: appBundleID,
                          language: language, sttBackend: sttBackend)
+        session.asrBackendID = asrBackendID
+        session.asrModelID = asrModelID
+        session.asrLocation = asrLocation
         session.asrProviderID = asrProviderID
         session.usedFallback = usedFallback
         session.fallbackReason = fallbackReason

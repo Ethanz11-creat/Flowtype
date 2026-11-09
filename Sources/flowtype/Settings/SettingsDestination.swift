@@ -6,10 +6,19 @@ enum SettingsSection: String, CaseIterable, Sendable {
 
 enum SettingsTarget: Hashable, Sendable {
     case localModels
+    case asrBackend(ASRBackendID)
     case provider(UUID)
     case microphone
     case accessibility
     case appleSpeech
+
+    var legacyASRTarget: SettingsTarget? {
+        guard case .asrBackend(let backendID) = self else { return self }
+        if backendID.rawValue == ASRProviderID.local || backendID.rawValue.hasPrefix("native:") { return .localModels }
+        if backendID.rawValue.hasPrefix("cloud:"),
+           let id = UUID(uuidString: String(backendID.rawValue.dropFirst("cloud:".count))) { return .provider(id) }
+        return nil
+    }
 }
 
 enum ClientDestination: Equatable, Sendable {

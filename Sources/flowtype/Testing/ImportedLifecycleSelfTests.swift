@@ -65,9 +65,10 @@ enum ImportedLifecycleSelfTests {
         r.eq(store.current, before, "Qwen to Whisper failure preserves entire configuration")
         r.eq(saves, 1, "failed imported candidate never commits")
         r.check(!state.didAutoFallback, "failed imported restore must never fall back to preset")
+        let availability = router.readinessBackends()
         let readiness = ReadinessSnapshotBuilder.make(config: store.current, modelStatus: state.status,
             accessibility: .granted, microphone: .granted, speechRecognition: .granted,
-            networkReachable: false, appleAvailable: false, computedAt: Date(), localUsable: state.activeLease != nil)
+            networkReachable: false, appleAvailable: false, computedAt: Date(), backends: availability.backends, availableIDs: availability.availableIDs)
         r.eq(classifyReadiness(readiness), .ready, "candidate failure with old local lease remains ready")
 
         await probe.setMode(.suspended)

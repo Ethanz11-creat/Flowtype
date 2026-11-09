@@ -495,11 +495,12 @@ final class SessionController: ObservableObject {
         presentationGeneration &+= 1
     }
 
-    private func presentRecovery(_ presentation: FailurePresentation, copyText: String?, context: SessionContext) {
+    private func presentRecovery(_ presentation: FailurePresentation, copyText: String?, context: SessionContext,
+                                 destination: ClientDestination? = nil) {
         guard activeSessionID == context.sessionID else { return }
         let card = RecoveryCard(id: UUID(), sessionID: context.sessionID, presentation: presentation)
         recoveryState = SessionRecoveryState(card: card, copyText: copyText,
-            destination: suspendedContext?.destination ?? .settings(.speech))
+            destination: destination ?? suspendedContext?.destination ?? .settings(.speech))
         transition(to: .error(presentation.message), context: context)
     }
 
@@ -726,7 +727,13 @@ final class SessionController: ObservableObject {
         clearSuspension()
         presentRecovery(RecoveryPolicy.presentation(kind: Self.readinessFailure(issue), resources: .init(
             stage: "Recording", hasAudio: false, textKind: .none, deliveryEventStarted: false,
-            routingPolicy: configurationStore.current.asrRoutingPolicy, hasHistory: false)), copyText: nil, context: context)
+            routingPolicy: configurationStore.current.asrRoutingPolicy, hasHistory: false)), copyText: nil, context: context,
+            destination: issue == .noEngine ? Self.backendReadinessDestination(configurationStore.current) : nil)
+    }
+
+    nonisolated static func backendReadinessDestination(_ config: Configuration) -> ClientDestination {
+        let selection = ASRBackendMigration.selection(from: config)
+        return (selection.primary ?? selection.fallback).map { .settings(.speech, .asrBackend($0)) } ?? .settings(.speech)
     }
 
     nonisolated static func readinessPreflight(_ level: ReadinessLevel) -> ReadinessIssue? {
@@ -867,12 +874,12 @@ final class SessionController: ObservableObject {
     /// sttBackend 文案：不再依赖 provider 类型判断。
     nonisolated static func backendLabel(forProviderID id: String?, localIdentity: LocalModelIdentity? = nil) -> String {
         switch id {
-        case ASRProviderID.local: return localIdentity?.engine ?? "qwen"
+        case ASRProviderID.local: return localIdentity?.engine ?? "local"
         case ASRProviderID.cloud: return "cloud"
         default:
             if let id, id.hasPrefix("native:") { return localIdentity?.engine ?? "local" }
             if let id, id.hasPrefix("cloud:") || id.hasPrefix("service:") { return id }
-            return "apple"
+            return id == nil ? "apple" : "unknown"
         }
     }
 
@@ -887,18 +894,10 @@ final class SessionController: ObservableObject {
         return (recoveryRaw, recoveryRaw)
     }
 
-    @discardableResult
-    private func saveHistory(context: SessionContext) -> Bool {
-        guard purpose == .dictation, context.claimHistorySave() else { return false }
-        if let saveHistory = effects.saveHistory { saveHistory(context); return true }
-        let durationMs: UInt64?
-        if let recStart = context.recordingStartTime {
-            durationMs = UInt64(Date().timeIntervalSince(recStart) * 1000)
-        } else {
-            durationMs = nil
-        }
+    /// Shared history projection uses the winning captured descriptor, including fallback.
+    static func historySession(context: SessionContext, durationMs: UInt64?) -> DictationSession {
         let mode: PolishMode = SessionController.historyMode(usePolish: context.usePolish, polishFailed: context.polishFailed)
-        let sttBackend = SessionController.backendLabel(forProviderID: context.usedProviderID, localIdentity: context.captureRoute?.localLease?.identity)
+        let sttBackend = context.usedBackendDescriptor?.displayName ?? SessionController.backendLabel(forProviderID: context.usedProviderID, localIdentity: context.captureRoute?.localLease?.identity)
         var session = DictationSession(
             rawTranscript: context.rawTranscript,
             finalText: context.finalText,
@@ -910,6 +909,9 @@ final class SessionController: ObservableObject {
             language: detectLanguageTag(context.finalText),
             sttBackend: sttBackend
         )
+        session.asrBackendID = context.usedBackendDescriptor?.id.rawValue
+        session.asrModelID = context.usedBackendDescriptor?.modelID
+        session.asrLocation = context.usedBackendDescriptor?.location.rawValue
         session.asrProviderID = context.usedProviderID
         session.usedFallback = context.usedFallback
         session.fallbackReason = context.fallbackReason
@@ -921,6 +923,20 @@ final class SessionController: ObservableObject {
         if let stopAt = context.stopRecordingAt, context.injectMs != nil {
             session.stopToInjectMs = Int(Date().timeIntervalSince(stopAt) * 1000)
         }
+        return session
+    }
+
+    @discardableResult
+    private func saveHistory(context: SessionContext) -> Bool {
+        guard purpose == .dictation, context.claimHistorySave() else { return false }
+        if let saveHistory = effects.saveHistory { saveHistory(context); return true }
+        let durationMs: UInt64?
+        if let recStart = context.recordingStartTime {
+            durationMs = UInt64(Date().timeIntervalSince(recStart) * 1000)
+        } else {
+            durationMs = nil
+        }
+        let session = Self.historySession(context: context, durationMs: durationMs)
         HistoryStore.shared.append(session, storeText: configurationStore.current.storeTranscriptText)
 
         // Auto-detect corrections for dictionary

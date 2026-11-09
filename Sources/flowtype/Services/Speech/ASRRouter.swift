@@ -9,11 +9,7 @@ struct ASRBackendCaptureFailure: Sendable, Equatable {
     let error: ASRCredentialError
 
     var destination: ClientDestination {
-        if backendID.rawValue.hasPrefix("cloud:"),
-           let id = UUID(uuidString: String(backendID.rawValue.dropFirst("cloud:".count))) {
-            return .settings(.speech, .provider(id))
-        }
-        return .settings(.speech)
+        .settings(.speech, .asrBackend(backendID))
     }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -28,6 +24,7 @@ struct ASRRouteSnapshot: Sendable, Equatable {
     let policy: ASRRoutingPolicy
     var bindings: [ASRBackendBinding] = []
     var captureFailures: [ASRBackendCaptureFailure] = []
+    var configuredBackends: [ASRBackendDescriptor] = []
     var captureError: ASRCredentialError? { captureFailures.first?.error }
     let selectedProviderID: String?
     let localAvailable: Bool
@@ -69,6 +66,7 @@ struct ASRRouteSnapshot: Sendable, Equatable {
             && lhs.cloudConfiguration == rhs.cloudConfiguration && lhs.language == rhs.language
             && lhs.healthGeneration == rhs.healthGeneration && lhs.isHealthRecovery == rhs.isHealthRecovery
             && lhs.localLease == rhs.localLease && lhs.captureFailures == rhs.captureFailures
+            && lhs.configuredBackends == rhs.configuredBackends
     }
 
 }
@@ -472,14 +470,30 @@ final class ASRRouter: @unchecked Sendable {
     @MainActor
     func captureStartRoute() async -> ASRRouteSnapshot { makeBackendRoute(reserveRecovery: true) }
 
+    /// Metadata/credential capture only: no transcription, service probe, health reservation,
+    /// or persisted legacy resolution. A constructed service is merely eligible to attempt.
     @MainActor
-    private func makeBackendRoute(reserveRecovery: Bool) -> ASRRouteSnapshot {
+    func readinessBackends(currentValidatedServices: [ASRServiceValidationRecord] = [])
+        -> (backends: [ASRBackendDescriptor], availableIDs: Set<ASRBackendID>) {
+        let route = makeBackendRoute(reserveRecovery: false, persistLegacyResolution: false)
+        let available = route.bindings.filter { binding in
+            guard binding.descriptor.location == .loopbackService else { return true }
+            return currentValidatedServices.contains {
+                $0.backendID == binding.descriptor.id && $0.revision == binding.descriptor.revision
+                    && $0.credentialGeneration == binding.credentialGeneration
+            }
+        }
+        return (route.configuredBackends, Set(available.map { $0.descriptor.id }))
+    }
+
+    @MainActor
+    private func makeBackendRoute(reserveRecovery: Bool, persistLegacyResolution: Bool = true) -> ASRRouteSnapshot {
         var cfg = configuration()
         cfg.migrateASRBackendSelectionIfNeeded()
         let lease = localLease()
         if let lease, cfg.pendingLegacyNativeResolution {
             cfg.resolveLegacyNativeSelection(lease: lease)
-            persistNativeResolution(lease)
+            if persistLegacyResolution { persistNativeResolution(lease) }
         }
         let selection = ASRBackendMigration.selection(from: cfg)
         let selected = Set([selection.primary, selection.fallback].compactMap { $0 })
@@ -509,6 +523,11 @@ final class ASRRouter: @unchecked Sendable {
             descriptors.append(descriptor)
             bindings.append(.init(descriptor: descriptor, provider: lease.provider, nativeLease: lease, credentialGeneration: nil))
         }
+        for id in selected where id.rawValue.hasPrefix("native:") && !descriptors.contains(where: { $0.id == id }) {
+            descriptors.append(ASRBackendDescriptor(id: id, revision: UUID(), displayName: "本地模型", modelID: nil,
+                location: .native, requiresInternet: false, capabilities: .init(supportsLanguageHint: false,
+                    supportsContextHint: false, requiresNetwork: false, location: .onDevice), maxUploadBytes: nil))
+        }
         let eligibleOrder = ASRBackendRouting.order(selection: selection, policy: cfg.asrRoutingPolicy,
             descriptors: descriptors, availableIDs: Set(descriptors.map(\.id)),
             internetAvailable: internetAvailable, degradedIDs: [])
@@ -522,6 +541,7 @@ final class ASRRouter: @unchecked Sendable {
                 guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       !profile.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       !profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                guard (try? CloudTranscriptionRequestBuilder.validate(provider: profile, apiKey: key)) != nil else { continue }
                 let provider = CapturedCloudASRProvider(configuration: .init(provider: profile, apiKey: key,
                     sendContext: cfg.cloudASRSendContext), underlying: cloudProvider)
                 bindings.append(.init(descriptor: descriptor, provider: provider,
@@ -559,6 +579,7 @@ final class ASRRouter: @unchecked Sendable {
             captureFailures: eligibleOrder.compactMap { id in
                 captureErrors[id].map { ASRBackendCaptureFailure(backendID: id, error: $0) }
             })
+        route.configuredBackends = descriptors
         route.healthGeneration = backendHealth.networkGeneration
         return route
     }

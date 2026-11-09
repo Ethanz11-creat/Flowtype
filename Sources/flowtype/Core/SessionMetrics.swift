@@ -21,7 +21,18 @@ enum SessionMetrics {
         let uncertain = sessions.filter { $0.deliveryOutcome == .uncertain }
         let asr = sessions.compactMap(\.asrMs)
         let fallbacks = sessions.filter { $0.usedFallback == true }.count
-        let cloud = sessions.filter { $0.asrProviderID == ASRProviderID.cloud }.count
+        let cloud = sessions.filter {
+            if let location = $0.asrLocation { return location == ASRBackendLocation.cloud.rawValue }
+            let id = $0.asrBackendID ?? $0.asrProviderID ?? ""
+            return id == ASRProviderID.cloud || id.hasPrefix("cloud:")
+        }.count
+
+        var backendCounts: [String: Int] = [:]
+        for session in sessions {
+            let identity = "backend: id=\(session.asrBackendID ?? session.asrProviderID ?? "legacy") model=\(session.asrModelID ?? "unknown") location=\(session.asrLocation ?? "unknown")"
+            backendCounts[identity, default: 0] += 1
+        }
+        let backendLines = backendCounts.keys.sorted().map { "\($0) sessions=\(backendCounts[$0]!)" }
 
         func line(_ label: String, _ values: [Int]) -> String {
             guard let p50 = percentile(values, 0.5), let p95 = percentile(values, 0.95) else {
@@ -30,7 +41,7 @@ enum SessionMetrics {
             return "\(label): n=\(values.count) p50=\(p50)ms p95=\(p95)ms"
         }
 
-        return [
+        return ([
             "=== Flowtype ASR metrics ===",
             line("stop→inject (legacy timing)", stopToInject),
             line("stop→dispatch", dispatched.compactMap(\.stopToDeliveryMs)),
@@ -40,6 +51,6 @@ enum SessionMetrics {
             "dispatch means events sent; insertion is not confirmed",
             line("asr", asr),
             "sessions: \(sessions.count), cloud: \(cloud), fallback: \(fallbacks)",
-        ].joined(separator: "\n")
+        ] + backendLines).joined(separator: "\n")
     }
 }

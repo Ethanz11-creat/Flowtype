@@ -1,8 +1,11 @@
 import Foundation
+import GRDB
 import os
 
 enum ASRBackendRoutingSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
+        await testOfflineServiceReadiness(r)
+        await testActualBackendHistoryAndRecovery(r)
         await testPolicyAndNetworkMatrix(r)
         testRoutingMatrix(r)
         await testCaptureIdentitySurvivesEdits(r)
@@ -465,8 +468,193 @@ extension ASRBackendRoutingSelfTests {
             let context = SessionContext(sessionID: 94101); context.captureRoute = route
             let stage = ASRStage(healthRecorder: { _, _, _ in }, speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
             if case .suspend(let recovery) = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: context) {
-                r.eq(recovery.destination, .settings(.speech, .provider(primary.id)), "capture-only failure retains primary backend destination")
+                r.eq(recovery.destination, .settings(.speech, .asrBackend(.init(rawValue: "cloud:" + primary.id.uuidString))), "capture-only failure retains primary backend destination")
             } else { r.check(false, "capture-only credential error suspends") }
         }
+    }
+}
+
+
+extension ASRBackendRoutingSelfTests {
+    // Regression: the old cloud/native readiness slots discard an offline loopback selection.
+    @MainActor static func testOfflineServiceReadiness(_ r: SelfTest.Reporter) async {
+        var config = Configuration()
+        config.asrRoutingPolicy = .localOnly
+        let service = descriptor("service:fixture", .loopbackService)
+        let native = descriptor("native:preset:fixture", .native)
+        let cloud = descriptor("cloud:fixture", .cloud)
+        config.asrBackendSelection = .init(primary: service.id)
+        func snapshot(_ backends: [ASRBackendDescriptor], _ available: Set<ASRBackendID>,
+                      status: QwenModelStatus = .notLoaded, internet: Bool = false) -> ReadinessSnapshot {
+            ReadinessSnapshotBuilder.make(config: config, modelStatus: status,
+                accessibility: .granted, microphone: .granted, speechRecognition: .denied,
+                networkReachable: internet, appleAvailable: false, computedAt: Date(timeIntervalSince1970: 1),
+                backends: backends, availableIDs: available)
+        }
+        let ready = snapshot([service], [service.id])
+        r.eq(classifyReadiness(ready), .ready, "A6 offline selected loopback is ready")
+        r.check(readinessMenuTitle(ready).contains("本机服务"), "A6 offline readiness menu identifies service")
+        r.eq(classifyReadiness(snapshot([service], [])), .blocked(.noEngine), "A6 configured service alone is not ready")
+        config.asrBackendSelection = nil
+        config.selectedLocalModelID = nil
+        config.activeImportedASRModelID = nil
+        r.eq(classifyReadiness(snapshot([native], [native.id])), .ready, "A6 pending legacy intent uses actual loaded availability without persistence")
+        let otherNative = descriptor("native:import:other", .native)
+        for descriptors in [[native, otherNative], [otherNative, native]] {
+            r.eq(classifyReadiness(snapshot(descriptors, [native.id, otherNative.id])), .blocked(.noEngine),
+                "A6 ambiguous injected native availability cannot choose array order")
+        }
+
+        config.setASRBackendSelection(.init())
+        r.eq(classifyReadiness(snapshot([native], [native.id])), .blocked(.noEngine), "A6 explicit clear cannot resurrect loaded native")
+        config.asrBackendSelection = .init(primary: native.id)
+        r.eq(classifyReadiness(snapshot([], [])), .blocked(.noEngine), "A6 missing native is not ready")
+        r.eq(classifyReadiness(snapshot([native], [], status: .ready)), .blocked(.noEngine), "A6 installed status without loaded lease is not ready")
+        r.eq(classifyReadiness(snapshot([native], [], status: .loading)), .degraded(.enginePreparing), "A6 selected native load reports preparing")
+        config.asrBackendSelection = .init(primary: cloud.id, fallback: service.id)
+        config.asrRoutingPolicy = .auto
+        r.eq(classifyReadiness(snapshot([cloud, service], [service.id])), .ready, "A6 offline cloud falls back to validated service")
+        config.asrBackendSelection = .init(primary: cloud.id)
+        r.eq(classifyReadiness(snapshot([cloud], [], internet: true)), .blocked(.noEngine), "A6 locked cloud is not ready")
+        config.asrBackendSelection = .init(primary: .init(rawValue: "future:unknown"))
+        let unknown = snapshot([service], [service.id])
+        r.eq(classifyReadiness(unknown), .blocked(.noEngine), "A6 unknown selection cannot adopt another backend")
+        let presentation = ReadinessPresentation.make(snapshot: unknown, level: classifyReadiness(unknown))
+        r.check(presentation.destinations.contains(.settings(.speech, .asrBackend(.init(rawValue: "future:unknown")))),
+                "A6 unknown readiness recovery preserves stable target")
+
+        let credentials = KeychainASRCredentialStore(access: .memory())
+        let profile = LocalASRServiceProfile(id: UUID(), revision: UUID(), name: "Evidence", baseURL: "http://127.0.0.1:8123/v1",
+            protocolKind: .openAICompatible, modelID: "actual", authentication: .none, fieldCapabilities: .init())
+        config.localASRServices = [profile]
+        config.asrBackendSelection = .init(primary: .init(rawValue: "service:" + profile.id.uuidString))
+        let settings = RoutingSettings(); settings.config = config
+        let router = ASRRouter(startMonitoring: false, internetAvailable: { false }, credentials: credentials,
+            configuration: { settings.config }, localAvailable: { false }, localLease: { nil })
+        r.eq(router.readinessBackends().availableIDs, [], "A6 runtime construction is not service validation")
+        let evidence = ASRServiceValidationRecord(backendID: config.asrBackendSelection!.primary!, revision: profile.revision,
+            credentialGeneration: nil, validatedAt: Date(timeIntervalSince1970: 1))
+        r.eq(router.readinessBackends(currentValidatedServices: [evidence]).availableIDs, [evidence.backendID], "A6 runtime current validation admits offline service")
+        settings.config.localASRServices[0].revision = UUID()
+        r.eq(router.readinessBackends(currentValidatedServices: [evidence]).availableIDs, [], "A6 revision edit invalidates service readiness")
+        settings.config.localASRServices[0] = profile
+        let keyID = "asr.service." + profile.id.uuidString
+        settings.config.localASRServices[0].authentication = .bearer(credentialID: keyID)
+        try? credentials.write("fixture-key", id: keyID)
+        let generation = credentials.generation(id: keyID)
+        let keyed = ASRServiceValidationRecord(backendID: evidence.backendID, revision: profile.revision,
+            credentialGeneration: generation, validatedAt: evidence.validatedAt)
+        r.eq(router.readinessBackends(currentValidatedServices: [keyed]).availableIDs, [evidence.backendID], "A6 matching credential evidence admits service")
+        try? credentials.write("fixture-replacement", id: keyID)
+        r.eq(router.readinessBackends(currentValidatedServices: [keyed]).availableIDs, [], "A6 credential generation edit invalidates service readiness")
+        var lockedAccess = ASRCredentialAccess.memory()
+        lockedAccess.read = { _ in throw ASRCredentialError.unavailable }
+        let locked = ASRRouter(startMonitoring: false, internetAvailable: { false },
+            credentials: KeychainASRCredentialStore(access: lockedAccess), configuration: { settings.config },
+            localAvailable: { false }, localLease: { nil })
+        r.eq(locked.readinessBackends(currentValidatedServices: [keyed]).availableIDs, [], "A6 locked credential cannot appear ready")
+
+    }
+
+    // Regressions: new identity survives JSON/SQL and configuration failures retain the actual backend.
+    @MainActor static func testActualBackendHistoryAndRecovery(_ r: SelfTest.Reporter) async {
+        do {
+            let session = DictationSession(rawTranscript: "fixture", finalText: "fixture", polishMode: .raw, durationMs: 1)
+            var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(session)) as! [String: Any]
+            json["asrBackendID"] = "cloud:actual-fallback"
+            json["asrModelID"] = "actual-model"
+            json["asrLocation"] = "cloud"
+            let decoded = try JSONDecoder().decode(DictationSession.self, from: JSONSerialization.data(withJSONObject: json))
+            let legacy = try JSONDecoder().decode(DictationSession.self, from: JSONEncoder().encode(session))
+            r.eq(legacy.asrBackendID, nil, "A6 old JSON defaults backend to nil")
+            r.eq(legacy.asrModelID, nil, "A6 old JSON defaults model to nil")
+            r.eq(legacy.asrLocation, nil, "A6 old JSON defaults location to nil")
+            let queue = try DatabaseQueue()
+            try AppDatabase.migrator.migrate(queue, upTo: "v5_delivery")
+            try await queue.write { db in
+                try db.execute(sql: "INSERT INTO session (id,startedAt,charCount,rawTranscript,finalText,sttBackend) VALUES ('legacy-row',123,7,'old raw','old final','custom-old-brand')")
+            }
+            _ = try AppDatabase(queue, isOnDisk: false)
+            let migrated = try await queue.read { try SessionRecord.fetchOne($0, key: "legacy-row")! }.toDictationSession()
+            r.eq(migrated.rawTranscript, "old raw", "A6 additive migration retains old transcript")
+            r.eq(migrated.sttBackend, "custom-old-brand", "A6 additive migration retains old unknown brand")
+            r.eq(migrated.asrBackendID, nil, "A6 migrated row defaults backend to nil")
+            let oldRecord = SessionRecord(from: session)
+            let oldRecordJSON = try JSONEncoder().encode(oldRecord)
+            r.eq(try JSONDecoder().decode(SessionRecord.self, from: oldRecordJSON).asrBackendID, nil,
+                "A6 old record decode defaults backend to nil")
+            let db = try AppDatabase.inMemory()
+            try await db.dbQueue.write { db in
+                var record = SessionRecord(from: decoded)
+                try record.insert(db)
+            }
+            let stored = try await db.dbQueue.read { try SessionRecord.fetchOne($0, key: session.id)! }.toDictationSession()
+            let roundTrip = try JSONSerialization.jsonObject(with: JSONEncoder().encode(stored)) as! [String: Any]
+            r.eq(roundTrip["asrBackendID"] as? String, "cloud:actual-fallback", "A6 actual backend survives JSON and SQL")
+            r.eq(roundTrip["asrModelID"] as? String, "actual-model", "A6 actual model survives JSON and SQL")
+            r.eq(roundTrip["asrLocation"] as? String, "cloud", "A6 actual location survives JSON and SQL")
+            r.check(SessionMetrics.report([stored]).contains("cloud: 1"), "A6 metrics count actual cloud location")
+        } catch { r.check(false, "A6 identity persistence fixture: \(error)") }
+        let failed = descriptor("service:actual", .loopbackService)
+        let context = SessionContext(sessionID: 601)
+        context.captureRoute = .init(policy: .localOnly, bindings: [.init(descriptor: failed,
+            provider: RoutingProvider(id: "wire", operation: { _ in throw CloudASRError.noModel }),
+            nativeLease: nil, credentialGeneration: nil)])
+        let stage = ASRStage(healthRecorder: { _, _, _ in }, speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
+        let result = await stage.execute(payload: .audio(samples: [0.1], previewText: ""), context: context)
+        if case .suspend(let recovery) = result {
+            r.eq(recovery.destination, .settings(.speech, .asrBackend(failed.id)), "A6 service failure targets actual backend")
+        } else { r.check(false, "A6 service configuration failure suspends") }
+        let fallback = ASRBackendDescriptor(id: .init(rawValue: "cloud:actual-fallback"), revision: UUID(), displayName: "Actual fallback",
+            modelID: "actual-model", location: .cloud, requiresInternet: true, capabilities: failed.capabilities, maxUploadBytes: nil)
+        context.captureRoute = .init(policy: .auto, bindings: [context.captureRoute!.bindings[0], .init(descriptor: fallback,
+            provider: RoutingProvider(id: "untrusted-wire-id"), nativeLease: nil, credentialGeneration: nil)])
+        let success = await stage.execute(payload: .audio(samples: [0.1], previewText: ""), context: context)
+        if case .continue(.transcript(let text)) = success { context.finalText = text }
+        else { r.check(false, "A6 actual fallback succeeds") }
+        // Later edits to route metadata cannot change the already completed winner.
+        context.captureRoute = .init(policy: .auto, bindings: [])
+        let history = SessionController.historySession(context: context, durationMs: 1)
+        r.eq(history.asrBackendID, "cloud:actual-fallback", "A6 fallback history uses winning backend")
+        r.eq(history.asrModelID, "actual-model", "A6 fallback history uses captured model")
+        r.eq(history.asrLocation, "cloud", "A6 fallback history uses actual location")
+        r.eq(history.sttBackend, "Actual fallback", "A6 fallback history uses actual display name")
+        r.eq(history.usedFallback, true, "A6 actual fallback is recorded")
+        r.check(SessionMetrics.report([history]).contains("cloud: 1"), "A6 fallback metrics use actual cloud")
+        let report = SessionMetrics.report([history])
+        r.check(report.contains("cloud:actual-fallback") && report.contains("actual-model") && report.contains("location=cloud"),
+                "A6 metrics expose actual captured backend model and location")
+        let suite = "flowtype.a6.preflight." + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ConfigurationStore(defaults: defaults, keychain: .init(save: { _, _ in true }, load: { _ in nil }, delete: { _ in }),
+            asrCredentials: KeychainASRCredentialStore(access: .memory()))
+        var config = store.current
+        let selected = ASRBackendID(rawValue: "future:selected-before-edit")
+        config.setASRBackendSelection(.init(primary: selected))
+        store.save(config)
+        var destinations: [ClientDestination] = []
+        let controller = SessionController(pipeline: [], observers: [],
+            effects: .init(prepare: {}, showWindow: {}, hideWindow: {}, saveHistory: { _ in }),
+            recoveryEffects: .init(openAccessibilitySettings: {}, openMicrophoneSettings: {}, openSpeechRecognitionSettings: {},
+                openASRSettings: {}, openHistory: {}, copyText: { _ in }, openDestination: { destinations.append($0) }),
+            configurationStore: store, refreshReadiness: { .blocked(.noEngine) }, readinessLevel: { .blocked(.noEngine) },
+            resources: SessionResourceCoordinator())
+        controller.startRecording()
+        if let card = controller.recoveryCard {
+            config.setASRBackendSelection(.init(primary: .init(rawValue: "future:later-edit")))
+            store.save(config)
+            controller.performRecoveryAction(.openASRSettings, cardID: card.id)
+            r.eq(destinations, [.settings(.speech, .asrBackend(selected))], "A6 preflight recovery retains blocked selection despite edits")
+        } else { r.check(false, "A6 preflight recovery card exists") }
+        controller.cancel()
+
+        let previewContext = SessionContext(sessionID: 602)
+        previewContext.captureRoute = .init(policy: .auto, bindings: [])
+        _ = await stage.execute(payload: .audio(samples: [0.1], previewText: "Apple preview"), context: previewContext)
+        let previewHistory = SessionController.historySession(context: previewContext, durationMs: 1)
+        r.eq(previewHistory.asrBackendID, nil, "A6 preview does not invent selectable backend")
+        r.eq(previewHistory.sttBackend, "apple", "A6 preview retains explicit Apple label")
+        r.eq(SessionController.backendLabel(forProviderID: ASRProviderID.local), "local", "A6 legacy local without brand does not force Qwen")
     }
 }
