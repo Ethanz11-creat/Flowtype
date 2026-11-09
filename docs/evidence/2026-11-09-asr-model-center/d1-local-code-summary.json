@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "scope": "D1 local code lane; remote CI remains unverified for this SHA",
+  "verifiedSourceIdentity": {
+    "dirty": false,
+    "sourceTree": "6ef9813355c20da71c689bc0742cd325f06c257f",
+    "gitSHA": "722e109b00a487073630fe1b2f745b49503d6967"
+  },
+  "reportPath": "build/verification/68B52C4B-5DE8-4928-AD95-3A4B08F2DAC4/verify-report.json",
+  "reportSHA256": "1a1856ad2e9aa576efac80f160e0c13c9068af28c5974321ed6bd759351b7893",
+  "fullSelfTest": {
+    "passed": 25932,
+    "failed": 0,
+    "stderrEmpty": true,
+    "actualTimerElapsedSeconds": 0.069680459,
+    "actualTimerTicks": 2,
+    "actualTimerStoppedElapsedSeconds": 0.140093667,
+    "actualTimerStoppedTicks": 2,
+    "sourceFiles": [
+      {
+        "path": "build/verification/68B52C4B-5DE8-4928-AD95-3A4B08F2DAC4/children/99B45C96-5B3B-4CC4-A21B-3F575A6F10F6/stdout",
+        "sha256": "51aacda65c1cbca7f6a64fddb99a6dbb491bb552b0666809af1bed49e6be05ab"
+      },
+      {
+        "path": "build/verification/68B52C4B-5DE8-4928-AD95-3A4B08F2DAC4/children/99B45C96-5B3B-4CC4-A21B-3F575A6F10F6/stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "priorLocalRun": {
+    "path": "build/verification/46AD161B-298D-469C-B634-025FAC270EC0/verify-report.json",
+    "status": "Fail",
+    "failedPhase": "source-end",
+    "failureCode": "sourceChanged",
+    "codeFullPassed": 25932,
+    "codeFullFailed": 0,
+    "cause": "Baseline evidence document created during source snapshot; corrected by freezing/committing before rerun"
+  },
+  "remoteCIStatus": "Pending",
+  "manualStatus": "Pending"
+}
