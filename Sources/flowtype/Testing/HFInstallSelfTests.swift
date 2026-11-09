@@ -5,5 +5,6 @@ enum HFInstallSelfTests {
         await HFRepositorySelfTests.run(r)
         await HFInstallPlannerSelfTests.run(r)
         await HFDownloadSelfTests.run(r)
+        await HFInstallTransactionSelfTests.run(r)
     }
 }

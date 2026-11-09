@@ -2,6 +2,25 @@ import Foundation
 
 /// Value transformations only. The coordinator persists successful owned loads in a later transaction.
 enum LocalModelLibrary {
+    /// Idempotent publication registration, without changing any selection or validation.
+    static func registering(_ record: ASRInstalledModelRecord, model: ImportedASRModel,
+                            in configuration: Configuration) throws -> Configuration {
+        guard record.importedModelID == model.id, record.id != model.id,
+              canonical(record.directory) == canonical(model.directory) else { throw HFDownloadError(code: .integrity) }
+        var result = configuration
+        if let existing = result.installedASRModels.first(where: { $0.id == record.id }) {
+            guard existing.importedModelID == record.importedModelID, existing.directory == record.directory,
+                  existing.installPlan == record.installPlan else { throw HFDownloadError(code: .integrity) }
+        } else { result.installedASRModels.append(record) }
+        if let existing = result.importedASRModels.first(where: { $0.id == model.id }) {
+            guard canonical(existing.directory) == canonical(model.directory), existing.engine == model.engine else { throw HFDownloadError(code: .integrity) }
+        } else {
+            guard !result.importedASRModels.contains(where: { canonical($0.directory) == canonical(model.directory) }) else { throw HFDownloadError(code: .integrity) }
+            result.importedASRModels.append(model)
+        }
+        return result
+    }
+
     /// Resolve the durable ID before constructing a provider/lease, including symlink aliases.
     static func canonicalizing(_ model: ImportedASRModel, in configuration: Configuration) -> ImportedASRModel {
         var result = model

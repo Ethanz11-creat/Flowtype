@@ -10,6 +10,9 @@ struct RuntimePaths: Sendable {
     let temporaryDirectory: URL
     let modelsDirectory: URL
 
+    var installedASRModelsDirectory: URL { modelsDirectory.appendingPathComponent("installed") }
+    var asrInstallationJobsDirectory: URL { modelsDirectory.appendingPathComponent("installation-jobs") }
+
     static func app(home: URL, applicationSupport: URL, caches: URL,
                     temporaryDirectory: URL) -> RuntimePaths {
         RuntimePaths(validationRoot: nil,

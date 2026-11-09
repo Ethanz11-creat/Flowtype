@@ -442,6 +442,7 @@ struct Configuration: Codable, Equatable {
     var selectedLocalModelID: String? = nil
     var customLocalModelPath: String? = nil
     var importedASRModels: [ImportedASRModel] = []
+    var installedASRModels: [ASRInstalledModelRecord] = []
     var activeImportedASRModelID: UUID? = nil
 
     // Constants
@@ -560,6 +561,7 @@ struct Configuration: Codable, Equatable {
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
         importedASRModels = try c.decodeIfPresent([ImportedASRModel].self, forKey: .importedASRModels) ?? []
+        installedASRModels = try c.decodeIfPresent([ASRInstalledModelRecord].self, forKey: .installedASRModels) ?? []
         activeImportedASRModelID = try c.decodeIfPresent(UUID.self, forKey: .activeImportedASRModelID)
         deliveryMode = (try? c.decodeIfPresent(DeliveryMode.self, forKey: .deliveryMode)) ?? .automatic
         storeTranscriptText = (try? c.decodeIfPresent(Bool.self, forKey: .storeTranscriptText)) ?? true
@@ -612,6 +614,7 @@ extension Configuration {
         case selectedLocalModelID
         case customLocalModelPath
         case importedASRModels
+        case installedASRModels
         case activeImportedASRModelID
         case storeTranscriptText
         case providerAPIKeys
@@ -648,6 +651,7 @@ extension Configuration {
         try container.encode(selectedLocalModelID, forKey: .selectedLocalModelID)
         try container.encode(customLocalModelPath, forKey: .customLocalModelPath)
         try container.encode(importedASRModels, forKey: .importedASRModels)
+        try container.encode(installedASRModels, forKey: .installedASRModels)
         try container.encodeIfPresent(activeImportedASRModelID, forKey: .activeImportedASRModelID)
         try container.encode(storeTranscriptText, forKey: .storeTranscriptText)
         try container.encode(providerAPIKeys, forKey: .providerAPIKeys)

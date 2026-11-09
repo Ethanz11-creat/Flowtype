@@ -136,6 +136,13 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         guard defaults.data(forKey: defaultsKey) == data else { throw ASRCredentialError.persistence }
     }
 
+    /// Installation success is reported only after the complete library pair is durable.
+    @MainActor func registerInstalledASRModel(_ record: ASRInstalledModelRecord, model: ImportedASRModel) throws {
+        let candidate = try LocalModelLibrary.registering(record, model: model, in: current)
+        try persist(candidate)
+        current = candidate
+    }
+
     /// Persist identity/revisions with legacy recovery copies before touching credentials.
     func retryASRCredentialMigration() {
         var source = current
