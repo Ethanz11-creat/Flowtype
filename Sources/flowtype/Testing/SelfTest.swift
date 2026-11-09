@@ -415,6 +415,11 @@ enum SelfTest {
             print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
+        if CommandLine.arguments.contains("--asr-backends-only") {
+            await ASRBackendSelfTests.run(r)
+            print("=== ASR backend self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--m2-fix-only") {
             LocalModelImportSelfTests.runInspection(r)
             await WhisperRuntimeSelfTests.run(r)
@@ -425,6 +430,7 @@ enum SelfTest {
             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
+        await ASRBackendSelfTests.run(r)
         await NativeClientSelfTests.run(r)
         await M5RuntimeSelfTests.run(r)
         await M5IsolationSelfTests.run(r)

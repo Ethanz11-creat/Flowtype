@@ -3,6 +3,7 @@ import Foundation
 /// 运行位置 — 决定隐私文案与路由过滤。
 enum ProviderLocation: String, Sendable, Codable {
     case onDevice
+    case localService
     case cloud
 }
 

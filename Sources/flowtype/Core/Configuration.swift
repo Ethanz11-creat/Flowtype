@@ -245,6 +245,7 @@ enum CloudASRProtocolKind: String, Codable, Sendable {
 
 struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
+    var revision: UUID
     var name: String
     var provider: String
     var baseURL: String
@@ -255,10 +256,11 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
     /// Used only for custom compatible services; optional fields require explicit opt-in.
     var customFieldCapabilities: CloudASRFieldCapabilities
 
-    init(id: UUID = UUID(), name: String, provider: String, baseURL: String, model: String,
+    init(id: UUID = UUID(), revision: UUID = UUID(), name: String, provider: String, baseURL: String, model: String,
          isActive: Bool = false, protocolKind: CloudASRProtocolKind = .openAICompatible,
          vendorID: CloudASRVendorID? = nil, customFieldCapabilities: CloudASRFieldCapabilities = .init()) {
         self.id = id
+        self.revision = revision
         self.name = name
         self.provider = provider
         self.baseURL = baseURL
@@ -270,12 +272,13 @@ struct CloudASRProviderConfig: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, provider, baseURL, model, isActive, protocolKind, vendorID, customFieldCapabilities
+        case id, revision, name, provider, baseURL, model, isActive, protocolKind, vendorID, customFieldCapabilities
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
+        revision = try c.decodeIfPresent(UUID.self, forKey: .revision) ?? UUID()
         name = try c.decode(String.self, forKey: .name)
         provider = try c.decode(String.self, forKey: .provider)
         baseURL = try c.decode(String.self, forKey: .baseURL)
@@ -418,6 +421,9 @@ struct Configuration: Codable, Equatable {
 
     // ASR routing policy (replaces the legacy binary asrEngine switch)
     var asrRoutingPolicy: ASRRoutingPolicy = .auto
+    /// Nil denotes legacy intent that has not yet been resolved/migrated.
+    var asrBackendSelection: ASRBackendSelection? = nil
+    var localASRServices: [LocalASRServiceProfile] = []
     /// 云端请求是否携带前台上下文（默认开启；设置中可关闭）。
     var cloudASRSendContext: Bool = true
     var cloudPolishSendContext: Bool = true
@@ -519,6 +525,8 @@ struct Configuration: Codable, Equatable {
         cloudASRSendContext = (try? c.decodeIfPresent(Bool.self, forKey: .cloudASRSendContext)) ?? true
         cloudPolishSendContext = (try? c.decodeIfPresent(Bool.self, forKey: .cloudPolishSendContext)) ?? cloudASRSendContext
         cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
+        asrBackendSelection = try c.decodeIfPresent(ASRBackendSelection.self, forKey: .asrBackendSelection)
+        localASRServices = try c.decodeIfPresent([LocalASRServiceProfile].self, forKey: .localASRServices) ?? []
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
         importedASRModels = try c.decodeIfPresent([ImportedASRModel].self, forKey: .importedASRModels) ?? []
@@ -564,6 +572,8 @@ extension Configuration {
         case downloadSource
         case asrEngine
         case asrRoutingPolicy
+        case asrBackendSelection
+        case localASRServices
         case cloudASRSendContext
         case deliveryMode
         case cloudPolishSendContext
@@ -597,6 +607,8 @@ extension Configuration {
         try container.encode(localModelPath, forKey: .localModelPath)
         try container.encode(downloadSource, forKey: .downloadSource)
         try container.encode(asrRoutingPolicy, forKey: .asrRoutingPolicy)
+        try container.encodeIfPresent(asrBackendSelection, forKey: .asrBackendSelection)
+        try container.encode(localASRServices, forKey: .localASRServices)
         try container.encode(cloudASRSendContext, forKey: .cloudASRSendContext)
         try container.encode(deliveryMode, forKey: .deliveryMode)
         try container.encode(cloudPolishSendContext, forKey: .cloudPolishSendContext)
