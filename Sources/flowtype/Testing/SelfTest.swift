@@ -418,6 +418,7 @@ enum SelfTest {
         }
         if CommandLine.arguments.contains("--asr-backends-only") {
             await ASRBackendSelfTests.run(r)
+            await testHealthRecovery(r)
             print("=== ASR backend self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
@@ -4219,50 +4220,74 @@ enum SelfTest {
         r.eq(preObservation, cleanPreObservation,
              "identity: route captured before first path callback cannot write health")
 
-        // Exercise the actual capture-start lock and probe entry point. No
-        // singleton, monitor, network connection, provider, or microphone starts.
-        let cfgBox = OSAllocatedUnfairLock(initialState: config)
+        // Exercise the actual capture-start lock and versioned health boundary
+        // using only explicit bindings and in-memory credentials.
+        let nativeID = ASRBackendID(rawValue: "native:preset:health-fixture")
+        let cloudID = ASRBackendID(rawValue: "cloud:" + provider.id.uuidString)
+        let nativeLease = LocalASRLease(id: UUID(), identity: .init(id: "health-fixture", displayName: "Health fixture", engine: "fixture",
+            repoID: nil, directory: URL(fileURLWithPath: "/nonexistent/health-fixture")),
+            provider: PipelineASRFixture(id: "health-fixture"))
+        var capturedConfig = config
+        capturedConfig.setASRBackendSelection(.init(primary: cloudID, fallback: nativeID, allowsCloudFallback: true))
+        let cfgBox = OSAllocatedUnfairLock(initialState: capturedConfig)
         let clock = OSAllocatedUnfairLock(initialState: UInt64(1_000_000_000))
         let probeGate = StageRendezvous()
-        let router = ASRRouter(startMonitoring: false, configuration: { cfgBox.withLock { $0 } },
-                               localAvailable: { true }, uptimeNanoseconds: { clock.withLock { $0 } },
-                               measureProbe: { _, _, _ in
-            await probeGate.invoke(suspend: true)
-            return 900
-        })
+        let credentials = KeychainASRCredentialStore(access: .memory())
+        let router = ASRRouter(startMonitoring: false, internetAvailable: { true }, credentials: credentials,
+            persistNativeResolution: { _ in }, configuration: { cfgBox.withLock { $0 } },
+            localAvailable: { true }, localLease: { nativeLease }, uptimeNanoseconds: { clock.withLock { $0 } },
+            measureProbe: { _, _, _ in
+                await probeGate.invoke(suspend: true)
+                return 900
+            })
         let route = await router.captureStartRoute()
-        router.recordFailure(providerID: ASRProviderID.cloud, route: route)
-        router.recordFailure(providerID: ASRProviderID.cloud, route: route)
+        r.eq(route.candidateIDs, [cloudID.rawValue, nativeID.rawValue], "capture entry: exact configured cloud and actual native lease are captured")
+        r.eq(route.bindings.last?.nativeLease?.id, nativeLease.id, "capture entry: actual native lease is retained")
+        router.recordFailure(providerID: cloudID.rawValue, route: route)
+        router.recordFailure(providerID: cloudID.rawValue, route: route)
+        r.check(route.bindings.first.map { router.backendHealth.isDegraded(binding: $0) } == true,
+                "capture entry: failures degrade the actual versioned cloud binding")
         let reserved = await router.captureStartRoute()
-        r.check(reserved.isHealthRecovery, "capture entry: production boundary reserves recovery")
+        r.eq(reserved.candidateIDs, [cloudID.rawValue, nativeID.rawValue], "capture entry: production boundary reserves recovery")
         let parallelRoutes = await withTaskGroup(of: ASRRouteSnapshot.self, returning: [ASRRouteSnapshot].self) { group in
             for _ in 0..<8 { group.addTask { await router.captureStartRoute() } }
             var routes: [ASRRouteSnapshot] = []
             for await captured in group { routes.append(captured) }
             return routes
         }
-        r.check(parallelRoutes.allSatisfy { !$0.isHealthRecovery && $0.selectedProviderID == ASRProviderID.qwenLocal },
-                "capture entry: concurrent callers cannot duplicate reservation")
-        router.recordSuccess(providerID: ASRProviderID.cloud, latencyMs: 180, route: reserved)
-        r.eq((await router.captureStartRoute()).selectedProviderID, ASRProviderID.cloud,
+        r.check(parallelRoutes.count == 8 && parallelRoutes.allSatisfy {
+            $0.candidateIDs == [nativeID.rawValue, cloudID.rawValue]
+                && $0.bindings.first?.nativeLease?.id == nativeLease.id
+        }, "capture entry: concurrent callers cannot duplicate reservation")
+        router.recordSuccess(providerID: cloudID.rawValue, latencyMs: 180, route: reserved)
+        r.eq((await router.captureStartRoute()).candidateIDs, [cloudID.rawValue, nativeID.rawValue],
              "capture entry: successful recovery restores cloud")
         let pendingProbe = Task { await router.refreshProbeIfNeeded(force: true) }
         await probeGate.waitForInvocation()
         cfgBox.withLock { $0.cloudASRConfig.providers[0].model = "replacement" }
         await probeGate.release()
         await pendingProbe.value
-        r.eq(router.snapshot().probeSampledAt, nil, "probe entry: configuration changed during await rejects result")
+        let replacementRoute = await router.captureStartRoute()
+        guard let replacement = replacementRoute.bindings.first(where: { $0.descriptor.id == cloudID }) else {
+            r.check(false, "capture entry: edited cloud remains configured")
+            return
+        }
+        r.eq(replacement.descriptor.modelID, "replacement", "probe entry: next capture uses replacement model")
+        r.check(!router.backendHealth.isDegraded(binding: replacement), "probe entry: configuration changed during await rejects result")
         r.eq(router.snapshot().realtimeLatencyEWMA, 0, "probe entry: new profile invalidates actual latency too")
-        let staleRoute = reserved
-        router.recordFailure(providerID: ASRProviderID.cloud, route: staleRoute)
-        r.eq(router.snapshot().cloudConsecutiveFailures, 0, "capture entry: stale request cannot write before next capture")
+        router.recordFailure(providerID: cloudID.rawValue, route: reserved)
+        router.recordFailure(providerID: cloudID.rawValue, route: reserved)
+        r.check(!router.backendHealth.isDegraded(binding: replacement), "capture entry: stale request cannot write before next capture")
+        r.eq((await router.captureStartRoute()).candidateIDs, [cloudID.rawValue, nativeID.rawValue],
+             "capture entry: stale version cannot reorder current route")
 
         let probes = OSAllocatedUnfairLock(initialState: 0)
-        let gated = ASRRouter(startMonitoring: false, configuration: { cfgBox.withLock { $0 } },
-                              localAvailable: { true }, measureProbe: { _, _, _ in
-            probes.withLock { $0 += 1 }
-            return 100
-        })
+        let gated = ASRRouter(startMonitoring: false, internetAvailable: { true }, credentials: credentials,
+            persistNativeResolution: { _ in }, configuration: { cfgBox.withLock { $0 } },
+            localAvailable: { true }, localLease: { nativeLease }, measureProbe: { _, _, _ in
+                probes.withLock { $0 += 1 }
+                return 100
+            })
         for policy in [ASRRoutingPolicy.localOnly, .cloudOnly] {
             cfgBox.withLock { $0.asrRoutingPolicy = policy }
             await gated.refreshProbeIfNeeded(force: true)
