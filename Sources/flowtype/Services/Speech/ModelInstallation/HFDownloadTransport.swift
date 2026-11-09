@@ -4,16 +4,20 @@ import os
 /// A transfer returns only after its serial delegate has stopped writing and closed the file.
 /// Caller owns the partial's directory and must not mutate it or its sidecar while transfer is active.
 final class HFDownloadTransport: @unchecked Sendable {
+    typealias FileCreator = @Sendable (URL) throws -> Void
+    typealias FileVerifier = @Sendable (HFPlannedFile, URL) throws -> Void
     typealias ChunkWriter = @Sendable (FileHandle, Data) throws -> Void
     private let configuration: URLSessionConfiguration
     private let credentials: any ASRCredentialStore
     private let sleep: @Sendable (TimeInterval) async throws -> Void
     private let chunkWriter: ChunkWriter
+    private let fileCreator: FileCreator
+    private let fileVerifier: FileVerifier
 
     init(configuration: URLSessionConfiguration = .ephemeral,
          credentialStore: any ASRCredentialStore = KeychainASRCredentialStore.shared,
          sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
-         chunkWriter: ChunkWriter? = nil) {
+         chunkWriter: ChunkWriter? = nil, fileCreator: FileCreator? = nil, fileVerifier: FileVerifier? = nil) {
         let config = configuration.copy() as! URLSessionConfiguration
         config.urlCache = nil; config.httpCookieStorage = nil; config.urlCredentialStorage = nil
         config.httpShouldSetCookies = false; config.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -22,6 +26,9 @@ final class HFDownloadTransport: @unchecked Sendable {
         config.timeoutIntervalForResource = 7 * 24 * 60 * 60
         self.configuration = config; credentials = credentialStore; self.sleep = sleep
         self.chunkWriter = chunkWriter ?? { try $0.write(contentsOf: $1) }
+        // Throwing exclusive creation preserves ENOSPC and cannot overwrite a partial that appeared meanwhile.
+        self.fileCreator = fileCreator ?? { try Data().write(to: $0, options: .withoutOverwriting) }
+        self.fileVerifier = fileVerifier ?? { try HFFileVerifier.verify(file: $0, at: $1) }
     }
 
     func transfer(file: HFPlannedFile, partialURL: URL, credentialID: String?,
@@ -59,7 +66,7 @@ final class HFDownloadTransport: @unchecked Sendable {
                         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
                     }
                     let sink = HFDownloadSink(file: file, partialURL: partialURL, offset: offset, validator: validator,
-                                              credentialID: credentialID, progress: progress, writer: chunkWriter)
+                                              credentialID: credentialID, progress: progress, writer: chunkWriter, fileCreator: fileCreator)
                     let outcome = try await sink.run(request: request, configuration: configuration)
                     switch outcome {
                     case .redirect(let location):
@@ -69,12 +76,14 @@ final class HFDownloadTransport: @unchecked Sendable {
                         currentURL = next
                     case .rangeUnsatisfied:
                         if (try Self.length(partialURL)) == file.sizeBytes,
-                           (try? HFFileVerifier.verify(file: file, at: partialURL)) != nil {
-                            try Self.removeSidecar(partialURL); return
+                           (try? fileVerifier(file, partialURL)) != nil {
+                            try Self.removeSidecar(partialURL)
+                            try Task.checkCancellation()
+                            return
                         }
                         throw HFDownloadAttemptError.restartRange
                     case .complete:
-                        do { try HFFileVerifier.verify(file: file, at: partialURL) }
+                        do { try fileVerifier(file, partialURL) }
                         catch { try? Self.discard(partialURL); throw error }
                         try Self.removeSidecar(partialURL)
                         try Task.checkCancellation()
@@ -162,6 +171,7 @@ private enum HFDownloadAttemptError: Error { case restartRange, retry(HFDownload
 private final class HFDownloadSink: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let file: HFPlannedFile, partialURL: URL, offset: Int64, originalValidator: String?, credentialID: String?
     private let progress: @Sendable (Int64) -> Void, writer: HFDownloadTransport.ChunkWriter
+    private let fileCreator: HFDownloadTransport.FileCreator
     private var handle: FileHandle?
     private var written: Int64 = 0
     private var responseEnd: Int64?
@@ -173,9 +183,10 @@ private final class HFDownloadSink: NSObject, URLSessionDataDelegate, @unchecked
     private let control = OSAllocatedUnfairLock(initialState: Control())
 
     init(file: HFPlannedFile, partialURL: URL, offset: Int64, validator: String?, credentialID: String?,
-         progress: @escaping @Sendable (Int64) -> Void, writer: @escaping HFDownloadTransport.ChunkWriter) {
+         progress: @escaping @Sendable (Int64) -> Void, writer: @escaping HFDownloadTransport.ChunkWriter,
+         fileCreator: @escaping HFDownloadTransport.FileCreator) {
         self.file = file; self.partialURL = partialURL; self.offset = offset; originalValidator = validator
-        self.credentialID = credentialID; self.progress = progress; self.writer = writer
+        self.credentialID = credentialID; self.progress = progress; self.writer = writer; self.fileCreator = fileCreator
     }
     func run(request: URLRequest, configuration: URLSessionConfiguration) async throws -> HFDownloadOutcome {
         try await withTaskCancellationHandler {
@@ -227,7 +238,7 @@ private final class HFDownloadSink: NSObject, URLSessionDataDelegate, @unchecked
             if let length = response.value(forHTTPHeaderField: "Content-Length").flatMap(Int64.init),
                length != (responseEnd! - written) { throw HFDownloadError(code: .integrity) }
             if !FileManager.default.fileExists(atPath: partialURL.path) {
-                guard FileManager.default.createFile(atPath: partialURL.path, contents: nil) else { throw HFDownloadError(code: .network) }
+                try fileCreator(partialURL)
             }
             _ = try HFDownloadTransport.length(partialURL)
             handle = try FileHandle(forWritingTo: partialURL)

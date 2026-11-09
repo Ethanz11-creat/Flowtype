@@ -16,6 +16,8 @@ enum HFDownloadSelfTests {
         await testRenewedResolveURL(r)
         testDigestFormats(r)
         await testRetryAndFailures(r)
+        await testDiskCreationFailures(r)
+        await testVerified416Cancellation(r)
         await testTransportCancellation(r)
     }
     static func root() -> URL {
@@ -135,6 +137,59 @@ enum HFDownloadSelfTests {
         HFDownloadFixture.reset { _, _ in .init(chunks: [bytes]) }
         let disk = transport(writer: { _, _ in throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC)) })
         await rejects(r, .diskFull, at: url, transport: disk, "B3 disk full is distinct failure")
+    }
+    static func testDiskCreationFailures(_ r: SelfTest.Reporter) async {
+        let dir = root(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("partial")
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [HFDownloadFixture.self]
+        let clock = HFDownloadTestClock(), progress = HFDownloadProgressProbe()
+        let creates = OSAllocatedUnfairLock(initialState: 0)
+        let disk = HFDownloadTransport(configuration: config, credentialStore: KeychainASRCredentialStore(access: .memory()),
+            sleep: { try await clock.sleep($0) }, fileCreator: { _ in
+                creates.withLock { $0 += 1 }
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))
+            })
+        HFDownloadFixture.reset { _, _ in .init(chunks: [bytes]) }
+        do { try await disk.transfer(file: file(), partialURL: url, credentialID: nil, progress: { progress.add($0) }); r.check(false, "B3 create ENOSPC must fail") }
+        catch { r.eq((error as? HFDownloadError)?.code, .diskFull, "B3 create ENOSPC is diskFull") }
+        r.eq(creates.withLock { $0 }, 1, "B3 create ENOSPC makes one creation attempt")
+        r.eq(HFDownloadFixture.requests.count, 1, "B3 create ENOSPC never retries network")
+        r.eq(clock.delays, [], "B3 create ENOSPC never backs off")
+        r.eq(progress.values, [], "B3 creation failure emits no byte progress")
+        r.check(!FileManager.default.fileExists(atPath: url.path), "B3 failed creation leaves no partial")
+        r.check(!FileManager.default.fileExists(atPath: HFDownloadJournal.sidecarURL(for: url).path), "B3 failed creation leaves no sidecar")
+        let prefix = Data(bytes.prefix(4)); try! prefix.write(to: url)
+        let writerClock = HFDownloadTestClock()
+        let writing = HFDownloadTransport(configuration: config, credentialStore: KeychainASRCredentialStore(access: .memory()),
+            sleep: { try await writerClock.sleep($0) }, chunkWriter: { _, _ in
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))
+            }, fileCreator: { _ in creates.withLock { $0 += 1 } })
+        HFDownloadFixture.reset { _, _ in .init(status: 206, headers: ["Content-Range": "bytes 4-7/8"], chunks: [Data(bytes.suffix(4))]) }
+        await rejects(r, .diskFull, at: url, transport: writing, "B3 resumed write ENOSPC is diskFull")
+        r.eq(try? Data(contentsOf: url), prefix, "B3 failed resumed write preserves old partial")
+        r.eq(creates.withLock { $0 }, 1, "B3 resume never recreates existing partial")
+        r.eq(HFDownloadFixture.requests.count, 1, "B3 write ENOSPC never retries network")
+        r.eq(writerClock.delays, [], "B3 write ENOSPC never backs off")
+    }
+    static func testVerified416Cancellation(_ r: SelfTest.Reporter) async {
+        let dir = root(); defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("partial"); try! bytes.write(to: url)
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [HFDownloadFixture.self]
+        let progress = HFDownloadProgressProbe(), verifications = OSAllocatedUnfairLock(initialState: 0)
+        let t = HFDownloadTransport(configuration: config, credentialStore: KeychainASRCredentialStore(access: .memory()),
+            fileVerifier: { file, url in
+                try HFFileVerifier.verify(file: file, at: url)
+                verifications.withLock { $0 += 1 }
+                withUnsafeCurrentTask { $0?.cancel() }
+            })
+        HFDownloadFixture.reset { _, _ in .init(status: 416) }
+        let task = Task { try await t.transfer(file: file(), partialURL: url, credentialID: nil, progress: { progress.add($0) }) }
+        do { try await task.value; r.check(false, "B3 verified 416 cancellation must throw") }
+        catch { r.eq((error as? HFDownloadError)?.code, .cancelled, "B3 verified 416 observes cancellation before success") }
+        r.eq(verifications.withLock { $0 }, 1, "B3 416 cancellation follows actual digest verification")
+        r.eq(try? Data(contentsOf: url), bytes, "B3 416 cancellation preserves verified partial")
+        r.eq(HFDownloadFixture.requests.count, 1, "B3 416 cancellation does not retry")
+        r.eq(progress.values, [], "B3 drained 416 emits no progress")
     }
     static func testTransportCancellation(_ r: SelfTest.Reporter) async {
         let dir = root(); defer { try? FileManager.default.removeItem(at: dir) }; let url = dir.appendingPathComponent("partial")
