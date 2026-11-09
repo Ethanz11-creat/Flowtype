@@ -216,6 +216,11 @@ struct CloudASRModelPreset: Identifiable, Hashable {
     let id: String
     let name: String
     let modelId: String
+    let isDeprecated: Bool
+
+    init(id: String, name: String, modelId: String, isDeprecated: Bool = false) {
+        self.id = id; self.name = name; self.modelId = modelId; self.isDeprecated = isDeprecated
+    }
 
     static let senseVoiceSmall = CloudASRModelPreset(
         id: "sensevoice-small",

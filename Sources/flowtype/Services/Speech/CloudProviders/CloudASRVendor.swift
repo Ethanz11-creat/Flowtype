@@ -18,7 +18,8 @@ enum CloudASRVendor {
         switch (profile.vendorID, profile.protocolKind) {
         case (.siliconFlow, .openAICompatible): return CloudASRModelPreset.siliconFlowModels
         case (.openAI, .openAICompatible):
-            return [CloudASRModelPreset(id: "whisper-1", name: "Whisper-1", modelId: "whisper-1")]
+            return [CloudASRModelPreset(id: "gpt-transcribe", name: "GPT Transcribe（推荐）", modelId: "gpt-transcribe"),
+                    CloudASRModelPreset(id: "whisper-1", name: "Whisper-1（已弃用）", modelId: "whisper-1", isDeprecated: true)]
         case (.dashScope, .dashScopeRealtime): return [.paraformerRealtimeV2]
         default: return []
         }
@@ -30,7 +31,7 @@ enum CloudASRVendor {
             return .defaultSiliconFlow(isActive: isActive)
         case .openAI:
             return CloudASRProviderConfig(name: "OpenAI", provider: "OpenAI", baseURL: "https://api.openai.com/v1",
-                                          model: "whisper-1", isActive: isActive, vendorID: .openAI)
+                                          model: "gpt-transcribe", isActive: isActive, vendorID: .openAI)
         case .dashScope:
             return .defaultParaformer(isActive: isActive)
         case .custom:
@@ -45,12 +46,22 @@ enum CloudASRVendor {
         case .siliconFlow, .dashScope:
             return CloudASRFieldCapabilities()
         case .openAI:
-            // Official optional-field verification remains pending (source access was HTTP 403).
-            // The first version retains only the existing whisper-1 JSON contract.
-            return CloudASRFieldCapabilities(sendResponseFormat: profile.model == "whisper-1")
+            // Verified official guide: docs/superpowers/research/2026-11-09-asr-model-center-sources.json (openai-speech-md).
+            // gpt-transcribe accepts prompt; its languages field is not the legacy language hint.
+            if profile.model == "gpt-transcribe" { return CloudASRFieldCapabilities(sendPrompt: true) }
+            if profile.model == "whisper-1" {
+                return CloudASRFieldCapabilities(sendResponseFormat: true)
+            }
+            return CloudASRFieldCapabilities()
         case .custom:
             return profile.customFieldCapabilities
         }
+    }
+
+    static func maxUploadBytes(for profile: CloudASRProviderConfig) -> Int64? {
+        guard profile.vendorID == .openAI, profile.protocolKind == .openAICompatible,
+              ["gpt-transcribe", "whisper-1"].contains(profile.model) else { return nil }
+        return 25_000_000
     }
 
     /// Legacy identity comes only from exact saved provider values, never a domain substring.

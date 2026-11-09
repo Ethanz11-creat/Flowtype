@@ -1,9 +1,5 @@
 import Foundation
 
-private struct TranscriptionResponse: Decodable {
-    let text: String
-}
-
 enum CloudASRError: Error, LocalizedError {
     case invalidResponse
     case apiError(statusCode: Int, message: String)
@@ -75,16 +71,6 @@ enum CloudASRError: Error, LocalizedError {
         case .unsupportedRealtimeTransport:
             return "该服务商配置为实时 WSS，请在真实录音时验证"
         }
-    }
-}
-
-/// Never resend credentials or audio to an endpoint the user did not configure.
-/// Redirects (including same-origin redirects) are surfaced as HTTP failures.
-private final class CloudASRRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
-    func urlSession(_ session: URLSession, task: URLSessionTask,
-                    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
-                    completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-        completionHandler(nil)
     }
 }
 
@@ -187,31 +173,13 @@ actor CloudASRProvider: ASRProvider {
     private func executeTranscriptionRequest(request: URLRequest, logPrefix: String) async throws -> String {
         guard injectedSession || ValidationEffects.live.allow(.network) else { throw URLError(.notConnectedToInternet) }
         do {
-            try Task.checkCancellation()
-            let (data, response) = try await session.data(for: request, delegate: CloudASRRedirectPolicy())
-            // A task that expired/cancelled while the transport completed cannot deliver a late result.
-            try Task.checkCancellation()
-            guard let response = response as? HTTPURLResponse else { throw CloudASRError.invalidResponse }
-            guard (200...299).contains(response.statusCode) else {
-                logger("\(logPrefix) HTTP \(response.statusCode)")
-                throw CloudASRError.apiError(statusCode: response.statusCode, message: "")
-            }
-            // Only the documented JSON text envelope is accepted; HTML/plain text is never a transcript.
-            guard let decoded = try? JSONDecoder().decode(TranscriptionResponse.self, from: data) else {
-                throw CloudASRError.invalidResponse
-            }
-            let text = decoded.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = try await ASRHTTPTransport(session: session).transcribe(request, originalHost: nil)
             logger("\(logPrefix) Transcription complete: \(text.count) chars")
             return text
         } catch {
-            if error is CancellationError || Task.isCancelled || (error as NSError).domain == NSURLErrorDomain &&
-                (error as NSError).code == NSURLErrorCancelled { throw CancellationError() }
-            if let error = error as? CloudASRError { throw error }
-            if (error as NSError).domain == NSURLErrorDomain && (error as NSError).code == NSURLErrorTimedOut {
-                throw CloudASRError.timeout
-            }
-            logger("\(logPrefix) Network request failed")
-            throw CloudASRError.networkError(Self.safeNetworkError(error))
+            if let status = (error as? CloudASRError)?.statusCode { logger("\(logPrefix) HTTP \(status)") }
+            else if !(error is CancellationError) { logger("\(logPrefix) Request failed") }
+            throw error
         }
     }
 

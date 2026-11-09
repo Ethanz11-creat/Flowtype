@@ -2,15 +2,33 @@ import Foundation
 
 /// provider 实例容器。路由决策不在这里 —— 见 `ASRRouter`（Task A4）。
 final class ASRProviderRegistry: @unchecked Sendable {
-    static let shared = ASRProviderRegistry()
+    static let shared = try! ASRProviderRegistry(adapters: [OpenAICompatibleASRAdapter(), WhisperCppASRAdapter()])
 
     /// Legacy compatibility instance. Live local routing always uses a captured lease.
     let qwenLocalProvider: QwenASRProvider
     let cloudProvider: CloudASRProvider
 
-    private init() {
+    private let adapters: [ASRServiceProtocol: any ASRServiceAdapter]
+
+    init(adapters: [any ASRServiceAdapter]) throws {
+        var registered: [ASRServiceProtocol: any ASRServiceAdapter] = [:]
+        for adapter in adapters {
+            guard registered[adapter.protocolKind] == nil else { throw ASRServiceAdapterError.duplicateProtocol }
+            guard adapter.protocolKind != .dashScopeRealtime else { throw ASRServiceAdapterError.unsupportedProtocol }
+            registered[adapter.protocolKind] = adapter
+        }
+        self.adapters = registered
         self.qwenLocalProvider = QwenASRProvider()
         self.cloudProvider = CloudASRProvider()
+    }
+
+    func makeLocalServiceBinding(profile: LocalASRServiceProfile, credential: String?, credentialGeneration: UUID?) throws -> ASRBackendBinding {
+        guard let adapter = adapters[profile.protocolKind] else { throw ASRServiceAdapterError.unsupportedProtocol }
+        let provider = try adapter.makeProvider(profile: profile, credential: credential)
+        let descriptor = ASRBackendDescriptor(id: .init(rawValue: "service:" + profile.id.uuidString), revision: profile.revision,
+            displayName: profile.name, modelID: profile.protocolKind == .whisperCpp ? nil : profile.modelID,
+            location: .loopbackService, requiresInternet: false, capabilities: provider.capabilities, maxUploadBytes: nil)
+        return .init(descriptor: descriptor, provider: provider, nativeLease: nil, credentialGeneration: credentialGeneration)
     }
 
     func realtimeCapabilities(for protocolKind: CloudASRProtocolKind) -> ASRCapabilities? {

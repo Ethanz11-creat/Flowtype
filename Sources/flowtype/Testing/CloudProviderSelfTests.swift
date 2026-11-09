@@ -12,7 +12,7 @@ enum CloudProviderSelfTests {
         r.eq(sf.baseURL, "https://api.siliconflow.cn/v1", "vendor: preserves SiliconFlow region")
         r.eq(sf.vendorID, .siliconFlow, "vendor: stable SiliconFlow identity")
         r.check(sf.isActive && !openai.isActive, "vendor: creation honors active selection")
-        r.eq(openai.model, "whisper-1", "vendor: OpenAI default visible")
+        r.eq(openai.model, "gpt-transcribe", "vendor: OpenAI default visible")
         r.eq(openai.baseURL, "https://api.openai.com/v1", "vendor: OpenAI base URL")
         r.eq(realtime.baseURL, "wss://dashscope.aliyuncs.com/api-ws/v1/inference", "vendor: existing WSS URL")
         r.eq(realtime.model, "paraformer-realtime-v2", "vendor: existing realtime model")
@@ -26,8 +26,8 @@ enum CloudProviderSelfTests {
         r.eq(CloudASRVendor.capabilities(for: sf), minimal, "capabilities: SiliconFlow only file/model")
         r.eq(CloudASRVendor.capabilities(for: realtime), minimal, "capabilities: WSS has no multipart fields")
         r.eq(CloudASRVendor.capabilities(for: custom), minimal, "capabilities: custom opt-in required")
-        r.eq(CloudASRVendor.capabilities(for: openai), CloudASRFieldCapabilities(sendResponseFormat: true),
-             "capabilities: OpenAI minimum verified contract excludes optional hints")
+        r.eq(CloudASRVendor.capabilities(for: openai), CloudASRFieldCapabilities(sendPrompt: true),
+             "capabilities: gpt-transcribe supports prompt without legacy language")
         var unknownModel = openai
         unknownModel.model = "unverified-model"
         r.eq(CloudASRVendor.capabilities(for: unknownModel), minimal, "capabilities: unknown models gain no implied optional fields")
@@ -246,7 +246,7 @@ enum CloudProviderSelfTests {
     private static func runModelSelection(_ r: SelfTest.Reporter, checks: CloudASRConnectionCheck) {
         for (vendor, expected) in [
             (CloudASRVendorID.siliconFlow, ["FunAudioLLM/SenseVoiceSmall", "TeleAI/TeleSpeechASR"]),
-            (.openAI, ["whisper-1"]), (.dashScope, ["paraformer-realtime-v2"]), (.custom, [])
+            (.openAI, ["gpt-transcribe", "whisper-1"]), (.dashScope, ["paraformer-realtime-v2"]), (.custom, [])
         ] {
             let profile = CloudASRVendor.makeProfile(vendor, isActive: false)
             r.eq(CloudASRVendor.modelPresets(for: profile).map(\.modelId), expected,
@@ -321,9 +321,9 @@ enum CloudProviderSelfTests {
                 r.eq(captured.url?.absoluteString, "https://asr-transport.invalid/v1/audio/transcriptions", "transport: base endpoint")
                 r.check(body.contains("name=\"model\"\r\n\r\n\(profile(vendor).model)\r\n"), "transport: selected model")
                 for field in ["language", "prompt", "temperature"] {
-                    r.check(!body.contains("name=\"\(field)\""), "transport: \(vendor) excludes unsupported \(field)")
+                    r.eq(body.contains("name=\"\(field)\""), vendor == .openAI && field == "prompt", "transport: \(vendor) gates \(field)")
                 }
-                r.eq(body.contains("name=\"response_format\""), vendor == .openAI, "transport: JSON field only with capability")
+                r.check(!body.contains("name=\"response_format\""), "transport: new model uses minimal JSON contract")
                 let boundary = captured.value(forHTTPHeaderField: "Content-Type")!.components(separatedBy: "boundary=").last!
                 r.check(body.hasPrefix("--\(boundary)\r\n") && body.hasSuffix("--\(boundary)--\r\n"), "transport: multipart boundaries match header")
                 r.check(body.contains("name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav"), "transport: WAV file disposition")

@@ -191,7 +191,7 @@ enum ProviderDraftSelfTests {
         asr.selectVendor(.openAI)
         llm.useVendorDefaults(); asr.useVendorDefaults()
         r.eq(llm.profile.baseURL, "https://api.openai.com/v1", "vendorChangePreservesFields: explicit LLM defaults")
-        r.eq(asr.profile.model, "whisper-1", "vendorChangePreservesFields: explicit ASR defaults")
+        r.eq(asr.profile.model, "gpt-transcribe", "vendorChangePreservesFields: explicit ASR defaults")
         r.eq(llm.keyEdit, .replace("staged"), "vendorChangePreservesFields: LLM key preserved")
         r.eq(asr.keyEdit, .replace("staged"), "vendorChangePreservesFields: ASR key preserved")
     }
