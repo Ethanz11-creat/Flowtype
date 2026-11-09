@@ -78,8 +78,23 @@ enum ASRBackendSelfTests {
             r.eq(sample.sampleRate, 16_000, "sample preserves rate")
             r.eq(sample.label, "synthetic silence", "sample preserves label")
             r.eq(sample.sha256, "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119", "hash is canonical little-endian Float32 PCM")
-            let packaged = try ASRValidationSample(samples: [0], sampleRate: 16_000, sha256: "trusted-resource-hash", label: "packaged")
-            r.eq(packaged.sha256, "trusted-resource-hash", "explicit resource fingerprint preserved")
+            let pcm: [Float] = [1, -0.5]
+            // Hand-checked bytes: 00 00 80 3f 00 00 00 bf (little-endian Float32).
+            let digest = "e5e0ce39fac89cd93af5ba8bcad2fe35d88c75417c7e44941fe5ee4e48f1cf75"
+            let computed = try ASRValidationSample(samples: pcm, sampleRate: 16_000, label: "nonzero PCM")
+            let supplied = try ASRValidationSample(samples: pcm, sampleRate: 16_000, sha256: digest, label: "verified PCM")
+            r.eq(computed.sha256, digest, "nonzero PCM fingerprint uses canonical byte ordering")
+            r.eq(supplied.sha256, computed.sha256, "both initializers give identical PCM the same identity")
+            r.check((try? ASRValidationSample(samples: pcm, sampleRate: 16_000, sha256: String(repeating: "0", count: 64), label: "incorrect")) == nil,
+                    "incorrect 64-digit PCM fingerprint rejected")
+            r.check((try? ASRValidationSample(samples: pcm, sampleRate: 16_000, sha256: "trusted-resource-hash", label: "malformed")) == nil,
+                    "malformed resource fingerprint rejected")
+            r.check((try? ASRValidationSample(samples: pcm, sampleRate: 16_000, sha256: String(repeating: "g", count: 64), label: "nonhex")) == nil,
+                    "nonhex 64-character fingerprint rejected")
+            r.check((try? ASRValidationSample(samples: [], sampleRate: 16_000, sha256: digest, label: "empty explicit")) == nil,
+                    "explicit initializer rejects empty PCM")
+            r.check((try? ASRValidationSample(samples: pcm, sampleRate: 48_000, sha256: digest, label: "wrong explicit rate")) == nil,
+                    "explicit initializer rejects non-16kHz PCM")
             r.check((try? ASRValidationSample(samples: [], sampleRate: 16_000, label: "empty")) == nil, "empty sample rejected")
             r.check((try? ASRValidationSample(samples: [0], sampleRate: 48_000, label: "wrong rate")) == nil, "non-16kHz sample rejected")
         } catch { r.check(false, "validation sample fixture: \(error)") }

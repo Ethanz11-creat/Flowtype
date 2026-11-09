@@ -7,7 +7,7 @@ struct ASRValidationSample: Sendable {
     let sha256: String
     let label: String
 
-    enum ValidationError: Error { case invalidSampleRate, emptySamples }
+    enum ValidationError: Error { case invalidSampleRate, emptySamples, invalidSHA256 }
 
     /// Runtime samples use a fingerprint of canonical little-endian Float32 PCM bytes.
     init(samples: [Float], sampleRate: Int, label: String) throws {
@@ -23,14 +23,11 @@ struct ASRValidationSample: Sendable {
         self.label = label
     }
 
-    /// Trusted sample resources may supply a fingerprint of their packaged container.
-    /// The resource owner defines that fingerprint; it is not recomputed as PCM here.
+    /// A supplied fingerprint must match canonical PCM, independent of resource packaging.
+    /// Container checksums belong in separate resource metadata.
     init(samples: [Float], sampleRate: Int, sha256: String, label: String) throws {
-        try Self.validate(samples: samples, sampleRate: sampleRate)
-        self.samples = samples
-        self.sampleRate = sampleRate
-        self.sha256 = sha256
-        self.label = label
+        try self.init(samples: samples, sampleRate: sampleRate, label: label)
+        guard sha256 == self.sha256 else { throw ValidationError.invalidSHA256 }
     }
 
     private static func validate(samples: [Float], sampleRate: Int) throws {
