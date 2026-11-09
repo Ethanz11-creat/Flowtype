@@ -139,7 +139,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
     /// Persist identity/revisions with legacy recovery copies before touching credentials.
     func retryASRCredentialMigration() {
         var source = current
-        if source.asrBackendSelection == nil { source.asrBackendSelection = ASRBackendMigration.selection(from: source) }
+        source.migrateASRBackendSelectionIfNeeded()
         do {
             try persist(source)
             current = source
@@ -216,6 +216,23 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         current = candidate
         pendingASRCredentialIDs.removeAll { $0 == oldID }
         asrPersistenceError = nil
+    }
+
+    func setASRBackendSelection(_ selection: ASRBackendSelection) throws {
+        var candidate = current
+        candidate.setASRBackendSelection(selection)
+        try persist(candidate)
+        current = candidate
+    }
+
+    /// Called only after a successful native lease is already available.
+    func resolveLegacyNativeSelection(lease: LocalASRLease) {
+        var candidate = current
+        candidate.migrateASRBackendSelectionIfNeeded()
+        guard candidate.pendingLegacyNativeResolution else { return }
+        candidate.resolveLegacyNativeSelection(lease: lease)
+        do { try persist(candidate); current = candidate }
+        catch { asrPersistenceError = ASRCredentialError.persistence.localizedDescription }
     }
 
     private var saveWorkItem: DispatchWorkItem?

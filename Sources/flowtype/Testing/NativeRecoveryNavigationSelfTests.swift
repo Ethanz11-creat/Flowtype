@@ -27,7 +27,7 @@ enum NativeRecoveryNavigationSelfTests {
             let context = SessionContext(sessionID: 1101)
             context.captureRoute = .init(policy: .auto, selectedProviderID: first, localAvailable: true,
                 cloudAvailable: true, cloudConfiguration: .init(provider: profile, apiKey: "synthetic", sendContext: false))
-            let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { FailedProvider(id: $0) },
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { FailedProvider(id: $0) },
                 speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
             if case .suspend(let recovery) = await stage.execute(payload: .audio(samples: [0.2, -0.1], previewText: ""), context: context) {
                 r.eq(recovery.destination, first == ASRProviderID.cloud ? .settings(.speech, .provider(profile.id)) : .settings(.speech, .localModels),
@@ -39,7 +39,7 @@ enum NativeRecoveryNavigationSelfTests {
         let noIdentity = SessionContext(sessionID: 1102)
         noIdentity.captureRoute = .init(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud, localAvailable: false,
             cloudAvailable: true, cloudConfiguration: nil)
-        let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { FailedProvider(id: $0) },
+        let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { FailedProvider(id: $0) },
             speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
         if case .suspend(let recovery) = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: noIdentity) {
             r.check(recovery.destination == nil, "ASR unknown profile keeps generic speech destination")

@@ -109,7 +109,7 @@ enum RecordingStageTerminationSelfTests {
                 cloudConfiguration: .init(provider: .defaultParaformer(isActive: true),
                                           apiKey: "synthetic", sendContext: false))
             let stage = RecordingStage(makeRecorder: { capture }, makePreview: { preview },
-                captureRoute: { route }, contextProvider: Foreground(), realtimeFactory: { _ in
+                captureRoute: { FixtureASRStage.capture(route) }, contextProvider: Foreground(), realtimeFactory: { _ in
                     .init(session: realtime, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
                 }, microphoneDeviceID: { nil })
             let task = Task { await stage.execute(payload: .empty, context: context) }

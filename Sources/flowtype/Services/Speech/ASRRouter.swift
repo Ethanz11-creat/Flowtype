@@ -7,6 +7,8 @@ import os
 /// different half-open route from mutable settings.
 struct ASRRouteSnapshot: Sendable, Equatable {
     let policy: ASRRoutingPolicy
+    var bindings: [ASRBackendBinding] = []
+    var captureError: ASRCredentialError? = nil
     let selectedProviderID: String?
     let localAvailable: Bool
     let cloudAvailable: Bool
@@ -17,22 +19,38 @@ struct ASRRouteSnapshot: Sendable, Equatable {
     var localLease: LocalASRLease? = nil
     var cloudIdentity: CloudASRHealthIdentity? { cloudConfiguration.map { CloudASRHealthIdentity(provider: $0.provider) } }
 
-    var shouldStartRealtime: Bool {
-        policy != .localOnly && selectedProviderID == ASRProviderID.cloud && cloudAvailable && isRealtime
+    init(policy: ASRRoutingPolicy, bindings: [ASRBackendBinding], language: String? = nil,
+         captureError: ASRCredentialError? = nil) {
+        self.policy = policy; self.bindings = bindings; self.language = language; self.captureError = captureError
+        selectedProviderID = bindings.first?.descriptor.id.rawValue
+        localAvailable = bindings.contains { $0.descriptor.location != .cloud }
+        cloudAvailable = bindings.contains { $0.descriptor.location == .cloud }
+        cloudConfiguration = bindings.compactMap(\.cloudConfiguration).first
+        localLease = bindings.compactMap(\.nativeLease).first
     }
 
-    var candidateIDs: [String] {
-        if policy == .localOnly { return localAvailable ? [ASRProviderID.qwenLocal] : [] }
-        if policy == .cloudOnly { return cloudAvailable ? [ASRProviderID.cloud] : [] }
-        var ids = selectedProviderID.map { [$0] } ?? []
-        if localAvailable, !ids.contains(ASRProviderID.qwenLocal) { ids.append(ASRProviderID.qwenLocal) }
-        if cloudAvailable, !ids.contains(ASRProviderID.cloud) { ids.append(ASRProviderID.cloud) }
-        return ids
+    /// Metadata compatibility only. Pipeline fixtures must explicitly provide bindings.
+    init(policy: ASRRoutingPolicy, selectedProviderID: String?, localAvailable: Bool,
+         cloudAvailable: Bool, cloudConfiguration: CloudASRRequestConfiguration?, language: String? = nil,
+         healthGeneration: UInt64 = 0, isHealthRecovery: Bool = false, localLease: LocalASRLease? = nil) {
+        self.policy = policy; self.selectedProviderID = selectedProviderID
+        self.localAvailable = localAvailable; self.cloudAvailable = cloudAvailable
+        self.cloudConfiguration = cloudConfiguration; self.language = language
+        self.healthGeneration = healthGeneration; self.isHealthRecovery = isHealthRecovery; self.localLease = localLease
     }
 
-    var isRealtime: Bool {
-        cloudConfiguration?.provider.protocolKind == .dashScopeRealtime
+    var shouldStartRealtime: Bool { bindings.first?.isRealtime == true }
+    var candidateIDs: [String] { bindings.map { $0.descriptor.id.rawValue } }
+    var isRealtime: Bool { bindings.isEmpty ? cloudConfiguration?.provider.protocolKind == .dashScopeRealtime : bindings.first?.isRealtime == true }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.policy == rhs.policy && lhs.bindings == rhs.bindings && lhs.selectedProviderID == rhs.selectedProviderID
+            && lhs.localAvailable == rhs.localAvailable && lhs.cloudAvailable == rhs.cloudAvailable
+            && lhs.cloudConfiguration == rhs.cloudConfiguration && lhs.language == rhs.language
+            && lhs.healthGeneration == rhs.healthGeneration && lhs.isHealthRecovery == rhs.isHealthRecovery
+            && lhs.localLease == rhs.localLease && lhs.captureError?.localizedDescription == rhs.captureError?.localizedDescription
     }
+
 }
 
 /// Content-free endpoint/model/transport identity. Credentials are never logged
@@ -248,6 +266,12 @@ func routingInputs(from snapshot: RouterHealthSnapshot,
 final class ASRRouter: @unchecked Sendable {
     static let shared = ASRRouter(startMonitoring: RuntimeEnvironment.current.role == .app)
 
+    let backendHealth = ASRBackendHealthStore()
+    private let internetAvailable: @Sendable () -> Bool?
+    private let credentials: any ASRCredentialStore
+    private let registry: ASRProviderRegistry
+    private let cloudProvider: any ASRProvider
+    private let persistNativeResolution: @MainActor @Sendable (LocalASRLease) -> Void
     private let health = OSAllocatedUnfairLock(initialState: RouterHealthSnapshot())
     private let monitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "flowtype.asr-router.path")
@@ -271,6 +295,13 @@ final class ASRRouter: @unchecked Sendable {
 
     /// Dependencies keep the real capture/probe boundary runnable offline.
     init(startMonitoring: Bool = true,
+         internetAvailable: @escaping @Sendable () -> Bool? = { nil },
+         credentials: any ASRCredentialStore = KeychainASRCredentialStore.shared,
+         registry: ASRProviderRegistry = .shared,
+         cloudProvider: any ASRProvider = ASRProviderRegistry.shared.cloudProvider,
+         persistNativeResolution: @escaping @MainActor @Sendable (LocalASRLease) -> Void = {
+             ConfigurationStore.shared.resolveLegacyNativeSelection(lease: $0)
+         },
          configuration: @escaping @MainActor @Sendable () -> Configuration = { ConfigurationStore.shared.current },
          localAvailable: @escaping @MainActor @Sendable () -> Bool = { QwenModelState.shared.activeLease != nil },
          localLease: @escaping @MainActor @Sendable () -> LocalASRLease? = { QwenModelState.shared.activeLease },
@@ -280,6 +311,9 @@ final class ASRRouter: @unchecked Sendable {
          measureProbe: @escaping @Sendable (String, UInt16, TimeInterval) async -> Double? = {
              await CloudProbe.measureLatency(host: $0, port: $1, timeout: $2)
          }) {
+        self.internetAvailable = internetAvailable
+        self.credentials = credentials; self.registry = registry; self.cloudProvider = cloudProvider
+        self.persistNativeResolution = persistNativeResolution
         self.probeFirstDelay = probeFirstDelay; self.probeInterval = probeInterval; self.role = role
         self.configuration = configuration
         self.localAvailable = localAvailable
@@ -292,6 +326,7 @@ final class ASRRouter: @unchecked Sendable {
             let current = Self.signature(for: path)
             let changed = self.health.withLock { $0.applyNetworkPath(current) }
             guard changed else { return }
+            self.backendHealth.invalidateInternetSamples()
             AppLogger.log("[ASRRouter] network path changed (\(current.interface ?? "?")) → latency samples invalidated")
             Task { await self.refreshProbeIfNeeded(force: true) }
         }
@@ -316,6 +351,11 @@ final class ASRRouter: @unchecked Sendable {
 
     @MainActor
     func recordSuccess(providerID: String, latencyMs: Int, route: ASRRouteSnapshot) {
+        if let binding = route.bindings.first(where: { $0.descriptor.id.rawValue == providerID }) {
+            if !binding.descriptor.requiresInternet || route.healthGeneration == backendHealth.networkGeneration {
+                backendHealth.recordSuccess(binding: binding, latencyMs: latencyMs)
+            }
+        }
         guard providerID == ASRProviderID.cloud else { return }
         synchronizeConfigurationIdentity()
         health.withLock { $0.recordSuccess(route: route, latencyMs: latencyMs, now: Date()) }
@@ -323,6 +363,11 @@ final class ASRRouter: @unchecked Sendable {
 
     @MainActor
     func recordFailure(providerID: String, route: ASRRouteSnapshot) {
+        if let binding = route.bindings.first(where: { $0.descriptor.id.rawValue == providerID }) {
+            if !binding.descriptor.requiresInternet || route.healthGeneration == backendHealth.networkGeneration {
+                backendHealth.recordFailure(binding: binding)
+            }
+        }
         guard providerID == ASRProviderID.cloud else { return }
         synchronizeConfigurationIdentity()
         health.withLock { $0.recordFailure(route: route) }
@@ -381,51 +426,117 @@ final class ASRRouter: @unchecked Sendable {
         guard !alreadyRunning else { return }
         defer { probeInFlight.withLock { $0 = false } }
 
-        // Capture configuration and its token without suspension between them.
-        let (cfg, snap) = await MainActor.run {
+        let (route, snap) = await MainActor.run {
             self.synchronizeConfigurationIdentity()
-            return (self.configuration(), self.snapshot())
+            return (self.makeBackendRoute(reserveRecovery: false), self.snapshot())
         }
-        guard let effective = cfg.effectiveCloudASRConfig else { return }
-        guard shouldProbeCloud(path: snap.pathSignature, policy: cfg.asrRoutingPolicy) else { return }
-        guard let endpoint = CloudProbe.probeEndpoint(fromBaseURL: effective.provider.baseURL) else { return }
-        if !force, sampleIsFresh(sampledAt: snap.probeSampledAt, now: Date(), ttl: ASRRouterProbeConfig.ttl) { return }
-
+        guard shouldProbeCloud(path: snap.pathSignature, policy: route.policy),
+              let binding = route.bindings.first(where: { $0.descriptor.location == .cloud }),
+              let config = binding.cloudConfiguration,
+              let endpoint = CloudProbe.probeEndpoint(fromBaseURL: config.provider.baseURL) else { return }
+        guard force || !backendHealth.probeIsFresh(binding: binding) else { return }
+        let generation = backendHealth.networkGeneration
         let ms = await measureProbe(endpoint.host, endpoint.port, ASRRouterProbeConfig.timeout)
+        backendHealth.recordProbe(binding: binding, generation: generation, latencyMs: ms)
         await MainActor.run {
-            // Configuration may have changed while the handshake was suspended,
-            // even when no subsequent capture or periodic probe has run yet.
             self.synchronizeConfigurationIdentity()
-            guard shouldProbeCloud(path: self.snapshot().pathSignature, policy: self.configuration().asrRoutingPolicy) else { return }
             self.health.withLock { $0.recordProbe(token: snap.token, latencyMs: ms, now: Date()) }
         }
     }
 
     /// 收集可用性与健康画像，交给纯函数决策，映射为有序 provider 实例。
     func selectChain() async -> [ASRProvider] {
-        // Diagnostic selection never spends the user-session recovery slot.
-        let route = await MainActor.run {
-            self.synchronizeConfigurationIdentity()
-            return makeASRRouteSnapshot(configuration: self.configuration(), localAvailable: self.localAvailable(), health: self.snapshot(), localLease: self.localLease())
-        }
-        return route.candidateIDs.compactMap { id in
-            id == ASRProviderID.local ? route.localLease?.provider : ASRProviderRegistry.shared.provider(forID: id)
-        }
+        await makeBackendRoute(reserveRecovery: false).bindings.map(\.provider)
     }
 
-    /// Snapshot routing exactly once at capture start. The returned identity is
-    /// carried through stop and fallback so a settings edit cannot change the
-    /// protocol or credentials of an active recording.
     @MainActor
-    func captureStartRoute() async -> ASRRouteSnapshot {
-        let cfg = configuration()
+    func captureStartRoute() async -> ASRRouteSnapshot { makeBackendRoute(reserveRecovery: true) }
+
+    @MainActor
+    private func makeBackendRoute(reserveRecovery: Bool) -> ASRRouteSnapshot {
+        var cfg = configuration()
+        cfg.migrateASRBackendSelectionIfNeeded()
         let lease = localLease()
-        let local = localAvailable()
-        let uptime = uptimeNanoseconds()
-        return health.withLock {
-            reserveASRCaptureRoute(configuration: cfg, localAvailable: local, health: &$0,
-                                   now: Date(), uptimeNanoseconds: uptime, localLease: lease)
+        if let lease, cfg.pendingLegacyNativeResolution {
+            cfg.resolveLegacyNativeSelection(lease: lease)
+            persistNativeResolution(lease)
         }
+        let selection = ASRBackendMigration.selection(from: cfg)
+        let selected = Set([selection.primary, selection.fallback].compactMap { $0 })
+        var bindings: [ASRBackendBinding] = []
+        var captureError: ASRCredentialError?
+        let internetAvailable = self.internetAvailable() ?? snapshot().networkReachable
+        // Determine eligibility from nonsecret metadata before touching credentials or factories.
+        var descriptors = cfg.cloudASRConfig.providers.filter {
+            selected.contains(.init(rawValue: "cloud:" + $0.id.uuidString))
+        }.map { profile in
+            ASRBackendDescriptor(id: .init(rawValue: "cloud:" + profile.id.uuidString), revision: profile.revision,
+                displayName: profile.name, modelID: profile.model, location: .cloud, requiresInternet: true,
+                capabilities: profile.protocolKind == .dashScopeRealtime ? DashScopeRealtimeASR.capabilities : cloudProvider.capabilities,
+                maxUploadBytes: nil)
+        }
+        descriptors += cfg.localASRServices.filter {
+            selected.contains(.init(rawValue: "service:" + $0.id.uuidString))
+        }.map { profile in
+            ASRBackendDescriptor(id: .init(rawValue: "service:" + profile.id.uuidString), revision: profile.revision,
+                displayName: profile.name, modelID: profile.protocolKind == .whisperCpp ? nil : profile.modelID,
+                location: .loopbackService, requiresInternet: false,
+                capabilities: .init(supportsLanguageHint: false, supportsContextHint: false, requiresNetwork: true,
+                                    location: .localService), maxUploadBytes: nil)
+        }
+        if let lease, localAvailable(), selected.contains(ASRBackendID(nativeLease: lease)) {
+            let descriptor = ASRBackendDescriptor(nativeLease: lease, id: ASRBackendID(nativeLease: lease))
+            descriptors.append(descriptor)
+            bindings.append(.init(descriptor: descriptor, provider: lease.provider, nativeLease: lease, credentialGeneration: nil))
+        }
+        let eligibleIDs = Set(ASRBackendRouting.order(selection: selection, policy: cfg.asrRoutingPolicy,
+            descriptors: descriptors, availableIDs: Set(descriptors.map(\.id)),
+            internetAvailable: internetAvailable, degradedIDs: []))
+        bindings.removeAll { !eligibleIDs.contains($0.descriptor.id) }
+        for profile in cfg.cloudASRConfig.providers where eligibleIDs.contains(.init(rawValue: "cloud:" + profile.id.uuidString)) {
+            guard let descriptor = descriptors.first(where: { $0.id.rawValue == "cloud:" + profile.id.uuidString }) else { continue }
+            do {
+                let credential = try cfg.cloudASRCredential(profileID: profile.id, store: credentials)
+                let key = credential.value ?? ""
+                guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      !profile.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      !profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+                let provider = CapturedCloudASRProvider(configuration: .init(provider: profile, apiKey: key,
+                    sendContext: cfg.cloudASRSendContext), underlying: cloudProvider)
+                bindings.append(.init(descriptor: descriptor, provider: provider,
+                    nativeLease: nil, credentialGeneration: credential.generation))
+            } catch { captureError = (error as? ASRCredentialError) ?? .invalidData }
+        }
+        for profile in cfg.localASRServices where eligibleIDs.contains(.init(rawValue: "service:" + profile.id.uuidString)) {
+            do {
+                let credential: ASRCredentialSnapshot?
+                switch profile.authentication {
+                case .none: credential = nil
+                case .bearer(let id):
+                    guard id == "asr.service." + profile.id.uuidString else { throw ASRCredentialError.invalidData }
+                    credential = try credentials.snapshot(id: id)
+                    guard let value = credential?.value, !value.isEmpty else { throw ASRCredentialError.invalidData }
+                }
+                bindings.append(try registry.makeLocalServiceBinding(profile: profile, credential: credential?.value,
+                    credentialGeneration: credential?.generation))
+            } catch let error as ASRCredentialError { captureError = error }
+            catch { /* Invalid service profiles remain selected but unavailable. */ }
+        }
+        let degraded = Set(bindings.filter { backendHealth.isDegraded(binding: $0) }.map { $0.descriptor.id })
+        var order = ASRBackendRouting.order(selection: selection, policy: cfg.asrRoutingPolicy,
+            descriptors: descriptors, availableIDs: Set(bindings.map { $0.descriptor.id }),
+            internetAvailable: internetAvailable, degradedIDs: degraded)
+        if reserveRecovery, cfg.asrRoutingPolicy == .auto, order.count == 2,
+           let primary = bindings.first(where: { $0.descriptor.id == selection.primary }),
+           primary.descriptor.location == .cloud, order.first != selection.primary,
+           backendHealth.reserveRecovery(binding: primary, uptime: uptimeNanoseconds()) {
+            order = [primary.descriptor.id] + order.filter { $0 != primary.descriptor.id }
+        }
+        var route = ASRRouteSnapshot(policy: cfg.asrRoutingPolicy,
+            bindings: order.compactMap { id in bindings.first { $0.descriptor.id == id } },
+            language: cfg.asrLanguage.qwenLanguageCode, captureError: captureError)
+        route.healthGeneration = backendHealth.networkGeneration
+        return route
     }
 
     @MainActor
@@ -471,49 +582,6 @@ struct CompletionBudget: Sendable, Equatable {
     }
 
     var isExpired: Bool { remainingSeconds <= 0 }
-}
-
-/// Pure capture route construction also makes privacy gating testable offline.
-func makeASRRouteSnapshot(configuration cfg: Configuration, localAvailable: Bool,
-                          health: RouterHealthSnapshot, now: Date = Date(), localLease: LocalASRLease? = nil) -> ASRRouteSnapshot {
-    let effective = cfg.effectiveCloudASRConfig
-    let cloud = effective.map {
-        CloudASRRequestConfiguration(provider: $0.provider, apiKey: $0.apiKey, sendContext: cfg.cloudASRSendContext)
-    }
-    let available = cloud.map {
-        !$0.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !$0.provider.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !$0.provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    } ?? false
-    var transportHealth = health
-    if cloud?.provider.protocolKind == .dashScopeRealtime {
-        transportHealth.cloudLatencyEWMA = health.realtimeLatencyEWMA
-        transportHealth.cloudLatencySampledAt = health.realtimeLatencySampledAt
-    }
-    let inputs = routingInputs(from: transportHealth, policy: cfg.asrRoutingPolicy,
-                               localAvailable: localAvailable, cloudAvailable: available, now: now)
-    return ASRRouteSnapshot(policy: cfg.asrRoutingPolicy, selectedProviderID: selectASRChain(inputs).first,
-                            localAvailable: localAvailable, cloudAvailable: available,
-                            cloudConfiguration: cloud, language: cfg.asrLanguage.qwenLanguageCode, healthGeneration: health.generation, localLease: localLease)
-}
-
-/// Caller owns the health lock: decision and reservation are indivisible.
-func reserveASRCaptureRoute(configuration cfg: Configuration, localAvailable: Bool,
-                            health: inout RouterHealthSnapshot, now: Date,
-                            uptimeNanoseconds uptime: UInt64, localLease: LocalASRLease? = nil) -> ASRRouteSnapshot {
-    let identity = cfg.effectiveCloudASRConfig.map { CloudASRHealthIdentity(provider: $0.provider) }
-    health.synchronizeIdentity(identity)
-    let route = makeASRRouteSnapshot(configuration: cfg, localAvailable: localAvailable, health: health, now: now, localLease: localLease)
-    guard route.policy == .auto, route.localAvailable, route.cloudAvailable,
-          route.selectedProviderID == ASRProviderID.qwenLocal, health.networkReachable else { return route }
-    if let last = health.lastHalfOpenUptimeNanoseconds {
-        guard uptime >= last, uptime - last >= ASRRouterProbeConfig.recoveryIntervalNanoseconds else { return route }
-    }
-    health.lastHalfOpenUptimeNanoseconds = uptime
-    return ASRRouteSnapshot(policy: route.policy, selectedProviderID: ASRProviderID.cloud,
-                            localAvailable: route.localAvailable, cloudAvailable: route.cloudAvailable,
-                            cloudConfiguration: route.cloudConfiguration, language: route.language,
-                            healthGeneration: route.healthGeneration, isHealthRecovery: true, localLease: route.localLease)
 }
 
 func completionStageTimeout(remaining: TimeInterval, cloud: Bool, policy: ASRRoutingPolicy,

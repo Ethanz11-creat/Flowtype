@@ -38,8 +38,8 @@ enum M4StageFailureSelfTests {
         healthRecorder: @escaping @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void,
         providerForID: @escaping @Sendable (String) -> (any ASRProvider)?,
         realtimeFactory: @escaping RealtimeSessionFactory = { _ in fatalError("unexpected realtime factory") }
-    ) -> ASRStage {
-        ASRStage(healthRecorder: healthRecorder, providerForID: providerForID,
+    ) -> FixtureASRStage {
+        FixtureASRStage(healthRecorder: healthRecorder, providerForID: providerForID,
                  realtimeFactory: realtimeFactory, phrases: { [] })
     }
 
@@ -114,11 +114,11 @@ enum M4StageFailureSelfTests {
 
         for routeValue in [route(first: nil, cloud: false), route()] {
             let context = SessionContext(sessionID: 944); context.captureRoute = routeValue
-            if !routeValue.candidateIDs.isEmpty { context.completionBudget = CompletionBudget(seconds: 0) }
+            if !FixtureASRStage.capture(routeValue).candidateIDs.isEmpty { context.completionBudget = CompletionBudget(seconds: 0) }
             let stage = makeASR(healthRecorder: { _, _, _ in r.check(false, "M4 empty/budget must not record health") },
                                  providerForID: { _ in nil })
             assertFailure(await stage.execute(payload: .audio(samples: samples, previewText: ""), context: context),
-                routeValue.candidateIDs.isEmpty ? .readiness(.noEngine) : .transientASR, r, "no candidates or initial budget")
+                FixtureASRStage.capture(routeValue).candidateIDs.isEmpty ? .readiness(.noEngine) : .transientASR, r, "no candidates or initial budget")
         }
         startup(r)
         await RecordingStageTerminationSelfTests.run(r)
@@ -170,7 +170,7 @@ enum M4StageFailureSelfTests {
     @MainActor private static func cancellations(_ r: SelfTest.Reporter) async {
         let preflightProvider = Provider(ASRProviderID.cloud)
         let preflightHealth = OSAllocatedUnfairLock<Int>(initialState: 0)
-        let preflightStage = ASRStage(healthRecorder: { _, _, _ in preflightHealth.withLock { $0 += 1 } },
+        let preflightStage = FixtureASRStage(healthRecorder: { _, _, _ in preflightHealth.withLock { $0 += 1 } },
             providerForID: { _ in preflightProvider }, speechPreflight: { _, _ in
                 throw CloudASRError.networkError(SpeechProviderError.networkError(URLError(.cancelled)))
             }, phrases: { [] })

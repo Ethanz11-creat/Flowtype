@@ -632,9 +632,9 @@ enum SelfTest {
         }
     }
 
-    private static func retryASR(ledger: RetryLedger) -> ASRStage {
+    private static func retryASR(ledger: RetryLedger) -> FixtureASRStage {
         let provider = RetryProvider(ledger: ledger)
-        return ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider }, phrases: { [] })
+        return FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider }, phrases: { [] })
     }
 
     private struct ProcessedStarter: PipelineStage {
@@ -2992,7 +2992,7 @@ enum SelfTest {
         let local = makeASRRouteSnapshot(configuration: config, localAvailable: true, health: RouterHealthSnapshot())
         r.check(!local.shouldStartRealtime, "capture route: localOnly opens no socket")
         config.asrRoutingPolicy = .auto
-        let cloud = makeASRRouteSnapshot(configuration: config, localAvailable: true, health: RouterHealthSnapshot())
+        let cloud = FixtureASRStage.capture(makeASRRouteSnapshot(configuration: config, localAvailable: true, health: RouterHealthSnapshot()))
         r.check(cloud.shouldStartRealtime, "capture route: healthy realtime cloud starts during capture")
         let validated = await CloudASRProvider().testConnection(provider: provider, apiKey: "offline-fixture")
         if case .success(let message) = validated {
@@ -3032,13 +3032,13 @@ enum SelfTest {
             }
             let invalidRoute = makeASRRouteSnapshot(configuration: invalid, localAvailable: true, health: RouterHealthSnapshot())
             let rejected = SessionContext(sessionID: 729)
-            rejected.prepareRealtime(route: invalidRoute, factory: unopenedFactory)
+            rejected.prepareRealtime(route: FixtureASRStage.capture(invalidRoute), factory: unopenedFactory)
             try? await rejected.realtimeStartTask?.value
             r.check(rejected.realtimeHandle == nil && rejected.realtimeStartTask == nil,
                     "capture endpoint: invalid configuration installs no session")
             r.check(rejected.realtimeFailureReason != nil, "capture endpoint: invalid configuration records local failure")
             let fallback = PipelineASRFixture(id: ASRProviderID.qwenLocal)
-            let rejectedStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in fallback },
+            let rejectedStage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in fallback },
                                          realtimeFactory: unopenedFactory)
             _ = await rejectedStage.execute(payload: .audio(samples: [0.25, -0.5], previewText: ""), context: rejected)
             r.eq(fallback.requests.withLock { $0.first?.samples }, [0.25, -0.5],
@@ -3061,7 +3061,7 @@ enum SelfTest {
         context.prepareRealtime(route: cloud, factory: { _ in failureHandle })
         context.completionBudget = CompletionBudget(seconds: 1)
         let completeSamples: [Float] = [0.25, 0.5, 0.75]
-        let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in localProvider })
+        let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in localProvider })
         let failed = await stage.execute(payload: .audio(samples: completeSamples, previewText: ""), context: context)
         if case .continue(.transcript(let text)) = failed {
             r.eq(text, "complete fixture", "pipeline: realtime failure chooses full local result")
@@ -3082,7 +3082,7 @@ enum SelfTest {
 
         let freshCount = OSAllocatedUnfairLock(initialState: 0)
         let saved = PipelineRealtimeFixture()
-        let savedStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in localProvider }, realtimeFactory: { _ in
+        let savedStage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in localProvider }, realtimeFactory: { _ in
             freshCount.withLock { $0 += 1 }
             return RealtimeASRSessionHandle(session: saved, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
         })
@@ -3099,7 +3099,7 @@ enum SelfTest {
         let bounded = SessionContext(sessionID: 733)
         bounded.captureRoute = local
         bounded.completionBudget = CompletionBudget(seconds: 0.02)
-        let slowStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in slow })
+        let slowStage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in slow })
         let clock = ContinuousClock.now
         let expired = await slowStage.execute(payload: .audio(samples: completeSamples, previewText: "partial"), context: bounded)
         r.check(clock.duration(to: .now) < .milliseconds(150), "pipeline: deadline never joins uncooperative inference")
@@ -3116,7 +3116,7 @@ enum SelfTest {
                                     localAvailable: true, cloudAvailable: true,
                                     cloudConfiguration: CloudASRRequestConfiguration(provider: httpProvider, apiKey: "fixture", sendContext: false))
         cancelContext.captureRoute = httpRoute
-        let cancelStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { id in id == ASRProviderID.cloud ? cancelledCloud : localProvider })
+        let cancelStage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { id in id == ASRProviderID.cloud ? cancelledCloud : localProvider })
         let task = Task { await cancelStage.execute(payload: .audio(samples: completeSamples, previewText: "partial"), context: cancelContext) }
         try? await Task.sleep(for: .milliseconds(10))
         task.cancel()
@@ -3142,7 +3142,7 @@ enum SelfTest {
         cloudBudget.captureRoute = httpRoute
         cloudBudget.completionBudget = CompletionBudget(seconds: 20)
         let fallbackBefore = localProvider.requests.withLock { $0.count }
-        let fiveSecondStage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { id in id == ASRProviderID.cloud ? slowCloud : localProvider })
+        let fiveSecondStage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { id in id == ASRProviderID.cloud ? slowCloud : localProvider })
         let fiveStart = ContinuousClock.now
         _ = await fiveSecondStage.execute(payload: .audio(samples: completeSamples, previewText: ""), context: cloudBudget)
         r.check(fiveStart.duration(to: .now) < .seconds(5.4), "pipeline: actual auto cloud attempt stops at five seconds")

@@ -105,7 +105,7 @@ enum ImportedLifecycleSelfTests {
             r.eq(loaded.variant, "unverified", "static Whisper inspection does not invent verified runtime metadata")
         } else { r.check(false, "imported candidate reaches injected runtime") }
 
-        let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil })
+        let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil })
         let first = SessionContext(sessionID: 9301); first.captureRoute = captured
         _ = await stage.execute(payload: .audio(samples: [0.25, -0.5, 0.75], previewText: ""), context: first)
         r.eq(first.rawTranscript, "qwenMLX:3", "recording captured before switch retains Qwen provider")

@@ -113,3 +113,7 @@ protocol ASRServiceAdapter: Sendable {
 新 service/HF 使用 credential ID；旧 `cloudASRConfig.providerAPIKeys` 按 profile ID 可重试迁移：写入并读回相同才从旧持久化字段移除该 key，失败保留旧值与原选择。当前 code 的 LLM provider key 存储不在本子项目迁移范围。Keychain 锁定/拒绝显示可恢复状态，不降级为空密钥或删除原记录。配置 revision 在凭据变更后失效；凭据移除需等待使用它的快照排空后清理，或已捕获值继续仅存会话内存。
 
 验收与文件任务见 [A 实施计划](../plans/2026-11-09-asr-model-center-a-backends.md)。
+
+### A4 legacy native resolution ruling
+
+`Configuration.pendingLegacyNativeResolution: Bool` defaults to false on decode. Initial migration from a missing `asrBackendSelection` sets it only when legacy local/auto intent has no explicit native reference. The selection and marker persist together. Only an actual successful native lease may fill that unresolved role, then clear the marker in the same configuration commit. Existing explicit unknown references remain unavailable. Every explicit route edit must use `Configuration.setASRBackendSelection(_:)` or `ConfigurationStore.setASRBackendSelection(_:)`, including clearing selection; these clear the marker. A subsequent native load cannot resurrect an explicitly cleared selection or replace an explicitly selected service/cloud role. Existing native-role model replacement updates that role after success; automatic loading resolves only pending legacy intent. The small schema addition preserves the distinction across restart; unmarked artifacts from this unreleased implementation need no inferred repair.

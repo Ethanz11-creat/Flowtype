@@ -212,7 +212,7 @@ final class SessionContext {
                          factory: RealtimeSessionFactory = liveRealtimeSessionFactory) {
         guard !isCancelled else { return }
         captureRoute = route
-        guard route.shouldStartRealtime, let cloud = route.cloudConfiguration else { return }
+        guard route.shouldStartRealtime, let cloud = route.bindings.first?.cloudConfiguration else { return }
         do {
             let config = try RealtimeASRConfiguration(provider: cloud.provider, apiKey: cloud.apiKey, language: route.language)
             let handle = factory(config)

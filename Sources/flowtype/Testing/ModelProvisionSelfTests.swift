@@ -698,7 +698,7 @@ extension ModelProvisionSelfTests {
         let captured = await router.captureStartRoute()
         box.set(newLease)
         let samples: [Float] = (0..<3207).map { Float($0) / 4000 }
-        let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in box.get()?.provider })
+        let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in box.get()?.provider })
         let first = SessionContext(sessionID: 8001); first.captureRoute = captured
         _ = await stage.execute(payload: .audio(samples: samples, previewText: ""), context: first)
         r.eq(first.rawTranscript, "old:3207", "recording finishes with its captured local provider after replacement")
@@ -707,7 +707,7 @@ extension ModelProvisionSelfTests {
         let next = SessionContext(sessionID: 8002); next.captureRoute = await router.captureStartRoute()
         _ = await stage.execute(payload: .audio(samples: samples, previewText: ""), context: next)
         r.eq(next.rawTranscript, "new:3207", "next recording uses the replacement lease")
-        r.eq(next.usedProviderID, "qwen-local", "future engines still occupy the single compatible local routing slot")
+        r.eq(next.usedProviderID, "native:preset:future-whisper", "future engines carry the captured actual backend identity")
         r.eq(SessionController.backendLabel(forProviderID: next.usedProviderID, localIdentity: next.captureRoute?.localLease?.identity),
              "whisper", "history labels the captured engine instead of the legacy routing slot")
     }

@@ -433,6 +433,7 @@ struct Configuration: Codable, Equatable {
     var asrRoutingPolicy: ASRRoutingPolicy = .auto
     /// Nil denotes legacy intent that has not yet been resolved/migrated.
     var asrBackendSelection: ASRBackendSelection? = nil
+    var pendingLegacyNativeResolution: Bool = false
     var localASRServices: [LocalASRServiceProfile] = []
     /// 云端请求是否携带前台上下文（默认开启；设置中可关闭）。
     var cloudASRSendContext: Bool = true
@@ -553,6 +554,7 @@ struct Configuration: Codable, Equatable {
         cloudASRSendContext = (try? c.decodeIfPresent(Bool.self, forKey: .cloudASRSendContext)) ?? true
         cloudPolishSendContext = (try? c.decodeIfPresent(Bool.self, forKey: .cloudPolishSendContext)) ?? cloudASRSendContext
         cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
+        pendingLegacyNativeResolution = try c.decodeIfPresent(Bool.self, forKey: .pendingLegacyNativeResolution) ?? false
         asrBackendSelection = try c.decodeIfPresent(ASRBackendSelection.self, forKey: .asrBackendSelection)
         localASRServices = try c.decodeIfPresent([LocalASRServiceProfile].self, forKey: .localASRServices) ?? []
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
@@ -600,6 +602,7 @@ extension Configuration {
         case downloadSource
         case asrEngine
         case asrRoutingPolicy
+        case pendingLegacyNativeResolution
         case asrBackendSelection
         case localASRServices
         case cloudASRSendContext
@@ -635,6 +638,7 @@ extension Configuration {
         try container.encode(localModelPath, forKey: .localModelPath)
         try container.encode(downloadSource, forKey: .downloadSource)
         try container.encode(asrRoutingPolicy, forKey: .asrRoutingPolicy)
+        try container.encode(pendingLegacyNativeResolution, forKey: .pendingLegacyNativeResolution)
         try container.encodeIfPresent(asrBackendSelection, forKey: .asrBackendSelection)
         try container.encode(localASRServices, forKey: .localASRServices)
         try container.encode(cloudASRSendContext, forKey: .cloudASRSendContext)
@@ -653,5 +657,48 @@ extension Configuration {
 extension Configuration {
     static var shared: Configuration {
         ConfigurationStore.shared.current
+    }
+}
+
+
+extension Configuration {
+    mutating func migrateASRBackendSelectionIfNeeded() {
+        guard asrBackendSelection == nil else { return }
+        asrBackendSelection = ASRBackendMigration.selection(from: self)
+        pendingLegacyNativeResolution = asrRoutingPolicy != .cloudOnly
+            && activeImportedASRModelID == nil && selectedLocalModelID == nil
+    }
+
+    /// Every explicit selection edit retires unresolved legacy intent, including clearing it.
+    mutating func setASRBackendSelection(_ selection: ASRBackendSelection) {
+        asrBackendSelection = selection
+        pendingLegacyNativeResolution = false
+    }
+
+    mutating func resolveLegacyNativeSelection(lease: LocalASRLease) {
+        guard pendingLegacyNativeResolution, var selection = asrBackendSelection else { return }
+        let id = ASRBackendID(nativeLease: lease)
+        if asrRoutingPolicy == .localOnly { selection.primary = id }
+        else if asrRoutingPolicy == .auto { selection.fallback = id }
+        asrBackendSelection = selection
+        pendingLegacyNativeResolution = false
+    }
+}
+
+
+extension Configuration {
+    /// Loading a model changes only an already selected native role.
+    mutating func selectNativeASRBackend(lease: LocalASRLease) {
+        migrateASRBackendSelectionIfNeeded()
+        if pendingLegacyNativeResolution {
+            resolveLegacyNativeSelection(lease: lease)
+            return
+        }
+        guard var selection = asrBackendSelection else { return }
+        let id = ASRBackendID(nativeLease: lease)
+        if selection.primary?.rawValue.hasPrefix("native:") == true { selection.primary = id }
+        else if selection.fallback?.rawValue.hasPrefix("native:") == true { selection.fallback = id }
+        else { return }
+        setASRBackendSelection(selection)
     }
 }

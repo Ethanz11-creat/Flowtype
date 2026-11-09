@@ -215,10 +215,10 @@ extension M4RecoveryControllerSelfTests {
         let route = ASRRouteSnapshot(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
             localAvailable: false, cloudAvailable: true, cloudConfiguration: nil)
         let capture = Stage(name: "Recording", run: { _, context in
-            f.contexts.append(context); context.captureRoute = route
+            f.contexts.append(context); context.captureRoute = FixtureASRStage.capture(route, providerForID: { _ in provider })
             return .continue(.audio(samples: [0.5, -0.25], previewText: ""))
         })
-        let asr = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider }, phrases: { [] })
+        let asr = ASRStage(healthRecorder: { _, _, _ in }, phrases: { [] })
         let c = f.controller([capture, asr])
         c.startRecording()
         await wait { c.recoveryCard != nil && f.resources.owner == nil }
@@ -255,10 +255,10 @@ extension M4RecoveryControllerSelfTests {
             let route = ASRRouteSnapshot(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
                 localAvailable: false, cloudAvailable: true, cloudConfiguration: nil, language: "en")
             let capture = Stage(name: "Recording", run: { _, ctx in
-                f.captures += 1; f.contexts.append(ctx); ctx.captureRoute = route
+                f.captures += 1; f.contexts.append(ctx); ctx.captureRoute = FixtureASRStage.capture(route, providerForID: { _ in p })
                 return .continue(.audio(samples: [0.5, -0.25], previewText: ""))
             })
-            let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in p }, phrases: { [] })
+            let stage = ASRStage(healthRecorder: { _, _, _ in }, phrases: { [] })
             let c = f.controller([capture, stage])
             c.startRecording(); await wait { c.recoveryCard != nil }
             let old = c.recoveryCard!
@@ -276,7 +276,7 @@ extension M4RecoveryControllerSelfTests {
                 r.eq(p.requests.withLock { $0.last?.samples }, [0.5, -0.25], "M4 retry retains exact original PCM")
                 r.eq(p.requests.withLock { $0.last?.language }, "en", "M4 retry retains captured language")
                 r.eq(f.contexts.count, 1, "M4 retry retains original session")
-                r.eq(f.contexts[0].captureRoute, route, "M4 retry retains captured route")
+                r.eq(f.contexts[0].captureRoute, FixtureASRStage.capture(route, providerForID: { _ in p }), "M4 retry retains captured route")
                 r.check((f.contexts[0].completionBudget?.remainingSeconds ?? 0) > 19, "M4 retry renews twenty second budget")
                 r.check(!f.contexts[0].usePolish, "M4 retry never opts into polish")
             }
@@ -400,10 +400,10 @@ extension M4RecoveryControllerSelfTests {
         let factories = OSAllocatedUnfairLock<Int>(initialState: 0)
         let capture = Stage(name: "Recording", run: { _, ctx in
             f.contexts.append(ctx)
-            ctx.prepareRealtime(route: route, factory: { _ in oldHandle })
+            ctx.prepareRealtime(route: FixtureASRStage.capture(route), factory: { _ in oldHandle })
             return .continue(.audio(samples: [0.5, -0.25], previewText: ""))
         })
-        let asr = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
+        let asr = ASRStage(healthRecorder: { _, _, _ in },
             realtimeFactory: { _ in factories.withLock { $0 += 1 }; return newHandle }, phrases: { [] })
         let c = f.controller([capture, asr])
         c.startRecording(); await wait { c.recoveryCard != nil }
@@ -412,7 +412,7 @@ extension M4RecoveryControllerSelfTests {
         r.eq(await oldLive.finishes, 1, "M4 realtime retry never reuses consumed handle")
         r.eq(await newLive.finishes, 1, "M4 realtime retry finishes new handle once")
         r.eq(await newLive.chunks.flatMap { $0 }, [0.5, -0.25], "M4 realtime retry sends complete original PCM")
-        r.eq(f.contexts.first?.captureRoute, route, "M4 realtime retry retains original route/language/credentials")
+        r.eq(f.contexts.first?.captureRoute, FixtureASRStage.capture(route), "M4 realtime retry retains original route/language/credentials")
         c.cancel()
 
         let local = Provider(CloudASRError.timeout), forbiddenReplacement = Provider(CloudASRError.timeout)
@@ -421,13 +421,13 @@ extension M4RecoveryControllerSelfTests {
         var localRoute = ASRRouteSnapshot(policy: .localOnly, selectedProviderID: ASRProviderID.local,
             localAvailable: true, cloudAvailable: false, cloudConfiguration: nil, language: "zh")
         localRoute.localLease = lease
-        let savedRoute = localRoute
+        let savedRoute = FixtureASRStage.capture(localRoute)
         let g = Fixture(configuration)
         let localCapture = Stage(name: "Recording", run: { _, ctx in
             g.contexts.append(ctx); ctx.captureRoute = savedRoute
             return .continue(.audio(samples: [0.5], previewText: ""))
         })
-        let localASR = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in forbiddenReplacement }, phrases: { [] })
+        let localASR = ASRStage(healthRecorder: { _, _, _ in }, phrases: { [] })
         let localController = g.controller([localCapture, localASR])
         localController.startRecording(); await wait { localController.recoveryCard != nil }
         localController.retryFailedStage(); await wait { localController.recoveryCard != nil }

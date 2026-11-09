@@ -29,3 +29,12 @@ struct LocalASRServiceProfile: Codable, Equatable, Sendable, Identifiable {
     var authentication: ASRServiceAuthentication
     var fieldCapabilities: CloudASRFieldCapabilities
 }
+
+
+extension ASRBackendID {
+    init(nativeLease lease: LocalASRLease) {
+        rawValue = UUID(uuidString: lease.identity.id) != nil
+            ? "native:import:" + lease.identity.id
+            : "native:preset:" + lease.identity.id
+    }
+}

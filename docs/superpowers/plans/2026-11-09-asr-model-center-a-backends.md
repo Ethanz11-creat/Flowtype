@@ -172,3 +172,9 @@ r.eq(testCallsAfterDoubleClick, 1, "one in-flight owner per profile")
 - [ ] **Step 3: 接线状态与导航。** 从统一后端投影构造 readiness、metrics、recovery target；Apple preview 继续作为现有明确后备机制，不注册成新增可选模型。DB 增字段需要沿用现有 GRDB migration 与旧配置兼容，不重建用户数据库。
 - [ ] **Step 4: 验证 GREEN。** focused、`--native-client-only`、`--m3-asr-regression-only` 全部通过；提交稳定源码后运行一次 `scripts/verify.sh --lane code`，预期所有阶段 Pass。真实服务仍 Pending。
 - [ ] **Step 5: 提交并整段审查。** `git commit -m "feat: expose actual ASR backend readiness and history"`；fresh review A 全范围，修复 Important/Critical 后交 B，不把 fixture 成功当厂商验收。
+
+### A4 controller rulings
+
+- Persist `pendingLegacyNativeResolution` with the initial migrated selection for unresolved legacy native intent. Resolve only from a successful actual lease. Explicit selection changes/clear use the centralized setter to clear this marker; never infer pending intent from old paths after migration.
+- Successful explicit model loading replaces an existing native role only, preserving other selected roles, routing policy and upload consent. Automatic success only resolves the pending legacy marker. Failed/cancelled load does not change selection.
+- Existing pipeline fixtures may use a Testing-only `FixtureASRStage` boundary to materialize injected providers into bindings before delegating to the real stage. Production batch execution uses only `ASRRouteSnapshot.bindings`; no mutable ID lookup or legacy fallback. New A4 fixtures exercise the new bindings directly.

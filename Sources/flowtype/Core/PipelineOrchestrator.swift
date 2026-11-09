@@ -869,7 +869,10 @@ final class SessionController: ObservableObject {
         switch id {
         case ASRProviderID.local: return localIdentity?.engine ?? "qwen"
         case ASRProviderID.cloud: return "cloud"
-        default: return "apple"
+        default:
+            if let id, id.hasPrefix("native:") { return localIdentity?.engine ?? "local" }
+            if let id, id.hasPrefix("cloud:") || id.hasPrefix("service:") { return id }
+            return "apple"
         }
     }
 

@@ -358,7 +358,7 @@ extension TrialSessionSelfTests {
             value.llmProviders = [provider]
             value.providerAPIKeys = [provider.id.uuidString: "fixture-key"]
             let polishConfiguration = value
-            let asr = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
+            let asr = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
                 routeFactory: { .init(policy: .localOnly, selectedProviderID: "fixture", localAvailable: false,
                                       cloudAvailable: false, cloudConfiguration: nil) },
                 speechPreflight: { _, _ in fixture == "silent" ? .clearlySilent : .emptyCapture }, phrases: { [] })

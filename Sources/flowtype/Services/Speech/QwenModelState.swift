@@ -443,8 +443,15 @@ final class QwenModelState: ObservableObject {
         } else {
             // .offline is retained for installed built-in preset bootstrap/download completion.
             // Legacy custom paths always enter through inspected .imported instead.
+            config.migrateASRBackendSelectionIfNeeded()
+            if request.origin == .automatic { config.resolveLegacyNativeSelection(lease: candidate) }
+            else { config.selectNativeASRBackend(lease: candidate) }
+            saveConfiguration(config)
             return
         }
+        config.migrateASRBackendSelectionIfNeeded()
+        if request.origin == .automatic { config.resolveLegacyNativeSelection(lease: candidate) }
+        else { config.selectNativeASRBackend(lease: candidate) }
         saveConfiguration(config)
     }
 

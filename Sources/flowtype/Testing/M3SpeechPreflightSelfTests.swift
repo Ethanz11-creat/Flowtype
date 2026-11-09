@@ -290,7 +290,7 @@ extension M3SpeechPreflightSelfTests {
     }
 
     private struct ObservedASR: PipelineStage {
-        let stage: ASRStage
+        let stage: FixtureASRStage
         let ledger: Ledger
         var name: String { stage.name }
         func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
@@ -336,7 +336,7 @@ extension M3SpeechPreflightSelfTests {
                 let ledger = Ledger(), providerLedger = Ledger()
                 let provider = Provider(providerLedger)
                 let saved = route(policy)
-                let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
+                let stage = FixtureASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
                     providerForID: { _ in provider }, routeFactory: { ledger.update { $0.routes += 1 }; return saved })
                 let context = SessionContext(sessionID: 900)
                 context.captureRoute = saved
@@ -412,7 +412,7 @@ extension M3SpeechPreflightSelfTests {
             let ledger = Ledger(), provider = Provider(Ledger())
             let context = SessionContext(sessionID: 910)
             context.captureRoute = route(.localOnly)
-            let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
                 providerForID: { _ in provider }, routeFactory: { ledger.update { $0.routes += 1 }; return route(.auto) },
                 speechPreflight: { samples, rate in
                     ledger.update { $0.preflights += 1 }
@@ -454,7 +454,7 @@ extension M3SpeechPreflightSelfTests {
             cloudLedger.update { $0.failProvider = true }
             let cloud = Provider(cloudLedger), local = Provider(localLedger)
             let context = SessionContext(sessionID: 911); context.captureRoute = route(.auto)
-            let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { $0 == ASRProviderID.cloud ? cloud : local })
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { $0 == ASRProviderID.cloud ? cloud : local })
             _ = await stage.execute(payload: .audio(samples: samples, previewText: "partial"), context: context)
             r.eq(cloudLedger.snapshot.requests.first?.samples, samples, "M3 signal \(samples.count): first candidate receives full recording")
             r.eq(localLedger.snapshot.requests.first?.samples, samples, "M3 signal \(samples.count): fallback receives full recording")
@@ -463,7 +463,7 @@ extension M3SpeechPreflightSelfTests {
         for bad: Float in [.nan, .infinity, -.infinity, 1.01, -1.01] {
             let ledger = Ledger(), provider = Provider(Ledger())
             let context = SessionContext(sessionID: 912)
-            let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
                 providerForID: { _ in provider }, routeFactory: { ledger.update { $0.routes += 1 }; return route(.localOnly) })
             let result = await stage.execute(payload: .audio(samples: [0.5, bad], previewText: "preview"), context: context)
             if case .suspend(let recovery) = result {
@@ -479,7 +479,7 @@ extension M3SpeechPreflightSelfTests {
             let before = context.completionBudget
             let observed = BudgetBox()
             let ledger = Ledger(), provider = Provider(Ledger())
-            let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider },
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider },
                 routeFactory: { ledger.update { $0.routes += 1 }; return route(.localOnly) },
                 speechPreflight: { _, _ in
                     await MainActor.run { observed.value = context.completionBudget; observed.remaining = context.completionBudget?.remainingSeconds }
@@ -512,13 +512,13 @@ extension M3SpeechPreflightSelfTests {
             let context = SessionContext(sessionID: 920)
             let live = Live(), ledger = Ledger()
             let handle = RealtimeASRSessionHandle(session: live, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
-            context.prepareRealtime(route: liveRoute(), factory: { _ in handle })
+            context.prepareRealtime(route: FixtureASRStage.capture(liveRoute()), factory: { _ in handle })
             let start = context.realtimeStartTask!
             try? await start.value
             // Prior start/upload/temporary text are allowed; stop must never finalize them.
             try? handle.ingress.enqueue(samples: [0])
             context.currentPreviewText = "existing live/Apple text"
-            let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } }, providerForID: { _ in nil },
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } }, providerForID: { _ in nil },
                 realtimeFactory: { _ in ledger.update { $0.factories += 1 }; return handle },
                 routeFactory: { ledger.update { $0.routes += 1 }; return liveRoute() })
             _ = await stage.execute(payload: .audio(samples: empty ? [] : Array(repeating: 0, count: 80000), previewText: context.currentPreviewText), context: context)
@@ -540,9 +540,9 @@ extension M3SpeechPreflightSelfTests {
         for throwsCancellation in [false, true] {
             let context = SessionContext(sessionID: 921), live = Live(), ledger = Ledger()
             let handle = RealtimeASRSessionHandle(session: live, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
-            context.prepareRealtime(route: liveRoute(), factory: { _ in handle })
+            context.prepareRealtime(route: FixtureASRStage.capture(liveRoute()), factory: { _ in handle })
             let start = context.realtimeStartTask!
-            let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
                 speechPreflight: { _, _ in
                     let owned = await MainActor.run {
                         context.realtimeHandle == nil && context.realtimeStartTask == nil && context.completionBudget != nil
@@ -577,7 +577,7 @@ extension M3SpeechPreflightSelfTests {
         for late: SpeechPreflightDecision in [.clearlySilent, .possiblySpeech] {
             let ledger = Ledger(), provider = Provider(Ledger()), plan = CapturePlan(), gate = Gate()
             let resources = SessionResourceCoordinator()
-            let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } }, providerForID: { _ in provider },
+            let stage = FixtureASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } }, providerForID: { _ in provider },
                 speechPreflight: { samples, rate in
                     if samples.first == 0.123 {
                         ledger.update { $0.preflights += 1 }
@@ -675,7 +675,7 @@ extension M3SpeechPreflightSelfTests {
         let ledger = Ledger(), plan = CapturePlan(), failedLive = Live(fail: true), freshLive = Live()
         let oldHandle = RealtimeASRSessionHandle(session: failedLive, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
         let newHandle = RealtimeASRSessionHandle(session: freshLive, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
-        let stage = ASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
+        let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
             realtimeFactory: { _ in ledger.update { $0.factories += 1 }; return newHandle },
             speechPreflight: { samples, rate in
                 ledger.update { $0.preflights += 1 }

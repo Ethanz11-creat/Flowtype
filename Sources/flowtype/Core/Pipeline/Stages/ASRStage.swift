@@ -4,7 +4,6 @@ import Foundation
 final class ASRStage: PipelineStage, @unchecked Sendable {
     var name: String { "ASR" }
     private let healthRecorder: @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void
-    private let providerForID: @Sendable (String) -> (any ASRProvider)?
     private let realtimeFactory: RealtimeSessionFactory
     private let routeFactory: @Sendable () async -> ASRRouteSnapshot
     private let speechPreflight: @Sendable ([Float], Int) async throws -> SpeechPreflightDecision
@@ -13,8 +12,6 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
     init(healthRecorder: @escaping @MainActor @Sendable (String, Int?, ASRRouteSnapshot) -> Void = { id, latency, route in
         if let latency { ASRRouter.shared.recordSuccess(providerID: id, latencyMs: latency, route: route) }
         else { ASRRouter.shared.recordFailure(providerID: id, route: route) }
-    }, providerForID: @escaping @Sendable (String) -> (any ASRProvider)? = {
-        ASRProviderRegistry.shared.provider(forID: $0)
     }, realtimeFactory: @escaping RealtimeSessionFactory = liveRealtimeSessionFactory,
          routeFactory: @escaping @Sendable () async -> ASRRouteSnapshot = {
         await ASRRouter.shared.captureStartRoute()
@@ -22,7 +19,6 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         try await SpeechPreflight.evaluate(samples: $0, sampleRate: $1)
     }, phrases: @escaping @MainActor @Sendable () -> [String] = { DictionaryStore.shared.enabledPhrases }) {
         self.healthRecorder = healthRecorder
-        self.providerForID = providerForID
         self.realtimeFactory = realtimeFactory
         self.routeFactory = routeFactory
         self.speechPreflight = speechPreflight
@@ -85,17 +81,18 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             return (self.phrases(), context.foregroundContextText)
         }
         let ids = route.candidateIDs
-        var firstFailure: Error?
-        var firstFailureKind: FailureKind?
+        var firstFailure: Error? = route.captureError
+        var firstFailureKind: FailureKind? = route.captureError.map { FailureClassifier.classify($0) }
         var firstFailureDestination: ClientDestination?
         var finalResult: ASRResult?
         var finalProviderID: String?
         var usedFallback = false
 
-        for id in ids where !samples.isEmpty {
+        for binding in route.bindings where !samples.isEmpty {
+            let id = binding.descriptor.id.rawValue
             guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
             let timeout = completionStageTimeout(remaining: budget.remainingSeconds,
-                                                  cloud: id == ASRProviderID.cloud,
+                                                  cloud: binding.descriptor.location == .cloud,
                                                   policy: route.policy, localAvailable: route.localAvailable)
             guard timeout > 0 else {
                 if firstFailure == nil {
@@ -111,11 +108,12 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             do {
                 let request = ASRRequest(samples: samples, sampleRate: 16000, language: route.language,
                                          context: ASRContext(phrases: phrases, foreground: foreground),
-                                         timeout: timeout, cloudConfiguration: route.cloudConfiguration)
+                                         timeout: timeout, cloudConfiguration: binding.cloudConfiguration)
                 let result: ASRResult
-                if id == ASRProviderID.cloud, route.isRealtime, let config = route.cloudConfiguration {
+                if binding.isRealtime, let config = binding.cloudConfiguration {
+                    let capturedLive = route.bindings.first?.descriptor.id == binding.descriptor.id ? live : nil
                     let handle: RealtimeASRSessionHandle
-                    if let live { handle = live.0 }
+                    if let live = capturedLive { handle = live.0 }
                     else {
                         handle = realtimeFactory(try RealtimeASRConfiguration(provider: config.provider,
                                                                               apiKey: config.apiKey,
@@ -123,7 +121,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                     }
                     do {
                         result = try await withAsyncDeadline(seconds: timeout) {
-                            if let live {
+                            if let live = capturedLive {
                                 if let start = live.1 { try await start.value }
                                 return try await handle.session.finish()
                             }
@@ -137,18 +135,17 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                         throw error
                     }
                 } else {
-                    let captured = id == ASRProviderID.local ? route.localLease?.provider : nil
-                    guard let provider = captured ?? providerForID(id) else { throw SpeechProviderError.notAvailable }
+                    let provider = binding.provider
                     result = try await withAsyncDeadline(seconds: timeout) { try await provider.transcribe(request) }
                 }
                 guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
                 guard !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     throw ASRStageError.transcriptionFailed(message: "未识别到完整文字，请重试")
                 }
-                finalResult = result
+                finalResult = ASRResult(text: result.text, providerID: id, latencyMs: result.latencyMs)
                 finalProviderID = id
                 let latencyMs = Int(budget.elapsedSeconds * 1000)
-                await healthRecorder(id, route.isRealtime ? latencyMs : result.latencyMs, route)
+                await healthRecorder(id, binding.isRealtime ? latencyMs : result.latencyMs, route)
                 break
             } catch {
                 // Classify before the safe generic terminal error hides provider causes.
@@ -160,14 +157,14 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                     firstFailure = error
                     firstFailureKind = kind
                     if case .configuration = kind {
-                        firstFailureDestination = id == ASRProviderID.local
+                        firstFailureDestination = binding.descriptor.location == .native
                             ? .settings(.speech, .localModels)
-                            : route.cloudConfiguration.map { .settings(.speech, .provider($0.provider.id)) }
+                            : binding.cloudConfiguration.map { .settings(.speech, .provider($0.provider.id)) }
                     }
                 }
                 usedFallback = true
                 await healthRecorder(id, nil, route)
-                AppLogger.log("[ASRStage#\(context.sessionID)] engine=\(id == ASRProviderID.local ? route.localLease?.identity.engine ?? "local" : "cloud") transport=\(route.isRealtime ? "realtime" : "batch") fallback=\(fallbackReason(for: error))")
+                AppLogger.log("[ASRStage#\(context.sessionID)] engine=\(binding.nativeLease?.identity.engine ?? binding.descriptor.location.rawValue) transport=\(binding.isRealtime ? "realtime" : "batch") fallback=\(fallbackReason(for: error))")
             }
         }
         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
@@ -180,7 +177,7 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
                 context.rawTranscript = result.text
                 context.usedFallback = usedFallback
                 context.fallbackReason = firstFailure.map { fallbackReason(for: $0) }
-                if route.isRealtime, result.providerID == ASRProviderID.cloud { context.setRealtimeResult(result) }
+                if route.bindings.first(where: { $0.descriptor.id.rawValue == result.providerID })?.isRealtime == true { context.setRealtimeResult(result) }
             }
             return .continue(.transcript(result.text))
         }
