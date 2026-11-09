@@ -2,13 +2,33 @@ import Foundation
 import Network
 import os
 
+/// A selected backend could not be captured. Preserve its identity independently
+/// of providers that can still attempt recognition.
+struct ASRBackendCaptureFailure: Sendable, Equatable {
+    let backendID: ASRBackendID
+    let error: ASRCredentialError
+
+    var destination: ClientDestination {
+        if backendID.rawValue.hasPrefix("cloud:"),
+           let id = UUID(uuidString: String(backendID.rawValue.dropFirst("cloud:".count))) {
+            return .settings(.speech, .provider(id))
+        }
+        return .settings(.speech)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.backendID == rhs.backendID && lhs.error.localizedDescription == rhs.error.localizedDescription
+    }
+}
+
 /// A capture-start routing decision. The provider identity and credentials are
 /// immutable for the lifetime of a session; stop/fallback never re-reserves a
 /// different half-open route from mutable settings.
 struct ASRRouteSnapshot: Sendable, Equatable {
     let policy: ASRRoutingPolicy
     var bindings: [ASRBackendBinding] = []
-    var captureError: ASRCredentialError? = nil
+    var captureFailures: [ASRBackendCaptureFailure] = []
+    var captureError: ASRCredentialError? { captureFailures.first?.error }
     let selectedProviderID: String?
     let localAvailable: Bool
     let cloudAvailable: Bool
@@ -20,8 +40,8 @@ struct ASRRouteSnapshot: Sendable, Equatable {
     var cloudIdentity: CloudASRHealthIdentity? { cloudConfiguration.map { CloudASRHealthIdentity(provider: $0.provider) } }
 
     init(policy: ASRRoutingPolicy, bindings: [ASRBackendBinding], language: String? = nil,
-         captureError: ASRCredentialError? = nil) {
-        self.policy = policy; self.bindings = bindings; self.language = language; self.captureError = captureError
+         captureFailures: [ASRBackendCaptureFailure] = []) {
+        self.policy = policy; self.bindings = bindings; self.language = language; self.captureFailures = captureFailures
         selectedProviderID = bindings.first?.descriptor.id.rawValue
         localAvailable = bindings.contains { $0.descriptor.location != .cloud }
         cloudAvailable = bindings.contains { $0.descriptor.location == .cloud }
@@ -48,7 +68,7 @@ struct ASRRouteSnapshot: Sendable, Equatable {
             && lhs.localAvailable == rhs.localAvailable && lhs.cloudAvailable == rhs.cloudAvailable
             && lhs.cloudConfiguration == rhs.cloudConfiguration && lhs.language == rhs.language
             && lhs.healthGeneration == rhs.healthGeneration && lhs.isHealthRecovery == rhs.isHealthRecovery
-            && lhs.localLease == rhs.localLease && lhs.captureError?.localizedDescription == rhs.captureError?.localizedDescription
+            && lhs.localLease == rhs.localLease && lhs.captureFailures == rhs.captureFailures
     }
 
 }
@@ -464,7 +484,7 @@ final class ASRRouter: @unchecked Sendable {
         let selection = ASRBackendMigration.selection(from: cfg)
         let selected = Set([selection.primary, selection.fallback].compactMap { $0 })
         var bindings: [ASRBackendBinding] = []
-        var captureError: ASRCredentialError?
+        var captureErrors: [ASRBackendID: ASRCredentialError] = [:]
         let internetAvailable = self.internetAvailable() ?? snapshot().networkReachable
         // Determine eligibility from nonsecret metadata before touching credentials or factories.
         var descriptors = cfg.cloudASRConfig.providers.filter {
@@ -489,9 +509,10 @@ final class ASRRouter: @unchecked Sendable {
             descriptors.append(descriptor)
             bindings.append(.init(descriptor: descriptor, provider: lease.provider, nativeLease: lease, credentialGeneration: nil))
         }
-        let eligibleIDs = Set(ASRBackendRouting.order(selection: selection, policy: cfg.asrRoutingPolicy,
+        let eligibleOrder = ASRBackendRouting.order(selection: selection, policy: cfg.asrRoutingPolicy,
             descriptors: descriptors, availableIDs: Set(descriptors.map(\.id)),
-            internetAvailable: internetAvailable, degradedIDs: []))
+            internetAvailable: internetAvailable, degradedIDs: [])
+        let eligibleIDs = Set(eligibleOrder)
         bindings.removeAll { !eligibleIDs.contains($0.descriptor.id) }
         for profile in cfg.cloudASRConfig.providers where eligibleIDs.contains(.init(rawValue: "cloud:" + profile.id.uuidString)) {
             guard let descriptor = descriptors.first(where: { $0.id.rawValue == "cloud:" + profile.id.uuidString }) else { continue }
@@ -505,7 +526,7 @@ final class ASRRouter: @unchecked Sendable {
                     sendContext: cfg.cloudASRSendContext), underlying: cloudProvider)
                 bindings.append(.init(descriptor: descriptor, provider: provider,
                     nativeLease: nil, credentialGeneration: credential.generation))
-            } catch { captureError = (error as? ASRCredentialError) ?? .invalidData }
+            } catch { captureErrors[descriptor.id] = (error as? ASRCredentialError) ?? .invalidData }
         }
         for profile in cfg.localASRServices where eligibleIDs.contains(.init(rawValue: "service:" + profile.id.uuidString)) {
             do {
@@ -519,7 +540,7 @@ final class ASRRouter: @unchecked Sendable {
                 }
                 bindings.append(try registry.makeLocalServiceBinding(profile: profile, credential: credential?.value,
                     credentialGeneration: credential?.generation))
-            } catch let error as ASRCredentialError { captureError = error }
+            } catch let error as ASRCredentialError { captureErrors[.init(rawValue: "service:" + profile.id.uuidString)] = error }
             catch { /* Invalid service profiles remain selected but unavailable. */ }
         }
         let degraded = Set(bindings.filter { backendHealth.isDegraded(binding: $0) }.map { $0.descriptor.id })
@@ -534,7 +555,10 @@ final class ASRRouter: @unchecked Sendable {
         }
         var route = ASRRouteSnapshot(policy: cfg.asrRoutingPolicy,
             bindings: order.compactMap { id in bindings.first { $0.descriptor.id == id } },
-            language: cfg.asrLanguage.qwenLanguageCode, captureError: captureError)
+            language: cfg.asrLanguage.qwenLanguageCode,
+            captureFailures: eligibleOrder.compactMap { id in
+                captureErrors[id].map { ASRBackendCaptureFailure(backendID: id, error: $0) }
+            })
         route.healthGeneration = backendHealth.networkGeneration
         return route
     }

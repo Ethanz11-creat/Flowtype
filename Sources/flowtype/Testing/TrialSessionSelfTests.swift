@@ -358,9 +358,8 @@ extension TrialSessionSelfTests {
             value.llmProviders = [provider]
             value.providerAPIKeys = [provider.id.uuidString: "fixture-key"]
             let polishConfiguration = value
-            let asr = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
-                routeFactory: { .init(policy: .localOnly, selectedProviderID: "fixture", localAvailable: false,
-                                      cloudAvailable: false, cloudConfiguration: nil) },
+            let asr = ASRStage(healthRecorder: { _, _, _ in },
+                routeFactory: { .init(policy: .localOnly, bindings: []) },
                 speechPreflight: { _, _ in fixture == "silent" ? .clearlySilent : .emptyCapture }, phrases: { [] })
             let polish = PolishStage(configuration: { polishConfiguration }, streamFactory: { _, _, _ in
                 AsyncThrowingStream { $0.finish(throwing: LLMError.apiError("fixture offline")) }

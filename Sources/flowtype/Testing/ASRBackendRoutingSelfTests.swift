@@ -10,6 +10,7 @@ enum ASRBackendRoutingSelfTests {
         await testLegacyResolutionAndCredentialFailures(r)
         await testServiceConsentAndRealtimeBinding(r)
         await testExcludedCredentialsNeverRead(r)
+        await testEligibleCaptureFailuresKeepAttemptedCause(r)
     }
 
     // Catches the fixed cloud/native slots silently discarding selected loopback services.
@@ -39,6 +40,7 @@ private struct RoutingProvider: ASRProvider {
 private final class RoutingHTTPFixture: URLProtocol, @unchecked Sendable {
     static let requests = OSAllocatedUnfairLock(initialState: [URLRequest]())
     static let failLoopback = OSAllocatedUnfairLock(initialState: false)
+    static let failure = OSAllocatedUnfairLock<URLError.Code?>(initialState: nil)
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -53,6 +55,7 @@ private final class RoutingHTTPFixture: URLProtocol, @unchecked Sendable {
             captured.httpBody = data
         }
         let frozen = captured
+        if let code = Self.failure.withLock({ $0 }) { client?.urlProtocol(self, didFailWithError: URLError(code)); return }
         Self.requests.withLock { $0.append(frozen) }
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: Self.failLoopback.withLock({ $0 }) && request.url?.host == "127.0.0.1" ? 503 : 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data("{\"text\":\"captured text\"}".utf8))
@@ -406,6 +409,64 @@ extension ASRBackendRoutingSelfTests {
                 if case .suspend(let recovery) = result { r.eq(recovery.failureKind, .transientASR, "permitted service failure retains its own cause") }
                 else { r.check(false, "permitted failed service remains recoverable") }
             }
+        }
+    }
+}
+
+extension ASRBackendRoutingSelfTests {
+    @MainActor static func testEligibleCaptureFailuresKeepAttemptedCause(_ r: SelfTest.Reporter) async {
+        for timeout in [false, true] {
+            let settings = RoutingSettings()
+            let cloud = CloudASRProviderConfig.defaultSiliconFlow(isActive: true)
+            let service = ASRBackendTransportSelfTests.profile()
+            settings.config.localASRServices = [service]
+            settings.config.cloudASRConfig.providers = [cloud]
+            settings.config.setASRBackendSelection(.init(primary: .init(rawValue: "service:" + service.id.uuidString),
+                fallback: .init(rawValue: "cloud:" + cloud.id.uuidString), allowsCloudFallback: true))
+            let credentials = KeychainASRCredentialStore(access: .init(read: { _ in throw ASRCredentialError.unavailable },
+                update: { _, _ in false }, add: { _, _ in }, remove: { _ in }))
+            let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [RoutingHTTPFixture.self]
+            let session = URLSession(configuration: configuration); defer { session.invalidateAndCancel() }
+            let registry = try! ASRProviderRegistry(adapters: [OpenAICompatibleASRAdapter(session: session, resolver: { _ in ["127.0.0.1"] })])
+            let router = ASRRouter(startMonitoring: false, credentials: credentials, registry: registry, persistNativeResolution: { _ in },
+                configuration: { settings.config }, localAvailable: { false }, localLease: { nil })
+            let context = SessionContext(sessionID: 94100); context.captureRoute = await router.captureStartRoute()
+            RoutingHTTPFixture.failLoopback.withLock { $0 = true }
+            RoutingHTTPFixture.failure.withLock { $0 = timeout ? .timedOut : nil }
+            let stage = ASRStage(healthRecorder: { _, _, _ in }, speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
+            let result = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: context)
+            RoutingHTTPFixture.failLoopback.withLock { $0 = false }; RoutingHTTPFixture.failure.withLock { $0 = nil }
+            if case .suspend(let recovery) = result {
+                r.eq(recovery.failureKind, .transientASR, "attempted service 503/timeout outranks locked eligible fallback")
+                let presentation = RecoveryPolicy.presentation(kind: recovery.failureKind, resources: .init(stage: "ASR", hasAudio: true,
+                    textKind: .none, deliveryEventStarted: false, routingPolicy: .auto, hasHistory: false))
+                r.check(presentation.actions.contains(.retry(stage: "ASR")), "locked fallback cannot remove retained-audio retry")
+            } else { r.check(false, "failed permitted service suspends") }
+        }
+
+        let primary = CloudASRProviderConfig.defaultSiliconFlow(isActive: true)
+        let fallback = CloudASRProviderConfig.defaultSiliconFlow(isActive: false)
+        for profiles in [[primary, fallback], [fallback, primary]] {
+            let settings = RoutingSettings()
+            settings.config.cloudASRConfig.providers = profiles
+            settings.config.setASRBackendSelection(.init(primary: .init(rawValue: "cloud:" + primary.id.uuidString),
+                fallback: .init(rawValue: "cloud:" + fallback.id.uuidString)))
+            let primaryCredentialID = primary.credentialID
+            let credentials = KeychainASRCredentialStore(access: .init(read: { id in
+                throw id == primaryCredentialID ? ASRCredentialError.unavailable : ASRCredentialError.invalidData
+            }, update: { _, _ in false }, add: { _, _ in }, remove: { _ in }))
+            let router = ASRRouter(startMonitoring: false, credentials: credentials, persistNativeResolution: { _ in },
+                configuration: { settings.config }, localAvailable: { false }, localLease: { nil })
+            let route = await router.captureStartRoute()
+            r.eq(route.captureFailures.map(\.backendID.rawValue), ["cloud:" + primary.id.uuidString, "cloud:" + fallback.id.uuidString],
+                 "capture diagnostics retain each backend identity in selection order")
+            r.eq(route.captureError?.localizedDescription, ASRCredentialError.unavailable.localizedDescription,
+                 "multiple capture errors follow selection order instead of profile array order")
+            let context = SessionContext(sessionID: 94101); context.captureRoute = route
+            let stage = ASRStage(healthRecorder: { _, _, _ in }, speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
+            if case .suspend(let recovery) = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: context) {
+                r.eq(recovery.destination, .settings(.speech, .provider(primary.id)), "capture-only failure retains primary backend destination")
+            } else { r.check(false, "capture-only credential error suspends") }
         }
     }
 }

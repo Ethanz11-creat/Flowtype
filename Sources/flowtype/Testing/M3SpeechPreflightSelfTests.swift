@@ -290,7 +290,7 @@ extension M3SpeechPreflightSelfTests {
     }
 
     private struct ObservedASR: PipelineStage {
-        let stage: FixtureASRStage
+        let stage: ASRStage
         let ledger: Ledger
         var name: String { stage.name }
         func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
@@ -335,9 +335,9 @@ extension M3SpeechPreflightSelfTests {
                 let label = "M3 ASR \(policy)/\(samples.count)"
                 let ledger = Ledger(), providerLedger = Ledger()
                 let provider = Provider(providerLedger)
-                let saved = route(policy)
-                let stage = FixtureASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
-                    providerForID: { _ in provider }, routeFactory: { ledger.update { $0.routes += 1 }; return saved })
+                let saved = FixtureASRStage.capture(route(policy), providerForID: { _ in provider })
+                let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
+                    routeFactory: { ledger.update { $0.routes += 1 }; return saved })
                 let context = SessionContext(sessionID: 900)
                 context.captureRoute = saved
                 let result = await stage.execute(payload: .audio(samples: samples, previewText: "Apple preview hallucination"), context: context)
@@ -577,7 +577,7 @@ extension M3SpeechPreflightSelfTests {
         for late: SpeechPreflightDecision in [.clearlySilent, .possiblySpeech] {
             let ledger = Ledger(), provider = Provider(Ledger()), plan = CapturePlan(), gate = Gate()
             let resources = SessionResourceCoordinator()
-            let stage = FixtureASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } }, providerForID: { _ in provider },
+            let stage = ASRStage(healthRecorder: { _, _, _ in ledger.update { $0.health += 1 } },
                 speechPreflight: { samples, rate in
                     if samples.first == 0.123 {
                         ledger.update { $0.preflights += 1 }
@@ -588,7 +588,7 @@ extension M3SpeechPreflightSelfTests {
                 })
             let capture = Capture { ctx in
                 plan.contexts.append(ctx)
-                ctx.captureRoute = route(.localOnly)
+                ctx.captureRoute = FixtureASRStage.capture(route(.localOnly), providerForID: { _ in provider })
                 return .audio(samples: plan.samples, previewText: plan.preview)
             }
             let controller = SessionController(pipeline: [capture, ObservedASR(stage: stage, ledger: ledger)] + tail(ledger), observers: [],
@@ -675,7 +675,7 @@ extension M3SpeechPreflightSelfTests {
         let ledger = Ledger(), plan = CapturePlan(), failedLive = Live(fail: true), freshLive = Live()
         let oldHandle = RealtimeASRSessionHandle(session: failedLive, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
         let newHandle = RealtimeASRSessionHandle(session: freshLive, ingress: RealtimeAudioIngress(), capabilities: DashScopeRealtimeASR.capabilities)
-        let stage = FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in nil },
+        let stage = ASRStage(healthRecorder: { _, _, _ in },
             realtimeFactory: { _ in ledger.update { $0.factories += 1 }; return newHandle },
             speechPreflight: { samples, rate in
                 ledger.update { $0.preflights += 1 }
@@ -685,7 +685,7 @@ extension M3SpeechPreflightSelfTests {
         let capture = Capture { ctx in
             plan.contexts.append(ctx)
             ctx.completionBudget = CompletionBudget(seconds: 1)
-            ctx.prepareRealtime(route: liveRoute(), factory: { _ in oldHandle })
+            ctx.prepareRealtime(route: FixtureASRStage.capture(liveRoute()), factory: { _ in oldHandle })
             return .audio(samples: [0.5, -0.5], previewText: "")
         }
         let controller = SessionController(pipeline: [capture, stage] + tail(ledger), observers: [],

@@ -81,8 +81,8 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             return (self.phrases(), context.foregroundContextText)
         }
         let ids = route.candidateIDs
-        var firstFailure: Error? = route.captureError
-        var firstFailureKind: FailureKind? = route.captureError.map { FailureClassifier.classify($0) }
+        var firstFailure: Error?
+        var firstFailureKind: FailureKind?
         var firstFailureDestination: ClientDestination?
         var finalResult: ASRResult?
         var finalProviderID: String?
@@ -168,6 +168,14 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
             }
         }
         guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
+        // Capture diagnostics cannot replace the first provider that actually
+        // attempted the recording. If no attempt failed, report the first
+        // unavailable selected backend in captured route order.
+        if firstFailure == nil, finalResult == nil, let failure = route.captureFailures.first {
+            firstFailure = failure.error
+            firstFailureKind = FailureClassifier.classify(failure.error)
+            firstFailureDestination = failure.destination
+        }
         if let result = finalResult {
             let ms = Int(budget.elapsedSeconds * 1000)
             await MainActor.run {

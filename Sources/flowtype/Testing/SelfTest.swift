@@ -358,6 +358,7 @@ enum SelfTest {
             M4RecoveryPolicySelfTests.run(r)
             await M4StageFailureSelfTests.run(r)
             await M4RecoveryControllerSelfTests.run(r)
+            await testSessionRecoveryDelivery(r)
             AppLogger.log("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
             AppLogger.flush()
             print("=== M4 recovery self-test: \(r.passed) passed, \(r.failed) failed ===")
@@ -603,8 +604,8 @@ enum SelfTest {
         func execute(payload: StagePayload, context: SessionContext) async -> StageResult {
             await MainActor.run {
                 ledger.context = context
-                context.captureRoute = .init(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
-                    localAvailable: false, cloudAvailable: true, cloudConfiguration: nil)
+                context.captureRoute = FixtureASRStage.capture(.init(policy: .cloudOnly, selectedProviderID: ASRProviderID.cloud,
+                    localAvailable: false, cloudAvailable: true, cloudConfiguration: nil), providerForID: { _ in RetryProvider(ledger: ledger) })
             }
             return .continue(.audio(samples: [0.5, -0.25], previewText: ""))
         }
@@ -632,9 +633,8 @@ enum SelfTest {
         }
     }
 
-    private static func retryASR(ledger: RetryLedger) -> FixtureASRStage {
-        let provider = RetryProvider(ledger: ledger)
-        return FixtureASRStage(healthRecorder: { _, _, _ in }, providerForID: { _ in provider }, phrases: { [] })
+    private static func retryASR(ledger: RetryLedger) -> ASRStage {
+        ASRStage(healthRecorder: { _, _, _ in }, phrases: { [] })
     }
 
     private struct ProcessedStarter: PipelineStage {
