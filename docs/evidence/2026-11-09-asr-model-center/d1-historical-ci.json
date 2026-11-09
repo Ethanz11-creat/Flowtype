@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 1,
+  "scope": "D1 historical CI failure; no current remote success claim",
+  "runURL": "https://github.com/Ethanz11-creat/Flowtype/actions/runs/41672136709",
+  "report": {
+    "artifactIdentity": null,
+    "ciStatus": "Pending",
+    "lane": "code",
+    "manualCases": [
+      {
+        "id": "R1.launch10",
+        "status": "Pending"
+      },
+      {
+        "id": "R2.sessions20",
+        "status": "Pending"
+      },
+      {
+        "id": "R3.axRecovery",
+        "status": "Pending"
+      },
+      {
+        "id": "R3.micRecovery",
+        "status": "Pending"
+      },
+      {
+        "id": "R3.noEngine",
+        "status": "Pending"
+      },
+      {
+        "id": "R3.multipleBlockers",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.metadata",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.switchSource",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.retry",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.autoFallback",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.manualSelection",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.builtin06",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.builtin17",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.importQwen",
+        "status": "Pending"
+      },
+      {
+        "id": "R4.importWhisper",
+        "status": "Pending"
+      },
+      {
+        "id": "R5.silence",
+        "status": "Pending"
+      },
+      {
+        "id": "R5.quiet",
+        "status": "Pending"
+      },
+      {
+        "id": "R5.short",
+        "status": "Pending"
+      },
+      {
+        "id": "R5.noise",
+        "status": "Pending"
+      },
+      {
+        "id": "R6.layout",
+        "status": "Pending"
+      },
+      {
+        "id": "R6.focus",
+        "status": "Pending"
+      },
+      {
+        "id": "R6.displays",
+        "status": "Pending"
+      },
+      {
+        "id": "V1.weak",
+        "status": "Pending"
+      },
+      {
+        "id": "V1.offline",
+        "status": "Pending"
+      },
+      {
+        "id": "V1.badKey",
+        "status": "Pending"
+      },
+      {
+        "id": "V2.textEdit",
+        "status": "Pending"
+      },
+      {
+        "id": "V2.vscode",
+        "status": "Pending"
+      },
+      {
+        "id": "V2.chrome",
+        "status": "Pending"
+      },
+      {
+        "id": "V2.terminal",
+        "status": "Pending"
+      },
+      {
+        "id": "V2.cursor",
+        "status": "Pending"
+      },
+      {
+        "id": "V2.safeTargets",
+        "status": "Pending"
+      },
+      {
+        "id": "V3.formats",
+        "status": "Pending"
+      },
+      {
+        "id": "V3.concurrentCopy",
+        "status": "Pending"
+      },
+      {
+        "id": "V4.preparing",
+        "status": "Pending"
+      },
+      {
+        "id": "V4.recording",
+        "status": "Pending"
+      },
+      {
+        "id": "V4.asr",
+        "status": "Pending"
+      },
+      {
+        "id": "V4.polish",
+        "status": "Pending"
+      },
+      {
+        "id": "V4.injection",
+        "status": "Pending"
+      },
+      {
+        "id": "V4.postEvent",
+        "status": "Pending"
+      },
+      {
+        "id": "V5.unplug",
+        "status": "Pending"
+      },
+      {
+        "id": "V5.bluetooth",
+        "status": "Pending"
+      }
+    ],
+    "manualIssues": [],
+    "manualStatus": "Pending",
+    "phases": [
+      {
+        "evidence": [
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/01A711D9-961A-4A8D-83DD-2BA0EA428187.stderr",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/01A711D9-961A-4A8D-83DD-2BA0EA428187.stdout",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/2F78DC15-D102-451E-B0B0-D135ECE5A861.stderr",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/2F78DC15-D102-451E-B0B0-D135ECE5A861.stdout",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/4E5E12BC-EDB1-488F-8038-3507761F4DE3.stderr",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/4E5E12BC-EDB1-488F-8038-3507761F4DE3.stdout",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/9D7CC2AD-B772-46B8-B35A-9DFAB398F159.stderr",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/9D7CC2AD-B772-46B8-B35A-9DFAB398F159.stdout",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/C14E4902-0292-4683-886E-B1CD4D61A65F.stderr",
+          "internal-A8B5358E-D449-4E96-B706-103CF48A3FBE/C14E4902-0292-4683-886E-B1CD4D61A65F.stdout"
+        ],
+        "exitCode": 0,
+        "failureCode": null,
+        "name": "source-start",
+        "status": "Pass",
+        "timedOut": false
+      },
+      {
+        "evidence": [
+          "children/08BA99F1-6CE6-4301-82D3-AF7877C337EC/stdout",
+          "children/08BA99F1-6CE6-4301-82D3-AF7877C337EC/stderr",
+          "children/08BA99F1-6CE6-4301-82D3-AF7877C337EC/process-result.json"
+        ],
+        "exitCode": 0,
+        "failureCode": null,
+        "name": "platform-os",
+        "status": "Pass",
+        "timedOut": false
+      },
+      {
+        "evidence": [
+          "children/F696F848-E2F7-46D3-91BE-683DD9D3DF32/stdout",
+          "children/F696F848-E2F7-46D3-91BE-683DD9D3DF32/stderr",
+          "children/F696F848-E2F7-46D3-91BE-683DD9D3DF32/process-result.json"
+        ],
+        "exitCode": 0,
+        "failureCode": null,
+        "name": "platform-arch",
+        "status": "Pass",
+        "timedOut": false
+      },
+      {
+        "evidence": [
+          "children/05CCCD9D-0D42-42B7-AF44-954E2CF02670/stdout",
+          "children/05CCCD9D-0D42-42B7-AF44-954E2CF02670/stderr",
+          "children/05CCCD9D-0D42-42B7-AF44-954E2CF02670/process-result.json"
+        ],
+        "exitCode": 0,
+        "failureCode": null,
+        "name": "platform-swift",
+        "status": "Pass",
+        "timedOut": false
+      },
+      {
+        "evidence": [
+          "children/7C6A2ACA-7E67-4963-A33F-E57422F77046/stdout",
+          "children/7C6A2ACA-7E67-4963-A33F-E57422F77046/stderr",
+          "children/7C6A2ACA-7E67-4963-A33F-E57422F77046/process-result.json"
+        ],
+        "exitCode": 0,
+        "failureCode": null,
+        "name": "code-build",
+        "status": "Pass",
+        "timedOut": false
+      },
+      {
+        "evidence": [
+          "children/F6684AB9-48F9-45E1-92CC-B90C3D9A81D0/stdout",
+          "children/F6684AB9-48F9-45E1-92CC-B90C3D9A81D0/stderr",
+          "children/F6684AB9-48F9-45E1-92CC-B90C3D9A81D0/process-result.json"
+        ],
+        "exitCode": 1,
+        "failureCode": "fullTestFailed",
+        "name": "code-full",
+        "status": "Fail",
+        "timedOut": false
+      },
+      {
+        "evidence": [
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/00700135-5DD6-4B38-8792-A74241532107.stderr",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/00700135-5DD6-4B38-8792-A74241532107.stdout",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/13FE274D-0F47-47B6-9861-91AF9DCC2CA3.stderr",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/13FE274D-0F47-47B6-9861-91AF9DCC2CA3.stdout",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/7B433078-EDE1-44C0-8987-C246ECB06DE7.stderr",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/7B433078-EDE1-44C0-8987-C246ECB06DE7.stdout",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/AF72A74F-5480-439C-B56C-F7F16CE5B5BA.stderr",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/AF72A74F-5480-439C-B56C-F7F16CE5B5BA.stdout",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/EBA2677B-3165-4DD2-BCA4-55D037D68EE7.stderr",
+          "internal-499AE29A-08E4-4C9F-965D-E30049026C80/EBA2677B-3165-4DD2-BCA4-55D037D68EE7.stdout"
+        ],
+        "exitCode": 0,
+        "failureCode": null,
+        "name": "source-end",
+        "status": "Pass",
+        "timedOut": false
+      }
+    ],
+    "runID": "2EA6A8BD-2BE9-4FCD-830C-703B91CC7875",
+    "schemaVersion": 1,
+    "sourceIdentity": {
+      "dirty": false,
+      "gitSHA": "288aa9a6d02ce966a05dbd3fe71a6e26f6a9ad21",
+      "sourceTree": "eeab631f159fc5ad0820e45fe03edaacbbb237b9"
+    },
+    "status": "Fail"
+  },
+  "selfTest": {
+    "passed": 25919,
+    "failed": 1,
+    "stderr": "  ✗ FAIL: M5 actual health timer advances once per interval\n"
+  },
+  "sourceFiles": [
+    {
+      "path": "build/ci-release-assessment-41672136709/verify-report.json",
+      "sha256": "68f7b4c88b886cde7c5faded74c2b7e34b02418d75cec10029c5ffdd7c31b62f"
+    },
+    {
+      "path": "build/ci-release-assessment-41672136709/children/F6684AB9-48F9-45E1-92CC-B90C3D9A81D0/stdout",
+      "sha256": "fe343a167368659ec334c12108d3238b1174bc5c6c8695e45982b6ba75fc2ab9"
+    },
+    {
+      "path": "build/ci-release-assessment-41672136709/children/F6684AB9-48F9-45E1-92CC-B90C3D9A81D0/stderr",
+      "sha256": "a5efac08ea0034ff1c5586c9f5c303bd8bfc2807c240518a4cec85e6afb183c8"
+    }
+  ]
+}

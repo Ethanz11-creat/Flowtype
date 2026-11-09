@@ -97,8 +97,9 @@ class WindowManager: ObservableObject {
     private var lastPanelPresentationLogs: [String: String] = [:]
 
     /// Periodic timer to ensure the CGEvent tap stays enabled after system events.
-    private var eventTapHealthTimer: DispatchSourceTimer?
+    private var eventTapHealthTimer: (any EventTapHealthTimer)?
     private let eventTapHealthInterval: TimeInterval
+    private let eventTapHealthScheduler: any EventTapHealthScheduler
 
     /// Current trigger key from configuration
     private var triggerKey: TriggerKey { ConfigurationStore.shared.current.triggerKey }
@@ -143,8 +144,9 @@ class WindowManager: ObservableObject {
         }
     }
 
-    init(eventTapHealthInterval: TimeInterval = 5, panelFactory: (() -> FloatingPanel?)? = nil, actionGate: ValidationActionGate = .live, actionEffects: ((ValidationAction) -> Void)? = nil) {
+    init(eventTapHealthInterval: TimeInterval = 5, eventTapHealthScheduler: any EventTapHealthScheduler = DispatchEventTapHealthScheduler(), panelFactory: (() -> FloatingPanel?)? = nil, actionGate: ValidationActionGate = .live, actionEffects: ((ValidationAction) -> Void)? = nil) {
         self.eventTapHealthInterval = eventTapHealthInterval; self.actionGate = actionGate; self.actionEffects = actionEffects
+        self.eventTapHealthScheduler = eventTapHealthScheduler
         if let panelFactory { panel = panelFactory(); return }
         let view = AnyView(
             CapsuleView()
@@ -220,17 +222,11 @@ class WindowManager: ObservableObject {
         guard eventTapHealthTimer == nil else { return }
         let generation = UUID()
         healthGeneration = generation
-        let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + eventTapHealthInterval, repeating: eventTapHealthInterval)
-        timer.setEventHandler { @Sendable [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, self.healthGeneration == generation else { return }
-                self.windowHealthTicks += 1
-                self.repairEventTap()
-            }
+        eventTapHealthTimer = eventTapHealthScheduler.schedule(interval: eventTapHealthInterval) { [weak self] in
+            guard let self, self.healthGeneration == generation else { return }
+            self.windowHealthTicks += 1
+            self.repairEventTap()
         }
-        eventTapHealthTimer = timer
-        timer.resume()
     }
 
     func startValidationHealthCheck() {
@@ -240,7 +236,6 @@ class WindowManager: ObservableObject {
 
     func stopValidationHealthCheck() {
         healthGeneration = nil
-        eventTapHealthTimer?.setEventHandler {}
         eventTapHealthTimer?.cancel()
         eventTapHealthTimer = nil
     }

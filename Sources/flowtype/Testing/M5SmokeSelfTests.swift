@@ -8,6 +8,8 @@ enum M5SmokeSelfTests {
         testSmokeReport(r)
         testValidationActionGuards(r)
         await testTimerOwnershipAndEvidence(r)
+        testOneHealthTimerOwner(r)
+        await testActualHealthTimerLiveness(r)
     }
 
     // Missing timer evidence or generic errors must not become success/WindowServer Skip.
@@ -93,13 +95,86 @@ enum M5SmokeSelfTests {
         r.eq(second.probeTimerTicks, 0, "M5 second router receives no callback")
         r.eq(secondReads.withLock { $0 }, 0, "M5 first router callback never refreshes another instance")
         first.stopProbing(); second.stopProbing()
-        let window = WindowManager(eventTapHealthInterval: 0.03, panelFactory: { nil })
+    }
+
+    // Removing the owner guard or the generation check must fail without wall-clock timing.
+    @MainActor
+    static func testOneHealthTimerOwner(_ r: SelfTest.Reporter) {
+        let fake = ManualEventTapHealthScheduler()
+        let window = WindowManager(eventTapHealthInterval: 0.03, eventTapHealthScheduler: fake, panelFactory: { nil })
+        let other = WindowManager(eventTapHealthScheduler: ManualEventTapHealthScheduler(), panelFactory: { nil })
+        r.eq(window.windowHealthTicks, 0, "M5 health timer cannot tick before a callback")
         window.startValidationHealthCheck(); window.startValidationHealthCheck()
-        try? await Task.sleep(for: .milliseconds(110))
-        r.check(window.windowHealthTicks >= 2 && window.windowHealthTicks <= 4, "M5 actual health timer advances once per interval")
+        r.eq(fake.scheduledCount, 1, "duplicate start has one scheduled timer")
+        r.eq(fake.intervals, [0.03], "M5 owner forwards health interval to scheduler")
+        guard let timer = fake.timers.first else { return }
+        timer.fire()
+        r.eq(window.windowHealthTicks, 1, "M5 one tick for first explicit callback")
+        timer.fire()
+        let ticksAfterTwoExplicitCallbacks = window.windowHealthTicks
+        r.eq(ticksAfterTwoExplicitCallbacks, 2, "one tick per callback")
+        r.eq(other.windowHealthTicks, 0, "M5 health callback only ticks its owning window")
+        window.stopValidationHealthCheck(); window.stopValidationHealthCheck()
+        r.eq(timer.cancelCount, 1, "M5 stopping twice cancels the owned timer once")
+        let stoppedTicks = window.windowHealthTicks
+        timer.fire() // Deliberately deliver a callback captured before cancellation.
+        let ticksAfterStaleCallback = window.windowHealthTicks
+        r.eq(ticksAfterStaleCallback, stoppedTicks, "cancelled generation cannot tick")
+
+        window.startValidationHealthCheck(); window.startValidationHealthCheck()
+        r.eq(fake.scheduledCount, 2, "M5 restart schedules exactly one new timer")
+        timer.fire()
+        r.eq(window.windowHealthTicks, stoppedTicks, "M5 old generation cannot tick a restarted owner")
+        fake.timers.last?.fire()
+        r.eq(window.windowHealthTicks, stoppedTicks + 1, "M5 restarted generation advances once per callback")
+        window.stopValidationHealthCheck()
+        r.eq(fake.timers.last?.cancelCount, 1, "M5 restarted timer is cancelled")
+        print("M5 manual health timer: ticks=\(window.windowHealthTicks) schedules=\(fake.scheduledCount) cancels=\(fake.timers.reduce(0) { $0 + $1.cancelCount })")
+    }
+
+    // A real main-queue callback is required; elapsed time alone never supplies evidence.
+    @MainActor
+    static func testActualHealthTimerLiveness(_ r: SelfTest.Reporter) async {
+        let window = WindowManager(eventTapHealthInterval: 0.03, panelFactory: { nil })
+        let started = ContinuousClock.now
+        let deadline = started + .seconds(2)
+        window.startValidationHealthCheck(); window.startValidationHealthCheck()
+        var actualCallbacksWithinTwoSeconds = 0
+        while ContinuousClock.now < deadline {
+            actualCallbacksWithinTwoSeconds = window.windowHealthTicks
+            if actualCallbacksWithinTwoSeconds >= 2 { break }
+            try? await Task.sleep(until: min(.now + .milliseconds(10), deadline), clock: .continuous)
+        }
+        print("M5 actual health timer: elapsed=\(started.duration(to: .now)) ticks=\(window.windowHealthTicks) callbacksWithinDeadline=\(actualCallbacksWithinTwoSeconds) startCalls=2 cancelCalls=0")
+        r.check(actualCallbacksWithinTwoSeconds >= 2, "actual timer must make progress")
         window.stopValidationHealthCheck()
         let stopped = window.windowHealthTicks
         try? await Task.sleep(for: .milliseconds(65))
+        print("M5 actual health timer stopped: elapsed=\(started.duration(to: .now)) ticks=\(window.windowHealthTicks) startCalls=2 cancelCalls=1")
         r.eq(window.windowHealthTicks, stopped, "M5 stopped health timer cannot keep ticking")
     }
+}
+
+@MainActor
+private final class ManualEventTapHealthScheduler: EventTapHealthScheduler {
+    private(set) var timers: [ManualEventTapHealthTimer] = []
+    private(set) var intervals: [TimeInterval] = []
+    var scheduledCount: Int { timers.count }
+
+    func schedule(interval: TimeInterval, tick: @escaping @MainActor @Sendable () -> Void) -> any EventTapHealthTimer {
+        let timer = ManualEventTapHealthTimer(tick: tick)
+        timers.append(timer)
+        intervals.append(interval)
+        return timer
+    }
+}
+
+@MainActor
+private final class ManualEventTapHealthTimer: EventTapHealthTimer {
+    private let tick: @MainActor @Sendable () -> Void
+    private(set) var cancelCount = 0
+
+    init(tick: @escaping @MainActor @Sendable () -> Void) { self.tick = tick }
+    func cancel() { cancelCount += 1 }
+    func fire() { tick() }
 }
