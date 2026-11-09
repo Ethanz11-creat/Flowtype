@@ -444,10 +444,14 @@ final class SessionController: ObservableObject {
         case .dismiss: resetToIdle()
         case .recheckReadiness: refreshRecoveryReadiness(cardID: cardID)
         case .useAutomaticRouting:
-            var config = configurationStore.current
-            config.asrRoutingPolicy = .auto
-            configurationStore.save(config)
-            refreshRecoveryReadiness(cardID: cardID)
+            do {
+                try configurationStore.applyASRSettingsAction(.changePolicy(.auto),
+                    activeNativeID: currentContext?.captureRoute?.localLease.map(ASRBackendID.init(nativeLease:)))
+                refreshRecoveryReadiness(cardID: cardID)
+            } catch {
+                // The card remains visible and settings explain the unresolved selection.
+                recoveryEffects.navigate(to: recoveryState.destination)
+            }
         }
     }
 

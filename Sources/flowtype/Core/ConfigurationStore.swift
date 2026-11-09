@@ -218,6 +218,14 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         asrPersistenceError = nil
     }
 
+    /// Persist an explicit legacy-control action atomically before publishing it.
+    func applyASRSettingsAction(_ action: ASRSettingsAction, activeNativeID: ASRBackendID? = nil) throws {
+        var candidate = current
+        try action.apply(to: &candidate, activeNativeID: activeNativeID)
+        try persist(candidate)
+        current = candidate
+    }
+
     func setASRBackendSelection(_ selection: ASRBackendSelection) throws {
         var candidate = current
         candidate.setASRBackendSelection(selection)

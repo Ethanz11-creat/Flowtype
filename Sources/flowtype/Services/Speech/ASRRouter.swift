@@ -507,7 +507,7 @@ final class ASRRouter: @unchecked Sendable {
             ASRBackendDescriptor(id: .init(rawValue: "cloud:" + profile.id.uuidString), revision: profile.revision,
                 displayName: profile.name, modelID: profile.model, location: .cloud, requiresInternet: true,
                 capabilities: profile.protocolKind == .dashScopeRealtime ? DashScopeRealtimeASR.capabilities : cloudProvider.capabilities,
-                maxUploadBytes: nil)
+                maxUploadBytes: CloudASRVendor.maxUploadBytes(for: profile))
         }
         descriptors += cfg.localASRServices.filter {
             selected.contains(.init(rawValue: "service:" + $0.id.uuidString))

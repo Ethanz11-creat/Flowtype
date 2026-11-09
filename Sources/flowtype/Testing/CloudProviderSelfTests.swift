@@ -234,7 +234,7 @@ enum CloudProviderSelfTests {
         r.check(!checks.accepts(deletedToken), "ownership: deletion rejects old revision")
         r.eq(checks.state(for: first.id), .idle, "ownership: deleted profile result stays absent")
         r.eq(config.providers.map(\.id), [second.id], "ownership: deleting preceding profile shifts safely")
-        r.check(config.providers[0].isActive, "ownership: deleting active profile activates remaining UUID")
+        r.check(!config.providers[0].isActive, "ownership: deletion never arbitrarily activates remaining UUID")
         r.eq(config.providerAPIKeys[first.id.uuidString], nil, "ownership: deletion removes only deleted key association")
         var shifted = second
         shifted.model = "shifted-model"

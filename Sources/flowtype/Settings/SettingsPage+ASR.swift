@@ -17,6 +17,7 @@ struct ASRSettingsContent: View {
     @State private var availableDevices: [AudioDevice] = []
     @State private var localExpanded = true
     @State private var cloudExpanded = true
+    @State private var policyMessage: String?
 
     var localModelPicker: LocalModelPicker {
         LocalModelPicker(store: store, modelState: modelState, downloader: downloader, importedActions: importedActions)
@@ -58,13 +59,19 @@ struct ASRSettingsContent: View {
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("识别方式").font(.system(size: 13, weight: .semibold))
-            Picker("识别方式", selection: $store.current.asrRoutingPolicy) {
+            Picker("识别方式", selection: Binding(get: { store.current.asrRoutingPolicy }, set: { policy in
+                do {
+                    try store.applyASRSettingsAction(.changePolicy(policy), activeNativeID: modelState.activeLease.map(ASRBackendID.init(nativeLease:)))
+                    policyMessage = nil
+                } catch { policyMessage = error.localizedDescription }
+            })) {
                 Text("仅本地").tag(ASRRoutingPolicy.localOnly)
                 Text("自动（推荐）").tag(ASRRoutingPolicy.auto)
                 Text("仅云端").tag(ASRRoutingPolicy.cloudOnly)
             }
             .labelsHidden().pickerStyle(.segmented)
             .frame(width: 276, height: 40)
+            if let policyMessage { Text(policyMessage).font(.system(size: 12)).foregroundStyle(.secondary) }
             Text(modeDescription).font(.system(size: 12)).foregroundStyle(.secondary)
             if let disclosure = SettingsPrivacyPresentation.make(config: store.current).localPolishDisclosure {
                 Text(disclosure).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -112,7 +119,7 @@ struct ASRSettingsContent: View {
     private var modeDescription: String {
         switch store.current.asrRoutingPolicy {
         case .localOnly: "仅使用可用本地模型；识别录音不发送给云端 ASR。"
-        case .auto: "优先云端；网络较慢或服务异常时，尝试已加载的本地模型。"
+        case .auto: "按明确的主选与备选识别；本地转云端需要允许云端备选。"
         case .cloudOnly: "仅使用配置的云端识别服务，不切换到本地 ASR。"
         }
     }

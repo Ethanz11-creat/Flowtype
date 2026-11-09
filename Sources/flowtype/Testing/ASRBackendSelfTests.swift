@@ -5,6 +5,7 @@ enum ASRBackendSelfTests {
         await ASRBackendTransportSelfTests.run(r)
         await ASRBackendValidationSelfTests.run(r)
         await ASRBackendRoutingSelfTests.run(r)
+        await ASRSettingsActionSelfTests.run(r)
         testLegacySelectionAndStableIdentity(r)
         testValidationSampleContract(r)
         testBindingIdentity(r)

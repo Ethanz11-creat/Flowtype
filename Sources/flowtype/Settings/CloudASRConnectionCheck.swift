@@ -126,13 +126,9 @@ final class CloudASRConnectionCheck: ObservableObject {
     }
 
     func deleteProfile(_ profileID: UUID, in config: inout CloudASRConfig) {
-        let wasActive = config.providers.first(where: { $0.id == profileID })?.isActive == true
         invalidate(profileID: profileID)
         config.providers.removeAll(where: { $0.id == profileID })
         config.providerAPIKeys.removeValue(forKey: profileID.uuidString)
-        if wasActive, let next = config.providers.first {
-            setActive(true, profileID: next.id, in: &config)
-        }
     }
 
     /// Also covers configuration changes made by another settings surface.
