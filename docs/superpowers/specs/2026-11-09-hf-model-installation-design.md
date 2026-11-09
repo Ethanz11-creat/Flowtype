@@ -69,6 +69,10 @@ struct ASRNativeValidationRecord: Codable, Equatable, Sendable {
 
 `HFRepositoryClient.resolve(_ selection: HFRepositorySelection, credentialID: String?) async throws -> HFResolvedRepository` 返回 repo/commit/license 与完整文件元数据；`HFResolvedRepository` 字段为 selection、commit、downloadEndpoint、files（remotePath/sizeBytes/digest）、licenseURL。客户端初始化时注入下载 endpoint，plan 将其按文件捕获，恢复时不能重读设置换源。tree 分页跟随同 origin Link，cursor 循环拒绝；路径逐段编码，不把 revision 中的 slash 当文件路径。
 
+B1 接口补充：`HFResolvedRepository` 额外携带不可变、仅内存使用的 `resolutionContextID: UUID?`（手工 fixture 初始化缺省 nil）。客户端为每次 resolve 分配独立 context，捕获 source/commit/endpoint/credential ID 和累计预算；即使同仓库同 commit 再次匿名/带凭据解析也不覆盖前一次上下文。`readMetadata` 只接受同客户端创建的 context 和完整匹配该结果清单的文件，拒绝未知 context 或调用者注入的 path/size/digest。只接受显式 `asr.hf.official` 凭据引用，镜像不读取或发送此凭据；正文不会进入解析结果。客户端每份 repository 预检累计 32MiB，B2 planner 另对模型与 tokenizer 多来源合计执行 32MiB 门禁。客户端实例随预览结束释放其内存 context，不将 context 写入安装计划。
+
+`HFRepositoryInputError.requiresSelection(repoID:suffix:kind:)` 保留 tree/blob 原 suffix；没有显式 revision 时不猜边界。显式 revision 必须完整匹配 suffix 前缀（允许 slash），另填 subdirectory 必须与剩余路径一致。客户端初始化可注入 `downloadEndpoint`、`URLSession`、`ASRCredentialStore` 和仅能降低默认上限的 `HFMetadataLimits`；常规大小上限维持 16/32MiB。
+
 `ASRInstallPlanner.plan(repository: HFResolvedRepository, variant: String?, tokenizer: HFResolvedRepository?) async throws -> ASRInstallPlan` 使用小元数据识别器与当前 ASRModelInspector 的相同兼容常数，禁止维护第二份宽松“支持列表”。检查 config、权重索引、必需 tokenizer/merges 和选中 Core ML 的全部组件文件。Whisper 已内含 tokenizer 时使用它；缺失时选择明确配方或用户指定的 tokenizer repo/commit，全部写入 plan。多个变体必须选，缺分词器不能自动选 tiny 或借本机其他缓存。
 
 资源上限：单次 JSON/索引/小配置 16MiB、预检累计 32MiB、文件数 10,000、单页最多 1,000、所有 size 求和检查 Int64 溢出。超过上限在预览前失败，不能静默截断列表。不把无 pipeline_tag 或模型文件夹改名判为不兼容。元数据无明确大小/可解释摘要时本版不启动托管下载，提示可用离线导入。

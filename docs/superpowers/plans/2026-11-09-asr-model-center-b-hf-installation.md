@@ -41,7 +41,7 @@
 
 **Interfaces:**
 - Produce `HFRepositorySelection`、`HFFileDigest`、`HFPlannedFile`（字段按 spec）；`HFRepositoryFile: Codable, Equatable, Sendable`（remotePath:String、sizeBytes:Int64、digest:HFFileDigest）。
-- Produce `HFResolvedRepository: Sendable`（selection:HFRepositorySelection、commit:String、downloadEndpoint:URL、files:[HFRepositoryFile]、licenseURL:URL?）。
+- Produce `HFResolvedRepository: Sendable`（selection:HFRepositorySelection、commit:String、downloadEndpoint:URL、files:[HFRepositoryFile]、licenseURL:URL?）。 另有仅内存不可变 `resolutionContextID:UUID?`，fixture init 默认 nil；每次 resolve 独立 context 捕获凭据引用与累计预算，readMetadata 拒绝未知 context/不属于清单的文件。B2 planner 跨模型/tokenizer 来源另做 32MiB 合计门禁。
 - Produce `HFRepositoryInput.parse(_ input: String, revision: String?, subdirectory: String?) throws -> HFRepositorySelection`；tree/blob 有歧义时返回结构化选择错误，不猜 revision 边界。
 - Produce `HFRepositoryClient.resolve(_:credentialID:) async throws -> HFResolvedRepository`；`.readMetadata(file: HFRepositoryFile, repository: HFResolvedRepository) async throws -> Data`，URLSession 与 credential store 注入。
 
