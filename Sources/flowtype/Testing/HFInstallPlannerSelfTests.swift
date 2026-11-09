@@ -50,6 +50,7 @@ enum HFInstallPlannerSelfTests {
         await testVariantAndBudgetRejections(r)
         await testNativeEngineRegistration(r)
         await testPlannerBoundaries(r)
+        await testNormalizedPathCollisions(r)
         await testResolverContextIntegration(r)
     }
     // Break caught: downloading a whole repository or ignoring an index shard dependency.
@@ -189,6 +190,45 @@ enum HFInstallPlannerSelfTests {
                 r.check(p.files.allSatisfy { $0.downloadEndpoint == URL(string: "https://mirror.invalid")! }, "B2 all source endpoints captured")
             } catch { r.check(false, "B2 pinned candidate recipe failed: \(error)") }
         }
+    }
+
+    // Break caught: a normalized file name is also an ancestor directory of another file.
+    static func testNormalizedPathCollisions(_ r: SelfTest.Reporter) async {
+        let pairs = [
+            ["AudioEncoder.mlmodelc/weights", "AudioEncoder.mlmodelc/Weights/weight.bin"],
+            ["AudioEncoder.mlmodelc/Café", "AudioEncoder.mlmodelc/Cafe\u{301}/weight.bin"],
+            ["AudioEncoder.mlmodelc/straße", "AudioEncoder.mlmodelc/STRASSE/weight.bin"],
+            ["AudioEncoder.mlmodelc/Café.bin", "AudioEncoder.mlmodelc/Cafe\u{301}.BIN"]
+        ]
+        for pair in pairs {
+            for paths in [pair, Array(pair.reversed())] {
+                let fixture = Fixture(data: graphs("").merging(tokenizerData) { a, _ in a }, weights: paths)
+                await rejects(r, fixture, expected: .destinationCollision, "B2 normalized source file/directory collision rejected in either order")
+            }
+        }
+        // These two manifests are individually safe, but their mapped installation paths collide.
+        let model = Fixture(data: graphs(""))
+        let tokens = Fixture(repoID: "custom/tokenizer", data: tokenizerData)
+        for paths in [["Tokenizer", "tokenizer/tokenizer.json"], ["TOKENIZER/TOKENIZER.JSON", "tokenizer/tokenizer.json"]] {
+            let mapped = [HFPlannedFile(source: model.repository.selection, downloadEndpoint: model.repository.downloadEndpoint,
+                resolvedCommit: commit, remotePath: "model-resource", relativeDestination: paths[0], sizeBytes: 1,
+                digest: .sha256(String(repeating: "d", count: 64))),
+                HFPlannedFile(source: tokens.repository.selection, downloadEndpoint: tokens.repository.downloadEndpoint,
+                resolvedCommit: tokenizerCommit, remotePath: "tokenizer.json", relativeDestination: paths[1], sizeBytes: 1,
+                digest: .sha256(String(repeating: "d", count: 64)))]
+            for files in [mapped, Array(mapped.reversed())] {
+                do { try ASRInstallPlanner.validateFilePaths(files.map(\.relativeDestination)); r.check(false, "B2 mapped paths across sources cannot collide") }
+                catch { r.eq(error as? ASRInstallPlanningError, .destinationCollision, "B2 complete mapped file set rejects cross-source collisions") }
+            }
+        }
+        let siblings = ["AudioEncoder.mlmodelc/weights/one.bin", "AudioEncoder.mlmodelc/Weights/two.bin",
+                        "AudioEncoder.mlmodelc/weights-extra", "AudioEncoder.mlmodelc/Café/a.bin", "AudioEncoder.mlmodelc/Cafe\u{301}/b.bin"]
+        let fixture = Fixture(data: graphs(""), weights: siblings)
+        do {
+            let p = try await planner([fixture, tokens]).plan(repository: fixture.repository, variant: nil, tokenizer: tokens.repository)
+            r.eq(p.files.count, 16, "B2 shared normalized directories and distinct siblings remain installable")
+            r.check(p.files.contains { $0.relativeDestination == "tokenizer/tokenizer.json" }, "B2 noncolliding second-source tokenizer mapping retained")
+        } catch { r.check(false, "B2 noncolliding normalized siblings failed: \(error)") }
     }
 
     // Exercises the real resolver/client path, including context provenance and cumulative initial bytes.

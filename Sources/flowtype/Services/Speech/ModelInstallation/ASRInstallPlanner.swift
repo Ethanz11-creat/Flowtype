@@ -131,9 +131,9 @@ struct ASRInstallPlanner: Sendable {
                 }
             }
         }
-        var destinations = Set<String>(), total: Int64 = 0
+        try Self.validateFilePaths(files.map(\.relativeDestination))
+        var total: Int64 = 0
         for file in files {
-            guard destinations.insert(file.relativeDestination.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw ASRInstallPlanningError.destinationCollision }
             let sum = total.addingReportingOverflow(file.sizeBytes)
             guard !sum.overflow else { throw ASRInstallPlanningError.totalSizeOverflow }
             total = sum.partialValue
@@ -164,18 +164,40 @@ struct ASRInstallPlanner: Sendable {
             return data
         }
     }
+    /// Conservatively require a portable case-insensitive macOS layout, even on case-sensitive volumes.
+    /// A file cannot also name a directory after canonical Unicode normalization and case folding.
+    static func validateFilePaths(_ paths: [String]) throws {
+        var files = Set<String>()
+        for path in paths {
+            guard HFRepositoryInput.validPath(path) else { throw ASRInstallPlanningError.invalidPath }
+            let components = path.components(separatedBy: "/").map {
+                $0.folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+                    .precomposedStringWithCanonicalMapping
+            }
+            guard files.insert(components.joined(separator: "/")).inserted else {
+                throw ASRInstallPlanningError.destinationCollision
+            }
+        }
+        // Collect all files first so either enumeration order catches a file/directory conflict.
+        for file in files {
+            var ancestor = file[...]
+            while let slash = ancestor.lastIndex(of: "/") {
+                ancestor = ancestor[..<slash]
+                guard !files.contains(String(ancestor)) else { throw ASRInstallPlanningError.destinationCollision }
+            }
+        }
+    }
     private static func object(_ data: Data) throws -> [String: Any] {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ASRInstallPlanningError.invalidMetadata }
         return object
     }
     private static func validate(_ repository: HFResolvedRepository) throws {
         guard repository.files.count <= 10_000 else { throw HFRepositoryError.fileLimit }
-        var paths = Set<String>()
         for file in repository.files {
             guard HFRepositoryInput.validPath(file.remotePath), file.sizeBytes >= 0,
                   repository.selection.subdirectory.map({ file.remotePath.hasPrefix($0 + "/") }) ?? true else { throw ASRInstallPlanningError.invalidPath }
-            guard paths.insert(file.remotePath.precomposedStringWithCanonicalMapping.lowercased()).inserted else { throw ASRInstallPlanningError.destinationCollision }
         }
+        try validateFilePaths(repository.files.map(\.remotePath))
     }
     private static func scoped(_ repository: HFResolvedRepository, prefix: String) -> [String: HFRepositoryFile] {
         let start = prefix.isEmpty ? "" : prefix + "/"

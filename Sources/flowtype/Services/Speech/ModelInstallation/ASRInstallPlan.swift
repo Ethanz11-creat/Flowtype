@@ -28,6 +28,7 @@ enum ASRInstallPlanningError: Error, LocalizedError, Equatable {
         case .tokenizerRequired: return "请提供此 Whisper 模型对应的分词器仓库和固定版本。"
         case .tokenizerMismatch: return "分词器与所选 Whisper 变体不匹配。"
         case .metadataBudget: return "模型预检元数据超过大小限制，可使用离线导入。"
+        case .destinationCollision: return "模型含有大小写或 Unicode 等价的文件名、文件与目录冲突，无法安全安装到 macOS 默认文件系统。为保证目录可移用，当前卷区分大小写时也不支持此布局。"
         default: return "无法生成完整安全的模型安装计划，请检查来源、文件和选择。"
         }
     }
