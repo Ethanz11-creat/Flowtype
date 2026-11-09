@@ -11,6 +11,7 @@ enum HFRepositorySelfTests {
     static func run(_ r: SelfTest.Reporter) async {
         testRepositoryInput(r)
         await testPinnedCommitPagination(r)
+        await testBlobInputResolution(r)
         await testMetadataLimitsAndAuth(r)
         await testByteBudgets(r)
         testRedirectPolicy(r)
@@ -24,8 +25,10 @@ enum HFRepositorySelfTests {
             do { _ = try HFRepositoryInput.parse(input); r.check(false, "input: suffix needs confirmation") }
             catch { r.eq(error as? HFRepositoryInputError,
                 .requiresSelection(repoID: "org/repo", suffix: "refs/pr/12/variant/config.json", kind: kind), "input: structured suffix preserved") }
-            r.eq(try? HFRepositoryInput.parse(input, revision: "refs/pr/12", subdirectory: "variant/config.json"),
-                .init(repoID: "org/repo", requestedRevision: "refs/pr/12", subdirectory: "variant/config.json"), "input: explicit slash revision boundary")
+            if kind == "tree" {
+                r.eq(try? HFRepositoryInput.parse(input, revision: "refs/pr/12", subdirectory: "variant/config.json"),
+                    .init(repoID: "org/repo", requestedRevision: "refs/pr/12", subdirectory: "variant/config.json"), "input: explicit slash revision boundary")
+            }
             r.check((try? HFRepositoryInput.parse(input, revision: "other")) == nil, "input: conflicting revision rejected")
         }
         r.eq(try? HFRepositoryInput.parse("org/repo", revision: "refs/pr/12", subdirectory: "a/b"),
@@ -86,6 +89,58 @@ enum HFRepositorySelfTests {
             r.check(HFMetadataFixture.requests.first?.url?.absoluteString.contains("/revision/refs%2Fpr%2F12") == true, "slash revision encoded as one API segment")
             r.check(HFMetadataFixture.requests.last?.url?.absoluteString.contains("/tree/\(commit)/folder%20name/sub") == true, "subdirectory encoded by path segments")
         } catch { r.check(false, "slash revision fixture unexpectedly failed") }
+    }
+
+    // A blob names a file; resolve its containing subtree and confirm that exact file exists.
+    static func testBlobInputResolution(_ r: SelfTest.Reporter) async {
+        let session = session(); defer { session.invalidateAndCancel() }
+        let store = KeychainASRCredentialStore(access: .memory())
+        for (revision, filePath, parent) in [("main", "config.json", nil as String?),
+            ("main", "variant/config.json", "variant"), ("refs/pr/12", "variant/nested/config.json", "variant/nested")] {
+            let input = "https://huggingface.co/org/repo/blob/\(revision)/\(filePath)"
+            let expectedTreePath = "/api/models/org/repo/tree/\(commit)" + (parent.map { "/" + $0 } ?? "")
+            HFMetadataFixture.reset { request, _ in
+                if request.url!.path.contains("/revision/") { return info() }
+                guard request.url!.path == expectedTreePath else { return .init(status: 404, body: Data()) }
+                let sibling = parent.map { $0 + "/weights.safetensors" } ?? "weights.safetensors"
+                return .init(body: json([entry(filePath), entry(sibling)]))
+            }
+            do {
+                let selected = try HFRepositoryInput.parse(input, revision: revision, subdirectory: parent)
+                r.eq(selected.subdirectory, parent, "blob: containing directory selected")
+                let encodedSelection = try JSONSerialization.jsonObject(with: JSONEncoder().encode(selected)) as? [String: Any]
+                r.eq(encodedSelection?["referencedFilePath"] as? String, filePath, "blob: referenced file identity survives Codable selection")
+                let repo = try await HFRepositoryClient(session: session, credentialStore: store).resolve(selected)
+                r.eq(repo.commit, commit, "blob: immutable commit retained")
+                r.eq(repo.files.count, 2, "blob: complete containing model subtree retained")
+                r.check(repo.files.contains { $0.remotePath == filePath }, "blob: referenced file appears in manifest")
+                r.eq(HFMetadataFixture.requests.last?.url?.path, expectedTreePath, "blob: file path never used as tree directory")
+                if revision.contains("/") {
+                    r.check(HFMetadataFixture.requests.first?.url?.absoluteString.contains("/revision/refs%2Fpr%2F12") == true,
+                        "blob: explicit slash revision encoded in one segment")
+                }
+            } catch { r.check(false, "blob parse-to-resolve unexpectedly failed: \(error)") }
+            for badSubdirectory in [filePath, "other"] {
+                do { _ = try HFRepositoryInput.parse(input, revision: revision, subdirectory: badSubdirectory); r.check(false, "blob: conflicting subtree rejected") }
+                catch { r.eq(error as? HFRepositoryInputError, .conflictingSelection, "blob: explicit subtree must equal parent directory") }
+            }
+            HFMetadataFixture.reset { request, _ in request.url!.path.contains("/revision/") ? info() : .init(body: json([])) }
+            do {
+                let selected = try HFRepositoryInput.parse(input, revision: revision)
+                _ = try await HFRepositoryClient(session: session, credentialStore: store).resolve(selected)
+                r.check(false, "blob: nonexistent referenced file rejected")
+            } catch { r.eq(error as? HFRepositoryError, .fileNotInRepository, "blob: file existence verified before returning preview") }
+        }
+        do {
+            let legacy = try JSONDecoder().decode(HFRepositorySelection.self, from: json(["repoID": "org/repo", "requestedRevision": "main"]))
+            r.eq(legacy, selection, "blob: legacy selection decodes without source file field")
+            let forged = try JSONDecoder().decode(HFRepositorySelection.self, from: json(["repoID": "org/repo", "requestedRevision": "main",
+                "subdirectory": "variant", "referencedFilePath": "other/config.json"]))
+            _ = try await HFRepositoryClient(session: session, credentialStore: store).resolve(forged)
+            r.check(false, "blob: forged file outside selected parent rejected")
+        } catch { r.eq(error as? HFRepositoryError, .invalidPath, "blob: referenced file must agree with selected subtree") }
+        do { _ = try HFRepositoryInput.parse("https://huggingface.co/org/repo/blob/refs/pr/12", revision: "refs/pr/12"); r.check(false, "blob: file suffix required") }
+        catch { r.eq(error as? HFRepositoryInputError, .invalidInput, "blob: revision without file rejected") }
     }
 
     static func expectFailure(_ r: SelfTest.Reporter, _ expected: HFRepositoryError,

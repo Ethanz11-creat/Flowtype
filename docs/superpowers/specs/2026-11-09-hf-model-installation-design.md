@@ -19,6 +19,7 @@ struct HFRepositorySelection: Codable, Equatable, Sendable {
     let repoID: String
     let requestedRevision: String
     let subdirectory: String?
+    let referencedFilePath: String? // confirmed blob file; legacy/default nil
 }
 enum HFFileDigest: Codable, Equatable, Sendable {
     case sha256(String)
@@ -71,7 +72,7 @@ struct ASRNativeValidationRecord: Codable, Equatable, Sendable {
 
 B1 接口补充：`HFResolvedRepository` 额外携带不可变、仅内存使用的 `resolutionContextID: UUID?`（手工 fixture 初始化缺省 nil）。客户端为每次 resolve 分配独立 context，捕获 source/commit/endpoint/credential ID 和累计预算；即使同仓库同 commit 再次匿名/带凭据解析也不覆盖前一次上下文。`readMetadata` 只接受同客户端创建的 context 和完整匹配该结果清单的文件，拒绝未知 context 或调用者注入的 path/size/digest。只接受显式 `asr.hf.official` 凭据引用，镜像不读取或发送此凭据；正文不会进入解析结果。客户端每份 repository 预检累计 32MiB，B2 planner 另对模型与 tokenizer 多来源合计执行 32MiB 门禁。客户端实例随预览结束释放其内存 context，不将 context 写入安装计划。
 
-`HFRepositoryInputError.requiresSelection(repoID:suffix:kind:)` 保留 tree/blob 原 suffix；没有显式 revision 时不猜边界。显式 revision 必须完整匹配 suffix 前缀（允许 slash），另填 subdirectory 必须与剩余路径一致。客户端初始化可注入 `downloadEndpoint`、`URLSession`、`ASRCredentialStore` 和仅能降低默认上限的 `HFMetadataLimits`；常规大小上限维持 16/32MiB。
+`HFRepositoryInputError.requiresSelection(repoID:suffix:kind:)` 保留 tree/blob 原 suffix；没有显式 revision 时不猜边界。显式 revision 必须完整匹配 suffix 前缀（允许 slash）。tree 的另填 subdirectory 必须与剩余路径一致；blob 的剩余路径是文件，subdirectory 取其父目录（根文件为 nil），另填目录必须等于该父目录。`HFRepositorySelection.referencedFilePath: String?` 保存 blob 的完整仓库相对文件路径，显式 init 默认 nil，旧 Codable 记录缺字段仍可解码。resolver 验证文件路径与父目录一致，冻结 commit 后完整枚举该目录，并确认 referencedFilePath 确实为清单中的文件；不存在时失败，不将文件名当成树目录查询。客户端初始化可注入 `downloadEndpoint`、`URLSession`、`ASRCredentialStore` 和仅能降低默认上限的 `HFMetadataLimits`；常规大小上限维持 16/32MiB。
 
 `ASRInstallPlanner.plan(repository: HFResolvedRepository, variant: String?, tokenizer: HFResolvedRepository?) async throws -> ASRInstallPlan` 使用小元数据识别器与当前 ASRModelInspector 的相同兼容常数，禁止维护第二份宽松“支持列表”。检查 config、权重索引、必需 tokenizer/merges 和选中 Core ML 的全部组件文件。Whisper 已内含 tokenizer 时使用它；缺失时选择明确配方或用户指定的 tokenizer repo/commit，全部写入 plan。多个变体必须选，缺分词器不能自动选 tiny 或借本机其他缓存。
 

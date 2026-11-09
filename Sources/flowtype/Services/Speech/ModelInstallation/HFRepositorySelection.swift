@@ -4,6 +4,13 @@ struct HFRepositorySelection: Codable, Equatable, Sendable {
     let repoID: String
     let requestedRevision: String
     let subdirectory: String?
+    /// A confirmed blob-link file, relative to the repository root; optional for legacy selections.
+    let referencedFilePath: String?
+
+    init(repoID: String, requestedRevision: String, subdirectory: String?, referencedFilePath: String? = nil) {
+        self.repoID = repoID; self.requestedRevision = requestedRevision
+        self.subdirectory = subdirectory; self.referencedFilePath = referencedFilePath
+    }
 }
 
 enum HFRepositoryInputError: Error, Equatable {
@@ -42,6 +49,7 @@ enum HFRepositoryInput {
         let requestedRevision = revision ?? "main"
         guard validPath(requestedRevision), subdirectory.map(validPath) ?? true else { throw HFRepositoryInputError.invalidInput }
         var selectedSubdirectory = subdirectory
+        var referencedFilePath: String?
         if components.count > 2 {
             guard text.contains("://"), components.count >= 4, ["tree", "blob"].contains(components[2]) else { throw HFRepositoryInputError.invalidInput }
             let suffix = components.dropFirst(3).joined(separator: "/")
@@ -49,10 +57,24 @@ enum HFRepositoryInput {
             guard let revision else { throw HFRepositoryInputError.requiresSelection(repoID: repoID, suffix: suffix, kind: components[2]) }
             guard suffix == revision || suffix.hasPrefix(revision + "/") else { throw HFRepositoryInputError.conflictingSelection }
             let remainder = suffix == revision ? nil : String(suffix.dropFirst(revision.count + 1))
-            if let subdirectory, subdirectory != remainder { throw HFRepositoryInputError.conflictingSelection }
-            selectedSubdirectory = remainder
+            if components[2] == "blob" {
+                guard let remainder else { throw HFRepositoryInputError.invalidInput }
+                referencedFilePath = remainder
+                let parent = parentDirectory(of: remainder)
+                if let subdirectory, subdirectory != parent { throw HFRepositoryInputError.conflictingSelection }
+                selectedSubdirectory = parent
+            } else {
+                if let subdirectory, subdirectory != remainder { throw HFRepositoryInputError.conflictingSelection }
+                selectedSubdirectory = remainder
+            }
         }
-        return .init(repoID: repoID, requestedRevision: requestedRevision, subdirectory: selectedSubdirectory)
+        return .init(repoID: repoID, requestedRevision: requestedRevision, subdirectory: selectedSubdirectory,
+            referencedFilePath: referencedFilePath)
+    }
+
+    static func parentDirectory(of path: String) -> String? {
+        let parent = path.split(separator: "/").dropLast().joined(separator: "/")
+        return parent.isEmpty ? nil : parent
     }
 
     static func validPath(_ path: String) -> Bool {

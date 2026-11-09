@@ -34,8 +34,16 @@ actor HFRepositoryClient {
     func resolve(_ selection: HFRepositorySelection, credentialID: String? = nil) async throws -> HFResolvedRepository {
         guard Self.validEndpoint(endpoint) else { throw HFRepositoryError.invalidEndpoint }
         guard credentialID == nil || credentialID == "asr.hf.official" else { throw HFRepositoryError.invalidCredential }
-        guard (try? HFRepositoryInput.parse(selection.repoID, revision: selection.requestedRevision,
-            subdirectory: selection.subdirectory)) == selection else { throw HFRepositoryError.invalidPath }
+        guard let normalized = try? HFRepositoryInput.parse(selection.repoID, revision: selection.requestedRevision,
+            subdirectory: selection.subdirectory), normalized.repoID == selection.repoID,
+            normalized.requestedRevision == selection.requestedRevision, normalized.subdirectory == selection.subdirectory else {
+            throw HFRepositoryError.invalidPath
+        }
+        if let filePath = selection.referencedFilePath {
+            guard HFRepositoryInput.validPath(filePath), HFRepositoryInput.parentDirectory(of: filePath) == selection.subdirectory else {
+                throw HFRepositoryError.invalidPath
+            }
+        }
         let budget = Budget()
         let base = ["api", "models"] + selection.repoID.components(separatedBy: "/")
         let infoURL = try url(segments: base + ["revision", selection.requestedRevision])
@@ -90,6 +98,9 @@ actor HFRepositoryClient {
                 byPath[entry.path] = file; files.append(file)
             }
             next = try pagination(response.value(forHTTPHeaderField: "Link"), pageURL: pageURL, treePath: treePath, cursors: &cursors)
+        }
+        if let filePath = selection.referencedFilePath, byPath[filePath] == nil {
+            throw HFRepositoryError.fileNotInRepository
         }
         let licensePath = files.first { ["license", "license.txt", "license.md", "copying"].contains($0.remotePath.components(separatedBy: "/").last!.lowercased()) }?.remotePath
         let licenseURL = try licensePath.map { try url(segments: selection.repoID.components(separatedBy: "/") + ["blob", commit] + $0.components(separatedBy: "/")) }
