@@ -480,10 +480,20 @@ struct Configuration: Codable, Equatable {
         )
     }
 
-    var effectiveCloudASRConfig: (provider: CloudASRProviderConfig, apiKey: String)? {
+    func cloudASRCredential(profileID: UUID, store: any ASRCredentialStore) throws -> ASRCredentialSnapshot {
+        let snapshot = try store.snapshot(id: "asr.cloud." + profileID.uuidString)
+        return .init(value: snapshot.value ?? cloudASRConfig.providerAPIKeys[profileID.uuidString], generation: snapshot.generation)
+    }
+
+    func effectiveCloudASRConfig(store: any ASRCredentialStore) throws -> (provider: CloudASRProviderConfig, apiKey: String)? {
         guard let provider = cloudASRConfig.activeProvider else { return nil }
-        let key = cloudASRConfig.providerAPIKeys[provider.id.uuidString] ?? ""
-        return (provider, key)
+        return (provider, try cloudASRCredential(profileID: provider.id, store: store).value ?? "")
+    }
+
+    /// Compatibility callers see an inaccessible credential as unavailable, never an empty key.
+    /// Route capture should use the throwing snapshot API to retain its generation and error.
+    var effectiveCloudASRConfig: (provider: CloudASRProviderConfig, apiKey: String)? {
+        try? effectiveCloudASRConfig(store: KeychainASRCredentialStore.shared)
     }
 
     // MARK: - Default

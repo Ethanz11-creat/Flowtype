@@ -14,8 +14,19 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
 
     private let defaults: UserDefaults
     private let backupDirectory: URL?
+    let asrCredentials: any ASRCredentialStore
+    private let persistData: (Data) throws -> Void
+    private(set) var pendingASRCredentialIDs: [String] = []
+    private(set) var asrPersistenceError: String?
 
-    init(defaults: UserDefaults = RuntimeEnvironment.defaults, backupDirectory: URL? = nil, keychain: KeychainAccess = .helper) {
+    init(defaults: UserDefaults = RuntimeEnvironment.defaults, backupDirectory: URL? = nil, keychain: KeychainAccess = .helper,
+         asrCredentials: any ASRCredentialStore = KeychainASRCredentialStore.shared,
+         persistence: ((Data) throws -> Void)? = nil) {
+        self.asrCredentials = asrCredentials
+        self.persistData = persistence ?? { data in
+            defaults.set(data, forKey: "flowtype.config")
+            guard defaults.synchronize(), defaults.data(forKey: "flowtype.config") == data else { throw ASRCredentialError.persistence }
+        }
         self.defaults = defaults
         self.backupDirectory = backupDirectory
 
@@ -98,11 +109,10 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
             }
 
             if needsSave {
-                if let encoded = try? JSONEncoder().encode(config) {
-                    defaults.set(encoded, forKey: defaultsKey)
-                }
+                if let encoded = try? JSONEncoder().encode(config) { try? persistData(encoded) }
             }
             self.current = config
+            retryASRCredentialMigration()
         }
     }
 
@@ -113,21 +123,87 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         let stamp = Int(Date().timeIntervalSince1970)
         let backupURL = dir.appendingPathComponent("flowtype.config.corrupt-\(stamp).json")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        // REDACT secrets before writing into the shareable diagnostics dir (users zip + send these logs).
-        // String-level so it still works when the blob isn't valid JSON (corrupt configs often aren't),
-        // while always producing a backup for diagnosis.
-        var text = String(data: data, encoding: .utf8) ?? "<non-utf8 blob, \(data.count) bytes>"
-        if let re = try? NSRegularExpression(pattern: #""providerAPIKeys"\s*:\s*\{[^}]*\}"#) {
-            text = re.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text),
-                                               withTemplate: #""providerAPIKeys":"[REDACTED]""#)
-        }
-        for p in [#"sk-[A-Za-z0-9_-]{8,}"#, #"sf-[A-Za-z0-9_-]{8,}"#] {
-            if let re = try? NSRegularExpression(pattern: p) {
-                text = re.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: "[REDACTED]")
-            }
-        }
+        // An undecodable blob cannot safely identify arbitrary-prefix tokens by regex.
+        // Keep diagnostic size/format only; never emit user string values or decoder details.
+        let text = "[REDACTED undecodable configuration: \(data.count) bytes]"
         try? text.data(using: .utf8)?.write(to: backupURL)
-        AppLogger.log("[ConfigurationStore] Failed to decode persisted config (\(error)); backed up REDACTED blob to \(backupURL.path) and reset to default")
+        AppLogger.log("[ConfigurationStore] Failed to decode persisted config; saved redacted diagnostic")
+    }
+
+    private func persist(_ config: Configuration) throws {
+        let data = try JSONEncoder().encode(config)
+        try persistData(data)
+        guard defaults.data(forKey: defaultsKey) == data else { throw ASRCredentialError.persistence }
+    }
+
+    /// Persist identity/revisions with legacy recovery copies before touching credentials.
+    func retryASRCredentialMigration() {
+        var source = current
+        if source.asrBackendSelection == nil { source.asrBackendSelection = ASRBackendMigration.selection(from: source) }
+        do {
+            try persist(source)
+            current = source
+            let result = ASRCredentialMigration.migrate(configuration: source, store: asrCredentials)
+            try persist(result.configuration)
+            current = result.configuration
+            pendingASRCredentialIDs = result.pendingIDs
+            asrPersistenceError = nil
+        } catch {
+            pendingASRCredentialIDs = source.cloudASRConfig.providerAPIKeys.keys.sorted().map { "asr.cloud." + $0 }
+            asrPersistenceError = ASRCredentialError.persistence.localizedDescription
+        }
+    }
+
+    func cloudASRCredential(profileID: UUID) throws -> ASRCredentialSnapshot {
+        try current.cloudASRCredential(profileID: profileID, store: asrCredentials)
+    }
+
+    /// Persist staged references first, then credential, then scrubbed configuration.
+    /// Empty values are removal tombstones: nil alone permits legacy fallback.
+    func saveASRDraft(_ draft: ASRProviderDraft) throws {
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        var candidate = current
+        try ProviderDraftCommit.apply(draft, to: &candidate)
+        let id = "asr.cloud." + draft.target.id.uuidString
+        let old = current
+        let snapshot = try current.cloudASRCredential(profileID: draft.target.id, store: asrCredentials)
+        let editedValue: String?
+        switch draft.keyEdit {
+        case .preserve: editedValue = snapshot.value
+        case .replace(let value): editedValue = value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? snapshot.value : value
+        case .remove: editedValue = ""
+        }
+        if editedValue != snapshot.value, let index = candidate.cloudASRConfig.providers.firstIndex(where: { $0.id == draft.target.id }) {
+            candidate.cloudASRConfig.providers[index].revision = UUID()
+        }
+        // Never serialize newly typed keys. Only an already persisted legacy backup
+        // may survive until the credential has been written and verified.
+        candidate.cloudASRConfig.providerAPIKeys.removeValue(forKey: draft.target.id.uuidString)
+        var staged = candidate
+        staged.cloudASRConfig.providerAPIKeys[draft.target.id.uuidString] = old.cloudASRConfig.providerAPIKeys[draft.target.id.uuidString]
+        try persist(staged)
+        do {
+            if let editedValue {
+                try asrCredentials.write(editedValue, id: id)
+                guard try asrCredentials.read(id: id) == editedValue else { throw ASRCredentialError.unavailable }
+            }
+        } catch {
+            try? persist(old)
+            asrPersistenceError = ASRCredentialError.unavailable.localizedDescription
+            throw ASRCredentialError.unavailable
+        }
+        // If scrubbing fails, retain staged backup + updated revision and surface retry.
+        current = staged
+        do { try persist(candidate) }
+        catch {
+            pendingASRCredentialIDs = staged.cloudASRConfig.providerAPIKeys.keys.sorted().map { "asr.cloud." + $0 }
+            asrPersistenceError = ASRCredentialError.persistence.localizedDescription
+            throw ASRCredentialError.persistence
+        }
+        current = candidate
+        pendingASRCredentialIDs.removeAll { $0 == id }
+        asrPersistenceError = nil
     }
 
     private var saveWorkItem: DispatchWorkItem?
@@ -138,9 +214,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         saveWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            if let data = try? JSONEncoder().encode(config) {
-                self.defaults.set(data, forKey: self.defaultsKey)
-            }
+            self.retryASRCredentialMigration()
         }
         self.saveWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
@@ -152,9 +226,7 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
     func flushPendingSave() {
         saveWorkItem?.cancel()
         saveWorkItem = nil
-        if let data = try? JSONEncoder().encode(current) {
-            defaults.set(data, forKey: defaultsKey)
-        }
+        retryASRCredentialMigration()
     }
 
     // MARK: - Provider API Key Helpers

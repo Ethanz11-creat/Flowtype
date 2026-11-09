@@ -5,6 +5,11 @@ enum ASRBackendSelfTests {
         testLegacySelectionAndStableIdentity(r)
         testValidationSampleContract(r)
         testBindingIdentity(r)
+        await ASRCredentialSelfTests.run(r)
+        await ProviderDraftSelfTests.run(r)
+        await ProviderDraftCheckSelfTests.run(r)
+        await SettingsChangeSelfTests.run(r)
+        await CloudProviderSelfTests.runConnectionOwnership(r)
     }
 
     // Catches policy inversion, default replacement of custom profiles, and identity tied to rows/names.

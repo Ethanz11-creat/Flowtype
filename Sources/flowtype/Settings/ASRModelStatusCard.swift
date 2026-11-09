@@ -35,15 +35,25 @@ struct ASRModelStatusCard: View {
     private var cloudStatusView: some View {
         let provider = store.current.cloudASRConfig.activeProvider
         let hasAPIKey: Bool
+        let credentialUnavailable: Bool
         if let provider {
-            hasAPIKey = !(store.current.cloudASRConfig.providerAPIKeys[provider.id.uuidString] ?? "").isEmpty
+            do {
+                hasAPIKey = try store.cloudASRCredential(profileID: provider.id).value?.isEmpty == false
+                credentialUnavailable = false
+            } catch {
+                hasAPIKey = false
+                credentialUnavailable = true
+            }
         } else {
             hasAPIKey = false
+            credentialUnavailable = false
         }
 
         let available = cloudAvailable ?? false
         let statusText: String
-        if available {
+        if credentialUnavailable {
+            statusText = ASRCredentialError.unavailable.localizedDescription
+        } else if available {
             statusText = "已配置"
         } else if !hasAPIKey {
             statusText = "未配置 API Key"
@@ -56,13 +66,13 @@ struct ASRModelStatusCard: View {
         }
 
         return HStack(spacing: 8) {
-            Image(systemName: available ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            Image(systemName: available && !credentialUnavailable ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .font(.system(size: 16))
-                .foregroundColor(available ? .green : .orange)
+                .foregroundColor(available && !credentialUnavailable ? .green : .orange)
             VStack(alignment: .leading, spacing: 2) {
                 Text(statusText)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(available ? .green : .orange)
+                    .foregroundColor(available && !credentialUnavailable ? .green : .orange)
                 if let provider {
                     Text("\(provider.name) · \(provider.model)")
                         .font(.system(size: 11))

@@ -58,14 +58,12 @@ struct CloudASRProviderList: View {
         }
         .sheet(item: $editor) { item in
             ASRProviderEditSheet(draft: item.draft, checks: draftChecks, navigation: navigation,
-                hadStoredKey: !(store.current.cloudASRConfig.providerAPIKeys[item.draft.target.id.uuidString] ?? "").isEmpty,
-                storedKey: { store.current.cloudASRConfig.providerAPIKeys[item.draft.target.id.uuidString] ?? "" },
+                hadStoredKey: ((try? store.cloudASRCredential(profileID: item.draft.target.id).value)?.isEmpty == false),
+                storedKey: { try store.cloudASRCredential(profileID: item.draft.target.id).value ?? "" },
                 onSave: { draft in
-                    var latest = store.current
-                    try ProviderDraftCommit.apply(draft, to: &latest)
+                    try store.saveASRDraft(draft)
                     checks.invalidate(profileID: draft.target.id)
                     draftChecks.invalidate(profileID: draft.target.id)
-                    store.current = latest
                     editor = nil
                 }, onCancel: { editor = nil })
         }

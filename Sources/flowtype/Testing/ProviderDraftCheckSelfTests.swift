@@ -94,7 +94,11 @@ enum ProviderDraftCheckSelfTests {
         await task?.value
         r.eq(live.state(for: value.target.id), .idle, "checkDoesNotCommit: draft success never becomes live success")
         try? ProviderDraftCommit.apply(session.draft, to: &config)
-        r.eq(transport.snapshots.first?.0, config.cloudASRConfig.providers.first, "checkDoesNotCommit: tested normalized snapshot matches saved profile")
+        if var tested = transport.snapshots.first?.0, let saved = config.cloudASRConfig.providers.first {
+            r.check(saved.revision != tested.revision, "checkDoesNotCommit: saving changed call fields rotates revision")
+            tested.revision = saved.revision
+            r.eq(tested, saved, "checkDoesNotCommit: tested normalized fields match saved profile")
+        } else { r.check(false, "checkDoesNotCommit: tested and saved profiles exist") }
         session.detach()
         r.eq(checks.state(for: value.target.id), .idle, "checkDoesNotCommit: save cleanup invalidates success")
         session.draft.keyEdit = .replace("replacement")

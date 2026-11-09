@@ -112,13 +112,13 @@ struct ASRProviderEditSheet: View {
     @ObservedObject private var checks: CloudASRConnectionCheck
     let navigation: SettingsNavigation?
     let hadStoredKey: Bool
-    let storedKey: () -> String
+    let storedKey: () throws -> String
     let onSave: (ASRProviderDraft) throws -> Void
     let onCancel: () -> Void
     @State private var validationError: String?
 
     init(draft: ASRProviderDraft, checks: CloudASRConnectionCheck, navigation: SettingsNavigation? = nil,
-         hadStoredKey: Bool, storedKey: @escaping () -> String,
+         hadStoredKey: Bool, storedKey: @escaping () throws -> String,
          onSave: @escaping (ASRProviderDraft) throws -> Void, onCancel: @escaping () -> Void) {
         _session = StateObject(wrappedValue: ASRProviderDraftSession(draft: draft, checks: checks))
         self.checks = checks
@@ -199,9 +199,9 @@ struct ASRProviderEditSheet: View {
                     }
                     Divider()
                     HStack {
-                        Button("检查配置") { session.checkConfiguration(storedKey: storedKey()) }
+                        Button("检查配置") { performCheck(recognize: false) }
                         if session.canTestRecognition {
-                            Button("测试识别") { session.testRecognition(storedKey: storedKey()) }
+                            Button("测试识别") { performCheck(recognize: true) }
                         }
                         if checks.isTesting(session.draft.target.id) { ProgressView().controlSize(.small) }
                     }
@@ -235,6 +235,14 @@ struct ASRProviderEditSheet: View {
         .onChange(of: session.draft) { _, _ in validationError = nil }
         .onAppear { session.attach(to: navigation, onClose: onCancel) }
         .onDisappear { session.detach() }
+    }
+
+    private func performCheck(recognize: Bool) {
+        do {
+            let key = try storedKey()
+            if recognize { session.testRecognition(storedKey: key) }
+            else { session.checkConfiguration(storedKey: key) }
+        } catch { validationError = ASRCredentialError.unavailable.localizedDescription }
     }
 
     private func save() {

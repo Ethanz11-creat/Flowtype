@@ -274,7 +274,9 @@ enum CloudProviderSelfTests {
             r.check(!checks.accepts(token), "model selection: preset selection invalidates prior connection result")
             var expected = before
             expected.providers[1].model = "TeleAI/TeleSpeechASR"
-            r.eq(config, expected, "model selection: preset changes only target model, preserving UUID, URL, Key and other profiles")
+            r.check(config.providers[1].revision != before.providers[1].revision, "model selection: model change rotates target revision")
+            expected.providers[1].revision = config.providers[1].revision
+            r.eq(config, expected, "model selection: preset changes target model and revision, preserving UUID, URL, Key and other profiles")
             checks.selectModel("my/new-custom-model", profileID: id, in: &config)
             r.eq(config.providers[1].model, "my/new-custom-model", "model selection: shared action accepts custom IDs")
             let unchangedToken = checks.begin(profileID: id)

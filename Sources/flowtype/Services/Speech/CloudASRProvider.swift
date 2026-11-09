@@ -140,9 +140,10 @@ actor CloudASRProvider: ASRProvider {
 
     private func resolveConfiguration(_ snapshot: CloudASRRequestConfiguration?) async throws -> CloudASRRequestConfiguration {
         if let snapshot { return snapshot }
-        let effective = await MainActor.run {
-            let config = ConfigurationStore.shared.current
-            return config.effectiveCloudASRConfig.map {
+        let effective = try await MainActor.run {
+            let store = ConfigurationStore.shared
+            let config = store.current
+            return try config.effectiveCloudASRConfig(store: store.asrCredentials).map {
                 CloudASRRequestConfiguration(provider: $0.provider, apiKey: $0.apiKey, sendContext: config.cloudASRSendContext)
             }
         }

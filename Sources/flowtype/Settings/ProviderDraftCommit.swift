@@ -43,7 +43,9 @@ enum ProviderDraftCommit {
         } catch { throw ProviderDraftCommitError.invalid(error.localizedDescription) }
         if let index {
             // Activation is a separate action; a stale editor never changes the latest choice.
-            profile.isActive = latest.cloudASRConfig.providers[index].isActive
+            let previous = latest.cloudASRConfig.providers[index]
+            profile.isActive = previous.isActive
+            profile.revision = previous.hasSameCallConfiguration(as: profile) ? previous.revision : UUID()
             latest.cloudASRConfig.providers[index] = profile
         } else {
             profile.isActive = latest.cloudASRConfig.providers.isEmpty

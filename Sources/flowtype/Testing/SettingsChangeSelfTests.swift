@@ -33,6 +33,7 @@ enum SettingsChangeSelfTests {
             defaults = UserDefaults(suiteName: suite)!
             defaults.set(5, forKey: "flowtype.migrationVersion")
             store = ObservedSaveStore(defaults: defaults)
+            store.current.asrBackendSelection = ASRBackendMigration.selection(from: store.current)
             store.current.llmProviders = [LLMProvider(
                 id: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
                 name: "Test", provider: "Custom", baseURL: "https://example.invalid/v1",

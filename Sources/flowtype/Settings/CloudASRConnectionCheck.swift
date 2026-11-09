@@ -88,7 +88,9 @@ final class CloudASRConnectionCheck: ObservableObject {
         guard let index = config.providers.firstIndex(where: { $0.id == profile.id }),
               config.providers[index] != profile else { return }
         invalidate(profileID: profile.id)
-        config.providers[index] = profile
+        var updated = profile
+        updated.revision = config.providers[index].hasSameCallConfiguration(as: profile) ? config.providers[index].revision : UUID()
+        config.providers[index] = updated
     }
 
     func selectModel(_ model: String, profileID: UUID, in config: inout CloudASRConfig) {
@@ -102,6 +104,7 @@ final class CloudASRConnectionCheck: ObservableObject {
               config.providerAPIKeys[profileID.uuidString] != key else { return }
         invalidate(profileID: profileID)
         config.providerAPIKeys[profileID.uuidString] = key
+        if let index = config.providers.firstIndex(where: { $0.id == profileID }) { config.providers[index].revision = UUID() }
     }
 
     func setActive(_ active: Bool, profileID: UUID, in config: inout CloudASRConfig) {
