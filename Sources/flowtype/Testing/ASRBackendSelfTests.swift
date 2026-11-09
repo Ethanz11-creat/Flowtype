@@ -3,6 +3,7 @@ import Foundation
 enum ASRBackendSelfTests {
     static func run(_ r: SelfTest.Reporter) async {
         await ASRBackendTransportSelfTests.run(r)
+        await ASRBackendValidationSelfTests.run(r)
         await ASRBackendRoutingSelfTests.run(r)
         testLegacySelectionAndStableIdentity(r)
         testValidationSampleContract(r)

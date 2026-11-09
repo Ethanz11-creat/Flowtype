@@ -17,6 +17,7 @@ final class CloudASRConnectionCheck: ObservableObject {
     @Published private var states: [UUID: State] = [:]
     @Published private var inFlight: [UUID: CloudASRCheckToken] = [:]
     private var revisions: [UUID: UUID] = [:]
+    private var operations: [UUID: Task<Void, Never>] = [:]
     private let service: CloudASRProvider
     private let recognitionTest: @MainActor (CloudASRProviderConfig, String) async -> Result<String, CloudASRError>
 
@@ -37,6 +38,7 @@ final class CloudASRConnectionCheck: ObservableObject {
     func invalidate(profileID: UUID) {
         revisions.removeValue(forKey: profileID)
         states.removeValue(forKey: profileID)
+        operations[profileID]?.cancel()
         // Keep the transport slot until its owner finishes, even after edits/deletion.
     }
 
@@ -67,21 +69,28 @@ final class CloudASRConnectionCheck: ObservableObject {
         let token = begin(profileID: provider.id)
         inFlight[provider.id] = token
         states[provider.id] = .testing
-        return Task {
+        let operation = Task {
             defer {
                 // A stale completion may release only its own operation.
-                if inFlight[provider.id] == token { inFlight.removeValue(forKey: provider.id) }
+                if inFlight[provider.id] == token {
+                    inFlight.removeValue(forKey: provider.id)
+                    operations.removeValue(forKey: provider.id)
+                }
             }
             // Editing before the queued task starts also suppresses the old upload.
             guard accepts(token) else { return }
+            guard !Task.isCancelled else { states[provider.id] = .idle; return }
             let result = await recognitionTest(provider, apiKey)
             guard inFlight[provider.id] == token, accepts(token) else { return }
+            guard !Task.isCancelled else { states[provider.id] = .idle; return }
             switch result {
             case .success: states[provider.id] = .connected
             case .failure(.cancelled): states[provider.id] = .idle
             case .failure(let error): states[provider.id] = .failure(error.localizedDescription)
             }
         }
+        operations[provider.id] = operation
+        return operation
     }
 
     func updateProfile(_ profile: CloudASRProviderConfig, in config: inout CloudASRConfig) {
