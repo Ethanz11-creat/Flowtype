@@ -2,6 +2,7 @@ import Foundation
 
 enum ASRModelCenterSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
+        await ASRAcquisitionSelfTests.run(r)
         await testHonestStatusProjection(r)
         await testPrimarySelectionTransaction(r)
         await testPolicyConsentAndRemoval(r)

@@ -70,7 +70,7 @@ struct CloudASRProviderList: View {
                 hadStoredKey: ((try? store.cloudASRCredential(profileID: item.draft.target.id).value)?.isEmpty == false),
                 storedKey: { try store.cloudASRCredential(profileID: item.draft.target.id).value ?? "" },
                 onSave: { draft in
-                    try store.saveASRDraft(draft)
+                    try store.saveModelCenterASRDraft(draft)
                     checks.invalidate(profileID: draft.target.id)
                     draftChecks.invalidate(profileID: draft.target.id)
                     editor = nil

@@ -171,16 +171,32 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         try current.cloudASRCredential(profileID: profileID, store: asrCredentials)
     }
 
+    /// Model-center save-only entry. Selection is a separate, explicit validated VM action.
+    func saveModelCenterASRDraft(_ draft: ASRProviderDraft) throws {
+        try commitASRDraft(draft, preservingSelection: true)
+    }
+
     /// A committed profile's credential is immutable during a draft transaction.
     /// Stage a fresh credential version, then commit its reference and call fields
     /// together in one config blob. Every restart sees a matching endpoint/key pair.
     func saveASRDraft(_ draft: ASRProviderDraft) throws {
+        try commitASRDraft(draft, preservingSelection: false)
+    }
+
+    private func commitASRDraft(_ draft: ASRProviderDraft, preservingSelection: Bool) throws {
         saveWorkItem?.cancel()
         saveWorkItem = nil
         var candidate = current
         try ProviderDraftCommit.apply(draft, to: &candidate)
         guard let index = candidate.cloudASRConfig.providers.firstIndex(where: { $0.id == draft.target.id }) else {
             throw ProviderDraftCommitError.deleted
+        }
+        if preservingSelection {
+            // Freeze effective compatibility roles before adding a first cloud candidate.
+            // Direct value assignment deliberately preserves unresolved legacy native intent.
+            candidate.asrBackendSelection = ASRBackendMigration.selection(from: current)
+            candidate.pendingLegacyNativeResolution = current.pendingLegacyNativeResolution
+            if case .new = draft.target { candidate.cloudASRConfig.providers[index].isActive = false }
         }
         let oldID = try candidate.cloudASRConfig.providers[index].validatedCredentialID()
         let stored = try asrCredentials.snapshot(id: oldID)
@@ -229,6 +245,40 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         current = candidate
         pendingASRCredentialIDs.removeAll { $0 == oldID }
         asrPersistenceError = nil
+    }
+
+    /// A fresh immutable credential reference and profile are committed together.
+    /// Failed credential writes or config persistence retain the old usable call pair.
+    func saveLocalASRServiceDraft(_ draft: LocalASRServiceDraft) throws {
+        saveWorkItem?.cancel(); saveWorkItem = nil
+        var candidate = try draft.applying(to: current)
+        guard let index = candidate.localASRServices.firstIndex(where: { $0.id == draft.target.id }) else {
+            throw ProviderDraftCommitError.deleted
+        }
+        switch draft.keyEdit {
+        case .preserve:
+            if case .bearer(let reference) = candidate.localASRServices[index].authentication {
+                guard try asrCredentials.snapshot(id: reference).value != nil else { throw ASRCredentialError.invalidData }
+            }
+        case .remove:
+            if candidate.localASRServices[index].authentication != .none {
+                candidate.localASRServices[index].authentication = .none
+                candidate.localASRServices[index].revision = UUID()
+            }
+        case .replace(let value):
+            if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                guard !value.contains(where: { $0.isNewline || $0 == "\0" }) else { throw ASRCredentialError.invalidData }
+                let reference = "asr.service." + draft.target.id.uuidString + "." + UUID().uuidString
+                do {
+                    try asrCredentials.write(value, id: reference)
+                    guard try asrCredentials.read(id: reference) == value else { throw ASRCredentialError.unavailable }
+                } catch { throw ASRCredentialError.unavailable }
+                candidate.localASRServices[index].authentication = .bearer(credentialID: reference)
+                candidate.localASRServices[index].revision = UUID()
+            }
+        }
+        do { try persist(candidate) } catch { throw ASRCredentialError.persistence }
+        current = candidate
     }
 
     /// Persist an explicit legacy-control action atomically before publishing it.

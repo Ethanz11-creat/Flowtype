@@ -82,6 +82,33 @@ final class ImportedASRModelActions: ObservableObject {
         isInspecting = false; preview = nil; message = nil
     }
 
+    /// C2 acquisition only: keep the external directory in place and save an unselected candidate.
+    /// C3 can then route Test / selection through the application-owned model-center VM.
+    @discardableResult
+    func savePreview(persist: (Configuration) throws -> Void) throws -> ASRBackendID {
+        guard let preview, !isInspecting, coordinator.operationID == nil,
+              preview.assessment.compatibility != .incompatible else {
+            throw ProviderDraftCommitError.invalid("请先完成兼容目录检查。")
+        }
+        if let id = preview.replacingID {
+            guard configuration().importedASRModels.contains(where: { $0.id == id }) else { throw ProviderDraftCommitError.deleted }
+            guard !relocationConflicts(directory: preview.model.directory, id: id) else { throw ProviderDraftCommitError.conflict }
+        }
+        let latest = configuration()
+        let model = LocalModelLibrary.canonicalizing(preview.model, in: latest)
+        if let existing = latest.importedASRModels.first(where: { $0.id == model.id }) {
+            // Existing rows are immutable to this add-only path, including changed fingerprints,
+            // active/captured/selected/managed records and newer edits made after inspection.
+            guard existing.directory.standardizedFileURL.resolvingSymlinksInPath() == model.directory.standardizedFileURL.resolvingSymlinksInPath(),
+                  existing.engine == model.engine else { throw ProviderDraftCommitError.conflict }
+            self.preview = nil
+            return .init(rawValue: "native:import:" + existing.id.uuidString)
+        }
+        try persist(LocalModelLibrary.upserting(model, in: latest))
+        self.preview = nil
+        return .init(rawValue: "native:import:" + model.id.uuidString)
+    }
+
     func loadPreview() async {
         guard let preview, !isInspecting, coordinator.operationID == nil,
               preview.assessment.compatibility != .incompatible else { return }

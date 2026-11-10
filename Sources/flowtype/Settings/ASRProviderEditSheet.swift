@@ -199,15 +199,12 @@ struct ASRProviderEditSheet: View {
                     }
                     Divider()
                     HStack {
-                        Button("检查配置") { performCheck(recognize: false) }
-                        if session.canTestRecognition {
-                            Button("测试识别") { performCheck(recognize: true) }
-                        }
+                        Button("检查配置") { performConfigurationCheck() }
                         if checks.isTesting(session.draft.target.id) { ProgressView().controlSize(.small) }
                     }
                     .disabled(checks.isTesting(session.draft.target.id))
                     Text(session.canTestRecognition
-                         ? "检查配置不联网。测试识别向当前 URL 发送 API Key 和 0.5 秒合成静音音频，可能计费；不使用麦克风。测试不会保存或启用服务。"
+                         ? "检查配置不联网。请先保存未验证配置，再在模型中心查看目标地址、内置语音样本与可能费用，并明确点击测试或试用并选择；测试结果供你判断质量。"
                          : "检查配置仅本地校验，不联网；连接与识别将在真实录音时验证。")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -237,11 +234,10 @@ struct ASRProviderEditSheet: View {
         .onDisappear { session.detach() }
     }
 
-    private func performCheck(recognize: Bool) {
+    private func performConfigurationCheck() {
         do {
             let key = try storedKey()
-            if recognize { session.testRecognition(storedKey: key) }
-            else { session.checkConfiguration(storedKey: key) }
+            session.checkConfiguration(storedKey: key)
         } catch { validationError = ASRCredentialError.unavailable.localizedDescription }
     }
 

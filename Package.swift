@@ -27,6 +27,7 @@ let package = Package(
             ],
             path: "Sources/flowtype",
             resources: [
+                .copy("Resources/ASRValidation"),
                 .copy("Resources/tech_terms.json"),
                 .copy("Resources/filler_words.json"),
                 .copy("Resources/AppIcon.icns"),
