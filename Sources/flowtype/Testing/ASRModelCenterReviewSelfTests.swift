@@ -109,13 +109,24 @@ enum ASRModelCenterReviewSelfTests {
         withExtendedLifetime(captured) {}
     }
 
+    actor AdmissionGate {
+        var held = false
+        var waiter: CheckedContinuation<Void, Never>?, started: CheckedContinuation<Void, Never>?
+        func hold() async {
+            held = true; started?.resume(); started = nil
+            await withCheckedContinuation { waiter = $0 }
+        }
+        func waitUntilHeld() async { if held { return }; await withCheckedContinuation { started = $0 } }
+        func release() { waiter?.resume(); waiter = nil }
+    }
+
     @MainActor static func realtimeSelection(_ r: SelfTest.Reporter) async {
         let f = ASRModelCenterIntegrationSelfTests.Fixture(); defer { f.cleanup() }
-        let probe = RealtimeProbe()
+        let probe = RealtimeProbe(), clock = DeadlineClock()
         let env = ASRModelCenterEnvironment(store: f.store, native: f.native, installer: f.installer, resources: f.resources,
             checks: f.checks, usage: f.usage, sample: { try f.sample() }, now: { f.date },
             makeValidation: { callback in .init(now: { f.date }, onVerified: callback,
-                serviceRecognition: { _, _, _ in "synthetic local" }, realtimeFactory: { probe.make($0) }, realtimeTimeout: 0.1) })
+                serviceRecognition: { _, _, _ in "synthetic local" }, realtimeFactory: { probe.make($0) }, realtimeTimeout: 0.1, realtimeDeadlineSleep: { try await clock.sleep($0) }) })
         f.store.current.asrRoutingPolicy = .auto
         f.store.current.setASRBackendSelection(.init(primary: f.id))
         let dash = CloudASRProviderConfig.defaultParaformer(), vm = env.model
@@ -151,30 +162,60 @@ enum ASRModelCenterReviewSelfTests {
             await vm.selectPrimary(id)
             r.eq(f.store.current.asrBackendSelection?.primary, f.id, "C4 I3 empty trial preserves prior selection")
             probe.mode = .held
-            let operation = Task { await vm.selectPrimary(id) }
-            await probe.waitForFinish()
+            let admission = AdmissionGate(), cancellationCount = probe.configurations.count
+            let cancelTimerCount = clock.count
+            let operation = Task { await admission.hold(); await vm.selectPrimary(id) }
+            await admission.waitUntilHeld()
+            let observation = Task { await probe.session(at: cancellationCount) }
+            // Deliberately register observation before VM admission. A poll/yield
+            // budget must never masquerade as proof that this producer is held.
+            await probe.waitUntilSessionRequested(at: cancellationCount)
+            r.check(!vm.isBusy && !env.validation.isTesting(profileID: dash.id), "C4 I3 delayed caller has no owner before positive admission")
+            await admission.release()
+            let cancelledSession = await observation.value
+            await cancelledSession.waitUntilFinishHeld()
+            let cancelledTimer = await clock.timer(at: cancelTimerCount)
+            r.eq(cancelledSession.ordinal, cancellationCount, "C4 I3 cancellation targets newly admitted session")
             operation.cancel()
-            for _ in 0..<1000 { if await probe.latest?.cancelled == true { break }; await Task.yield() }
+            await cancelledSession.waitUntilCleanupHeld()
+            print("C4 cancellation barrier: \(await cancelledSession.diagnostic()) vmBusy=\(vm.isBusy) a5Owner=\(env.validation.isTesting(profileID: dash.id))")
+            r.check(vm.isBusy, "C4 I3 cancelled producer retains VM owner until actual cleanup drain")
+            r.check(env.validation.isTesting(profileID: dash.id), "C4 I3 cancelled producer retains A5 owner until actual cleanup drain")
             r.check(vm.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 cancelled producer retains owner until actual cleanup drain")
-            await probe.latest?.release(); await operation.value
+            await cancelledSession.releaseFinish()
+            r.check(vm.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 finished producer still retains owner while cleanup is held")
+            await cancelledSession.releaseCleanup(); await operation.value
+            r.eq(clock.pending, 0, "C4 I3 cancellation drains timer continuation")
             r.eq(f.store.current.asrBackendSelection?.primary, f.id, "C4 I3 cancelled trial preserves prior selection")
             r.check(vm.currentValidatedServices.allSatisfy { $0.backendID != id }, "C4 I3 cancellation cannot publish live evidence")
-            let timedCount = probe.configurations.count
+            let timedCount = probe.configurations.count, timedTimerCount = clock.count
             let timed = Task { await vm.selectPrimary(id) }
-            await probe.waitForNewFinish(after: timedCount)
-            try await Task.sleep(for: .milliseconds(200))
-            r.check(await probe.latest?.cancelled == true && vm.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 timeout keeps owner while cleanup is held")
-            await probe.latest?.release(); await timed.value
+            let timedSession = await probe.session(at: timedCount)
+            await timedSession.waitUntilFinishHeld()
+            let deadline = await clock.timer(at: timedTimerCount)
+            r.eq(deadline.seconds, 0.1, "C4 I3 injected clock retains configured realtime deadline")
+            r.check(!clock.expire(cancelledTimer), "C4 I3 canceled timer cannot expire successor")
+            r.check(vm.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 stale timer leaves successor owned")
+            r.check(clock.expire(deadline), "C4 I3 expires exact current deadline after held finish")
+            await timedSession.waitUntilCleanupHeld()
+            print("C4 timeout barrier: \(await timedSession.diagnostic()) vmBusy=\(vm.isBusy) a5Owner=\(env.validation.isTesting(profileID: dash.id))")
+            r.check(await timedSession.cancelled && vm.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 timeout keeps owner while cleanup is held")
+            await timedSession.releaseCleanup()
+            r.check(vm.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 cleanup completion still retains owner while producer is held")
+            await timedSession.releaseFinish(); await timed.value
             r.eq(env.validation.state(profileID: dash.id), .failed(code: "timeout"), "C4 I3 timeout is stable failure despite late worker result")
             r.eq(f.store.current.asrBackendSelection?.primary, f.id, "C4 I3 timeout preserves prior selection")
             let count = probe.configurations.count
             let edited = Task { await vm.selectPrimary(id) }
-            await probe.waitForNewFinish(after: count)
+            let editedSession = await probe.session(at: count)
+            await editedSession.waitUntilFinishHeld()
             var changed = f.store.current.cloudASRConfig.providers.first { $0.id == dash.id }!; changed.model = "changed-model"
             try env.actions(navigation: nil).saveCloud!(.init(target: .existing(dash.id), profile: changed, keyEdit: .replace("replacement-key")))
             vm.refresh()
             r.check(vm.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 edited profile keeps old transport owner while draining")
-            await probe.latest?.release(); await edited.value
+            await editedSession.waitUntilCleanupHeld()
+            await editedSession.release(); await edited.value
+            r.eq(clock.pending, 0, "C4 I3 edited validation drains timer continuation")
             r.eq(f.store.current.asrBackendSelection?.primary, f.id, "C4 I3 profile/key change prevents late selection commit")
             r.check(vm.currentValidatedServices.allSatisfy { $0.backendID != id }, "C4 I3 profile/key change prevents stale evidence")
         } catch { r.check(false, "C4 I3 realtime fixture: \(error)") }
@@ -203,38 +244,115 @@ enum ASRModelCenterReviewSelfTests {
         enum Mode { case success, empty, held }
         private let lock = NSLock()
         private var selectedMode: Mode = .success, configs: [RealtimeASRConfiguration] = [], sessions: [RealtimeFixture] = []
+        private var sessionWaiters: [Int: [CheckedContinuation<RealtimeFixture, Never>]] = [:]
+        private var requestWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
         var mode: Mode { get { lock.withLock { selectedMode } } set { lock.withLock { selectedMode = newValue } } }
         var configurations: [RealtimeASRConfiguration] { lock.withLock { configs } }
         var latest: RealtimeFixture? { lock.withLock { sessions.last } }
         func make(_ config: RealtimeASRConfiguration) -> RealtimeASRSessionHandle {
             lock.withLock {
+                let ordinal = sessions.count
                 configs.append(config)
-                let session = RealtimeFixture(mode: selectedMode); sessions.append(session)
+                let session = RealtimeFixture(mode: selectedMode, ordinal: ordinal); sessions.append(session)
+                sessionWaiters.removeValue(forKey: ordinal)?.forEach { $0.resume(returning: session) }
                 return .init(session: session, ingress: .init(), capabilities: DashScopeRealtimeASR.capabilities)
             }
         }
-        func waitForNewFinish(after count: Int) async {
-            for _ in 0..<10000 { if configurations.count > count, await latest?.waiting == true { return }; await Task.yield() }
+        func session(at ordinal: Int) async -> RealtimeFixture {
+            await withCheckedContinuation { continuation in
+                lock.withLock {
+                    if sessions.indices.contains(ordinal) { continuation.resume(returning: sessions[ordinal]); return }
+                    sessionWaiters[ordinal, default: []].append(continuation)
+                    requestWaiters.removeValue(forKey: ordinal)?.forEach { $0.resume() }
+                }
+            }
         }
-        func waitForFinish() async { for _ in 0..<10000 { if await latest?.waiting == true { return }; await Task.yield() } }
+        func waitUntilSessionRequested(at ordinal: Int) async {
+            await withCheckedContinuation { continuation in
+                lock.withLock {
+                    if sessionWaiters[ordinal] != nil { continuation.resume() }
+                    else { requestWaiters[ordinal, default: []].append(continuation) }
+                }
+            }
+        }
     }
     actor RealtimeFixture: RealtimeASRSession {
         let mode: RealtimeProbe.Mode
-        var chunks: [[Float]] = [], starts = 0, finishes = 0, cancelled = false, waiting = false
-        var continuation: CheckedContinuation<Void, Never>?, cleanup: CheckedContinuation<Void, Never>?
-        init(mode: RealtimeProbe.Mode) { self.mode = mode }
+        nonisolated let ordinal: Int
+        var chunks: [[Float]] = [], starts = 0, finishes = 0, cancelled = false, waiting = false, cleanupWaiting = false
+        private var continuation: CheckedContinuation<Void, Never>?, cleanup: CheckedContinuation<Void, Never>?
+        private var finishWaiters: [CheckedContinuation<Void, Never>] = [], cleanupWaiters: [CheckedContinuation<Void, Never>] = []
+        init(mode: RealtimeProbe.Mode, ordinal: Int) { self.mode = mode; self.ordinal = ordinal }
         func start() async throws { starts += 1 }
         func append(samples: [Float]) async throws { chunks.append(samples) }
         func finish() async throws -> ASRResult {
             finishes += 1
-            if mode == .held { waiting = true; await withCheckedContinuation { continuation = $0 } }
+            if mode == .held {
+                await withCheckedContinuation {
+                    continuation = $0; waiting = true
+                    finishWaiters.forEach { $0.resume() }; finishWaiters.removeAll()
+                }
+            }
             return .init(text: mode == .empty ? " " : "synthetic realtime", providerID: "fixture", latencyMs: 1)
+        }
+        func waitUntilFinishHeld() async {
+            if waiting { return }
+            await withCheckedContinuation { finishWaiters.append($0) }
         }
         func cancel() async {
             cancelled = true
-            if mode == .held && waiting { await withCheckedContinuation { cleanup = $0 } }
+            if mode == .held && waiting {
+                await withCheckedContinuation {
+                    cleanup = $0; cleanupWaiting = true
+                    cleanupWaiters.forEach { $0.resume() }; cleanupWaiters.removeAll()
+                }
+            }
         }
-        func release() { waiting = false; continuation?.resume(); continuation = nil; cleanup?.resume(); cleanup = nil }
+        func waitUntilCleanupHeld() async {
+            if cleanupWaiting { return }
+            await withCheckedContinuation { cleanupWaiters.append($0) }
+        }
+        func diagnostic() -> String { "session=\(ordinal) starts=\(starts) finishes=\(finishes) finishHeld=\(waiting) cancelled=\(cancelled) cleanupHeld=\(cleanupWaiting)" }
+        func releaseFinish() { waiting = false; continuation?.resume(); continuation = nil }
+        func releaseCleanup() { cleanupWaiting = false; cleanup?.resume(); cleanup = nil }
+        func release() { releaseFinish(); releaseCleanup() }
+    }
+
+    /// Drives the real DeadlineRace timer, preserving cancellation and exact timer identity.
+    final class DeadlineClock: @unchecked Sendable {
+        struct Ticket: Sendable { let id: UUID; let seconds: TimeInterval }
+        private let lock = NSLock()
+        private var tickets: [Ticket] = []
+        private var sleepers: [UUID: CheckedContinuation<Void, Error>] = [:]
+        private var observers: [Int: [CheckedContinuation<Ticket, Never>]] = [:]
+        var count: Int { lock.withLock { tickets.count } }
+        var pending: Int { lock.withLock { sleepers.count } }
+        func sleep(_ seconds: TimeInterval) async throws {
+            let ticket = Ticket(id: UUID(), seconds: seconds)
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    lock.withLock {
+                        guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
+                        let ordinal = tickets.count; tickets.append(ticket); sleepers[ticket.id] = continuation
+                        observers.removeValue(forKey: ordinal)?.forEach { $0.resume(returning: ticket) }
+                    }
+                }
+            } onCancel: {
+                self.lock.withLock { self.sleepers.removeValue(forKey: ticket.id) }?.resume(throwing: CancellationError())
+            }
+        }
+        func timer(at ordinal: Int) async -> Ticket {
+            await withCheckedContinuation { continuation in
+                lock.withLock {
+                    if tickets.indices.contains(ordinal) { continuation.resume(returning: tickets[ordinal]) }
+                    else { observers[ordinal, default: []].append(continuation) }
+                }
+            }
+        }
+        func expire(_ ticket: Ticket) -> Bool {
+            guard let continuation = lock.withLock({ sleepers.removeValue(forKey: ticket.id) }) else { return false }
+            continuation.resume(); return true
+        }
     }
     private final class DiscoveryTransport: URLProtocol, @unchecked Sendable {
         private static let captured = OSAllocatedUnfairLock(initialState: [URLRequest]())

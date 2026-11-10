@@ -6,6 +6,7 @@ enum AsyncDeadlineError: Error { case timedOut }
 /// The caller resumes immediately; it never joins a producer that ignores cancellation.
 /// Producers must own resource cleanup in their cancellation handler/stream termination.
 func withAsyncDeadline<Value: Sendable>(seconds: TimeInterval,
+    sleep: (@Sendable (TimeInterval) async throws -> Void)? = nil,
     operation: @escaping @Sendable () async throws -> Value) async throws -> Value {
     let race = DeadlineRace<Value>()
     return try await withTaskCancellationHandler {
@@ -19,7 +20,8 @@ func withAsyncDeadline<Value: Sendable>(seconds: TimeInterval,
             }
             let timer = Task {
                 do {
-                    try await Task.sleep(for: .seconds(max(0, seconds)))
+                    if let sleep { try await sleep(max(0, seconds)) }
+                    else { try await Task.sleep(for: .seconds(max(0, seconds))) }
                     race.finish(.failure(AsyncDeadlineError.timedOut))
                 } catch { /* The other participant won. */ }
             }

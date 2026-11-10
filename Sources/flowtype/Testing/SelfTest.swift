@@ -417,6 +417,7 @@ enum SelfTest {
             finish(r)
         }
         if CommandLine.arguments.contains("--asr-model-center-only") {
+            await testAsyncDeadline(r)
             await ASRModelCenterSelfTests.run(r)
             print("=== ASR model center self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)

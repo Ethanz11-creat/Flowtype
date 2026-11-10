@@ -42,7 +42,8 @@ enum ASRServiceValidationState: Equatable, Sendable {
          now: @escaping @MainActor () -> Date = { Date() },
          onVerified: @escaping @MainActor (ASRServiceValidationRecord) -> Void = { _ in },
          serviceRecognition: ServiceRecognition? = nil, cloudRecognition: CloudRecognition? = nil,
-         realtimeFactory: @escaping RealtimeSessionFactory = liveRealtimeSessionFactory, realtimeTimeout: TimeInterval = 15) {
+         realtimeFactory: @escaping RealtimeSessionFactory = liveRealtimeSessionFactory, realtimeTimeout: TimeInterval = 15,
+         realtimeDeadlineSleep: (@Sendable (TimeInterval) async throws -> Void)? = nil) {
         self.session = session; self.resolver = resolver
         self.onVerified = onVerified; self.now = now
         self.serviceRecognition = serviceRecognition ?? { profile, credential, sample in
@@ -61,7 +62,7 @@ enum ASRServiceValidationState: Equatable, Sendable {
             let worker = Task { try await transcribeSavedRealtime(samples: sample.samples, handle: handle) }
             let result: Result<ASRResult, Error>
             do {
-                result = .success(try await withAsyncDeadline(seconds: realtimeTimeout) { try await worker.value })
+                result = .success(try await withAsyncDeadline(seconds: realtimeTimeout, sleep: realtimeDeadlineSleep) { try await worker.value })
             } catch {
                 worker.cancel()
                 result = .failure(error)
