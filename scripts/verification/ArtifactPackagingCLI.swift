@@ -31,20 +31,9 @@ import Darwin
             }, writeManifest: { app, output, logs in
                 _ = try required("/usr/bin/swift", [scripts.appendingPathComponent("write-artifact-manifest.swift").path, "--app", app.path, "--output", output.path], cwd: repo, logs: logs)
             }, sign: { app, logs in
-                // Resource-only bundles are sealed by the final app signature. Sign actual Mach-O code inside out.
-                let e = FileManager.default.enumerator(at: app, includingPropertiesForKeys: [.isRegularFileKey])!
-                var code: [URL] = []
-                while let file = e.nextObject() as? URL {
-                    if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
-                        let h = try FileHandle(forReadingFrom: file); let bytes = try h.read(upToCount: 4); try h.close()
-                        let magic = bytes.map(Array.init) ?? []
-                        if [[0xcf,0xfa,0xed,0xfe], [0xce,0xfa,0xed,0xfe], [0xca,0xfe,0xba,0xbe], [0xbe,0xba,0xfe,0xca]].contains(magic) { code.append(file) }
-                    }
+                try PackagingSigning.sign(app: app, identity: ProcessInfo.processInfo.environment["FLOWTYPE_SIGNING_IDENTITY"]) { executable, args in
+                    _ = try required(executable, args, cwd: repo, logs: logs)
                 }
-                for file in code.sorted(by: { $0.path.count > $1.path.count }) {
-                    _ = try required("/usr/bin/codesign", ["--force", "--sign", "-", file.path], cwd: repo, logs: logs)
-                }
-                _ = try required("/usr/bin/codesign", ["--force", "--sign", "-", app.path], cwd: repo, logs: logs)
             }, verify: { app, logs in
                 _ = try required("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", app.path], cwd: repo, logs: logs)
             }, inUse: { app, logs in

@@ -79,6 +79,54 @@ enum VerificationSelfTests {
         lastRepository = repo; lastOutput = output
         return try VerificationRunner.run(lane: lane, repository: repo, output: output, manualReport: nil, ciReport: nil, dependencies: dependencies(scenario, recovery: recovery))
     }
+    static func testCandidateReuseDoesNotRebuild() throws {
+        for scenario in ["good", "dirty", "wrong-source", "wrong-hash", "external"] {
+            let repo = root.appendingPathComponent("reuse-\(UUID())")
+            try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+            let output = try VerificationPaths.prepare(repository: repo).appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+            let candidate = repo.appendingPathComponent("build/FlowType.manifest.json")
+            try JSONEncoder().encode(manifest).write(to: candidate)
+            let base = dependencies("good")
+            var executed: [String] = []
+            let deps = VerificationDependencies(execute: { request in
+                executed.append(request.phase)
+                return try base.execute(request)
+            }, snapshot: { repo, logs in
+                let value = try base.snapshot(repo, logs)
+                return SourceSnapshot(identity: SourceIdentity(gitSHA: scenario == "wrong-source" ? String(repeating: "f", count: 40) : value.identity.gitSHA, sourceTree: value.identity.sourceTree, dirty: scenario == "dirty"), fingerprint: value.fingerprint, shallow: false)
+            }, manifest: { repo in
+                if scenario == "wrong-hash" { throw VerificationFailure.identityMismatch }
+                return try base.manifest(repo)
+            }, recover: base.recover, ciCode: false)
+            let report = try VerificationRunner.run(lane: .artifact, repository: repo, output: output, manualReport: nil, ciReport: nil,
+                candidateManifest: scenario == "external" ? root.appendingPathComponent("external.json") : candidate, dependencies: deps)
+            check(!executed.contains("artifact-build"), "reuse \(scenario) never builds or signs")
+            if scenario == "good" {
+                check(report.status == .pass && report.phases.contains(where: { $0.name == "artifact-reuse" && $0.status == .pass }), "reuse records successful internal phase")
+                check(executed.filter { $0.hasPrefix("smoke-") }.count == 10 && executed.contains("artifact-check") && executed.contains("artifact-signature"), "reuse retains signature resource and ten smoke checks")
+                let destination = root.appendingPathComponent("reuse-export-\(UUID())")
+                try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
+                check(try VerificationEvidence.exportAllowlisted(report: report, runRoot: output, destination: destination).contains("verify-report.json"), "reuse evidence can be exported")
+                for both in [false, true] {
+                    var changed = report
+                    if both { changed.phases.append(VerificationPhase(name: "artifact-build", status: .pending, failureCode: .notExecuted)) }
+                    else { changed.phases.removeAll { $0.name == "artifact-reuse" } }
+                    try JSONEncoder().encode(changed).write(to: output.appendingPathComponent("verify-report.json"))
+                    let invalid = root.appendingPathComponent("invalid-reuse-export-\(UUID())")
+                    try FileManager.default.createDirectory(at: invalid, withIntermediateDirectories: false)
+                    do { _ = try VerificationEvidence.exportAllowlisted(report: changed, runRoot: output, destination: invalid); check(false, "report rejects both or neither build/reuse phases") }
+                    catch { check(true, "report rejects both or neither build/reuse phases") }
+                }
+
+            } else { check(report.status == .fail && !executed.contains("artifact-check"), "reuse rejects \(scenario)") }
+        }
+        for args in [["--lane", "code", "--candidate-manifest", "/tmp/candidate.json"], ["--lane", "artifact", "--candidate-manifest", "relative"], ["--lane", "artifact", "--candidate-manifest", "/a", "--candidate-manifest", "/b"]] {
+            do { _ = try VerificationOptions.parse(args); check(false, "reuse option invalid combination rejected") } catch { check(true, "reuse option invalid combination rejected") }
+        }
+        do { let options = try VerificationOptions.parse(["--lane", "release", "--candidate-manifest", "/tmp/candidate.json"]); check(options.candidateManifest?.path == "/tmp/candidate.json", "reuse parses absolute paired option") }
+        catch { check(false, "reuse parses absolute paired option") }
+    }
     static func testPartialReportAndSkipAggregation() throws {
         let code = try runFixture("good", lane: .code)
         check(code.status == .pass && code.phases.contains(where: { $0.name == "code-full" && $0.status == .pass }), "code executes full")
@@ -457,12 +505,12 @@ enum VerificationSelfTests {
         catch { check(false, "historical schema1 reports without manual detail remain exportable") }
     }
     /// The old runner delegates to the real standalone CLI; it never runs its CLI fixtures under the old executable.
-    static func runModelCenterSelfTests(_ command: BoundedCommand) throws -> Bool {
+    static func runModelCenterSelfTests(_ command: BoundedCommand, summary: String = "Model center acceptance self-test:") throws -> Bool {
         let result = try BoundedProcess.run(command)
         guard result.termination == .normal, result.exitCode == 0, !result.timedOut else { return false }
         let text = String(decoding: try Data(contentsOf: command.stdoutURL), as: UTF8.self)
-        let summaries = text.components(separatedBy: "\n").filter { $0.hasPrefix("Model center acceptance self-test:") }
-        return summaries.count == 1 && summaries[0].range(of: #"\AModel center acceptance self-test: [1-9][0-9]* passed, 0 failed\z"#, options: .regularExpression) != nil
+        let summaries = text.components(separatedBy: "\n").filter { $0.hasPrefix(summary) }
+        return summaries.count == 1 && summaries[0].range(of: "\\A" + NSRegularExpression.escapedPattern(for: summary) + " [1-9][0-9]* passed, 0 failed\\z", options: .regularExpression) != nil
     }
     static func testModelCenterSelfTestRegistration() throws {
         let directory = root.appendingPathComponent("D2-registration-fixtures")
@@ -496,6 +544,16 @@ enum VerificationSelfTests {
         }
         check(passed, "registered standalone model center CLI self-test passes")
     }
+    static func testRegisteredDistributionSuite() throws {
+        let repository = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let directory = root.appendingPathComponent("D4-registered-suite")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        let command = BoundedCommand(executable: URL(fileURLWithPath: "/bin/bash"), arguments: [repository.appendingPathComponent("scripts/verify-distribution.sh").path, "--self-test"], workingDirectory: repository,
+            environment: ProcessInfo.processInfo.environment, stdoutURL: directory.appendingPathComponent("D4.stdout"), stderrURL: directory.appendingPathComponent("D4.stderr"), timeoutSeconds: 120)
+        let passed = try runModelCenterSelfTests(command, summary: "Distribution verification self-test:")
+        if FileManager.default.fileExists(atPath: command.stdoutURL.path) { print(String(decoding: try Data(contentsOf: command.stdoutURL), as: UTF8.self), terminator: "") }
+        check(passed, "registered standalone distribution CLI self-test passes")
+    }
     static func run() -> Int32 {
         let fm = FileManager.default
         root = fm.temporaryDirectory.appendingPathComponent("flowtype-verification-\(UUID())")
@@ -508,7 +566,7 @@ enum VerificationSelfTests {
             let compiled = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/usr/bin/swiftc"), arguments: ["-parse-as-library", source.path, "-o", fixture.path], workingDirectory: root,
                 environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("compile.stdout"), stderrURL: root.appendingPathComponent("compile.stderr"), timeoutSeconds: 30))
             guard compiled.cliExitCode == 0 else { throw VerificationFailure.toolFailed }
-            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks, testManualIdentityAndRequiredCases, testModelCenterSelfTestRegistration, testRegisteredModelCenterSuite] {
+            for test in [testCandidateReuseDoesNotRebuild, testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks, testManualIdentityAndRequiredCases, testModelCenterSelfTestRegistration, testRegisteredModelCenterSuite, testRegisteredDistributionSuite] {
                 do { try test() } catch { failed += 1; print("FAIL: fixture \((error as? VerificationFailure)?.rawValue ?? String((error as NSError).code))") }
             }
             testFullRunnerRequired()

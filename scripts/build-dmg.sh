@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
-[ "$#" -eq 0 ] || exit 64
+DISTRIBUTION=0
+if [ "$#" -eq 1 ] && [ "$1" = "--distribution" ]; then DISTRIBUTION=1
+elif [ "$#" -ne 0 ]; then exit 64
+fi
 ROOT=$(cd "$(dirname "$0")/.." && pwd -P)
 APP="$ROOT/build/FlowType.app"
 MANIFEST="$ROOT/build/FlowType.manifest.json"
@@ -10,6 +13,13 @@ NUMBER=$(/usr/bin/plutil -extract CFBundleVersion raw -o - "$APP/Contents/Info.p
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
 [ "$VERSION" = "$(/usr/bin/plutil -extract buildInfo.version raw -o - "$MANIFEST")" ] || exit 1
 [ "$NUMBER" = "$(/usr/bin/plutil -extract buildInfo.buildNumber raw -o - "$MANIFEST")" ] || exit 1
+if [ "$DISTRIBUTION" -eq 1 ]; then
+    # Explicit opt-in: this mode submits both packages to Apple's notary service.
+    EVIDENCE="$ROOT/build/distribution-$(/usr/bin/uuidgen)"
+    exec "$ROOT/scripts/verify-distribution.sh" --distribute \
+        --app "$APP" --manifest "$MANIFEST" --dmg "$ROOT/build/FlowType-$VERSION.dmg" \
+        --notary-evidence "$EVIDENCE/notary-evidence.json" --output "$EVIDENCE/distribution-report.json"
+fi
 TEMP=$(mktemp -d)
 trap 'rm -rf "$TEMP"' EXIT
 trap 'exit 143' TERM

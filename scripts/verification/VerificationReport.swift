@@ -140,7 +140,7 @@ enum VerificationEvidence {
     static func exportAllowlisted(report: VerificationReport, runRoot: URL, destination: URL) throws -> [String] {
         let root = try ownedRoot(runRoot), output = try emptyDestination(destination, runRoot: root)
         guard let (reportName, disk) = try selected(root), try encoded(disk) == encoded(report) else { throw VerificationFailure.identityMismatch }
-        let internalNames: Set<String> = ["source-start", "source-end", "artifact-recovery-before", "artifact-source", "artifact-manifest", "artifact-recovery-after", "report-write"]
+        let internalNames: Set<String> = ["source-start", "source-end", "artifact-recovery-before", "artifact-source", "artifact-reuse", "artifact-manifest", "artifact-recovery-after", "report-write"]
         let commandNames = Set(["platform-os", "platform-arch", "platform-swift", "code-build", "code-full", "artifact-build", "artifact-signature", "artifact-check"] + (1...10).map { String(format: "smoke-%02d", $0) })
         let streamNames = commandNames.subtracting(["platform-os", "platform-arch", "platform-swift"])
         var payloads = [reportName: try encoded(report)], usedChildren: Set<String> = [], phases: Set<String> = []
@@ -188,6 +188,9 @@ enum VerificationEvidence {
                 for name in ["artifact.stdout", "artifact.stderr"] { try include(child + "/check-output/" + name) }
                 for suffix in ["", ".1", ".2", ".3"] { try include(child + "/check-output/validation-root/Logs/diagnostic-smoke.log" + suffix) }
             }
+        }
+        if report.lane != .code {
+            guard phases.contains("artifact-build") != phases.contains("artifact-reuse") else { throw VerificationFailure.malformedReport }
         }
         // Validate the complete selection before creating any output, then write data, never copied links.
         for path in payloads.keys.sorted() {
@@ -352,7 +355,8 @@ enum VerificationRunner {
     static func run(lane: VerificationLane, repository: URL, output: URL, manualReport: URL?, ciReport: URL?) throws -> VerificationReport {
         try run(lane: lane, repository: repository, output: output, manualReport: manualReport, ciReport: ciReport, dependencies: .live())
     }
-    static func run(lane: VerificationLane, repository: URL, output: URL, manualReport: URL?, ciReport: URL?, dependencies: VerificationDependencies) throws -> VerificationReport {
+    static func run(lane: VerificationLane, repository: URL, output: URL, manualReport: URL?, ciReport: URL?, candidateManifest: URL? = nil, dependencies: VerificationDependencies) throws -> VerificationReport {
+        guard candidateManifest == nil || lane != .code else { throw VerificationFailure.usage }
         let lock = try VerificationLock(repository: repository); defer { withExtendedLifetime(lock) {} }
         let fm = FileManager.default
         guard UUID(uuidString: output.lastPathComponent) != nil,
@@ -363,7 +367,7 @@ enum VerificationRunner {
         let code = lane != .artifact, artifact = lane != .code
         var names = ["source-start", "platform-os", "platform-arch", "platform-swift"]
         if code { names += ["code-build", "code-full"] }
-        if artifact { names += ["artifact-recovery-before", "artifact-source", "artifact-build", "artifact-manifest", "artifact-signature", "artifact-check", "artifact-recovery-after"] + (1...10).map { String(format: "smoke-%02d", $0) } }
+        if artifact { names += ["artifact-recovery-before", "artifact-source", candidateManifest == nil ? "artifact-build" : "artifact-reuse", "artifact-manifest", "artifact-signature", "artifact-check", "artifact-recovery-after"] + (1...10).map { String(format: "smoke-%02d", $0) } }
         names.append("source-end")
         var report = VerificationReport(schemaVersion: 1, runID: UUID(uuidString: output.lastPathComponent)?.uuidString ?? UUID().uuidString,
             lane: lane, status: .pending, sourceIdentity: nil, artifactIdentity: nil,
@@ -446,7 +450,18 @@ enum VerificationRunner {
             }
             var candidate: ArtifactManifest?
             if platform && sourceOK && recovered && clean {
-                if try execute("artifact-build", repository.appendingPathComponent("scripts/build-app.sh"), [], timeout: 900, failure: .buildFailed) {
+                let ready: Bool
+                if let candidateManifest {
+                    ready = try internalPhase("artifact-reuse") { _ in
+                        let expected = try canonicalExisting(repository).appendingPathComponent("build/FlowType.manifest.json")
+                        guard candidateManifest.path == expected.path, try canonicalExisting(candidateManifest).path == expected.path else { throw VerificationFailure.identityMismatch }
+                        let value = try dependencies.manifest(repository)
+                        guard value.buildInfo.gitSHA == start?.identity.gitSHA, value.buildInfo.sourceTree == start?.identity.sourceTree, !value.buildInfo.dirty else { throw VerificationFailure.identityMismatch }
+                    }
+                } else {
+                    ready = try execute("artifact-build", repository.appendingPathComponent("scripts/build-app.sh"), [], timeout: 900, failure: .buildFailed)
+                }
+                if ready {
                     let loaded = try internalPhase("artifact-manifest") { _ in
                         let value = try dependencies.manifest(repository)
                         guard value.buildInfo.gitSHA == start?.identity.gitSHA, value.buildInfo.sourceTree == start?.identity.sourceTree, !value.buildInfo.dirty else { throw VerificationFailure.identityMismatch }

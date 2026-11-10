@@ -395,3 +395,34 @@ struct ArtifactPackager {
         }
     }
 }
+
+/// Injected command boundary keeps signing tests away from Keychain.
+enum PackagingSigning {
+    static func developerIdentity(_ identity: String) throws -> String {
+        guard identity.range(of: #"\ADeveloper ID Application: .+ \([A-Z0-9]{10}\)\z"#, options: .regularExpression) != nil,
+              !identity.contains("\n"), !identity.contains("\r") else { throw PackagingFailure.signFailed }
+        return String(identity.suffix(11).prefix(10))
+    }
+    static func sign(app: URL, identity: String?, command: (String, [String]) throws -> Void) throws {
+        if let identity { _ = try developerIdentity(identity) }
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(at: app, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey]) else { throw PackagingFailure.signFailed }
+        var code: Set<URL> = []
+        while let file = enumerator.nextObject() as? URL {
+            let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey])
+            if values.isSymbolicLink == true { continue }
+            if values.isDirectory == true && ["framework", "xpc", "app"].contains(file.pathExtension) { code.insert(file) }
+            if values.isRegularFile == true {
+                let h = try FileHandle(forReadingFrom: file); let bytes = try h.read(upToCount: 4); try h.close()
+                let magic = bytes.map(Array.init) ?? []
+                if [[0xcf,0xfa,0xed,0xfe], [0xfe,0xed,0xfa,0xcf], [0xce,0xfa,0xed,0xfe], [0xfe,0xed,0xfa,0xce], [0xca,0xfe,0xba,0xbe], [0xbe,0xba,0xfe,0xca], [0xca,0xfe,0xba,0xbf], [0xbf,0xba,0xfe,0xca]].contains(magic) { code.insert(file) }
+            }
+        }
+        let flags = ["--force", "--sign", identity ?? "-"] + (identity == nil ? [] : ["--timestamp", "--options", "runtime"])
+        // No JIT/unsigned-executable-memory entitlement: MLX/Metal and WhisperKit use native code.
+        for file in code.sorted(by: { $0.path.count == $1.path.count ? $0.path < $1.path : $0.path.count > $1.path.count }) {
+            try command("/usr/bin/codesign", flags + [file.path])
+        }
+        try command("/usr/bin/codesign", flags + [app.path])
+    }
+}
