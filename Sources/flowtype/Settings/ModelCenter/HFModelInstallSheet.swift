@@ -29,26 +29,34 @@ final class HFModelInstallSession: ObservableObject {
     private let resolve: Resolve
     private let plan: Plan
     private let enqueue: (ASRInstallPlan) async throws -> UUID
-    init(resolve: @escaping Resolve, plan: @escaping Plan, enqueue: @escaping (ASRInstallPlan) async throws -> UUID) {
-        self.resolve = resolve; self.plan = plan; self.enqueue = enqueue
+    private let beginPreview: () -> Void
+    init(resolve: @escaping Resolve, plan: @escaping Plan, enqueue: @escaping (ASRInstallPlan) async throws -> UUID,
+         beginPreview: @escaping () -> Void = {}) {
+        self.resolve = resolve; self.plan = plan; self.enqueue = enqueue; self.beginPreview = beginPreview
     }
     /// The session owns metadata previews only; B4 retains every download after dismissal.
     convenience init(credentialStore: any ASRCredentialStore, installer: ModelInstallationCoordinator) {
-        let clients = Clients(credentialStore: credentialStore)
+        self.init(makeClient: { HFRepositoryClient(downloadEndpoint: $0, credentialStore: credentialStore) },
+            enqueue: { try await installer.enqueue($0) })
+    }
+    /// Uses the same preview composition with an injected metadata transport for focused fixtures.
+    convenience init(makeClient: @escaping (URL) -> HFRepositoryClient,
+                     enqueue: @escaping (ASRInstallPlan) async throws -> UUID) {
+        let clients = Clients(makeClient: makeClient)
         self.init(resolve: { selection, endpoint, credential in
             try await clients.client(endpoint).resolve(selection, credentialID: credential)
         }, plan: { repository, variant, tokenizer, credential in
             try await ASRInstallPlanner(client: clients.client(repository.downloadEndpoint)).plan(
                 repository: repository, variant: variant, tokenizer: tokenizer, credentialID: credential)
-        }, enqueue: { try await installer.enqueue($0) })
+        }, enqueue: enqueue, beginPreview: { clients.values.removeAll() })
     }
     private final class Clients {
-        let credentials: any ASRCredentialStore
+        let makeClient: (URL) -> HFRepositoryClient
         var values: [URL: HFRepositoryClient] = [:]
-        init(credentialStore: any ASRCredentialStore) { credentials = credentialStore }
+        init(makeClient: @escaping (URL) -> HFRepositoryClient) { self.makeClient = makeClient }
         func client(_ endpoint: URL) -> HFRepositoryClient {
             if let value = values[endpoint] { return value }
-            let value = HFRepositoryClient(downloadEndpoint: endpoint, credentialStore: credentials)
+            let value = makeClient(endpoint)
             values[endpoint] = value
             return value
         }
@@ -61,6 +69,9 @@ final class HFModelInstallSession: ObservableObject {
     }
     func preparePreview() async {
         guard !isWorking else { return }
+        // B1 contexts belong to one metadata preview; its model/tokenizer/planner still
+        // share clients, while a fresh attempt releases all prior endpoint contexts.
+        beginPreview()
         isWorking = true; preview = nil; message = nil; jobID = nil; variants = []
         defer { isWorking = false }
         let captured = input

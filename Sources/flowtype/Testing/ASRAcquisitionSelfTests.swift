@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import os
 
 /// C2 orchestration uses tiny injected metadata and PCM; never production credentials or transport.
 enum ASRAcquisitionSelfTests {
@@ -12,6 +13,8 @@ enum ASRAcquisitionSelfTests {
         testAtomicServiceDraft(r)
         testCloudSaveOnlyAndLegacyIntent(r)
         testLocalDraftCloseOwnership(r)
+        await testStaleCloudRevisionHasNoEffects(r)
+        await testHFPreviewReleasesOldContexts(r)
     }
     @MainActor static func testHFPreviewDoesNotDownloadWeights(_ r: SelfTest.Reporter) async {
         let f = HFInstallPlannerSelfTests.Fixture(data: HFInstallPlannerSelfTests.qwenData, weights: ["model.safetensors"])
@@ -206,6 +209,106 @@ enum ASRAcquisitionSelfTests {
         session.discard()
         r.eq(navigation.request?.destination, .history("c2-original"), "C2 local discard forwards original navigation")
         r.eq(closed, 1, "C2 local discard closes once")
+    }
+    @MainActor static func testStaleCloudRevisionHasNoEffects(_ r: SelfTest.Reporter) async {
+        let suite = "flowtype-c2-revision-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let boundary = CredentialFixture(), effects = OSAllocatedUnfairLock(initialState: 0)
+        let access = boundary.access
+        let credentials = KeychainASRCredentialStore(access: .init(read: { id in
+            effects.withLock { $0 += 1 }; return try access.read(id)
+        }, update: { id, value in
+            effects.withLock { $0 += 1 }; return try access.update(id, value)
+        }, add: { id, value in
+            effects.withLock { $0 += 1 }; try access.add(id, value)
+        }, remove: { id in effects.withLock { $0 += 1 }; try access.remove(id) }))
+        var writes = 0
+        let store = ConfigurationStore(defaults: defaults, asrCredentials: credentials, persistence: { data in
+            writes += 1; defaults.set(data, forKey: "flowtype.config")
+        })
+        store.current.cloudASRConfig.providers = []
+        var profile = CloudASRProviderConfig.defaultSiliconFlow(isActive: false)
+        profile.name = "C2 revision fixture"
+        do {
+            try store.saveModelCenterASRDraft(.init(target: .new(profile.id), profile: profile, keyEdit: .replace("fixture-R0-key")))
+            var stale = ASRProviderDraft(target: .existing(profile.id), profile: store.current.cloudASRConfig.providers[0], keyEdit: .replace("fixture-stale-key"))
+            stale.profile.name = "Unsaved second editor"
+            let retainedDraft = stale
+            var newer = stale
+            newer.profile.baseURL = "https://fixture.invalid/new/v1"
+            newer.profile.model = "fixture-R1-model"
+            newer.keyEdit = .replace("fixture-R1-key")
+            try store.saveModelCenterASRDraft(newer)
+            var pending = store.current
+            pending.pendingLegacyNativeResolution = true
+            pending.systemPrompt = "Pending unrelated setting"
+            store.save(pending)
+            let before = store.current, beforeBytes = defaults.data(forKey: "flowtype.config")
+            let beforeCredentials = boundary.state.withLock { $0.values }
+            let beforeWrites = writes
+            effects.withLock { $0 = 0 }
+            do { try store.saveModelCenterASRDraft(stale); r.check(false, "C2 I1 stale cloud revision throws conflict") }
+            catch { r.eq(error as? ProviderDraftCommitError, .conflict, "C2 I1 stale cloud revision throws conflict") }
+            r.eq(writes, beforeWrites, "C2 I1 stale revision rejected before config writes")
+            r.eq(effects.withLock { $0 }, 0, "C2 I1 stale revision rejected before credential reads or writes")
+            r.eq(boundary.state.withLock { $0.values }, beforeCredentials, "C2 I1 stale revision cannot stage any key")
+            r.eq(store.current, before, "C2 I1 stale revision preserves latest profile selection and migration marker")
+            r.eq(defaults.data(forKey: "flowtype.config"), beforeBytes, "C2 I1 stale revision leaves durable config untouched")
+            r.eq(ASRBackendMigration.selection(from: store.current), ASRBackendMigration.selection(from: before), "C2 I1 stale revision leaves effective selection untouched")
+            r.eq(stale, retainedDraft, "C2 I1 rejected stale draft remains available for conflict recovery")
+            let afterAttemptWrites = writes
+            try await Task.sleep(for: .milliseconds(650))
+            r.check(writes > afterAttemptWrites, "C2 I1 conflict does not cancel an already scheduled settings save")
+            let persisted = try JSONDecoder().decode(Configuration.self, from: defaults.data(forKey: "flowtype.config")!)
+            r.eq(persisted.systemPrompt, "Pending unrelated setting", "C2 I1 prior pending settings save still completes")
+        } catch { r.check(false, "C2 I1 isolated revision fixture unexpectedly failed") }
+    }
+    @MainActor static func testHFPreviewReleasesOldContexts(_ r: SelfTest.Reporter) async {
+        let commit = HFInstallPlannerSelfTests.commit
+        let model = HFInstallPlannerSelfTests.graphs("openai_whisper-tiny/")
+        let tokenizer = HFInstallPlannerSelfTests.tokenizerData
+        let transport = HFRepositorySelfTests.session()
+        defer { transport.invalidateAndCancel() }
+        HFMetadataFixture.reset { request, _ in
+            let path = request.url!.path
+            if path.contains("/revision/") { return .init(body: HFInstallPlannerSelfTests.json(["sha": commit])) }
+            let files = path.contains("/openai/whisper-tiny/") ? tokenizer : model
+            if path.contains("/tree/") {
+                let entries: [[String: Any]] = files.map { path, data in
+                    var blob = Data("blob \(data.count)\0".utf8); blob.append(data)
+                    let digest = Insecure.SHA1.hash(data: blob).map { String(format: "%02x", $0) }.joined()
+                    return ["type": "file", "path": path, "size": data.count, "oid": digest]
+                }
+                return .init(body: HFInstallPlannerSelfTests.json(entries))
+            }
+            let name = path.components(separatedBy: "/resolve/" + commit + "/").last ?? ""
+            return .init(status: files[name] == nil ? 404 : 200, body: files[name] ?? Data())
+        }
+        let credentials = KeychainASRCredentialStore(access: .memory())
+        var created = 0, enqueues = 0
+        weak var firstClient: HFRepositoryClient?
+        let session = HFModelInstallSession(makeClient: { endpoint in
+            let client = HFRepositoryClient(downloadEndpoint: endpoint, session: transport, credentialStore: credentials)
+            created += 1
+            if created == 1 { firstClient = client }
+            return client
+        }, enqueue: { enqueues += 1; return $0.id })
+        session.input.repository = "org/model"
+        session.input.variant = "openai_whisper-tiny"
+        session.input.tokenizerRepository = "openai/whisper-tiny"
+        await session.preparePreview()
+        r.eq(session.preview?.plan.files.count, 11, "C2 M1 actual resolver and planner share model/tokenizer contexts")
+        r.eq(created, 1, "C2 M1 one client serves both sources within one preview")
+        r.check(firstClient != nil, "C2 M1 current preview retains its resolver context")
+        let oldContext = session.preview?.repository.resolutionContextID
+        await session.preparePreview()
+        r.eq(created, 2, "C2 M1 fresh preview replaces the prior metadata client")
+        r.check(firstClient == nil, "C2 M1 obsolete resolver and all of its contexts are released")
+        r.eq(session.preview?.plan.files.count, 11, "C2 M1 fresh preview still resolves and plans both sources")
+        r.check(session.preview?.repository.resolutionContextID != oldContext, "C2 M1 fresh preview owns new repository contexts")
+        r.eq(enqueues, 0, "C2 M1 replacing metadata clients never enqueues weights")
+        r.check(!HFMetadataFixture.requests.contains { $0.url!.path.hasSuffix("/weight.bin") }, "C2 M1 lifecycle fixture requests metadata only")
     }
     static func testValidationResourceContract(_ r: SelfTest.Reporter) {
         for language: WhisperLanguage in [.zh, .en, .auto] {

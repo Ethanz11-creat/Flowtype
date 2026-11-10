@@ -173,6 +173,14 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
 
     /// Model-center save-only entry. Selection is a separate, explicit validated VM action.
     func saveModelCenterASRDraft(_ draft: ASRProviderDraft) throws {
+        // Model-center editors own the revision they captured. Reject stale input before
+        // cancelling a pending save, reading credentials or starting the durable transaction.
+        if case .existing(let id) = draft.target {
+            guard let profile = current.cloudASRConfig.providers.first(where: { $0.id == id }) else {
+                throw ProviderDraftCommitError.deleted
+            }
+            guard profile.revision == draft.profile.revision else { throw ProviderDraftCommitError.conflict }
+        }
         try commitASRDraft(draft, preservingSelection: true)
     }
 
