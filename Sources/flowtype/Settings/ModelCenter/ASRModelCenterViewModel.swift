@@ -441,8 +441,17 @@ import Foundation
                       preview.assessment.compatibility != .incompatible,
                       let original = preview.replacingModel, preview.replacingID == original.id,
                       self.configuration().installedASRModels.filter({ $0.importedModelID == original.id }) == preview.replacingRecords else { throw NativeASRActivationError.changedCandidate }
+                let originalID = ASRModelCenterPresentation.nativeID(for: original, records: preview.replacingRecords)
+                let wasFocused = self.selectedID == originalID
                 try await self.native.relocate(preview.model, replacing: original, sample: self.sample())
                 if actions.preview?.id == previewID { actions.cancelInspection() }
+                // Legacy relocation changes backend identity; follow the durable model
+                // only while the user is still viewing its original detail.
+                let committed = self.configuration()
+                if wasFocused, self.selectedID == originalID,
+                   let relocated = committed.importedASRModels.first(where: { $0.id == original.id }) {
+                    self.selectedID = ASRModelCenterPresentation.nativeID(for: relocated, records: committed.installedASRModels)
+                }
             } catch { self.notice = error.localizedDescription }
             self.refresh()
         }

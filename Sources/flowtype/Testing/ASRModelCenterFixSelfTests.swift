@@ -9,6 +9,7 @@ enum ASRModelCenterFixSelfTests {
         policyDisclosure(r)
         await renderPolicy(r)
         await legacyRelocation(r)
+        await legacyRelocationFocusGuards(r)
         await relocation(r)
         await relocationGuards(r)
     }
@@ -58,10 +59,12 @@ enum ASRModelCenterFixSelfTests {
             let oldSelection = ASRBackendSelection(primary: role == "primary" ? oldID : (role == "fallback" ? f.base.id : unrelated),
                 fallback: role == "fallback" ? oldID : nil)
             f.base.store.current.setASRBackendSelection(oldSelection); env.model.refresh()
+            env.model.selectedID = oldID
             let previous = f.native.activeLease, actions = env.actions(navigation: nil)
             await actions.stageRelocation?(oldID, f.moved)?.value
             guard let preview = f.imported.preview else { r.check(false, "I3 legacy relocation preview exists"); continue }
             await actions.relocatePreview?(preview.id)
+            r.eq(env.model.selectedID, f.id, "R1 successful legacy \(role) relocation follows same imported UUID detail")
             r.eq(f.base.store.current.installedASRModels.first { $0.importedModelID == f.original.id }?.legacyPresetID, nil,
                  "I3 legacy relocation clears outdated preset association")
             r.eq(f.base.store.current.asrBackendSelection?.primary, role == "primary" ? f.id : oldSelection.primary,
@@ -70,6 +73,42 @@ enum ASRModelCenterFixSelfTests {
                  "I3 legacy relocation maps only exact fallback slot to same imported UUID")
             if role == "unselected" { r.eq(f.native.activeLease, previous, "I3 unselected legacy relocation never steals unrelated preset runtime") }
             else { r.eq(env.model.loadedNativeID, f.id, "I3 selected legacy relocation swaps to inspected imported identity") }
+        }
+    }
+
+    @MainActor static func legacyRelocationFocusGuards(_ r: SelfTest.Reporter) async {
+        for mode in ["failure", "cancel", "stalePreview", "browseOther", "clearFocus", "otherBeforeStart"] {
+            let f = RelocationFixture(); defer { f.base.cleanup() }
+            let env = f.environment
+            await env.model.selectPrimary(f.id)
+            let record = f.base.store.current.installedASRModels[0]
+            f.base.store.current.installedASRModels[0] = .init(id: record.id, importedModelID: record.importedModelID,
+                ownership: .external, installPlan: nil, directory: record.directory, validation: record.validation,
+                legacyPresetID: ModelPreset.qwen306B.id)
+            let oldID = ASRBackendID(rawValue: "native:preset:" + ModelPreset.qwen306B.id)
+            f.base.store.current.setASRBackendSelection(.init(primary: oldID)); env.model.refresh()
+            env.model.selectedID = mode == "otherBeforeStart" ? f.otherID : oldID
+            let actions = env.actions(navigation: nil)
+            await actions.stageRelocation?(oldID, f.moved)?.value
+            guard let preview = f.imported.preview else { r.check(false, "R1 focus fixture has relocation preview"); continue }
+            if mode == "failure" { f.fails = true }
+            if mode == "stalePreview" { await actions.stageRelocation?(oldID, f.moved.appendingPathComponent("newer"))?.value }
+            let blocked = ["cancel", "browseOther", "clearFocus"].contains(mode)
+            f.blocked = blocked
+            let operation = Task { await actions.relocatePreview?(preview.id) }
+            if blocked {
+                await f.waitForLoad()
+                if mode == "cancel" { actions.currentOperation?()?.cancel() }
+                if mode == "browseOther" { env.model.selectedID = f.otherID }
+                if mode == "clearFocus" { env.model.selectedID = nil }
+                f.finish()
+            }
+            await operation.value
+            let expected: ASRBackendID? = mode == "clearFocus" ? nil : (["browseOther", "otherBeforeStart"].contains(mode) ? f.otherID : oldID)
+            r.eq(env.model.selectedID, expected, "R1 \(mode) relocation does not redirect detail focus")
+            let successful = ["browseOther", "clearFocus", "otherBeforeStart"].contains(mode)
+            r.eq(f.base.store.current.importedASRModels.first { $0.id == f.original.id }?.directory,
+                 successful ? f.moved : f.original.directory, "R1 \(mode) checks actual transaction outcome alongside focus")
         }
     }
 
