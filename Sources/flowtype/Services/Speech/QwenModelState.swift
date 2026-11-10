@@ -83,6 +83,8 @@ final class QwenModelState: ObservableObject {
 
     private let preflight: @Sendable (ModelPreset, DownloadSource) async throws -> Void
     private let load: @Sendable (ModelProvisionTarget, Bool, @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease
+    private let loadImported: @MainActor (ImportedASRModel, @escaping @MainActor (ImportedASRModel) throws -> Void) async throws -> LocalASRLease
+    private let hasLoadOverride: Bool
     private let sleep: @Sendable (Duration) async throws -> Void
     private let now: @Sendable () -> Date
     private let configuration: @MainActor () -> Configuration
@@ -136,7 +138,11 @@ final class QwenModelState: ObservableObject {
         sampleProvider: @escaping @MainActor () throws -> ASRValidationSample = { throw NativeASRActivationError.validationRequired },
         engineVersion: @escaping @Sendable (LocalASREngine) -> String = { LocalASRRuntimeFactory.engineVersion(for: $0) },
         validationSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        canUnload: @escaping @MainActor () -> Bool = { false }
+        canUnload: @escaping @MainActor () -> Bool = { false },
+        loadImported: @escaping @MainActor (ImportedASRModel, @escaping @MainActor (ImportedASRModel) throws -> Void) async throws -> LocalASRLease = { model, admission in
+            guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
+            return try await LocalASRRuntimeFactory.load(model, beforeAllocation: admission)
+        }
     ) {
         self.preflight = preflight; self.sleep = sleep; self.now = now
         self.configuration = configuration; self.localModel = localModel; self.destination = destination
@@ -144,6 +150,7 @@ final class QwenModelState: ObservableObject {
         self.inspect = inspect; self.assessHardware = assessHardware; self.saveConfiguration = saveConfiguration
         self.persistActivation = persistActivation; self.sampleProvider = sampleProvider
         self.engineVersion = engineVersion; self.validationSleep = validationSleep; self.canUnload = canUnload
+        self.loadImported = loadImported; self.hasLoadOverride = load != nil
         self.load = load ?? { target, offline, progress in
             guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
             let directory: URL
@@ -151,7 +158,8 @@ final class QwenModelState: ObservableObject {
             let identity: LocalModelIdentity
             switch target {
             case .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
-            case .imported(let model): return try await LocalASRRuntimeFactory.load(model)
+            // Imported candidates dispatch through loadImported with the owner's final admission.
+            case .imported: throw ModelProvisionError.incompleteLocal()
             case .preset(let preset):
                 directory = destination(preset); repo = preset.repoId
                 identity = .init(id: preset.id, displayName: preset.name, engine: "qwen", repoID: repo, directory: directory)
@@ -564,14 +572,14 @@ final class QwenModelState: ObservableObject {
             // .offline is retained for installed built-in preset bootstrap/download completion.
             // Legacy custom paths always enter through inspected .imported instead.
             config.migrateASRBackendSelectionIfNeeded()
-            if request.origin == .automatic { config.resolveLegacyNativeSelection(lease: candidate) }
+            if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
             else { config.selectNativeASRBackend(lease: candidate) }
             config = recording(validation, model: validatedModel, in: config)
             try persistActivation(config)
             return
         }
         config.migrateASRBackendSelectionIfNeeded()
-        if request.origin == .automatic { config.resolveLegacyNativeSelection(lease: candidate) }
+        if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
         else { config.selectNativeASRBackend(lease: candidate) }
         config = recording(validation, model: validatedModel, in: config)
         try persistActivation(config)
@@ -715,6 +723,18 @@ final class QwenModelState: ObservableObject {
             case .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
             }
             try checkGeneration(generation, modelID: modelID, directory: directory)
+            if case .imported(let model) = target, !hasLoadOverride {
+                return try await loadImported(model) { [self] current in
+                    try checkOwnership(id)
+                    try checkGeneration(generation, modelID: current.id, directory: current.directory)
+                    let assessment = assessHardware(current, activeLease?.minimumResidentBytes)
+                    hardwareAssessment = assessment
+                    guard assessment.compatibility != .incompatible else {
+                        importFailureDetail = assessment.explanation
+                        throw ModelProvisionError.loadFailed()
+                    }
+                }
+            }
             return try await load(target, offline) { [weak self] fraction in
                 let (speed, eta) = progress.update(fraction, now: now(), bytes: totalBytes)
                 Task { @MainActor in

@@ -24,7 +24,14 @@ struct LocalASRRuntimeRegistry: Sendable {
     func inspect(engine: LocalASREngine, directory: URL) throws -> ImportedASRModel {
         try adapter(for: engine).inspect(directory: directory)
     }
-    func load(_ model: ImportedASRModel) async throws -> LocalASRLease {
-        try await adapter(for: model.engine).load(model: model)
+    @MainActor
+    func load(_ model: ImportedASRModel,
+              beforeAllocation: @MainActor (ImportedASRModel) throws -> Void = { _ in }) async throws -> LocalASRLease {
+        let runtime = try adapter(for: model.engine)
+        try Task.checkCancellation()
+        // No suspension between the owner's fresh authority/admission check and
+        // dispatch into the allocating adapter. Native work remains asynchronous.
+        try beforeAllocation(model)
+        return try await runtime.load(model: model)
     }
 }

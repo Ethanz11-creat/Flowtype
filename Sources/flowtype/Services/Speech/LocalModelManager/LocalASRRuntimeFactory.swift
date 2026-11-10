@@ -9,10 +9,13 @@ enum LocalASRRuntimeFactory {
         }
     }
 
-    static func load(_ model: ImportedASRModel, registry: LocalASRRuntimeRegistry = .standard) async throws -> LocalASRLease {
+    @MainActor
+    static func load(_ model: ImportedASRModel, registry: LocalASRRuntimeRegistry = .standard,
+                     inspect: @escaping @Sendable (URL) throws -> ImportedASRModel = { try ASRModelInspector.inspect(directory: $0) },
+                     beforeAllocation: @escaping @MainActor (ImportedASRModel) throws -> Void = { _ in }) async throws -> LocalASRLease {
         try Task.checkCancellation()
         // Every adapter goes through the same fresh inspection before runtime allocation.
-        let current = try await LocalModelInspection.inspect(directory: model.directory)
+        let current = try await LocalModelInspection.inspect(directory: model.directory, using: inspect)
         guard current.fileFingerprint == model.fileFingerprint, current.engine == model.engine,
               current.tokenizerDirectory == model.tokenizerDirectory,
               current.qwenCompatibilityModelID == model.qwenCompatibilityModelID else {
@@ -20,6 +23,6 @@ enum LocalASRRuntimeFactory {
         }
         // Preserve the library identity while using freshly inspected resource metadata.
         var candidate = current; candidate.id = model.id; candidate.name = model.name
-        return try await registry.load(candidate)
+        return try await registry.load(candidate, beforeAllocation: beforeAllocation)
     }
 }

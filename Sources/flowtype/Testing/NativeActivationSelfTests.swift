@@ -106,6 +106,8 @@ enum NativeActivationSelfTests {
         await testCompletionBelongsToItsOperation(r)
         await testAuthoritativePresetRestore(r)
         await testGenerationBeforeAllocation(r)
+        await testFactoryAllocationAuthority(r)
+        await testResolvedAutomaticSelection(r)
     }
     @MainActor static func testCandidateValidationIsTransactional(_ r: SelfTest.Reporter) async {
         let f = ActivationFixture()
@@ -253,6 +255,126 @@ enum NativeActivationSelfTests {
                 r.eq(f.config, original, "B5 legacy \(entry) trial failure preserves selection")
                 r.eq(f.samplesRequested, 1, "B5 legacy \(entry) obtains injected offline sample")
             } catch { r.check(false, "B5 legacy fixture: \(error)") }
+        }
+    }
+
+    @MainActor static func testFactoryAllocationAuthority(_ r: SelfTest.Reporter) async {
+        for mutation in ["none", "selection", "library", "record", "budget", "cancel"] {
+            let f = ActivationFixture()
+            let inspection = ActivationInspection(f.model)
+            inspection.gate.block()
+            let allocations = ActivationAllocations()
+            let adapter = ActivationAllocationAdapter(model: f.model, trial: f.trial, allocations: allocations,
+                version: f.inspection.engineVersion())
+            let registry = try! LocalASRRuntimeRegistry(adapters: [adapter])
+            var assessments = 0
+            var budgetChanged = false
+            let state = QwenModelState(configuration: { f.config }, localModel: { _ in nil },
+                environment: .init(read: { nil }, write: { _ in }), inspect: { _ in f.model },
+                assessHardware: { _, _ in MainActor.assumeIsolated {
+                    assessments += 1
+                    return .init(compatibility: budgetChanged ? .incompatible : .compatible,
+                        explanation: "fresh fixture budget", recommendedMinimumMemory: nil, minimumResidentBytes: 10)
+                } }, persistActivation: { f.config = $0 },
+                engineVersion: { [version = f.inspection.engineVersion()] _ in version },
+                loadImported: { model, admission in
+                    try await LocalASRRuntimeFactory.load(model, registry: registry,
+                        inspect: { _ in inspection.inspect() }, beforeAllocation: admission)
+                })
+            let task = Task { try await state.activate(modelID: f.model.id, sample: NativeActivationFixtures.sample()) }
+            while !inspection.gate.entered { await Task.yield() }
+            r.eq(assessments, 1, "B5 fix factory inspection occurs after owner's first hardware admission")
+            switch mutation {
+            case "selection": f.config.selectedLocalModelID = ModelPreset.qwen317B.id
+            case "library": f.config.importedASRModels.removeAll()
+            case "record": f.config.installedASRModels.removeAll()
+            case "budget": budgetChanged = true
+            case "cancel": task.cancel()
+            default: break
+            }
+            let edited = f.config
+            inspection.gate.release()
+            do {
+                let result = try await task.value
+                r.check(mutation == "none", "B5 fix stale factory \(mutation) activation rejects")
+                r.eq(state.activeLease, result, "B5 fix factory result belongs to active owner")
+            } catch { r.check(mutation != "none", "B5 fix unchanged factory candidate succeeds") }
+            r.eq(allocations.count, mutation == "none" ? 1 : 0,
+                 "B5 fix factory \(mutation) rechecks authority at allocating adapter boundary")
+            r.eq(await f.trial.calls, mutation == "none" ? 1 : 0,
+                 "B5 fix rejected factory \(mutation) candidate never trials")
+            if mutation == "none" || mutation == "budget" {
+                r.eq(assessments, 2, "B5 fix factory resamples admission after final awaited inspection")
+            }
+            if mutation != "none" {
+                r.eq(f.config, edited, "B5 fix rejected factory \(mutation) preserves latest config")
+                r.eq(state.activeLease, nil, "B5 fix rejected factory \(mutation) never owns runtime")
+            }
+        }
+    }
+
+    @MainActor static func testResolvedAutomaticSelection(_ r: SelfTest.Reporter) async {
+        for mode in ["preset", "offline", "fallback", "cleared"] {
+            let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("B5-automatic-fix-\(UUID())")
+            var config = Configuration()
+            config.hasCompletedOnboarding = true
+            config.asrRoutingPolicy = .localOnly
+            config.selectedLocalModelID = mode == "offline" ? nil : ModelPreset.qwen317B.id
+            config.setASRBackendSelection(.init(primary: mode == "cleared" ? nil : .init(rawValue: "native:preset:" + ModelPreset.qwen317B.id),
+                fallback: nil, allowsCloudFallback: false))
+            let oldSelection = config.asrBackendSelection
+            var attempts: [String] = []
+            var returned: LocalASRLease?
+            var commits = 0
+            func makeState(restoring: Bool) -> QwenModelState {
+                QwenModelState(preflight: { _, _ in }, load: { target, offline, _ in
+                    let preset: ModelPreset
+                    switch target {
+                    case .preset(let value): preset = value
+                    case .offline(let value): preset = ModelPreset.allPresets.first { $0.repoId == value.modelId }!
+                    default: throw ModelProvisionError.incompleteLocal()
+                    }
+                    await MainActor.run { attempts.append(preset.id) }
+                    if mode == "fallback", !restoring, preset.id == ModelPreset.qwen317B.id { throw ModelProvisionError.loadFailed() }
+                    let lease = LocalASRLease(id: UUID(), identity: .init(id: preset.id, displayName: preset.name,
+                        engine: "qwen", repoID: preset.repoId, directory: root.appendingPathComponent(preset.id)),
+                        provider: NativeActivationFixtures.Provider())
+                    await MainActor.run { returned = lease }
+                    return lease
+                }, configuration: { config }, localModel: { lookup in
+                    guard restoring || mode == "offline", let preset = ModelPreset.preset(forID: lookup.selectedLocalModelID) else { return nil }
+                    return .init(directory: root.appendingPathComponent(preset.id), modelId: preset.repoId)
+                }, destination: { root.appendingPathComponent($0.id) }, availableDisk: { _ in .max },
+                    environment: .init(read: { nil }, write: { _ in }), inspect: { NativeActivationFixtures.model($0) },
+                    assessHardware: { _, _ in .init(compatibility: .compatible, explanation: "fixture", recommendedMinimumMemory: nil, minimumResidentBytes: nil) },
+                    persistActivation: { value in config = value; commits += 1 }, sampleProvider: NativeActivationFixtures.sample)
+            }
+            let state = makeState(restoring: false)
+            if mode == "offline" {
+                await state.perform(.init(target: .offline(.init(directory: root.appendingPathComponent(ModelPreset.qwen306B.id),
+                    modelId: ModelPreset.qwen306B.repoId)), source: .official, origin: .automatic))
+            } else { await state.selectPreset(mode == "fallback" ? .qwen317B : .qwen306B, automatic: true) }
+            r.eq(state.activeLease, returned, "B5 fix automatic \(mode) owns exactly loader-returned candidate")
+            r.eq(state.activeLease?.identity.id, ModelPreset.qwen306B.id, "B5 fix automatic \(mode) activates actual successful preset")
+            r.eq(config.selectedLocalModelID, nil, "B5 fix automatic \(mode) preserves nil manual-preset intent")
+            r.check(!config.pendingLegacyNativeResolution, "B5 fix resolved automatic action does not recreate migration intent")
+            r.eq(commits, 1, "B5 fix automatic \(mode) validation and selection commit together")
+            if mode == "cleared" {
+                r.eq(config.asrBackendSelection, oldSelection, "B5 fix explicit cleared native role never resurrects")
+            } else {
+                r.eq(config.asrBackendSelection?.primary, state.activeLease.map { ASRBackendID(nativeLease: $0) },
+                     "B5 fix automatic \(mode) authoritative role agrees with actual lease")
+                let startup = makeState(restoring: true)
+                await startup.loadModel()
+                r.eq(startup.activeLease?.identity.id, state.activeLease?.identity.id,
+                     "B5 fix automatic \(mode) restart agrees with selected active identity")
+                r.eq(config.selectedLocalModelID, nil, "B5 fix automatic \(mode) restart retains automatic intent")
+            }
+            if mode == "fallback" {
+                r.eq(Array(attempts.prefix(2)), [ModelPreset.qwen317B.id, ModelPreset.qwen306B.id],
+                     "B5 fix automatic fallback still attempts primary then smaller preset")
+                r.check(state.didAutoFallback, "B5 fix automatic fallback is reported")
+            }
         }
     }
 
@@ -407,6 +529,29 @@ enum NativeActivationSelfTests {
         _ = try? await next.value
         r.eq(state.operationID, nil, "B5 native compute drain releases lifecycle")
         r.eq(state.activeLease, nil, "B5 cancelled native result never becomes active")
+    }
+}
+
+private final class ActivationAllocations: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.withLock { value } }
+    func allocated() { lock.withLock { value += 1 } }
+}
+
+private struct ActivationAllocationAdapter: LocalASREngineAdapter {
+    let model: ImportedASRModel
+    let trial: ActivationTrial
+    let allocations: ActivationAllocations
+    let version: String
+    var engine: LocalASREngine { model.engine }
+    func assessMetadata(config: Data?, paths: [String]) throws -> Bool { true }
+    func inspect(directory: URL) throws -> ImportedASRModel { model }
+    func load(model: ImportedASRModel) async throws -> LocalASRLease {
+        allocations.allocated()
+        return LocalASRLease(id: UUID(), identity: .init(id: model.id.uuidString, displayName: model.name,
+            engine: model.engine.rawValue, repoID: nil, directory: model.directory), provider: trial,
+            minimumResidentBytes: model.minimumResidentBytes, engineVersion: version)
     }
 }
 
