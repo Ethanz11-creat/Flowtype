@@ -45,6 +45,7 @@ enum LocalModelLibrary {
         var result = configuration
         guard let removed = result.importedASRModels.first(where: { $0.id == id }) else { return result }
         result.importedASRModels.removeAll { $0.id == id }
+        result.installedASRModels.removeAll { $0.importedModelID == id }
         if result.activeImportedASRModelID == id {
             result.activeImportedASRModelID = nil
             result.localModelPath = nil

@@ -31,7 +31,8 @@ enum LocalSettingsOwnershipSelfTests {
                 provider: Provider())
         }, configuration: { store.current }, localModel: { _ in nil },
             destination: { URL(fileURLWithPath: "/fixture/" + $0.id) }, availableDisk: { _ in .max },
-            environment: .init(read: { nil }, write: { _ in }), saveConfiguration: { store.save($0) })
+            environment: .init(read: { nil }, write: { _ in }), inspect: { NativeActivationFixtures.model($0) }, saveConfiguration: { store.save($0) }, persistActivation: { try store.commitNativeASRActivation($0) },
+            sampleProvider: NativeActivationFixtures.sample)
     }
 
     static func run(_ r: SelfTest.Reporter) async {

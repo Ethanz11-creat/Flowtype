@@ -14,7 +14,13 @@ struct ModelRecoveryActions {
         guard coordinator.operationID == nil else { return }
         var config = store.current
         if let id = config.activeImportedASRModelID {
-            config = LocalModelLibrary.removing(id: id, from: config)
+            // This is explicit deselection, not removal of a possibly managed/in-use row.
+            let backend = ASRBackendID(rawValue: "native:import:" + id.uuidString)
+            var selection = ASRBackendMigration.selection(from: config)
+            if selection.primary == backend { selection.primary = nil }
+            if selection.fallback == backend { selection.fallback = nil }
+            config.setASRBackendSelection(selection)
+            config.activeImportedASRModelID = nil
         }
         config.customLocalModelPath = nil
         config.localModelPath = nil

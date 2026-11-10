@@ -15,10 +15,11 @@ final class ModelDownloader: ObservableObject {
 
     @Published var currentDownload: (preset: ModelPreset, status: DownloadStatus)?
 
-    private var downloadTask: Task<Void, Never>?
+    private var ownedOperationID: UUID?
     private let coordinator: QwenModelState
     private let configuration: @MainActor () -> Configuration
     private var subscription: AnyCancellable?
+    private var ownershipSubscription: AnyCancellable?
     private var cancelRequested = false
 
     init(coordinator: QwenModelState = .shared,
@@ -26,7 +27,7 @@ final class ModelDownloader: ObservableObject {
         self.coordinator = coordinator
         self.configuration = configuration
         subscription = coordinator.$status.sink { [weak self] status in
-            guard let self, self.downloadTask != nil, let current = self.currentDownload else { return }
+            guard let self, self.ownedOperationID != nil, let current = self.currentDownload else { return }
             if self.cancelRequested { return }
             switch status {
             case .downloading(let progress, _, _): self.currentDownload = (current.preset, .downloading(progress: progress))
@@ -37,26 +38,23 @@ final class ModelDownloader: ObservableObject {
             case .stalled: break
             }
         }
+        ownershipSubscription = coordinator.$operationID.sink { [weak self] id in
+            guard let self, id == nil, self.ownedOperationID != nil else { return }
+            self.ownedOperationID = nil
+            if self.cancelRequested { self.currentDownload = nil }
+        }
     }
 
     func startDownload(preset: ModelPreset) {
-        guard downloadTask == nil, coordinator.operationID == nil else { return }
+        guard ownedOperationID == nil, coordinator.operationID == nil else { return }
         cancelRequested = false
         currentDownload = (preset, .pending)
-        let source = configuration().downloadSource
-        downloadTask = Task {
-            guard !Task.isCancelled, coordinator.operationID == nil else {
-                currentDownload = nil; downloadTask = nil; return
-            }
-            await coordinator.perform(.init(target: .preset(preset), source: source, origin: .manual))
-            if Task.isCancelled { currentDownload = nil }
-            downloadTask = nil
-        }
+        ownedOperationID = coordinator.start(.init(target: .preset(preset), source: configuration().downloadSource, origin: .manual))
     }
 
     /// A terminal download record is history, never an in-flight operation.
     func isDownloading(preset: ModelPreset) -> Bool {
-        guard downloadTask != nil, let current = currentDownload, current.preset.id == preset.id else { return false }
+        guard ownedOperationID != nil, let current = currentDownload, current.preset.id == preset.id else { return false }
         switch current.status {
         case .pending: return true
         case .downloading, .verifying: return coordinator.operationID != nil
@@ -65,17 +63,21 @@ final class ModelDownloader: ObservableObject {
     }
 
     func cancelDownload() {
-        guard downloadTask != nil else { return }
+        guard let ownedOperationID, coordinator.operationID == ownedOperationID else { return }
         cancelRequested = true
-        // perform's cancellation handler cancels only the operation this task owns.
-        downloadTask?.cancel()
-        // Keep ownership until the coordinator has drained the underlying loader.
+        coordinator.cancel()
     }
 
-    func isModelDownloaded(_ preset: ModelPreset) -> Bool { ModelLocator.isPresetDownloaded(preset) }
+    func isModelDownloaded(_ preset: ModelPreset) -> Bool {
+        configuration().installedASRModels.contains {
+            $0.ownership == .managed && $0.installPlan?.recipeID == preset.id && FileManager.default.fileExists(atPath: $0.directory.path)
+        } || ModelLocator.isPresetDownloaded(preset)
+    }
 
-    func deleteModel(_ preset: ModelPreset) throws {
-        let dir = preset.localDirectory()
-        if FileManager.default.fileExists(atPath: dir.path) { try FileManager.default.removeItem(at: dir) }
+    func deleteModel(_ preset: ModelPreset) async throws {
+        let records = configuration().installedASRModels.filter { $0.ownership == .managed && $0.installPlan?.recipeID == preset.id }
+        guard !records.isEmpty else { throw NativeModelUsageError.external }
+        guard records.count == 1, let record = records.first else { throw NativeModelUsageError.invalidOwnership }
+        try await coordinator.removeModelRecord(id: record.importedModelID, deleteManagedFiles: true)
     }
 }

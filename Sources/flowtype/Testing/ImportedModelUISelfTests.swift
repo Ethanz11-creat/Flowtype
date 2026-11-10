@@ -27,7 +27,8 @@ enum ImportedModelUISelfTests {
         let state = QwenModelState(load: { target, _, _ in try await probe.load(target) },
             configuration: { store.current }, inspect: { directory in
                 var model = directory == qwen.directory ? qwen : whisper; model.directory = directory; return model
-            }, assessHardware: { model, _ in assessment(model) }, saveConfiguration: { store.save($0) })
+            }, assessHardware: { model, _ in assessment(model) }, saveConfiguration: { store.save($0) }, persistActivation: { try store.commitNativeASRActivation($0) },
+            sampleProvider: NativeActivationFixtures.sample, canUnload: { true })
         let actions = ImportedASRModelActions(coordinator: state, configuration: { store.current },
             inspect: { directory in var model = whisper; model.directory = directory; return model }, assess: assessment)
         let before = store.current
@@ -85,6 +86,10 @@ enum ImportedModelUISelfTests {
         r.eq(store.current.activeImportedASRModelID, whisper.id, "import UI: successful relocation commits selected UUID")
         r.eq(store.current.importedASRModels.first { $0.id == whisper.id }?.directory, moved, "import UI: successful relocation commits path through coordinator")
         r.eq(store.current.importedASRModels.count, 2, "import UI: relocation does not append a duplicate row")
+        r.eq(store.current.installedASRModels.first { $0.importedModelID == whisper.id }?.directory, moved,
+             "B6 external relocation updates record directory in activation transaction")
+        r.eq(store.current.installedASRModels.first { $0.importedModelID == whisper.id }?.legacyPresetID, nil,
+             "B6 explicit imported activation cannot retain stale legacy preset association")
         await actions.stage(directory: root.appendingPathComponent("claimed-later"), replacing: whisper.id)?.value
         var claimed = qwen; claimed.id = UUID(); claimed.directory = root.appendingPathComponent("claimed-later")
         store.current.importedASRModels.append(claimed)
@@ -92,10 +97,17 @@ enum ImportedModelUISelfTests {
         await actions.loadPreview()
         r.eq(await probe.calls, beforeClaimed, "import UI: relocation rechecks directory ownership after preview")
         state.removeImportedModel(id: claimed.id)
-        let active = state.activeLease
+        var active = state.activeLease
         actions.remove(id: whisper.id)
         r.eq(state.activeLease, active, "import UI: record removal leaves usable lease alive")
         r.check(FileManager.default.fileExists(atPath: retainedFile.path), "import UI: record removal never deletes user files")
+        r.check(store.current.importedASRModels.contains { $0.id == whisper.id }, "B6 import UI: selected active row removal rejected")
+        active = nil
+        try? await state.unloadCurrentAfterDrain()
+        store.current.activeImportedASRModelID = nil; store.current.customLocalModelPath = nil
+        store.current.localModelPath = nil; store.current.selectedLocalModelID = nil
+        store.current.setASRBackendSelection(.init())
+        actions.remove(id: whisper.id)
         r.check(!store.current.importedASRModels.contains { $0.id == whisper.id }, "import UI: record removal targets UUID after reorder")
         await actions.stageExisting(id: whisper.id)?.value
         r.check(actions.preview == nil && actions.message?.contains("已移除") == true, "import UI: stale row action cannot select another row")

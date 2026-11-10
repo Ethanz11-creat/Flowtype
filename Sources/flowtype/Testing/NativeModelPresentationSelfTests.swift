@@ -69,6 +69,12 @@ enum NativeModelPresentationSelfTests {
             actions.remove(id: b.id)
             r.check(FileManager.default.fileExists(atPath: marker.path), "native model: removal preserves external model directory and weights")
             r.eq(state.activeLease?.identity.id, b.id.uuidString, "native model: removing record retains loaded B")
+            r.check(store.current.importedASRModels.contains { $0.id == b.id }, "B6 native model: selected active removal rejected")
+            try? await state.unloadCurrentAfterDrain()
+            store.current.activeImportedASRModelID = nil; store.current.customLocalModelPath = nil
+            store.current.localModelPath = nil; store.current.selectedLocalModelID = nil
+            store.current.setASRBackendSelection(.init())
+            actions.remove(id: b.id)
             r.check(!store.current.importedASRModels.contains { $0.id == b.id }, "native model: removal forgets only record")
         }
     }
@@ -84,14 +90,16 @@ enum NativeModelPresentationSelfTests {
         let probe = NativePresetProbe(root: root)
         let state = QwenModelState(preflight: { _, _ in }, load: { target, _, _ in try await probe.load(target) },
             configuration: { store.current }, localModel: { _ in nil }, destination: { root.appendingPathComponent($0.id) },
-            availableDisk: { _ in Int64.max }, environment: .init(read: { nil }, write: { _ in }),
-            saveConfiguration: { store.save($0) })
+            availableDisk: { _ in Int64.max }, environment: .init(read: { nil }, write: { _ in }), inspect: { NativeActivationFixtures.model($0) },
+            saveConfiguration: { store.save($0) }, persistActivation: { try store.commitNativeASRActivation($0) },
+            sampleProvider: NativeActivationFixtures.sample, canUnload: { true })
         await state.perform(.init(target: .preset(.qwen317B), source: .official, origin: .automatic))
         let automatic = LocalModelSelectionPresentation.make(config: store.current, coordinator: state)
         r.eq(automatic.recovery.fallbackLabel, "已退回 0.6B", "native model: successful automatic fallback is labelled")
         r.eq(automatic.loaded?.id, ModelPreset.qwen306B.id, "native model: fallback reports actual 0.6B lease")
         r.check(automatic.selectedName.contains("自动选择"), "native model: automatic selection remains automatic")
         r.eq(store.current.selectedLocalModelID, nil, "native model: fallback never pins manual 0.6B choice")
+        r.eq(store.current.installedASRModels.first?.legacyPresetID, ModelPreset.qwen306B.id, "B6 fallback associates actual 0.6B preset, never preferred 1.7B")
         r.eq(await probe.attempts, [ModelPreset.qwen317B.id, ModelPreset.qwen306B.id],
             "native model: automatic fallback uses existing serial coordinator once per target")
         store.current.selectedLocalModelID = ModelPreset.qwen317B.id
@@ -119,8 +127,9 @@ enum NativeModelPresentationSelfTests {
         let probe = NativePresetProbe(root: root)
         let state = QwenModelState(preflight: { _, _ in }, load: { target, _, _ in try await probe.load(target) },
             configuration: { store.current }, localModel: { _ in nil }, destination: { root.appendingPathComponent($0.id) },
-            availableDisk: { _ in Int64.max }, environment: .init(read: { nil }, write: { _ in }),
-            saveConfiguration: { store.save($0) })
+            availableDisk: { _ in Int64.max }, environment: .init(read: { nil }, write: { _ in }), inspect: { NativeActivationFixtures.model($0) },
+            saveConfiguration: { store.save($0) }, persistActivation: { try store.commitNativeASRActivation($0) },
+            sampleProvider: NativeActivationFixtures.sample, canUnload: { true })
         await state.selectPreset(.qwen306B)
         let retained = state.activeLease
         let downloader = ModelDownloader(coordinator: state, configuration: { store.current })
@@ -177,7 +186,8 @@ enum NativeModelPresentationSelfTests {
             configuration: { store.current }, localModel: { _ in nil }, destination: { root.appendingPathComponent($0.id) },
             availableDisk: { _ in Int64.max }, environment: .init(read: { nil }, write: { _ in }),
             inspect: { $0 == a.directory ? a : b }, assessHardware: { model, _ in assessment(model) },
-            saveConfiguration: { store.save($0) })
+            saveConfiguration: { store.save($0) }, persistActivation: { try store.commitNativeASRActivation($0) },
+            sampleProvider: NativeActivationFixtures.sample, canUnload: { true })
         let actions = ImportedASRModelActions(coordinator: state, configuration: { store.current },
             inspect: { $0 == a.directory ? a : b }, assess: assessment)
         await run(store, state, actions, gate, a, b)

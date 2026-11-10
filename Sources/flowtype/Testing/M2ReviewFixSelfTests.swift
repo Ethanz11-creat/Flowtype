@@ -99,6 +99,8 @@ private actor ReviewBackend: OfflineWhisperBackend {
 }
 
 private actor ReviewLoads {
+    static let oldModel = ImportedASRModel(name: "old", directory: RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("review-old"),
+        engine: .whisperCoreML, variant: "unverified", sizeBytes: 1, fileFingerprint: "review-old")
     var count = 0
     func load(_ target: ModelProvisionTarget) -> LocalASRLease {
         count += 1
@@ -106,7 +108,7 @@ private actor ReviewLoads {
         if case .imported(let model) = target {
             identity = .init(id: model.id.uuidString, displayName: model.name, engine: model.engine.rawValue, repoID: nil, directory: model.directory)
         } else {
-            identity = .init(id: "old", displayName: "old", engine: "whisperCoreML", repoID: nil, directory: URL(fileURLWithPath: "/old"))
+            identity = .init(id: "old", displayName: "old", engine: "whisperCoreML", repoID: nil, directory: Self.oldModel.directory)
         }
         return LocalASRLease(id: UUID(), identity: identity, provider: WhisperASRProvider(identity: identity, backend: ReviewBackend()))
     }
@@ -124,10 +126,11 @@ extension M2ReviewFixSelfTests {
             var saves = 0
             let state = QwenModelState(preflight: { _, _ in }, load: { target, _, _ in await io.load(target) },
                 configuration: { config }, localModel: { _ in nil }, availableDisk: { _ in .max },
-                environment: .init(read: { nil }, write: { _ in }), inspect: { _ in blocked.block(); return model },
+                environment: .init(read: { nil }, write: { _ in }), inspect: { directory in if directory == model.directory { blocked.block(); return model }; return ReviewLoads.oldModel },
                 assessHardware: { model, _ in .assess(model: model, physicalMemory: 32 * 1_073_741_824,
                     availableMemory: 16 * 1_073_741_824, activeModelBytes: nil, isAppleSilicon: true) },
-                saveConfiguration: { config = $0; saves += 1 })
+                saveConfiguration: { config = $0; saves += 1 },
+                persistActivation: { config = $0; saves += 1 }, sampleProvider: NativeActivationFixtures.sample)
             if mode != "startup" { await state.selectPreset(.qwen306B) }
             let previous = state.activeLease
             let captured = previous // A retained capture survives cancellation of a replacement.
@@ -150,7 +153,8 @@ extension M2ReviewFixSelfTests {
             let otherIO = ReviewLoads()
             let other = QwenModelState(preflight: { _, _ in }, load: { target, _, _ in await otherIO.load(target) },
                 configuration: { Configuration() }, localModel: { _ in nil }, availableDisk: { _ in .max },
-                environment: .init(read: { nil }, write: { _ in }))
+                environment: .init(read: { nil }, write: { _ in }), inspect: { _ in ReviewLoads.oldModel },
+                persistActivation: { _ in }, sampleProvider: NativeActivationFixtures.sample)
             let waiting = Task { await other.selectPreset(.qwen306B) }
             while other.operationID == nil { await Task.yield() }
             r.eq(await otherIO.count, 0, "\(mode): other coordinator waits behind global inspection gate")
@@ -273,10 +277,11 @@ extension M2ReviewFixSelfTests {
                 }
                 return await io.load(target)
             }, configuration: { config }, localModel: { _ in nil }, availableDisk: { _ in .max },
-                environment: .init(read: { nil }, write: { _ in }), inspect: { _ in model },
+                environment: .init(read: { nil }, write: { _ in }), inspect: { directory in directory == model.directory ? model : ReviewLoads.oldModel },
                 assessHardware: { model, _ in .assess(model: model, physicalMemory: 32 * 1_073_741_824,
                     availableMemory: 16 * 1_073_741_824, activeModelBytes: nil, isAppleSilicon: true) },
-                saveConfiguration: { config = $0; saves += 1 })
+                saveConfiguration: { config = $0; saves += 1 },
+                persistActivation: { config = $0; saves += 1 }, sampleProvider: NativeActivationFixtures.sample)
             await state.selectPreset(.qwen306B)
             let old = state.activeLease
             let before = config
@@ -288,7 +293,8 @@ extension M2ReviewFixSelfTests {
             let otherIO = ReviewLoads()
             let other = QwenModelState(preflight: { _, _ in }, load: { target, _, _ in await otherIO.load(target) },
                 configuration: { Configuration() }, localModel: { _ in nil }, availableDisk: { _ in .max },
-                environment: .init(read: { nil }, write: { _ in }))
+                environment: .init(read: { nil }, write: { _ in }), inspect: { _ in ReviewLoads.oldModel },
+                persistActivation: { _ in }, sampleProvider: NativeActivationFixtures.sample)
             let waiting = Task { await other.selectPreset(.qwen306B) }
             while other.operationID == nil { await Task.yield() }
             r.check(state.operationID != nil, "cancelled native compilation keeps coordinator reservation")

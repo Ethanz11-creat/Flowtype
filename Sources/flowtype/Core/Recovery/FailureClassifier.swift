@@ -10,6 +10,7 @@ enum FailureClassifier {
         // follow unbounded chains; unknown and over-deep errors remain internal.
         guard wrapperDepth <= 4 else { return .internalFailure }
         if error is CancellationError { return .cancelled }
+        if error is NativeModelUsageError { return .configuration(.endpointOrModel) }
         if error is ASRCredentialError { return .configuration(.credentials) }
 
         if let cloud = error as? CloudASRError {

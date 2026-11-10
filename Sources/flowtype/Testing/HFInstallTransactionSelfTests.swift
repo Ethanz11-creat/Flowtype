@@ -1,9 +1,185 @@
 import Foundation
 import CryptoKit
 import os
+import Darwin
 
 /// Real journals, hashes, static inspection and rename; injected byte source only.
 enum HFInstallTransactionSelfTests {
+    @MainActor static func testDeleteWhileOldSessionOwnsLease(_ r: SelfTest.Reporter) async {
+        let registry = NativeModelUsageRegistry(), id = UUID()
+        do {
+            var token: ModelUsageToken? = try registry.acquire(modelID: id)
+            r.check(token != nil, "B6 old session retains usage token")
+            r.check((try? registry.reserveDeletion(modelID: id)) == nil, "B6 captured lease blocks deletion")
+            token = nil
+            var permit: ModelDeletionPermit? = try registry.reserveDeletion(modelID: id)
+            r.check(permit != nil, "B6 released session permits deletion")
+            r.check((try? registry.acquire(modelID: id)) == nil, "B6 deletion reservation blocks new acquire")
+            permit = nil
+            r.check((try? registry.acquire(modelID: id)) != nil, "B6 released permit permits acquire")
+        } catch { r.check(false, "B6 usage registry: \(error)") }
+    }
+
+    @MainActor static func testExternalAndAliasProtection(_ r: SelfTest.Reporter) async {
+        let f = Fixture(), library = Library(), usage = NativeModelUsageRegistry()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let source = Source(f.bytes); await source.release()
+        let coordinator = ModelInstallationCoordinator(transport: { file, url, credential, progress in
+            try await source.transfer(file, url, credential, progress)
+        }, publisher: f.publisher(library), diskSample: { _ in Int64.max }, journalRoot: f.jobs,
+           usageRegistry: usage, configuration: { library.config }, persistRemoval: { library.config = $0 })
+        do {
+            let job = try await coordinator.enqueue(f.plan)
+            _ = await until { await coordinator.snapshots().first?.state == .installed }
+            guard let record = library.config.installedASRModels.first else { r.check(false, "B6 fixture installed"); return }
+            r.check(record.id == job && record.importedModelID != job, "B6 deletion identity is imported UUID")
+            var token: ModelUsageToken? = try usage.acquire(modelID: record.importedModelID)
+            do { try await coordinator.remove(modelID: record.importedModelID, deleteManagedFiles: true); r.check(false, "B6 used model removal rejected") }
+            catch { r.check(true, "B6 used model removal rejected") }
+            r.check(token != nil && FileManager.default.fileExists(atPath: record.directory.path), "B6 occupied bytes preserved")
+            token = nil
+            try await coordinator.remove(modelID: record.importedModelID, deleteManagedFiles: false)
+            r.check(library.config.importedASRModels.isEmpty, "B6 detached library record removed")
+            r.check(FileManager.default.fileExists(atPath: record.directory.path), "B6 retain files option")
+            _ = try await coordinator.recover()
+            r.check(library.config.importedASRModels.isEmpty, "B6 detached recovery never resurrects")
+            var model = try ASRModelInspector.inspect(directory: record.directory); model.id = UUID()
+            library.config.importedASRModels = [model]
+            library.config.installedASRModels = [.init(id: UUID(), importedModelID: model.id, ownership: .external, installPlan: nil, directory: model.directory, validation: nil)]
+            do { try await coordinator.remove(modelID: model.id, deleteManagedFiles: true); r.check(false, "B6 external deletion rejected") }
+            catch { r.check(true, "B6 external deletion rejected") }
+            r.check(FileManager.default.fileExists(atPath: record.directory.path), "B6 external files are never owned")
+        } catch { r.check(false, "B6 removal: \(error)") }
+    }
+
+    @MainActor static func testRemovalBoundaries(_ r: SelfTest.Reporter) async {
+        for mode in ["delete", "alias", "caseAlias", "extraFile", "symlink", "forged", "forgedJournal", "detachFailure", "selected", "selectedLowercase", "wrongID"] {
+            let f = Fixture(), library = Library(), source = Source(f.bytes)
+            defer { try? FileManager.default.removeItem(at: f.root) }
+            await source.release()
+            let coordinator = ModelInstallationCoordinator(transport: { file, url, credential, progress in
+                try await source.transfer(file, url, credential, progress)
+            }, publisher: f.publisher(library), diskSample: { _ in Int64.max }, journalRoot: f.jobs,
+               usageRegistry: NativeModelUsageRegistry(), configuration: { library.config }, persistRemoval: { library.config = $0 })
+            do {
+                _ = try await coordinator.enqueue(f.plan)
+                _ = await until { await coordinator.snapshots().first?.state == .installed }
+                guard let record = library.config.installedASRModels.first, let model = library.config.importedASRModels.first else {
+                    r.check(false, "B6 removal fixture installed"); continue
+                }
+                if mode == "delete" {
+                    r.eq(model.directory.path, record.directory.standardizedFileURL.resolvingSymlinksInPath().path, "B6 publisher canonical inspection directory")
+                    r.check(record.id == record.installPlan?.id, "B6 managed plan identity")
+                }
+                var preservedDirectory = record.directory
+                if mode == "caseAlias" {
+                    let oldParent = record.directory.deletingLastPathComponent()
+                    let alias = oldParent.deletingLastPathComponent().appendingPathComponent(oldParent.lastPathComponent.lowercased())
+                    guard Darwin.rename(oldParent.path, alias.path) == 0 else { throw NativeModelUsageError.invalidOwnership }
+                    preservedDirectory = alias.appendingPathComponent("model")
+                }
+                if mode == "extraFile" { try Data("user-owned addition".utf8).write(to: record.directory.appendingPathComponent("user-added.txt")) }
+                if mode == "alias" {
+                    var alias = model; alias.id = UUID(); alias.directory = URL(fileURLWithPath: model.directory.path.lowercased())
+                    library.config.importedASRModels.append(alias)
+                }
+                if mode == "symlink" {
+                    try FileManager.default.createSymbolicLink(at: record.directory.appendingPathComponent("outside"), withDestinationURL: f.root)
+                }
+                if mode == "forged" {
+                    let url = record.directory.appendingPathComponent("installation-manifest.json")
+                    var object = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+                    var forged = object["record"] as! [String: Any]; forged["importedModelID"] = UUID().uuidString; object["record"] = forged
+                    try JSONSerialization.data(withJSONObject: object).write(to: url)
+                }
+                if mode == "forgedJournal" {
+                    let url = f.jobs.appendingPathComponent(record.id.uuidString).appendingPathComponent("job.json")
+                    try Data("{}".utf8).write(to: url)
+                }
+                if mode == "detachFailure" {
+                    let url = f.jobs.appendingPathComponent(record.id.uuidString).appendingPathComponent("job.json")
+                    try FileManager.default.removeItem(at: url); try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+                }
+                if mode == "selected" || mode == "selectedLowercase" {
+                    let value = mode == "selectedLowercase" ? model.id.uuidString.lowercased() : model.id.uuidString
+                    library.config.asrBackendSelection = .init(primary: ASRBackendID(rawValue: "native:import:" + value))
+                }
+                let before = library.config
+                do {
+                    try await coordinator.remove(modelID: mode == "wrongID" ? record.id : model.id, deleteManagedFiles: mode != "detachFailure")
+                    r.check(mode == "delete", "B6 removal succeeds only with full authority \(mode)")
+                } catch { r.check(mode != "delete", "B6 removal rejects unsafe authority \(mode): \(error)") }
+                if mode == "delete" {
+                    r.check(!FileManager.default.fileExists(atPath: record.directory.path), "B6 owned inactive model files deleted")
+                    _ = try await coordinator.recover()
+                    r.check(library.config.importedASRModels.isEmpty, "B6 deleted entry never resurrects")
+                } else {
+                    r.eq(library.config, before, "B6 refused deletion preserves library \(mode)")
+                    r.check(FileManager.default.fileExists(atPath: preservedDirectory.path), "B6 refused deletion preserves files \(mode)")
+                }
+            } catch { r.check(false, "B6 removal boundaries \(mode): \(error)") }
+        }
+    }
+
+    @MainActor static func testLegacyAssociationRemoval(_ r: SelfTest.Reporter) async {
+        let f = Fixture(), library = Library()
+        let old = NativeActivationFixtures.model(f.root.appendingPathComponent("old"))
+        let unrelated = NativeActivationFixtures.model(f.root.appendingPathComponent("unrelated"))
+        var record = ASRInstalledModelRecord(id: UUID(), importedModelID: old.id, ownership: .external,
+            installPlan: nil, directory: old.directory, validation: nil)
+        do {
+            let decoded = try JSONDecoder().decode(ASRInstalledModelRecord.self, from: JSONEncoder().encode(record))
+            r.eq(decoded.legacyPresetID, nil, "B6 old record without preset association decodes")
+            record.legacyPresetID = ModelPreset.qwen306B.id
+            let associated = try JSONDecoder().decode(ASRInstalledModelRecord.self, from: JSONEncoder().encode(record))
+            r.eq(associated.legacyPresetID, ModelPreset.qwen306B.id, "B6 exact legacy association persists")
+            library.config.importedASRModels = [old, unrelated]; library.config.installedASRModels = [record]
+            library.config.asrBackendSelection = .init(primary: .init(rawValue: "native:preset:" + ModelPreset.qwen306B.id))
+            let coordinator = ModelInstallationCoordinator(transport: { _, _, _, _ in }, publisher: f.publisher(library),
+                journalRoot: f.jobs, usageRegistry: NativeModelUsageRegistry(), configuration: { library.config }, persistRemoval: { library.config = $0 })
+            try await coordinator.remove(modelID: unrelated.id, deleteManagedFiles: false)
+            r.eq(library.config.importedASRModels.map(\.id), [old.id], "B6 unrelated same-family Qwen record can be removed")
+            do { try await coordinator.remove(modelID: old.id, deleteManagedFiles: false); r.check(false, "B6 selected exact legacy association rejects removal") }
+            catch { r.check(true, "B6 selected exact legacy association rejects removal") }
+            library.config.setASRBackendSelection(.init())
+            try await coordinator.remove(modelID: old.id, deleteManagedFiles: false)
+            r.check(library.config.importedASRModels.isEmpty, "B6 explicit preset deselection permits associated record removal")
+        } catch { r.check(false, "B6 legacy association: \(error)") }
+    }
+
+    @MainActor static func testPresetDeleteFacade(_ r: SelfTest.Reporter) async {
+        let f = Fixture(), library = Library()
+        let model = NativeActivationFixtures.model(f.root.appendingPathComponent("model"))
+        let plan = ASRInstallPlan(id: f.plan.id, displayName: f.plan.displayName, engine: f.plan.engine, files: f.plan.files,
+            totalBytes: f.plan.totalBytes, recipeID: ModelPreset.qwen306B.id, recipeVersion: 1, credentialID: nil)
+        library.config.importedASRModels = [model]
+        library.config.installedASRModels = [.init(id: plan.id, importedModelID: model.id, ownership: .managed,
+            installPlan: plan, directory: model.directory, validation: nil)]
+        var ids: [UUID] = [], flags: [Bool] = []
+        var reject = false
+        let state = QwenModelState(configuration: { library.config }, removeManagedRecord: { id, files in
+            if reject { throw NativeModelUsageError.inUse }
+            ids.append(id); flags.append(files)
+        })
+        let facade = ModelDownloader(coordinator: state, configuration: { library.config })
+        do {
+            try await facade.deleteModel(.qwen306B)
+            r.eq(ids, [model.id], "B6 preset delete facade targets imported UUID, never job UUID")
+            r.eq(flags, [true], "B6 preset delete facade requests guarded managed file removal")
+            reject = true
+            do { try await facade.deleteModel(.qwen306B); r.check(false, "B6 facade propagates in-use refusal") }
+            catch { r.check(error as? NativeModelUsageError == .inUse, "B6 facade propagates in-use refusal") }
+            library.config.installedASRModels.append(.init(id: UUID(), importedModelID: UUID(), ownership: .managed,
+                installPlan: plan, directory: model.directory, validation: nil))
+            do { try await facade.deleteModel(.qwen306B); r.check(false, "B6 facade rejects ambiguous managed preset") }
+            catch { r.check(true, "B6 facade rejects ambiguous managed preset") }
+            library.config.installedASRModels = []
+            do { try await facade.deleteModel(.qwen306B); r.check(false, "B6 facade refuses external legacy preset deletion") }
+            catch { r.check(true, "B6 facade refuses external legacy preset deletion") }
+            r.eq(ids, [model.id], "B6 refusals never dispatch another delete")
+        } catch { r.check(false, "B6 preset facade: \(error)") }
+    }
+
     struct Fixture: Sendable {
         let root: URL
         let bytes: [String: Data]
@@ -79,6 +255,11 @@ enum HFInstallTransactionSelfTests {
         return false
     }
     static func run(_ r: SelfTest.Reporter) async {
+        await testDeleteWhileOldSessionOwnsLease(r)
+        await testExternalAndAliasProtection(r)
+        await testRemovalBoundaries(r)
+        await testLegacyAssociationRemoval(r)
+        await testPresetDeleteFacade(r)
         await testPersistentQueueRecovery(r)
         await testPublishCrashBoundaries(r)
         await testCancelGenerationAndDiskAdmission(r)

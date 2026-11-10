@@ -127,6 +127,47 @@ struct ModelInstallationPublisher: Sendable {
         _ = try committedManifest(for: plan)
         return true
     }
+    /// Only a registered B4 publication in the exact owned layout can authorize deletion.
+    func validateRemoval(_ record: ASRInstalledModelRecord, model: ImportedASRModel, configuration: Configuration) throws {
+        guard record.ownership == .managed, record.legacyPresetID == nil, let plan = record.installPlan,
+              record.id == plan.id, record.importedModelID == model.id,
+              record.directory.path == directory(for: plan).path,
+              [record.directory.path, record.directory.standardizedFileURL.resolvingSymlinksInPath().path].contains(model.directory.path) else { throw NativeModelUsageError.invalidOwnership }
+        try Self.validate(plan)
+        let manifest = try committedManifest(for: plan)
+        guard manifest.record.importedModelID == model.id else { throw NativeModelUsageError.invalidOwnership }
+        let key = record.directory.standardizedFileURL.resolvingSymlinksInPath().path.lowercased()
+        guard !configuration.importedASRModels.contains(where: {
+            $0.id != model.id && $0.directory.standardizedFileURL.resolvingSymlinksInPath().path.lowercased() == key
+        }), !configuration.installedASRModels.contains(where: {
+            $0.id != record.id && $0.directory.standardizedFileURL.resolvingSymlinksInPath().path.lowercased() == key
+        }) else { throw NativeModelUsageError.invalidOwnership }
+        try Self.noSymlinks(record.directory)
+        // Root aliases accepted by Foundation must not relax spelling below the trusted
+        // root, including case-only renames on case-insensitive filesystems.
+        guard try FileManager.default.contentsOfDirectory(atPath: installedRoot.path).contains(plan.id.uuidString),
+              try FileManager.default.contentsOfDirectory(atPath: record.directory.deletingLastPathComponent().path).contains("model") else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        let files = Set(plan.files.map(\.relativeDestination)).union(["installation-manifest.json"])
+        var directories = Set<String>()
+        for path in files {
+            let components = path.split(separator: "/")
+            for depth in 1..<components.count { directories.insert(components.prefix(depth).joined(separator: "/")) }
+        }
+        guard let entries = FileManager.default.enumerator(at: record.directory, includingPropertiesForKeys: nil) else { throw NativeModelUsageError.invalidOwnership }
+        var count = 0
+        while let file = entries.nextObject() as? URL {
+            count += 1; guard count <= 100_000 else { throw NativeModelUsageError.invalidOwnership }
+            try Self.noSymlinks(file)
+            let relative = String(file.path.dropFirst(record.directory.path.count + 1))
+            let type = try FileManager.default.attributesOfItem(atPath: file.path)[.type] as? FileAttributeType
+            guard (type == .typeDirectory && directories.contains(relative)) || (type == .typeRegular && files.contains(relative)) else {
+                throw NativeModelUsageError.invalidOwnership
+            }
+        }
+    }
+
     private func committedManifest(for plan: ASRInstallPlan) throws -> Manifest {
         let destination = directory(for: plan)
         try Self.noSymlinks(destination)

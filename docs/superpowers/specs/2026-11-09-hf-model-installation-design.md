@@ -62,7 +62,7 @@ struct ASRNativeValidationRecord: Codable, Equatable, Sendable {
 }
 ```
 
-记录写入 `Configuration.installedASRModels: [ASRInstalledModelRecord]`，缺省为空。现有 ImportedASRModel 保存兼容性与真实目录；新记录通过 importedModelID 引用它，不创建第二套 active 模型。安装记录 id 为安装 UUID，激活/删除/usage API 的 modelID 一律指 importedModelID；两者不能混用。导入旧目录视为 external，未知归属绝不据路径猜 managed。
+记录写入 `Configuration.installedASRModels: [ASRInstalledModelRecord]`，缺省为空。现有 ImportedASRModel 保存兼容性与真实目录；新记录通过 importedModelID 引用它，不创建第二套 active 模型。安装记录 id 为安装 UUID，激活/删除/usage API 的 modelID 一律指 importedModelID；两者不能混用。导入旧目录视为 external，未知归属绝不据路径猜 managed。 `ASRInstalledModelRecord.legacyPresetID: String?` 缺省 nil，仅在 external 旧目录通过验证时记录实际 lease 的 preset ID（含实际回退型号）；不改变 imported/job ID 或 native:preset 选择。移除时以该精确关联核对 preset 主选/备选，不能按模型族猜测。目录重新定位或显式以 imported 身份激活时，在同一验证事务更新目录并清除旧 preset 关联。
 
 托管目录在 `RuntimePaths.modelsDirectory/installed/<install UUID>/model`；journal/staging 在同一文件系统的 `.../installation-jobs/<job UUID>/`。下载中目录不进入可用库。来源文件可映射到 model 根或 `tokenizer/`，必须由 plan 精确列出且目标不可冲突；不展开 zip/tar、不修改用户 HF 全局缓存。旧 preset 路径继续可识别，升级不强制搬动/重下载权重。
 

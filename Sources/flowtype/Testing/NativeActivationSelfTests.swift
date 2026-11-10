@@ -96,6 +96,11 @@ private final class ActivationFixture {
 
 enum NativeActivationSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
+        await testRawLeaseCaptureOwnership(r)
+        await testManagedPresetAcquisition(r)
+        await testExplicitRemovalAfterDrain(r)
+        await testLegacyPresetAdoption(r)
+        await testCapturedUsageDrain(r)
         await testCandidateValidationIsTransactional(r)
         await testOfflineValidationAndFingerprint(r)
         await testActivationCancelDrain(r)
@@ -109,6 +114,219 @@ enum NativeActivationSelfTests {
         await testFactoryAllocationAuthority(r)
         await testResolvedAutomaticSelection(r)
     }
+    @MainActor static func testRawLeaseCaptureOwnership(_ r: SelfTest.Reporter) async {
+        let f = HFInstallTransactionSelfTests.Fixture(), library = HFInstallTransactionSelfTests.Library()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let source = HFInstallTransactionSelfTests.Source(f.bytes); await source.release()
+        let installer = ModelInstallationCoordinator(transport: { file, url, credential, progress in
+            try await source.transfer(file, url, credential, progress)
+        }, publisher: f.publisher(library), diskSample: { _ in .max }, journalRoot: f.jobs,
+            configuration: { library.config }, persistRemoval: { library.config = $0 })
+        do {
+            _ = try await installer.enqueue(f.plan)
+            _ = await HFInstallTransactionSelfTests.until { await installer.snapshots().first?.state == .installed }
+            guard let model = library.config.importedASRModels.first else { r.check(false, "B6 raw lease fixture installed"); return }
+            let backend = ActivationWhisperBackend()
+            let identity = LocalModelIdentity(id: model.id.uuidString, displayName: model.name, engine: model.engine.rawValue,
+                repoID: nil, directory: model.directory)
+            let provider = WhisperASRProvider(identity: identity, backend: backend)
+            let raw = LocalASRLease(id: UUID(), identity: identity, provider: provider, drain: { await provider.drainInference() })
+            library.config.asrRoutingPolicy = .localOnly
+            library.config.setASRBackendSelection(.init(primary: .init(rawValue: "native:import:" + model.id.uuidString)))
+            let router = ASRRouter(startMonitoring: false, configuration: { library.config }, localAvailable: { true }, localLease: { raw })
+            let before = library.config
+            var route: ASRRouteSnapshot? = await router.captureStartRoute()
+            r.eq(route?.localLease?.usageToken?.modelID, model.id, "B6 raw lease capture registers existing imported UUID")
+            r.eq(route?.localLease?.usageToken?.isExternalSource, true, "B6 raw lease usage is registered as external source")
+            r.eq(library.config, before, "B6 external-source usage registration never rewrites real managed ownership")
+            var alias = model; alias.id = UUID()
+            library.config.importedASRModels.append(alias)
+            let refused = await router.captureStartRoute()
+            r.check(refused.bindings.isEmpty, "B6 ambiguous raw alias cannot create unprotected native binding")
+            r.eq(refused.captureFailures.count, 1, "B6 ambiguous raw alias reports per-backend capture failure")
+            if let failure = refused.captureFailures.first {
+                r.eq(failure.destination, .settings(.speech, .asrBackend(.init(rawValue: "native:import:" + model.id.uuidString))), "B6 native capture failure targets exact model")
+                r.eq(FailureClassifier.classify(failure.error), .configuration(.endpointOrModel), "B6 native usage failure is model configuration, not credentials")
+            }
+            library.config.importedASRModels.removeAll { $0.id == alias.id }
+            library.config.setASRBackendSelection(.init())
+            do {
+                try await installer.remove(modelID: model.id, deleteManagedFiles: true)
+                r.check(false, "B6 captured raw lease blocks actual managed deletion after deselection")
+                return
+            } catch { r.check(true, "B6 captured raw lease blocks actual managed deletion after deselection") }
+            var completed = false
+            let work = Task { [captured = route!.bindings[0].provider] in
+                defer { completed = true }
+                return try await captured.transcribe(.init(samples: [0], sampleRate: 16_000, language: nil, context: nil, timeout: 1))
+            }
+            while await backend.calls == 0 { await Task.yield() }
+            work.cancel(); route = nil
+            _ = await HFInstallTransactionSelfTests.until { completed }
+            r.check(completed, "B6 raw lease caller cancellation remains prompt")
+            do { try await installer.remove(modelID: model.id, deleteManagedFiles: true); r.check(false, "B6 raw lease native tail blocks actual delete") }
+            catch { r.check(true, "B6 raw lease native tail blocks actual delete") }
+            await backend.release(); _ = await work.result
+            _ = await HFInstallTransactionSelfTests.until { NativeModelUsageRegistry.shared.hasNoCapturedUsage(modelID: model.id) }
+            try await installer.remove(modelID: model.id, deleteManagedFiles: true)
+            r.check(library.config.importedASRModels.isEmpty, "B6 raw lease releases real managed delete after native drain")
+            r.check(!FileManager.default.fileExists(atPath: model.directory.path), "B6 raw lease drained files actually removed")
+            let unknown = try raw.captured(), again = try raw.captured()
+            r.eq(unknown.usageToken?.modelID, raw.id, "B6 unresolved external identity derives from immutable lease UUID")
+            r.eq(again.usageToken?.modelID, unknown.usageToken?.modelID, "B6 unresolved external registration is stable across captures")
+        } catch { r.check(false, "B6 raw lease boundary: \(error)") }
+    }
+
+    @MainActor static func testManagedPresetAcquisition(_ r: SelfTest.Reporter) async {
+        for mode in ["install", "budget", "fallback"] {
+            let f = HFInstallTransactionSelfTests.Fixture(), library = HFInstallTransactionSelfTests.Library()
+            defer { try? FileManager.default.removeItem(at: f.root) }
+            let source = HFInstallTransactionSelfTests.Source(f.bytes); await source.release()
+            let installer = HFInstallTransactionSelfTests.coordinator(f, library, source: source)
+            let trial = ActivationTrial(), allocations = ActivationAllocations()
+            var sources: [DownloadSource] = [], presets: [String] = []
+            library.config.downloadSource = .custom("https://original.invalid")
+            let selection = library.config.asrBackendSelection
+            let state = QwenModelState(configuration: { library.config }, localModel: { _ in nil },
+                inspect: { try ASRModelInspector.inspect(directory: $0) },
+                assessHardware: { _, _ in .init(compatibility: mode == "budget" ? .incompatible : .compatible,
+                    explanation: "fixture", recommendedMinimumMemory: nil, minimumResidentBytes: nil) },
+                persistActivation: { library.config = $0 }, sampleProvider: NativeActivationFixtures.sample,
+                acquirePreset: { preset, capturedSource, _ in
+                    sources.append(capturedSource); presets.append(preset.id)
+                    if mode == "fallback" && preset.id == ModelPreset.qwen317B.id { throw ModelProvisionError.metadataInvalid() }
+                    _ = try await installer.enqueue(f.plan)
+                    _ = await HFInstallTransactionSelfTests.until { await installer.snapshots().first?.state == .installed }
+                    r.eq(library.config.asrBackendSelection, selection, "B6 B4 installation remains unselected before trial")
+                    library.config.downloadSource = .mirror
+                    guard let model = library.config.importedASRModels.first else { throw ModelProvisionError.incompleteLocal() }
+                    return model
+                }, loadImported: { model, authority in
+                    let adapter = ActivationAllocationAdapter(model: model, trial: trial, allocations: allocations,
+                        version: LocalASRRuntimeFactory.engineVersion(for: model.engine))
+                    return try await LocalASRRuntimeFactory.load(model,
+                        registry: LocalASRRuntimeRegistry(adapters: [adapter]), beforeAllocation: authority)
+                })
+            await state.perform(.init(target: .preset(mode == "fallback" ? .qwen317B : .qwen306B),
+                source: .custom("https://original.invalid"), origin: mode == "fallback" ? .automatic : .manual))
+            r.eq(allocations.count, mode == "budget" ? 0 : 1, "B6 acquired preset allocation after strict admission \(mode)")
+            r.eq(await trial.calls, mode == "budget" ? 0 : 1, "B6 acquired preset requires trial \(mode)")
+            r.check(sources.allSatisfy { $0 == .custom("https://original.invalid") }, "B6 source captured across acquisition/fallback")
+            r.eq(library.config.downloadSource, .mirror, "B6 unrelated next-download source edit survives")
+            if mode == "budget" { r.eq(library.config.asrBackendSelection, selection, "B6 failed activation leaves installed model unselected") }
+            else if let model = library.config.importedASRModels.first {
+                r.eq(state.activeLease?.identity.id, model.id.uuidString, "B6 new managed preset uses native import identity")
+                r.eq(library.config.activeImportedASRModelID, model.id, "B6 successful managed preset selects imported UUID")
+                r.check(library.config.installedASRModels.first?.validation != nil, "B6 managed activation persists validation")
+            }
+            if mode == "fallback" {
+                r.eq(presets, [ModelPreset.qwen317B.id, ModelPreset.qwen306B.id], "B6 explicit automatic fallback acquires actual smaller preset")
+                r.eq(library.config.selectedLocalModelID, nil, "B6 fallback keeps automatic legacy intent")
+            }
+        }
+    }
+
+    @MainActor static func testExplicitRemovalAfterDrain(_ r: SelfTest.Reporter) async {
+        let f = ActivationFixture(), root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("B6-remove-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let installer = ModelInstallationCoordinator(transport: { _, _, _, _ in throw HFDownloadError(code: .network) },
+            publisher: .init(installedRoot: root.appendingPathComponent("installed"), register: { _, _ in }),
+            journalRoot: root.appendingPathComponent("installation-jobs"), configuration: { f.config }, persistRemoval: { f.config = $0 })
+        do {
+            var old: LocalASRLease? = try await f.activate()
+            var captured = try old?.captured()
+            let selected = f.config
+            do { try await installer.remove(modelID: f.model.id, deleteManagedFiles: false); r.check(false, "B6 active removal rejected") }
+            catch { r.eq(f.config, selected, "B6 active removal preserves selected record") }
+            do { try await f.state.unloadCurrentAfterDrain(); r.check(false, "B6 captured binding denies unload") }
+            catch { r.check(captured != nil, "B6 captured binding denies unload") }
+            captured = nil
+            try await f.state.unloadCurrentAfterDrain()
+            old = nil
+            f.config.activeImportedASRModelID = nil; f.config.customLocalModelPath = nil; f.config.localModelPath = nil
+            f.config.selectedLocalModelID = nil; f.config.asrBackendSelection = .init()
+            try await installer.remove(modelID: f.model.id, deleteManagedFiles: false)
+            r.check(f.config.importedASRModels.isEmpty && f.config.installedASRModels.isEmpty, "B6 explicit deselection and owner/capture drain permits record removal")
+        } catch { r.check(false, "B6 explicit removal after drain: \(error)") }
+    }
+
+    @MainActor static func testLegacyPresetAdoption(_ r: SelfTest.Reporter) async {
+        for mode in ["reuse", "budget", "strict", "recheck"] {
+            let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("B6-legacy-\(UUID())")
+            let model = NativeActivationFixtures.model(root)
+            var config = Configuration(), downloads = 0
+            config.importedASRModels = [model]
+            let trial = ActivationTrial(), allocations = ActivationAllocations(), gate = ActivationInspectionGate()
+            let adapter = ActivationAllocationAdapter(model: model, trial: trial, allocations: allocations,
+                version: LocalASRRuntimeFactory.engineVersion(for: model.engine))
+            do {
+                let registry = try LocalASRRuntimeRegistry(adapters: [adapter])
+                let state = QwenModelState(configuration: { config },
+                    localModel: { _ in .init(directory: root, modelId: ModelPreset.qwen306B.repoId) },
+                    inspect: { _ in
+                        if mode == "strict" { throw ModelProvisionError.incompleteLocal() }
+                        return model
+                    }, assessHardware: { _, _ in .init(compatibility: mode == "budget" ? .incompatible : .compatible,
+                        explanation: "fixture", recommendedMinimumMemory: nil, minimumResidentBytes: nil) },
+                    persistActivation: { config = $0 }, sampleProvider: NativeActivationFixtures.sample,
+                    acquirePreset: { _, _, _ in downloads += 1; return model },
+                    loadImported: { candidate, authority in
+                        if mode == "recheck" { gate.block() }
+                        return try await LocalASRRuntimeFactory.load(candidate, registry: registry,
+                            inspect: { _ in gate.wait(); return model }, beforeAllocation: authority)
+                    })
+                let task = Task { await state.selectPreset(.qwen306B) }
+                if mode == "recheck" {
+                    _ = await HFInstallTransactionSelfTests.until { gate.entered }
+                    config.asrBackendSelection = .init(primary: ASRBackendID(rawValue: "native:preset:changed"))
+                    gate.release()
+                }
+                await task.value
+                r.eq(downloads, 0, "B6 existing preset reused without download \(mode)")
+                r.eq(allocations.count, mode == "reuse" ? 1 : 0, "B6 preset static/budget/final authority before allocation \(mode)")
+                r.eq(await trial.calls, mode == "reuse" ? 1 : 0, "B6 preset trial follows admission \(mode)")
+                if mode == "reuse" {
+                    r.eq(state.activeLease?.identity.id, ModelPreset.qwen306B.id, "B6 legacy native preset identity retained")
+                    r.eq(config.importedASRModels.map(\.id), [model.id], "B6 legacy preset import UUID stable")
+                    r.eq(config.installedASRModels.first?.ownership, .external, "B6 legacy files adopted as external")
+                    r.eq(config.installedASRModels.first?.legacyPresetID, ModelPreset.qwen306B.id, "B6 adoption stores exact actual preset association")
+                    r.check(state.activeLease?.usageToken?.modelID == model.id, "B6 legacy preset lease has imported usage identity")
+                }
+            } catch { r.check(false, "B6 legacy preset: \(error)") }
+        }
+    }
+
+    @MainActor static func testCapturedUsageDrain(_ r: SelfTest.Reporter) async {
+        let registry = NativeModelUsageRegistry(), id = UUID(), backend = ActivationWhisperBackend()
+        let identity = LocalModelIdentity(id: id.uuidString, displayName: "fixture", engine: "whisperCoreML", repoID: nil,
+            directory: RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("B6-tail"))
+        let native = WhisperASRProvider(identity: identity, backend: backend)
+        do {
+            var lease: LocalASRLease? = LocalASRLease(id: UUID(), identity: identity, provider: native,
+                usageToken: try registry.acquire(modelID: id), drain: { await native.drainInference() })
+            var captured = try lease?.captured()
+            r.check(!registry.hasNoCapturedUsage(modelID: id), "B6 capture separately blocks unload")
+            var completed = false
+            let work = Task { [provider = captured!.provider] in
+                defer { completed = true }
+                return try await provider.transcribe(.init(samples: [0], sampleRate: 16_000, language: nil, context: nil, timeout: 1))
+            }
+            while await backend.calls == 0 { await Task.yield() }
+            work.cancel(); captured = nil; lease = nil
+            for _ in 0..<100 { await Task.yield() }
+            _ = await HFInstallTransactionSelfTests.until { completed }
+            r.check(completed, "B6 cancelled native caller returns before compute drains")
+            r.eq(registry.pendingDrains(modelID: id), 1, "B6 registry owns cancellation drain keeper")
+            r.check((try? registry.reserveDeletion(modelID: id)) == nil, "B6 cancelled native compute retains deletion exclusion")
+            r.check(!registry.hasNoCapturedUsage(modelID: id), "B6 native tail retains capture evidence")
+            await backend.release(); _ = await work.result
+            _ = await HFInstallTransactionSelfTests.until { registry.hasNoCapturedUsage(modelID: id) }
+            r.eq(registry.pendingDrains(modelID: id), 0, "B6 registry releases completed drain keeper")
+            r.check(registry.hasNoCapturedUsage(modelID: id), "B6 real queue drain releases capture evidence")
+            r.check((try? registry.reserveDeletion(modelID: id)) != nil, "B6 real queue drain releases file protection")
+        } catch { r.check(false, "B6 capture drain: \(error)") }
+    }
+
     @MainActor static func testCandidateValidationIsTransactional(_ r: SelfTest.Reporter) async {
         let f = ActivationFixture()
         do {
@@ -637,6 +855,23 @@ private final class ActivationClock: @unchecked Sendable {
 
 /// Shared only by synthetic native lifecycle fixtures, never production runtime selection.
 enum NativeActivationFixtures {
+    @MainActor static func legacyState(loadDownloadedPreset: @escaping @MainActor (ModelPreset) async throws -> Void) -> QwenModelState {
+        let root = RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("legacy-io-\(UUID())")
+        return QwenModelState(preflight: { _, _ in }, load: { target, _, _ in
+            let preset: ModelPreset
+            switch target {
+            case .preset(let value): preset = value
+            case .offline(let value): preset = ModelPreset.allPresets.first { $0.repoId == value.modelId } ?? .qwen306B
+            default: throw ModelProvisionError.incompleteLocal()
+            }
+            try await loadDownloadedPreset(preset)
+            return LocalASRLease(id: UUID(), identity: .init(id: preset.id, displayName: preset.name,
+                engine: "qwen", repoID: preset.repoId, directory: root.appendingPathComponent(preset.id)), provider: Provider())
+        }, configuration: { Configuration() }, localModel: { _ in nil }, destination: { root.appendingPathComponent($0.id) },
+            availableDisk: { _ in .max }, environment: .init(read: { nil }, write: { _ in }),
+            inspect: { model($0) }, persistActivation: { _ in }, sampleProvider: sample)
+    }
+
     static func sample() throws -> ASRValidationSample {
         try .init(samples: [0, 0.25, -0.25], sampleRate: 16_000, label: "synthetic native fixture")
     }

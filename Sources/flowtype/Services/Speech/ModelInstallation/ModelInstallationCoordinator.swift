@@ -17,7 +17,16 @@ actor ModelInstallationCoordinator {
     private var generation = UUID()
     private var permit: ModelPublicationPermit?
     private var isRecovering = false
+    private var removalCount = 0
     private var currentTransferID: UUID?
+    private let usageRegistry: NativeModelUsageRegistry
+    private let configuration: @MainActor @Sendable () -> Configuration
+    private let persistRemoval: @MainActor @Sendable (Configuration) throws -> Void
+
+    @MainActor static let shared = ModelInstallationCoordinator(publisher: .production(),
+        journalRoot: RuntimeEnvironment.current.paths.asrInstallationJobsDirectory,
+        configuration: { ConfigurationStore.shared.current },
+        persistRemoval: { try ConfigurationStore.shared.commitNativeASRActivation($0) })
 
     init(transport: @escaping Transfer, publisher: ModelInstallationPublisher,
          verification: @escaping HFFileVerifier.Verification = { try HFFileVerifier.verify(file: $0, at: $1) },
@@ -26,9 +35,12 @@ actor ModelInstallationCoordinator {
              let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
              guard let bytes = values.volumeAvailableCapacityForImportantUsage else { throw HFDownloadError(code: .diskFull) }
              return bytes
-         }, journalRoot: URL) {
+         }, journalRoot: URL, usageRegistry: NativeModelUsageRegistry = .shared,
+         configuration: @escaping @MainActor @Sendable () -> Configuration = { Configuration() },
+         persistRemoval: @escaping @MainActor @Sendable (Configuration) throws -> Void = { _ in throw NativeModelUsageError.invalidOwnership }) {
         self.transport = transport; self.publisher = publisher; self.clock = clock; self.verification = verification
         self.diskSample = diskSample; self.journalRoot = journalRoot
+        self.usageRegistry = usageRegistry; self.configuration = configuration; self.persistRemoval = persistRemoval
     }
     init(transport: HFDownloadTransport = HFDownloadTransport(), publisher: ModelInstallationPublisher,
          verification: @escaping HFFileVerifier.Verification = { try HFFileVerifier.verify(file: $0, at: $1) },
@@ -36,11 +48,57 @@ actor ModelInstallationCoordinator {
          diskSample: @escaping DiskSample = { url in
              let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
              guard let bytes = values.volumeAvailableCapacityForImportantUsage else { throw HFDownloadError(code: .diskFull) }; return bytes
-         }, journalRoot: URL) {
+         }, journalRoot: URL, usageRegistry: NativeModelUsageRegistry = .shared,
+         configuration: @escaping @MainActor @Sendable () -> Configuration = { Configuration() },
+         persistRemoval: @escaping @MainActor @Sendable (Configuration) throws -> Void = { _ in throw NativeModelUsageError.invalidOwnership }) {
         self.init(transport: { file, url, credential, progress in
             try await transport.transfer(file: file, partialURL: url, credentialID: credential, progress: progress)
-        }, publisher: publisher, verification: verification, clock: clock, diskSample: diskSample, journalRoot: journalRoot)
+        }, publisher: publisher, verification: verification, clock: clock, diskSample: diskSample, journalRoot: journalRoot, usageRegistry: usageRegistry, configuration: configuration, persistRemoval: persistRemoval)
     }
+    /// Explicit preset acquisition. The queue remains the only transfer owner and the
+    /// immutable recipe/source are captured before enqueue. Acquisition never selects.
+    func acquire(preset: ModelPreset, source: DownloadSource,
+                 progress: @escaping @Sendable (Double) -> Void) async throws -> ImportedASRModel {
+        let config = await configuration()
+        let existing = config.installedASRModels.filter { $0.ownership == .managed && $0.installPlan?.recipeID == preset.id }
+        guard existing.count <= 1 else { throw NativeModelUsageError.invalidOwnership }
+        if let record = existing.first,
+           let model = config.importedASRModels.first(where: { $0.id == record.importedModelID }) {
+            try publisher.validateRemoval(record, model: model, configuration: config)
+            return model
+        }
+        guard ValidationEffects.live.allow(.modelDownload), let recipe = preset.installationRecipe,
+              let sourceSelection = recipe.sources.first else { throw ModelProvisionError.loadFailed() }
+        let endpoint = try source.validatedEndpoint(isChina: DownloadSource.systemIsLikelyChina())
+        let client = HFRepositoryClient(downloadEndpoint: endpoint)
+        let repository = try await client.resolve(sourceSelection)
+        let tokenizer: HFResolvedRepository?
+        if recipe.sources.count > 1 { tokenizer = try await client.resolve(recipe.sources[1]) } else { tokenizer = nil }
+        let plan = try await ASRInstallPlanner(client: client).plan(repository: repository, variant: recipe.variant, tokenizer: tokenizer)
+        try Task.checkCancellation()
+        let jobID = try await enqueue(plan)
+        do {
+            while let snapshot = jobs[jobID]?.snapshot {
+                try Task.checkCancellation()
+                progress(Double(snapshot.receivedBytes) / Double(max(1, plan.totalBytes)))
+                switch snapshot.state {
+                case .installed:
+                    let current = await configuration()
+                    guard let record = current.installedASRModels.first(where: { $0.id == jobID }),
+                          let model = current.importedASRModels.first(where: { $0.id == record.importedModelID }) else { throw HFDownloadError(code: .integrity) }
+                    return model
+                case .failed, .cancelled, .paused: throw HFDownloadError(code: .network)
+                default: try await Task.sleep(for: .milliseconds(40))
+                }
+            }
+            throw HFDownloadError(code: .integrity)
+        } catch {
+            // A cancellation cannot release the lifecycle while a native file writer lives.
+            if Task.isCancelled { await cancel(jobID: jobID) }
+            throw error
+        }
+    }
+
     func enqueue(_ plan: ASRInstallPlan) async throws -> UUID {
         guard !isRecovering, ownedJournalRoot else { throw HFDownloadError(code: .integrity) }
         try ModelInstallationPublisher.validate(plan)
@@ -87,7 +145,7 @@ actor ModelInstallationCoordinator {
 
     /// All unfinished network work becomes paused. Only already-renamed installations can register offline.
     func recover() async throws -> [ModelInstallSnapshot] {
-        guard activeTask == nil, !isRecovering, ownedJournalRoot else { throw HFDownloadError(code: .integrity) }
+        guard activeTask == nil, removalCount == 0, !isRecovering, ownedJournalRoot else { throw HFDownloadError(code: .integrity) }
         isRecovering = true
         defer { isRecovering = false }
         try ModelInstallationPublisher.ensureDirectory(journalRoot)
@@ -140,6 +198,78 @@ actor ModelInstallationCoordinator {
         job.libraryDetached = true
         try persist(job); jobs[jobID] = job
     }
+    /// modelID is the imported library UUID, never the installation/job UUID.
+    func remove(modelID: UUID, deleteManagedFiles: Bool) async throws {
+        guard !isRecovering, ownedJournalRoot else { throw NativeModelUsageError.invalidOwnership }
+        let reservation = try usageRegistry.reserveDeletion(modelID: modelID)
+        removalCount += 1
+        defer { removalCount -= 1; withExtendedLifetime(reservation) {} }
+        let before = await configuration()
+        guard let model = before.importedASRModels.first(where: { $0.id == modelID }) else { throw NativeModelUsageError.invalidOwnership }
+        let records = before.installedASRModels.filter { $0.importedModelID == modelID }
+        guard records.count <= 1 else { throw NativeModelUsageError.invalidOwnership }
+        let record = records.first
+        try Self.requireDeselected(model, in: before)
+        if deleteManagedFiles {
+            guard let record, record.ownership == .managed else { throw NativeModelUsageError.external }
+            try publisher.validateRemoval(record, model: model, configuration: before)
+        }
+        if let record, record.ownership == .managed {
+            // Recovery is deliberately not invoked here: it could republish removed state.
+            // Read the durable journal afresh: an in-memory entry cannot authorize
+            // replacing a corrupted or foreign on-disk owner record.
+            do {
+                let url = jobDirectory(record.id).appendingPathComponent("job.json")
+                try ModelInstallationPublisher.noSymlinks(url)
+                let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+                guard attrs[.type] as? FileAttributeType == .typeRegular,
+                      (attrs[.size] as? NSNumber)?.int64Value ?? .max <= 32 * 1024 * 1024 else { throw NativeModelUsageError.invalidOwnership }
+                let data = try Data(contentsOf: url)
+                guard data.count <= 32 * 1024 * 1024 else { throw NativeModelUsageError.invalidOwnership }
+                let journal = try JSONDecoder().decode(ModelInstallationJobJournal.self, from: data)
+                guard journal.version == 1, journal.snapshot.jobID == record.id,
+                      journal.snapshot.plan == record.installPlan else { throw NativeModelUsageError.invalidOwnership }
+                jobs[record.id] = journal
+            }
+            guard jobs[record.id]?.snapshot.plan == record.installPlan else { throw NativeModelUsageError.invalidOwnership }
+            try await markLibraryDetached(jobID: record.id)
+        }
+        let publisher = self.publisher, configuration = self.configuration, persist = self.persistRemoval
+        try await MainActor.run {
+            let current = configuration()
+            guard current.importedASRModels.first(where: { $0.id == modelID }) == model,
+                  current.installedASRModels.filter({ $0.importedModelID == modelID }) == records else {
+                throw NativeModelUsageError.invalidOwnership
+            }
+            try Self.requireDeselected(model, in: current)
+            if deleteManagedFiles, let record { try publisher.validateRemoval(record, model: model, configuration: current) }
+            var next = LocalModelLibrary.removing(id: modelID, from: current)
+            next.installedASRModels.removeAll { $0.importedModelID == modelID }
+            try persist(next)
+            if deleteManagedFiles, let record { try FileManager.default.removeItem(at: record.directory) }
+        }
+    }
+    static func requireDeselected(_ model: ImportedASRModel, in config: Configuration) throws {
+        let selected = config.asrBackendSelection
+        let selectedImports = [selected?.primary, selected?.fallback].compactMap { id -> UUID? in
+            guard let raw = id?.rawValue, raw.hasPrefix("native:import:") else { return nil }
+            return UUID(uuidString: String(raw.dropFirst("native:import:".count)))
+        }
+        guard config.activeImportedASRModelID != model.id, !selectedImports.contains(model.id) else {
+            throw NativeModelUsageError.selected
+        }
+        for path in [config.localModelPath, config.customLocalModelPath].compactMap({ $0 }) {
+            guard URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL.resolvingSymlinksInPath() != model.directory.standardizedFileURL.resolvingSymlinksInPath() else {
+                throw NativeModelUsageError.selected
+            }
+        }
+        let presetIDs = [config.selectedLocalModelID] + [selected?.primary, selected?.fallback].map {
+            $0?.rawValue.hasPrefix("native:preset:") == true ? String($0!.rawValue.dropFirst("native:preset:".count)) : nil
+        }
+        if let associated = config.installedASRModels.first(where: { $0.importedModelID == model.id })?.legacyPresetID,
+           presetIDs.contains(associated) { throw NativeModelUsageError.selected }
+    }
+
     private func schedule() {
         guard activeTask == nil, let id = order.first(where: { jobs[$0]?.snapshot.state == .queued && jobs[$0]?.libraryDetached == false }) else { return }
         let token = UUID(), publicationPermit = ModelPublicationPermit()

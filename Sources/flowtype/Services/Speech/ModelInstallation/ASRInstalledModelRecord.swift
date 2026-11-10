@@ -9,6 +9,8 @@ struct ASRInstalledModelRecord: Codable, Equatable, Sendable, Identifiable {
     let installPlan: ASRInstallPlan?
     let directory: URL
     var validation: ASRNativeValidationRecord?
+    /// Exact validated legacy lease identity; absent on old records and new managed installs.
+    var legacyPresetID: String? = nil
 }
 
 struct ASRNativeValidationRecord: Codable, Equatable, Sendable {

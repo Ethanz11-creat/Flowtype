@@ -116,6 +116,13 @@ final class ImportedASRModelActions: ObservableObject {
     func remove(id: UUID) {
         guard coordinator.operationID == nil else { return }
         cancelInspection()
-        coordinator.removeImportedModel(id: id)
+        if configuration().installedASRModels.contains(where: { $0.importedModelID == id && $0.ownership == .managed }) {
+            Task {
+                do { try await coordinator.removeModelRecord(id: id) }
+                catch { message = "请先解除模型选择并结束使用它的会话，再移除记录。" }
+            }
+        } else if !coordinator.removeImportedModel(id: id) {
+            message = "请先解除模型选择并结束使用它的会话，再移除记录。"
+        }
     }
 }

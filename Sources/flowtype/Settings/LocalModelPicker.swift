@@ -87,8 +87,10 @@ struct LocalModelPicker: View {
                     }.controlSize(.small).disabled(modelState.operationID != nil)
                     if isDownloaded {
                         Button("删除下载") {
-                            do { try downloader.deleteModel(preset); deletionError = nil }
-                            catch { deletionError = "无法删除下载文件，请检查目录权限后重试。" }
+                            Task {
+                                do { try await downloader.deleteModel(preset); deletionError = nil }
+                                catch { deletionError = error.localizedDescription }
+                            }
                         }
                         .buttonStyle(.borderless).controlSize(.small)
                         .disabled(modelState.operationID != nil)

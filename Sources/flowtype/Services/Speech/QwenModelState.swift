@@ -65,7 +65,13 @@ private final class ProvisionProgress: @unchecked Sendable {
 @MainActor
 final class QwenModelState: ObservableObject {
     static let shared = QwenModelState(saveConfiguration: { ConfigurationStore.shared.save($0) },
-        persistActivation: { try ConfigurationStore.shared.commitNativeASRActivation($0) })
+        persistActivation: { try ConfigurationStore.shared.commitNativeASRActivation($0) },
+        removeManagedRecord: removeManaged)
+
+    private static func removeManaged(_ id: UUID, files: Bool) async throws {
+        let installer = ModelInstallationCoordinator.shared
+        try await installer.remove(modelID: id, deleteManagedFiles: files)
+    }
 
     @Published private(set) var status: QwenModelStatus = .notLoaded
     @Published private(set) var activeLease: LocalASRLease?
@@ -85,6 +91,7 @@ final class QwenModelState: ObservableObject {
     private let load: @Sendable (ModelProvisionTarget, Bool, @escaping @Sendable (Double) -> Void) async throws -> LocalASRLease
     private let loadImported: @MainActor (ImportedASRModel, @escaping @MainActor (ImportedASRModel) throws -> Void) async throws -> LocalASRLease
     private let hasLoadOverride: Bool
+    private let acquirePreset: @MainActor (ModelPreset, DownloadSource, @escaping @Sendable (Double) -> Void) async throws -> ImportedASRModel
     private let sleep: @Sendable (Duration) async throws -> Void
     private let now: @Sendable () -> Date
     private let configuration: @MainActor () -> Configuration
@@ -96,13 +103,15 @@ final class QwenModelState: ObservableObject {
     private let inspect: @Sendable (URL) throws -> ImportedASRModel
     private let assessHardware: @Sendable (ImportedASRModel, UInt64?) -> LocalModelHardwareAssessment
     private let saveConfiguration: @MainActor (Configuration) -> Void
-    private var operation: Task<Void, Never>?
+    private var operation: Task<Result<LocalASRLease, Error>, Never>?
     private var attemptID: UUID?
     private var userCancelled = false
     private let persistActivation: @MainActor (Configuration) throws -> Void
     private let sampleProvider: @MainActor () throws -> ASRValidationSample
     private let engineVersion: @Sendable (LocalASREngine) -> String
     private let validationSleep: @Sendable (Duration) async throws -> Void
+    private let removeManagedRecord: @MainActor (UUID, Bool) async throws -> Void
+    private let usageRegistry: NativeModelUsageRegistry
     private let canUnload: @MainActor () -> Bool
 
     init(
@@ -138,7 +147,12 @@ final class QwenModelState: ObservableObject {
         sampleProvider: @escaping @MainActor () throws -> ASRValidationSample = { throw NativeASRActivationError.validationRequired },
         engineVersion: @escaping @Sendable (LocalASREngine) -> String = { LocalASRRuntimeFactory.engineVersion(for: $0) },
         validationSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        removeManagedRecord: @escaping @MainActor (UUID, Bool) async throws -> Void = { _, _ in throw NativeModelUsageError.invalidOwnership },
+        usageRegistry: NativeModelUsageRegistry = .shared,
         canUnload: @escaping @MainActor () -> Bool = { false },
+        acquirePreset: @escaping @MainActor (ModelPreset, DownloadSource, @escaping @Sendable (Double) -> Void) async throws -> ImportedASRModel = { preset, source, progress in
+            try await ModelInstallationCoordinator.shared.acquire(preset: preset, source: source, progress: progress)
+        },
         loadImported: @escaping @MainActor (ImportedASRModel, @escaping @MainActor (ImportedASRModel) throws -> Void) async throws -> LocalASRLease = { model, admission in
             guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
             return try await LocalASRRuntimeFactory.load(model, beforeAllocation: admission)
@@ -149,57 +163,13 @@ final class QwenModelState: ObservableObject {
         self.availableDisk = availableDisk; self.environment = environment; self.commit = commit
         self.inspect = inspect; self.assessHardware = assessHardware; self.saveConfiguration = saveConfiguration
         self.persistActivation = persistActivation; self.sampleProvider = sampleProvider
-        self.engineVersion = engineVersion; self.validationSleep = validationSleep; self.canUnload = canUnload
+        self.engineVersion = engineVersion; self.validationSleep = validationSleep; self.canUnload = canUnload; self.usageRegistry = usageRegistry
+        self.removeManagedRecord = removeManagedRecord
+        self.acquirePreset = acquirePreset
         self.loadImported = loadImported; self.hasLoadOverride = load != nil
-        self.load = load ?? { target, offline, progress in
-            guard ValidationEffects.live.allow(.modelLoad) else { throw ModelProvisionError.loadFailed() }
-            let directory: URL
-            let repo: String
-            let identity: LocalModelIdentity
-            switch target {
-            case .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
-            // Imported candidates dispatch through loadImported with the owner's final admission.
-            case .imported: throw ModelProvisionError.incompleteLocal()
-            case .preset(let preset):
-                directory = destination(preset); repo = preset.repoId
-                identity = .init(id: preset.id, displayName: preset.name, engine: "qwen", repoID: repo, directory: directory)
-            case .offline(let resolved):
-                directory = resolved.directory; repo = resolved.modelId
-                let preset = ModelPreset.allPresets.first { $0.repoId == repo }
-                identity = .init(id: preset?.id ?? repo, displayName: preset?.name ?? directory.lastPathComponent,
-                                 engine: "qwen", repoID: repo, directory: directory)
-            }
-            if !offline { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-            let candidate = QwenASRProvider()
-            try await candidate.loadModel(modelId: repo, cacheDir: directory, offlineMode: offline,
-                                          progressHandler: { value, _ in progress(value) })
-            return LocalASRLease(id: UUID(), identity: identity, provider: candidate,
-                drain: { await candidate.drainInference() })
-        }
-    }
-
-    /// Legacy injection adapter: the callback replaces model I/O, not coordinator state transitions.
-    /// Its success lease is a harmless stub; production uses the default candidate loader above.
-    convenience init(loadDownloadedPreset: @escaping @MainActor (ModelPreset) async throws -> Void) {
-        let directory: @Sendable (ModelPreset) -> URL = {
-            URL(fileURLWithPath: "/injected-model", isDirectory: true).appendingPathComponent($0.id)
-        }
-        self.init(preflight: { _, _ in }, load: { target, _, _ in
-            let preset: ModelPreset
-            switch target {
-            case .imported, .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
-            case .preset(let value): preset = value
-            case .offline(let resolved):
-                guard let value = ModelPreset.allPresets.first(where: { $0.repoId == resolved.modelId }) else {
-                    throw ModelProvisionError.incompleteLocal()
-                }
-                preset = value
-            }
-            try await loadDownloadedPreset(preset)
-            return LocalASRLease(id: UUID(), identity: .init(id: preset.id, displayName: preset.name,
-                engine: "qwen", repoID: preset.repoId, directory: directory(preset)), provider: QwenASRProvider())
-        }, configuration: { Configuration() }, localModel: { _ in nil }, destination: directory,
-           availableDisk: { _ in Int64.max }, environment: .init(read: { nil }, write: { _ in }))
+        // Explicit injected load remains the isolated legacy test I/O seam. Production
+        // acquisition is B4 and every native allocation is the inspected factory route.
+        self.load = load ?? { _, _, _ in throw ModelProvisionError.incompleteLocal() }
     }
 
     func perform(_ request: ModelProvisionRequest) async { _ = await execute(request) }
@@ -208,27 +178,28 @@ final class QwenModelState: ObservableObject {
     /// gate releases, before an earlier awaiting caller resumes on the main actor.
     private func execute(_ request: ModelProvisionRequest) async -> Result<LocalASRLease, Error> {
         guard !Task.isCancelled else { return .failure(CancellationError()) }
-        guard operationID == nil else { return .failure(NativeASRActivationError.busy) }
-        let id = UUID()
-        let generation = ActivationGeneration(configuration())
+        guard let (id, task) = begin(request) else { return .failure(NativeASRActivationError.busy) }
+        return await withTaskCancellationHandler(operation: { await task.value }, onCancel: {
+            task.cancel()
+            Task { @MainActor [weak self] in if self?.operationID == id { self?.cancel() } }
+        })
+    }
+
+    /// UI facades observe this owner's task; they do not create a downloader task.
+    @discardableResult func start(_ request: ModelProvisionRequest) -> UUID? { begin(request)?.0 }
+    private func begin(_ request: ModelProvisionRequest) -> (UUID, Task<Result<LocalASRLease, Error>, Never>)? {
+        guard operationID == nil else { return nil }
+        let id = UUID(), generation = ActivationGeneration(configuration())
         operationID = id; failure = nil; validationFailure = nil; didAutoFallback = false; userCancelled = false
         hardwareAssessment = nil; importFailureDetail = nil
         if case .imported(let model) = request.target { pendingImportDirectory = model.directory }
         else if case .uninspectedDirectory(let directory) = request.target { pendingImportDirectory = directory }
         else { pendingImportDirectory = nil }
-        selectionRequest = request
-        target = request.target; operationSource = request.source
+        selectionRequest = request; target = request.target; operationSource = request.source
         status = .loading
-        var completion: Result<LocalASRLease, Error> = .failure(CancellationError())
-        let task = Task { completion = await run(request, id: id, generation: generation) }
+        let task = Task { await run(request, id: id, generation: generation) }
         operation = task
-        await withTaskCancellationHandler(operation: { await task.value }, onCancel: {
-            // Mark the operation cancelled synchronously, before a queued main-actor callback
-            // could race with candidate commit. The actor callback also suppresses UI progress.
-            task.cancel()
-            Task { @MainActor [weak self] in if self?.operationID == id { self?.cancel() } }
-        })
-        return completion
+        return (id, task)
     }
 
     /// All identities here are importedModelID, never the installation/job UUID.
@@ -246,14 +217,14 @@ final class QwenModelState: ObservableObject {
     /// Cancel and drain the owned task before a single gate-covered check and release.
     /// A retained recording lease remains valid; the injected registry decides when release is allowed.
     func unloadCurrentAfterDrain() async throws {
-        if let operation { cancel(); await operation.value }
+        if let operation { cancel(); _ = await operation.value }
         try Task.checkCancellation()
         guard operationID == nil else { throw NativeASRActivationError.busy }
         let id = UUID(); operationID = id; userCancelled = false
         await ProvisionGate.acquire()
         defer { ProvisionGate.release(); if operationID == id { operationID = nil } }
         try checkOwnership(id)
-        guard canUnload() else { throw NativeASRActivationError.resourcesInUse }
+        guard canUnload(), activeLease?.usageToken.map({ usageRegistry.hasNoCapturedUsage(modelID: $0.modelID) }) ?? true else { throw NativeASRActivationError.resourcesInUse }
         activeLease = nil
         failure = nil; validationFailure = nil
         status = .notLoaded
@@ -385,15 +356,31 @@ final class QwenModelState: ObservableObject {
         _ = try result.get()
     }
 
-    /// Removing intent never invalidates an active lease or a recording's retained provider.
-    func removeImportedModel(id: UUID) {
-        guard operationID == nil else { return }
+    /// External record removal requires explicit deselection and no retained runtime.
+    @discardableResult func removeImportedModel(id: UUID) -> Bool {
+        guard operationID == nil else { return false }
         let config = configuration()
         let removed = config.importedASRModels.first { $0.id == id }
+        guard let removed,
+              !config.installedASRModels.contains(where: { $0.importedModelID == id && $0.ownership == .managed }),
+              (try? ModelInstallationCoordinator.requireDeselected(removed, in: config)) != nil,
+              let permit = try? usageRegistry.reserveDeletion(modelID: id) else { return false }
+        defer { withExtendedLifetime(permit) {} }
         saveConfiguration(LocalModelLibrary.removing(id: id, from: config))
         if case .imported(let model) = target, model.id == id { resetConfiguredRecovery() }
-        else if let removed, pendingImportDirectory?.standardizedFileURL.resolvingSymlinksInPath()
+        else if pendingImportDirectory?.standardizedFileURL.resolvingSymlinksInPath()
                     == removed.directory.standardizedFileURL.resolvingSymlinksInPath() { resetConfiguredRecovery() }
+        return true
+    }
+
+    func removeModelRecord(id: UUID, deleteManagedFiles: Bool = false) async throws {
+        guard operationID == nil else { throw NativeModelUsageError.inUse }
+        if configuration().installedASRModels.contains(where: { $0.importedModelID == id && $0.ownership == .managed }) {
+            try await removeManagedRecord(id, deleteManagedFiles)
+        } else {
+            guard !deleteManagedFiles else { throw NativeModelUsageError.external }
+            guard removeImportedModel(id: id) else { throw NativeModelUsageError.inUse }
+        }
     }
 
     func selectPreset(_ preset: ModelPreset?, automatic: Bool = false) async {
@@ -416,7 +403,7 @@ final class QwenModelState: ObservableObject {
             try Task.checkCancellation()
             let capturedSelection = generation.selection
             guard SelectionGeneration(configuration()) == capturedSelection else { throw NativeASRActivationError.changedCandidate }
-            let candidate: LocalASRLease
+            var candidate: LocalASRLease
             do { candidate = try await provision(request.target, source: request.source, attempts: 3, id: id, generation: generation) }
             catch {
                 try checkOwnership(id)
@@ -427,6 +414,7 @@ final class QwenModelState: ObservableObject {
             }
             try checkOwnership(id)
             let model = try await validationModel(for: candidate, id: id)
+            candidate = candidate.usageToken == nil ? candidate.retainingUsage(try usageRegistry.acquire(modelID: model.id)) : candidate
             let version = engineVersion(model.engine)
             guard candidate.engineVersion == version else { throw NativeASRActivationError.changedCandidate }
             let record: ASRNativeValidationRecord?
@@ -478,6 +466,40 @@ final class QwenModelState: ObservableObject {
     private func provision(_ target: ModelProvisionTarget, source: DownloadSource, attempts: Int, id: UUID,
                            generation: ActivationGeneration) async throws -> LocalASRLease {
         self.target = target
+        if !hasLoadOverride {
+            switch target {
+            case .preset(let preset):
+                var lookup = Configuration(); lookup.selectedLocalModelID = preset.id
+                if let existing = localModel(lookup) {
+                    return try await provisionExisting(existing, id: id, generation: generation)
+                }
+                status = .downloading(progress: 0, speedMBps: 0, etaSeconds: 0)
+                let acquisitionID = UUID(); attemptID = acquisitionID
+                defer { if attemptID == acquisitionID { attemptID = nil } }
+                let installed = try await acquirePreset(preset, source) { [weak self] value in
+                    Task { @MainActor in
+                        guard let self, self.operationID == id, self.attemptID == acquisitionID, !self.userCancelled,
+                              case .downloading = self.status else { return }
+                        self.status = .downloading(progress: value, speedMBps: 0, etaSeconds: 0)
+                    }
+                }
+                if attemptID == acquisitionID { attemptID = nil }
+                try checkOwnership(id)
+                guard SelectionGeneration(configuration()) == generation.selection else { throw NativeASRActivationError.changedCandidate }
+                // Only this B4 publication may augment the captured library generation.
+                let current = configuration()
+                guard current.importedASRModels.first(where: { $0.id == installed.id }) == installed,
+                      let record = current.installedASRModels.first(where: { $0.importedModelID == installed.id }),
+                      record.ownership == .managed,
+                      record.directory.standardizedFileURL.resolvingSymlinksInPath() == installed.directory.standardizedFileURL.resolvingSymlinksInPath() else { throw NativeASRActivationError.changedCandidate }
+                if !generation.models.contains(where: { $0.id == installed.id }) {
+                    generation.models.append(installed); generation.records.append(record)
+                }
+                return try await provision(.imported(installed), source: source, attempts: 1, id: id, generation: generation)
+            case .offline(let existing): return try await provisionExisting(existing, id: id, generation: generation)
+            default: break
+            }
+        }
         let importDirectory: URL?
         switch target {
         case .imported(let staged): importDirectory = staged.directory
@@ -494,6 +516,10 @@ final class QwenModelState: ObservableObject {
                 current.name = staged.name
             }
             current = LocalModelLibrary.canonicalizing(current, in: configuration())
+            if let owned = configuration().installedASRModels.first(where: { $0.importedModelID == current.id && $0.ownership == .managed }),
+               owned.directory.standardizedFileURL.resolvingSymlinksInPath() != current.directory.standardizedFileURL.resolvingSymlinksInPath() {
+                throw NativeModelUsageError.invalidOwnership
+            }
             let refreshed = ModelProvisionTarget.imported(current)
             self.target = refreshed
             let assessment = assessHardware(current, activeLease?.minimumResidentBytes)
@@ -551,6 +577,23 @@ final class QwenModelState: ObservableObject {
         throw ModelProvisionError.loadFailed()
     }
 
+    private func provisionExisting(_ resolved: ResolvedModel, id: UUID, generation: ActivationGeneration) async throws -> LocalASRLease {
+        let inspected = try await LocalModelInspection.inspect(directory: resolved.directory, using: inspect)
+        try checkOwnership(id)
+        let model = LocalModelLibrary.canonicalizing(inspected, in: configuration())
+        if selectionRequest?.restoringValidatedRuntime == true { try requireHistoricalValidation(model) }
+        let assessment = assessHardware(model, activeLease?.minimumResidentBytes)
+        hardwareAssessment = assessment
+        guard assessment.compatibility != .incompatible else { throw ModelProvisionError.loadFailed() }
+        let legacyTarget = target
+        let lease = try await attempt(.imported(model), offline: true, id: id, generation: generation)
+        target = legacyTarget
+        let preset = ModelPreset.allPresets.first { $0.repoId == resolved.modelId }
+        let identity = LocalModelIdentity(id: preset?.id ?? resolved.modelId, displayName: preset?.name ?? model.name,
+            engine: model.engine.rawValue, repoID: resolved.modelId, directory: model.directory)
+        return lease.retainingUsage(lease.usageToken!, identity: identity)
+    }
+
     /// Synchronous main-actor transaction: read the latest config so unrelated edits made
     /// while loading survive; no path, library, or active reference changes before success.
     private func commitSelection(_ candidate: LocalASRLease, request: ModelProvisionRequest,
@@ -574,29 +617,33 @@ final class QwenModelState: ObservableObject {
             config.migrateASRBackendSelectionIfNeeded()
             if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
             else { config.selectNativeASRBackend(lease: candidate) }
-            config = recording(validation, model: validatedModel, in: config)
+            config = recording(validation, model: validatedModel, legacyPresetID: ModelPreset.preset(forID: candidate.identity.id)?.id, in: config)
             try persistActivation(config)
             return
         }
         config.migrateASRBackendSelectionIfNeeded()
         if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
         else { config.selectNativeASRBackend(lease: candidate) }
-        config = recording(validation, model: validatedModel, in: config)
+        config = recording(validation, model: validatedModel, legacyPresetID: ModelPreset.preset(forID: candidate.identity.id)?.id, in: config)
         try persistActivation(config)
     }
 
-    private func recording(_ validation: ASRNativeValidationRecord, model: ImportedASRModel,
+    private func recording(_ validation: ASRNativeValidationRecord, model: ImportedASRModel, legacyPresetID: String?,
                            in config: Configuration) -> Configuration {
         var model = model
         if let existing = config.importedASRModels.first(where: { $0.id == model.id }),
            case .imported = target { model.variant = existing.variant }
         var result = LocalModelLibrary.upserting(model, in: config)
         if let index = result.installedASRModels.firstIndex(where: { $0.importedModelID == model.id }) {
-            result.installedASRModels[index].validation = validation
+            let existing = result.installedASRModels[index]
+            if existing.ownership == .external {
+                result.installedASRModels[index] = .init(id: existing.id, importedModelID: model.id, ownership: .external,
+                    installPlan: nil, directory: model.directory, validation: validation, legacyPresetID: legacyPresetID)
+            } else { result.installedASRModels[index].validation = validation }
         } else {
             // Legacy/adopted directories are external until B6 explicitly establishes ownership.
             result.installedASRModels.append(.init(id: UUID(), importedModelID: model.id, ownership: .external,
-                installPlan: nil, directory: model.directory, validation: validation))
+                installPlan: nil, directory: model.directory, validation: validation, legacyPresetID: legacyPresetID))
         }
         return result
     }
@@ -613,8 +660,8 @@ final class QwenModelState: ObservableObject {
 
     private func validationModel(for candidate: LocalASRLease, id: UUID) async throws -> ImportedASRModel {
         if case .imported(let model) = target { return model }
-        // Legacy preset downloader currently allocates during download. B6 moves that
-        // download to B4, then performs static/memory admission before candidate allocation.
+        // Existing preset directories retain their legacy backend identity. Their
+        // record association is external unless B4 explicitly published ownership.
         let current = try await LocalModelInspection.inspect(directory: candidate.identity.directory, using: inspect)
         try checkOwnership(id)
         return LocalModelLibrary.canonicalizing(current, in: configuration())
@@ -665,10 +712,10 @@ final class QwenModelState: ObservableObject {
                      validatedAt: now(), latencyMs: Int(min(elapsed * 1000, Double(Int.max))))
     }
 
-    private struct ActivationGeneration {
+    private final class ActivationGeneration {
         let selection: SelectionGeneration
-        let models: [ImportedASRModel]
-        let records: [ASRInstalledModelRecord]
+        var models: [ImportedASRModel]
+        var records: [ASRInstalledModelRecord]
         init(_ config: Configuration) {
             selection = SelectionGeneration(config)
             models = config.importedASRModels; records = config.installedASRModels
@@ -723,8 +770,10 @@ final class QwenModelState: ObservableObject {
             case .uninspectedDirectory: throw ModelProvisionError.incompleteLocal()
             }
             try checkGeneration(generation, modelID: modelID, directory: directory)
+            let usage: ModelUsageToken?
+            if case .imported(let model) = target { usage = try usageRegistry.acquire(modelID: model.id) } else { usage = nil }
             if case .imported(let model) = target, !hasLoadOverride {
-                return try await loadImported(model) { [self] current in
+                let candidate = try await loadImported(model) { [self] current in
                     try checkOwnership(id)
                     try checkGeneration(generation, modelID: current.id, directory: current.directory)
                     let assessment = assessHardware(current, activeLease?.minimumResidentBytes)
@@ -734,8 +783,9 @@ final class QwenModelState: ObservableObject {
                         throw ModelProvisionError.loadFailed()
                     }
                 }
+                return candidate.retainingUsage(usage!)
             }
-            return try await load(target, offline) { [weak self] fraction in
+            let candidate = try await load(target, offline) { [weak self] fraction in
                 let (speed, eta) = progress.update(fraction, now: now(), bytes: totalBytes)
                 Task { @MainActor in
                     guard let self, self.operationID == id, self.attemptID == token, !self.userCancelled,
@@ -743,6 +793,7 @@ final class QwenModelState: ObservableObject {
                     self.status = fraction >= 1 ? .loading : .downloading(progress: max(0, fraction), speedMBps: speed, etaSeconds: eta)
                 }
             }
+            return usage.map { candidate.retainingUsage($0) } ?? candidate
         }
         var timedOut = false
         let watchdog = Task {

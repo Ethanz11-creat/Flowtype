@@ -23,6 +23,8 @@ enum LocalASRRuntimeFactory {
         }
         // Preserve the library identity while using freshly inspected resource metadata.
         var candidate = current; candidate.id = model.id; candidate.name = model.name
-        return try await registry.load(candidate, beforeAllocation: beforeAllocation)
+        let usage = try NativeModelUsageRegistry.shared.acquire(modelID: candidate.id)
+        let lease = try await registry.load(candidate, beforeAllocation: beforeAllocation)
+        return lease.retainingUsage(usage)
     }
 }

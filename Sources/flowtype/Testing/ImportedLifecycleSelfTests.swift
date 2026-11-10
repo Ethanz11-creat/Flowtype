@@ -141,13 +141,13 @@ enum ImportedLifecycleSelfTests {
 
         state.removeImportedModel(id: whisper.id)
         r.eq(state.activeLease, newLease, "removing active library row preserves usable lease")
-        r.eq(store.current.activeImportedASRModelID, nil, "removing active row clears durable intent")
+        r.eq(store.current.activeImportedASRModelID, whisper.id, "B6 active row removal is rejected without explicit deselection and drain")
         r.eq(store.current.customLocalModelPath, nil, "removing library row clears legacy aliases")
         let retained = SessionContext(sessionID: 9303); retained.captureRoute = next.captureRoute
         _ = await stage.execute(payload: .audio(samples: [0.25], previewText: ""), context: retained)
         r.eq(retained.rawTranscript, "whisperCoreML:1", "removed library row cannot invalidate an existing capture")
         store.flushPendingSave()
-        r.eq(ConfigurationStore(defaults: defaults).current.activeImportedASRModelID, nil, "removed active import stays removed after restart")
+        r.eq(ConfigurationStore(defaults: defaults).current.activeImportedASRModelID, whisper.id, "B6 refused active removal preserves selection after restart")
 
         // A legacy path is inspected and migrated only on successful runtime ownership.
         var legacy = Configuration(); legacy.localModelPath = qwen.directory.path

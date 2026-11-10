@@ -454,7 +454,10 @@ extension ModelProvisionSelfTests {
         let validExplicit = fixture(load: { target, _, _ in
             await installedProbe.record(target); return old
         }, configuration: { explicitFixture }, localModel: { _ in installedPrimary })
-        await validExplicit.loadModel(provider: QwenASRProvider())
+        await validExplicit.loadModel()
+        r.eq(validExplicit.validationFailure, .validationRequired, "B6 legacy explicit startup without history requires validation")
+        r.eq(await installedProbe.loadedTargets, [], "B6 startup without evidence never allocates")
+        await validExplicit.retryConfiguredModel()
         r.eq(validExplicit.activeLease?.id, old.id, "verified explicit path survives unknown legacy selection ID")
         r.eq(validExplicit.failure, nil, "verified explicit path is not rejected as unknown preset")
 
@@ -471,7 +474,11 @@ extension ModelProvisionSelfTests {
         }, configuration: { automaticFixture }, localModel: { config in
             config.selectedLocalModelID == ModelPreset.qwen306B.id ? nil : installedPrimary
         })
-        await bootstrap.loadModel(provider: QwenASRProvider())
+        await bootstrap.loadModel()
+        r.eq(bootstrap.validationFailure, .validationRequired, "B6 automatic startup without history requires explicit recovery")
+        r.eq(await bootstrapProbe.loadedTargets, [], "B6 automatic startup never allocates unvalidated runtime")
+        r.eq(await bootstrapProbe.preflights, 0, "B6 automatic startup never downloads fallback")
+        await bootstrap.retryConfiguredModel()
         r.eq(await bootstrapProbe.loadedTargets, [.offline(installedPrimary), .preset(.qwen306B)],
              "automatic local primary load failure falls back once to 0.6B")
         r.eq(await bootstrapProbe.preflightPresets, ["qwen3-0.6b-4bit"],
@@ -480,9 +487,16 @@ extension ModelProvisionSelfTests {
         r.check(bootstrap.didAutoFallback, "bootstrap retains automatic fallback eligibility")
 
         let preOnboardingProbe = ProvisionProbe()
+        let startupModel = ImportedASRModel(name: "installed-1.7b", directory: installedPrimary.directory,
+            engine: .qwenMLX, variant: "1.7B", bits: 4, sizeBytes: 1024, fileFingerprint: "fixture")
+        var startupConfig = Configuration()
+        startupConfig.importedASRModels = [startupModel]
+        startupConfig.installedASRModels = [.init(id: UUID(), importedModelID: startupModel.id, ownership: .external,
+            installPlan: nil, directory: startupModel.directory, validation: try! NativeActivationFixtures.validation(startupModel))]
+        let startupHistory = startupConfig
         let preOnboarding = fixture(preflight: { preset, _ in await preOnboardingProbe.preflight(preset) }, load: { target, _, _ in
             await preOnboardingProbe.record(target); throw ModelProvisionError.loadFailed()
-        }, configuration: { Configuration() }, localModel: { _ in installedPrimary })
+        }, configuration: { startupHistory }, localModel: { _ in installedPrimary })
         await preOnboarding.loadModel(provider: QwenASRProvider())
         r.eq(await preOnboardingProbe.loadedTargets, [.offline(installedPrimary)], "pre-onboarding local bootstrap stays offline-only")
         r.eq(await preOnboardingProbe.preflights, 0, "pre-onboarding local failure cannot download fallback")
@@ -493,7 +507,7 @@ extension ModelProvisionSelfTests {
         let explicitFailure = fixture(preflight: { preset, _ in await explicitFailureProbe.preflight(preset) }, load: { target, _, _ in
             await explicitFailureProbe.record(target); throw ModelProvisionError.loadFailed()
         }, configuration: { explicitFixture }, localModel: { _ in installedPrimary })
-        await explicitFailure.loadModel(provider: QwenASRProvider())
+        await explicitFailure.retryConfiguredModel()
         r.eq(await explicitFailureProbe.loadedTargets, [.offline(installedPrimary)], "explicit path bootstrap failure remains terminal")
         r.eq(await explicitFailureProbe.preflights, 0, "explicit path failure never starts preflight")
         r.check(!explicitFailure.didAutoFallback, "explicit path bootstrap never auto-falls back")
@@ -561,7 +575,7 @@ extension ModelProvisionSelfTests {
         await until { await serialA.calls == 1 }
         let second = Task { await b.perform(.init(target: .preset(.qwen306B), source: .official, origin: .manual)) }
         var compatibilityCalls = 0
-        let compatibility = QwenModelState(loadDownloadedPreset: { _ in
+        let compatibility = NativeActivationFixtures.legacyState(loadDownloadedPreset: { _ in
             compatibilityCalls += 1
             throw ModelProvisionError.loadFailed()
         })
@@ -888,7 +902,11 @@ extension ModelProvisionSelfTests {
         try? await actions.importOfflineModel(at: folder)
         let importedLease = removal.activeLease
         store.current.localModelPath = "/fixture/legacy-conflict"
+        let retainedRows = store.current.importedASRModels
+        let retainedRecords = store.current.installedASRModels
         actions.removeFolderOverride()
+        r.eq(store.current.importedASRModels, retainedRows, "B6 folder deselection retains library rows")
+        r.eq(store.current.installedASRModels, retainedRecords, "B6 folder deselection retains ownership records")
         r.eq(store.current.customLocalModelPath, nil, "shared removal clears custom override")
         r.eq(store.current.localModelPath, nil, "shared removal clears legacy override")
         r.eq(removal.activeLease, importedLease, "removing configuration preserves available folder lease")

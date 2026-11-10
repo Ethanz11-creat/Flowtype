@@ -427,6 +427,13 @@ enum SelfTest {
             print("=== ASR backend self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
+        if CommandLine.arguments.contains("--model-provision-only") {
+            await ModelProvisionSelfTests.runPreflight(r)
+            await ModelProvisionSelfTests.runCoordinator(r)
+            await testTerminalModelLoadPreflight(r)
+            print("=== Model provision self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--m2-fix-only") {
             LocalModelImportSelfTests.runInspection(r)
             await WhisperRuntimeSelfTests.run(r)
@@ -2019,7 +2026,7 @@ enum SelfTest {
         var attemptedPresets: [String] = []
         var modelUnderTest: QwenModelState?
         var hadOperationOwnership = false
-        let model = QwenModelState(loadDownloadedPreset: { preset in
+        let model = NativeActivationFixtures.legacyState(loadDownloadedPreset: { preset in
             hadOperationOwnership = modelUnderTest?.operationID != nil
             attemptedPresets.append(preset.id)
             throw SyntheticLoadFailure()
@@ -2079,7 +2086,7 @@ enum SelfTest {
         session.cancel()
         await stage.release()
 
-        let recovered = QwenModelState(loadDownloadedPreset: { _ in })
+        let recovered = NativeActivationFixtures.legacyState(loadDownloadedPreset: { _ in })
         await recovered.handleDownloadCompleted(preset: .qwen306B)
         r.eq(recovered.status, .ready, "terminal model: successful auto-load still publishes ready")
         r.check(recovered.activeLease != nil, "terminal model: successful injected load commits a coordinator lease")

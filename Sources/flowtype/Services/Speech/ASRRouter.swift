@@ -6,7 +6,7 @@ import os
 /// of providers that can still attempt recognition.
 struct ASRBackendCaptureFailure: Sendable, Equatable {
     let backendID: ASRBackendID
-    let error: ASRCredentialError
+    let error: any Error
 
     var destination: ClientDestination {
         .settings(.speech, .asrBackend(backendID))
@@ -25,7 +25,7 @@ struct ASRRouteSnapshot: Sendable, Equatable {
     var bindings: [ASRBackendBinding] = []
     var captureFailures: [ASRBackendCaptureFailure] = []
     var configuredBackends: [ASRBackendDescriptor] = []
-    var captureError: ASRCredentialError? { captureFailures.first?.error }
+    var captureError: (any Error)? { captureFailures.first?.error }
     let selectedProviderID: String?
     let localAvailable: Bool
     let cloudAvailable: Bool
@@ -486,6 +486,25 @@ final class ASRRouter: @unchecked Sendable {
         return (route.configuredBackends, Set(available.map { $0.descriptor.id }))
     }
 
+    /// Resolve existing library identity without changing its ownership. Raw legacy
+    /// sources receive external-source occupancy; ambiguous aliases cannot be captured.
+    @MainActor private func captureNativeLease(_ lease: LocalASRLease, configuration: Configuration) throws -> LocalASRLease {
+        func key(_ directory: URL) -> String {
+            directory.standardizedFileURL.resolvingSymlinksInPath().path.precomposedStringWithCanonicalMapping.lowercased()
+        }
+        let importedID = UUID(uuidString: lease.identity.id)
+        let matches = configuration.importedASRModels.filter { $0.id == importedID || key($0.directory) == key(lease.identity.directory) }
+        guard Set(matches.map(\.id)).count <= 1 else { throw NativeModelUsageError.invalidOwnership }
+        if let model = matches.first {
+            guard key(model.directory) == key(lease.identity.directory) else { throw NativeModelUsageError.invalidOwnership }
+        }
+        let modelID = matches.first?.id ?? lease.id
+        if let token = lease.usageToken, let expectedID = matches.first?.id ?? importedID, token.modelID != expectedID {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        return try lease.captured(externalModelID: modelID)
+    }
+
     @MainActor
     private func makeBackendRoute(reserveRecovery: Bool, persistLegacyResolution: Bool = true) -> ASRRouteSnapshot {
         var cfg = configuration()
@@ -498,7 +517,7 @@ final class ASRRouter: @unchecked Sendable {
         let selection = ASRBackendMigration.selection(from: cfg)
         let selected = Set([selection.primary, selection.fallback].compactMap { $0 })
         var bindings: [ASRBackendBinding] = []
-        var captureErrors: [ASRBackendID: ASRCredentialError] = [:]
+        var captureErrors: [ASRBackendID: any Error] = [:]
         let internetAvailable = self.internetAvailable() ?? snapshot().networkReachable
         // Determine eligibility from nonsecret metadata before touching credentials or factories.
         var descriptors = cfg.cloudASRConfig.providers.filter {
@@ -519,9 +538,13 @@ final class ASRRouter: @unchecked Sendable {
                                     location: .localService), maxUploadBytes: nil)
         }
         if let lease, localAvailable(), selected.contains(ASRBackendID(nativeLease: lease)) {
-            let descriptor = ASRBackendDescriptor(nativeLease: lease, id: ASRBackendID(nativeLease: lease))
-            descriptors.append(descriptor)
-            bindings.append(.init(descriptor: descriptor, provider: lease.provider, nativeLease: lease, credentialGeneration: nil))
+            let backendID = ASRBackendID(nativeLease: lease)
+            do {
+                let captured = try captureNativeLease(lease, configuration: cfg)
+                let descriptor = ASRBackendDescriptor(nativeLease: captured, id: backendID)
+                descriptors.append(descriptor)
+                bindings.append(.init(descriptor: descriptor, provider: captured.provider, nativeLease: captured, credentialGeneration: nil))
+            } catch { captureErrors[backendID] = error }
         }
         for id in selected where id.rawValue.hasPrefix("native:") && !descriptors.contains(where: { $0.id == id }) {
             descriptors.append(ASRBackendDescriptor(id: id, revision: UUID(), displayName: "本地模型", modelID: nil,
