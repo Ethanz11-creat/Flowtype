@@ -416,6 +416,11 @@ enum SelfTest {
             print("=== M2 package self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
+        if CommandLine.arguments.contains("--asr-model-center-only") {
+            await ASRModelCenterSelfTests.run(r)
+            print("=== ASR model center self-test: \(r.passed) passed, \(r.failed) failed ===")
+            finish(r)
+        }
         if CommandLine.arguments.contains("--hf-install-only") {
             await HFInstallSelfTests.run(r)
             print("=== HF install self-test: \(r.passed) passed, \(r.failed) failed ===")
@@ -444,6 +449,7 @@ enum SelfTest {
             print("=== M2 fix self-test: \(r.passed) passed, \(r.failed) failed ===")
             finish(r)
         }
+        await ASRModelCenterSelfTests.run(r)
         await HFInstallSelfTests.run(r)
         await ASRBackendSelfTests.run(r)
         await NativeClientSelfTests.run(r)

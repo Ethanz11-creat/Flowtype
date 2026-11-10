@@ -435,6 +435,7 @@ struct Configuration: Codable, Equatable {
     var asrBackendSelection: ASRBackendSelection? = nil
     var pendingLegacyNativeResolution: Bool = false
     var localASRServices: [LocalASRServiceProfile] = []
+    var asrServiceValidationRecords: [ASRServiceValidationRecord] = []
     /// 云端请求是否携带前台上下文（默认开启；设置中可关闭）。
     var cloudASRSendContext: Bool = true
     var cloudPolishSendContext: Bool = true
@@ -557,6 +558,7 @@ struct Configuration: Codable, Equatable {
         cloudASRConfig = (try? c.decode(CloudASRConfig.self, forKey: .cloudASRConfig)) ?? d.cloudASRConfig
         pendingLegacyNativeResolution = try c.decodeIfPresent(Bool.self, forKey: .pendingLegacyNativeResolution) ?? false
         asrBackendSelection = try c.decodeIfPresent(ASRBackendSelection.self, forKey: .asrBackendSelection)
+        asrServiceValidationRecords = try c.decodeIfPresent([ASRServiceValidationRecord].self, forKey: .asrServiceValidationRecords) ?? []
         localASRServices = try c.decodeIfPresent([LocalASRServiceProfile].self, forKey: .localASRServices) ?? []
         selectedLocalModelID = (try? c.decode(String?.self, forKey: .selectedLocalModelID)) ?? d.selectedLocalModelID
         customLocalModelPath = (try? c.decode(String?.self, forKey: .customLocalModelPath)) ?? d.customLocalModelPath
@@ -606,6 +608,7 @@ extension Configuration {
         case asrRoutingPolicy
         case pendingLegacyNativeResolution
         case asrBackendSelection
+        case asrServiceValidationRecords
         case localASRServices
         case cloudASRSendContext
         case deliveryMode
@@ -643,6 +646,7 @@ extension Configuration {
         try container.encode(asrRoutingPolicy, forKey: .asrRoutingPolicy)
         try container.encode(pendingLegacyNativeResolution, forKey: .pendingLegacyNativeResolution)
         try container.encodeIfPresent(asrBackendSelection, forKey: .asrBackendSelection)
+        try container.encode(asrServiceValidationRecords, forKey: .asrServiceValidationRecords)
         try container.encode(localASRServices, forKey: .localASRServices)
         try container.encode(cloudASRSendContext, forKey: .cloudASRSendContext)
         try container.encode(deliveryMode, forKey: .deliveryMode)

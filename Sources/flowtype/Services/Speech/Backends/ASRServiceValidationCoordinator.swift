@@ -29,6 +29,7 @@ enum ASRServiceValidationState: Equatable, Sendable {
     private var operations: [UUID: Task<String, Error>] = [:]
     // Only for injected/manual callers without a store generation. No key hash is produced.
     private var fallbackCredentials: [UUID: (value: String?, generation: UUID)] = [:]
+    private let now: @MainActor () -> Date
     private let onVerified: @MainActor (ASRServiceValidationRecord) -> Void
     private let serviceRecognition: ServiceRecognition
     private let cloudRecognition: CloudRecognition
@@ -37,10 +38,11 @@ enum ASRServiceValidationState: Equatable, Sendable {
 
     init(session: URLSession? = nil,
          resolver: @escaping LocalASRServiceEndpoint.Resolver = LocalASRServiceEndpoint.resolve,
+         now: @escaping @MainActor () -> Date = { Date() },
          onVerified: @escaping @MainActor (ASRServiceValidationRecord) -> Void = { _ in },
          serviceRecognition: ServiceRecognition? = nil, cloudRecognition: CloudRecognition? = nil) {
         self.session = session; self.resolver = resolver
-        self.onVerified = onVerified
+        self.onVerified = onVerified; self.now = now
         self.serviceRecognition = serviceRecognition ?? { profile, credential, sample in
             let provider: any ASRProvider
             switch profile.protocolKind {
@@ -131,7 +133,9 @@ enum ASRServiceValidationState: Equatable, Sendable {
         }
         let encoder = JSONEncoder(); encoder.outputFormatting = .sortedKeys
         // Full profiles cover revision and every wire field; the random generation covers credentials.
-        var data = (try? encoder.encode(profile)) ?? Data()
+        let encoded = (profile as? CloudASRProviderConfig).flatMap { try? encoder.encode($0.asrValidationIdentity) }
+            ?? (try? encoder.encode(profile))
+        var data = encoded ?? Data()
         data.append(contentsOf: effectiveGeneration.uuidString.utf8)
         let fingerprint = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         if configurations[profileID] != fingerprint {
@@ -164,7 +168,7 @@ enum ASRServiceValidationState: Equatable, Sendable {
         case .success(let value):
             let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { states[profileID] = .failed(code: "invalidResponse"); return }
-            let date = Date()
+            let date = now()
             states[profileID] = .verified(at: date, text: text)
             // A state observer may invalidate while receiving the publication above.
             guard owners[profileID] == owner, configurations[profileID] == fingerprint,
@@ -209,5 +213,12 @@ enum ASRServiceValidationState: Equatable, Sendable {
             let ns = underlying as NSError
             return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorTimedOut ? "timeout" : "network"
         }
+    }
+}
+
+extension CloudASRProviderConfig {
+    /// Only this legacy display flag is excluded. Revision and every other field remain bound.
+    var asrValidationIdentity: Self {
+        var result = self; result.isActive = false; return result
     }
 }

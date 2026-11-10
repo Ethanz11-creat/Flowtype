@@ -103,7 +103,11 @@ final class QwenModelState: ObservableObject {
     private let inspect: @Sendable (URL) throws -> ImportedASRModel
     private let assessHardware: @Sendable (ImportedASRModel, UInt64?) -> LocalModelHardwareAssessment
     private let saveConfiguration: @MainActor (Configuration) -> Void
-    private var operation: Task<Result<LocalASRLease, Error>, Never>?
+    private struct OperationResult {
+        let lease: LocalASRLease?
+        let trial: ASRModelTrialResult?
+    }
+    private var operation: Task<Result<OperationResult, Error>, Never>?
     private var attemptID: UUID?
     private var userCancelled = false
     private let persistActivation: @MainActor (Configuration) throws -> Void
@@ -176,7 +180,7 @@ final class QwenModelState: ObservableObject {
 
     /// Each caller retains its own completion. A newer operation may begin after the
     /// gate releases, before an earlier awaiting caller resumes on the main actor.
-    private func execute(_ request: ModelProvisionRequest) async -> Result<LocalASRLease, Error> {
+    private func execute(_ request: ModelProvisionRequest) async -> Result<OperationResult, Error> {
         guard !Task.isCancelled else { return .failure(CancellationError()) }
         guard let (id, task) = begin(request) else { return .failure(NativeASRActivationError.busy) }
         return await withTaskCancellationHandler(operation: { await task.value }, onCancel: {
@@ -187,7 +191,7 @@ final class QwenModelState: ObservableObject {
 
     /// UI facades observe this owner's task; they do not create a downloader task.
     @discardableResult func start(_ request: ModelProvisionRequest) -> UUID? { begin(request)?.0 }
-    private func begin(_ request: ModelProvisionRequest) -> (UUID, Task<Result<LocalASRLease, Error>, Never>)? {
+    private func begin(_ request: ModelProvisionRequest) -> (UUID, Task<Result<OperationResult, Error>, Never>)? {
         guard operationID == nil else { return nil }
         let id = UUID(), generation = ActivationGeneration(configuration())
         operationID = id; failure = nil; validationFailure = nil; didAutoFallback = false; userCancelled = false
@@ -203,15 +207,63 @@ final class QwenModelState: ObservableObject {
     }
 
     /// All identities here are importedModelID, never the installation/job UUID.
-    func activate(modelID: UUID, sample: ASRValidationSample) async throws -> LocalASRLease {
+    func activate(modelID: UUID, sample: ASRValidationSample, selectionIntent: NativeASRSelectionIntent = .existingRole) async throws -> LocalASRLease {
+        guard selectionIntent != .trialOnly else { throw NativeASRActivationError.validationRequired }
         guard operationID == nil else { throw NativeASRActivationError.busy }
         guard let model = configuration().importedASRModels.first(where: { $0.id == modelID }) else {
             throw NativeASRActivationError.missingModel
         }
+        try validateSelectionIntent(selectionIntent, id: .init(rawValue: "native:import:" + model.id.uuidString))
         let result = await execute(.init(target: .imported(model), source: configuration().downloadSource,
-                                         origin: .offlineImport, validationSample: sample))
+                                         origin: .offlineImport, validationSample: sample, selectionIntent: selectionIntent))
         try Task.checkCancellation()
-        return try result.get()
+        guard let lease = try result.get().lease else { throw NativeASRActivationError.validationRequired }
+        return lease
+    }
+
+    /// Preset acquisition remains B4-owned; the successful candidate may have an imported identity.
+    func activate(preset: ModelPreset, sample: ASRValidationSample, selectionIntent: NativeASRSelectionIntent = .existingRole) async throws -> LocalASRLease {
+        guard selectionIntent != .trialOnly else { throw NativeASRActivationError.validationRequired }
+        guard operationID == nil else { throw NativeASRActivationError.busy }
+        try validateSelectionIntent(selectionIntent, id: .init(rawValue: "native:preset:" + preset.id))
+        let result = await execute(.init(target: .preset(preset), source: configuration().downloadSource,
+                                         origin: .manual, validationSample: sample, selectionIntent: selectionIntent))
+        try Task.checkCancellation()
+        guard let lease = try result.get().lease else { throw NativeASRActivationError.validationRequired }
+        return lease
+    }
+
+    private func validateSelectionIntent(_ intent: NativeASRSelectionIntent, id: ASRBackendID) throws {
+        var proposed = configuration()
+        if intent == .primary { try ASRSettingsAction.selectPrimary(id).apply(to: &proposed) }
+        if intent == .fallback { try ASRSettingsAction.selectFallback(id).apply(to: &proposed) }
+    }
+
+    func test(modelID: UUID, sample: ASRValidationSample) async throws -> ASRModelTrialResult {
+        guard let model = configuration().importedASRModels.first(where: { $0.id == modelID }) else { throw NativeASRActivationError.missingModel }
+        return try await test(target: .imported(model), sample: sample)
+    }
+
+    func test(preset: ModelPreset, sample: ASRValidationSample) async throws -> ASRModelTrialResult {
+        // Test is offline. Acquisition remains an independent, explicit B4 action.
+        let config = configuration()
+        let records = config.installedASRModels.filter { $0.installPlan?.recipeID == preset.id }
+        if records.count == 1, let model = config.importedASRModels.first(where: { $0.id == records[0].importedModelID }) {
+            return try await test(target: .imported(model), sample: sample)
+        }
+        var lookup = config
+        lookup.selectedLocalModelID = preset.id; lookup.activeImportedASRModelID = nil
+        lookup.customLocalModelPath = nil; lookup.localModelPath = nil
+        guard let resolved = localModel(lookup), resolved.modelId == preset.repoId else { throw NativeASRActivationError.missingModel }
+        return try await test(target: .offline(resolved), sample: sample)
+    }
+
+    private func test(target: ModelProvisionTarget, sample: ASRValidationSample) async throws -> ASRModelTrialResult {
+        let outcome = await execute(.init(target: target, source: configuration().downloadSource, origin: .offlineImport,
+                                          validationSample: sample, selectionIntent: .trialOnly))
+        try Task.checkCancellation()
+        guard let trial = try outcome.get().trial else { throw NativeASRActivationError.validationRequired }
+        return trial
     }
 
     /// Cancel and drain the owned task before a single gate-covered check and release.
@@ -249,7 +301,9 @@ final class QwenModelState: ObservableObject {
 
     func retrySelection(source: DownloadSource) async {
         guard let request = selectionRequest else { await retryConfiguredModel(); return }
-        await perform(.init(target: request.target, source: source, origin: request.origin))
+        await perform(.init(target: request.target, source: source, origin: request.origin,
+                            validationSample: request.validationSample, restoringValidatedRuntime: request.restoringValidatedRuntime,
+                            selectionIntent: request.selectionIntent))
     }
 
     /// Forget a removed folder intent without unloading the lease recordings may still use.
@@ -393,7 +447,7 @@ final class QwenModelState: ObservableObject {
                             source: configuration().downloadSource, origin: .manual))
     }
 
-    private func run(_ request: ModelProvisionRequest, id: UUID, generation: ActivationGeneration) async -> Result<LocalASRLease, Error> {
+    private func run(_ request: ModelProvisionRequest, id: UUID, generation: ActivationGeneration) async -> Result<OperationResult, Error> {
         await ProvisionGate.acquire()
         defer {
             ProvisionGate.release()
@@ -403,6 +457,18 @@ final class QwenModelState: ObservableObject {
             try Task.checkCancellation()
             let capturedSelection = generation.selection
             guard SelectionGeneration(configuration()) == capturedSelection else { throw NativeASRActivationError.changedCandidate }
+            if request.selectionIntent == .primary || request.selectionIntent == .fallback {
+                let requestedID: ASRBackendID?
+                switch request.target {
+                case .imported(let model): requestedID = .init(rawValue: "native:import:" + model.id.uuidString)
+                case .preset(let preset): requestedID = .init(rawValue: "native:preset:" + preset.id)
+                case .offline(let resolved): requestedID = ModelPreset.allPresets.first { $0.repoId == resolved.modelId }.map { .init(rawValue: "native:preset:" + $0.id) }
+                case .uninspectedDirectory: requestedID = nil
+                }
+                guard let requestedID else { throw NativeASRActivationError.missingModel }
+                try validateSelectionIntent(request.selectionIntent, id: requestedID)
+            }
+            if request.selectionIntent == .trialOnly, case .preset = request.target { throw NativeASRActivationError.missingModel }
             var candidate: LocalASRLease
             do { candidate = try await provision(request.target, source: request.source, attempts: 3, id: id, generation: generation) }
             catch {
@@ -418,6 +484,7 @@ final class QwenModelState: ObservableObject {
             let version = engineVersion(model.engine)
             guard candidate.engineVersion == version else { throw NativeASRActivationError.changedCandidate }
             let record: ASRNativeValidationRecord?
+            var trialOutput: ASRModelTrialResult?
             if request.restoringValidatedRuntime {
                 let current = try await LocalModelInspection.inspect(directory: model.directory, using: inspect)
                 try checkOwnership(id)
@@ -430,15 +497,25 @@ final class QwenModelState: ObservableObject {
                 record = configuration().installedASRModels.first(where: { $0.importedModelID == model.id })?.validation
             } else {
                 let sample = try request.validationSample ?? sampleProvider()
-                record = try await validate(candidate, model: model, sample: sample, version: version, id: id)
+                let validated = try await validate(candidate, model: model, sample: sample, version: version, id: id)
+                record = validated.record; trialOutput = validated.output
             }
             try checkOwnership(id)
             guard SelectionGeneration(configuration()) == capturedSelection else { throw NativeASRActivationError.changedCandidate }
             // Library removal/replacement during an await cannot resurrect the captured candidate.
             try checkGeneration(generation, modelID: model.id, directory: model.directory)
+            if request.selectionIntent == .trialOnly {
+                guard let record, let trialOutput else { throw NativeASRActivationError.validationRequired }
+                let priorAssociation = configuration().installedASRModels.first { $0.importedModelID == model.id }?.legacyPresetID
+                let legacyID = priorAssociation ?? ModelPreset.preset(forID: candidate.identity.id)?.id
+                let updated = recording(record, model: model, legacyPresetID: legacyID, in: configuration())
+                try persistActivation(updated)
+                failure = nil; status = activeLease == nil ? .notLoaded : .ready
+                return .success(.init(lease: nil, trial: trialOutput))
+            }
             if let record { try commitSelection(candidate, request: request, model: model, validation: record) }
             activeLease = candidate; commit(candidate); failure = nil; status = .ready
-            return .success(candidate)
+            return .success(.init(lease: candidate, trial: trialOutput))
         } catch is CancellationError {
             didAutoFallback = false
             status = activeLease == nil ? .notLoaded : .ready
@@ -615,14 +692,18 @@ final class QwenModelState: ObservableObject {
             // .offline is retained for installed built-in preset bootstrap/download completion.
             // Legacy custom paths always enter through inspected .imported instead.
             config.migrateASRBackendSelectionIfNeeded()
-            if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
+            if request.selectionIntent == .primary { try ASRSettingsAction.selectPrimary(.init(nativeLease: candidate)).apply(to: &config) }
+            else if request.selectionIntent == .fallback { try ASRSettingsAction.selectFallback(.init(nativeLease: candidate)).apply(to: &config) }
+            else if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
             else { config.selectNativeASRBackend(lease: candidate) }
             config = recording(validation, model: validatedModel, legacyPresetID: ModelPreset.preset(forID: candidate.identity.id)?.id, in: config)
             try persistActivation(config)
             return
         }
         config.migrateASRBackendSelectionIfNeeded()
-        if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
+        if request.selectionIntent == .primary { try ASRSettingsAction.selectPrimary(.init(nativeLease: candidate)).apply(to: &config) }
+        else if request.selectionIntent == .fallback { try ASRSettingsAction.selectFallback(.init(nativeLease: candidate)).apply(to: &config) }
+        else if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
         else { config.selectNativeASRBackend(lease: candidate) }
         config = recording(validation, model: validatedModel, legacyPresetID: ModelPreset.preset(forID: candidate.identity.id)?.id, in: config)
         try persistActivation(config)
@@ -668,7 +749,7 @@ final class QwenModelState: ObservableObject {
     }
 
     private func validate(_ candidate: LocalASRLease, model: ImportedASRModel, sample: ASRValidationSample,
-                          version: String, id: UUID) async throws -> ASRNativeValidationRecord {
+                          version: String, id: UUID) async throws -> (record: ASRNativeValidationRecord, output: ASRModelTrialResult) {
         guard !candidate.provider.capabilities.requiresNetwork, candidate.provider.capabilities.location == .onDevice else {
             throw NativeASRActivationError.onlineProvider
         }
@@ -708,8 +789,10 @@ final class QwenModelState: ObservableObject {
               engineVersion(model.engine) == version, candidate.engineVersion == version else {
             throw NativeASRActivationError.changedCandidate
         }
-        return .init(fileFingerprint: model.fileFingerprint, engineVersion: version, sampleSHA256: sample.sha256,
-                     validatedAt: now(), latencyMs: Int(min(elapsed * 1000, Double(Int.max))))
+        let latency = Int(min(elapsed * 1000, Double(Int.max)))
+        return (.init(fileFingerprint: model.fileFingerprint, engineVersion: version, sampleSHA256: sample.sha256,
+                      validatedAt: now(), latencyMs: latency),
+                .init(backendID: .init(nativeLease: candidate), text: result.text, latencyMs: latency))
     }
 
     private final class ActivationGeneration {
@@ -729,10 +812,12 @@ final class QwenModelState: ObservableObject {
         let local: String?
         let custom: String?
         let unresolved: Bool
+        let policy: ASRRoutingPolicy
         init(_ config: Configuration) {
             selection = config.asrBackendSelection; imported = config.activeImportedASRModelID
             preset = config.selectedLocalModelID; local = config.localModelPath; custom = config.customLocalModelPath
             unresolved = config.pendingLegacyNativeResolution
+            policy = config.asrRoutingPolicy
         }
     }
 

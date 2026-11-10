@@ -6,8 +6,20 @@ final class NativeASRActivationCoordinator {
     private let state: QwenModelState
     init(state: QwenModelState) { self.state = state }
 
-    func activate(modelID: UUID, sample: ASRValidationSample) async throws -> LocalASRLease {
-        try await state.activate(modelID: modelID, sample: sample)
+    func activate(modelID: UUID, sample: ASRValidationSample, selectionIntent: NativeASRSelectionIntent = .existingRole) async throws -> LocalASRLease {
+        try await state.activate(modelID: modelID, sample: sample, selectionIntent: selectionIntent)
+    }
+
+    func activate(preset: ModelPreset, sample: ASRValidationSample, selectionIntent: NativeASRSelectionIntent = .existingRole) async throws -> LocalASRLease {
+        try await state.activate(preset: preset, sample: sample, selectionIntent: selectionIntent)
+    }
+
+    func test(modelID: UUID, sample: ASRValidationSample) async throws -> ASRModelTrialResult {
+        try await state.test(modelID: modelID, sample: sample)
+    }
+
+    func test(preset: ModelPreset, sample: ASRValidationSample) async throws -> ASRModelTrialResult {
+        try await state.test(preset: preset, sample: sample)
     }
 
     func unloadCurrentAfterDrain() async throws {
