@@ -8,6 +8,9 @@ import Foundation
     @Published private(set) var installations: [ModelInstallSnapshot] = []
     @Published private(set) var notice: String?
     @Published private(set) var lastTrialResult: ASRModelTrialResult?
+    /// Observable through objectWillChange; stored before publishing so reentrant actions see admission.
+    private(set) var isBusy = false
+    @Published private(set) var busyNotice: String?
     private let configuration: () -> Configuration
     private let persist: (Configuration) throws -> Void
     private let native: QwenModelState
@@ -171,7 +174,26 @@ import Foundation
         id.rawValue.hasPrefix("cloud:") ? .cloud : (id.rawValue.hasPrefix("service:") ? .loopbackService : .native)
     }
 
+    /// One UI intent at a time. This slot owns no Task, provider, or domain operation.
+    private func admitUserAction() -> Bool {
+        guard !isBusy else {
+            busyNotice = "模型中心正在执行另一项操作，请等待完成后重试。"
+            return false
+        }
+        isBusy = true
+        busyNotice = nil
+        return true
+    }
+
+    private func finishUserAction() {
+        // Publish after releasing the slot; no older action writes output after this boundary.
+        isBusy = false
+        objectWillChange.send()
+    }
+
     func selectPrimary(_ id: ASRBackendID) async {
+        guard admitUserAction() else { return }
+        defer { finishUserAction() }
         notice = nil
         do {
             let before = configuration()
@@ -193,6 +215,8 @@ import Foundation
         refresh()
     }
     func selectFallback(_ id: ASRBackendID?) async {
+        guard admitUserAction() else { return }
+        defer { finishUserAction() }
         notice = nil
         do {
             var proposed = configuration()
@@ -213,12 +237,16 @@ import Foundation
     func changePolicy(_ policy: ASRRoutingPolicy) { apply(.changePolicy(policy)) }
     func deselect(_ id: ASRBackendID) { apply(.deselect(id)) }
     private func apply(_ action: ASRSettingsAction) {
+        guard admitUserAction() else { return }
+        defer { finishUserAction() }
         do { var config = configuration(); try action.apply(to: &config, activeNativeID: native.activeLease.map { .init(nativeLease: $0) }); try persist(config); notice = nil }
         catch { notice = error.localizedDescription }
         refresh()
     }
 
     func test(_ id: ASRBackendID) async {
+        guard admitUserAction() else { return }
+        defer { finishUserAction() }
         notice = nil; lastTrialResult = nil
         if location(id) == .native {
             do {
@@ -268,7 +296,7 @@ import Foundation
             }
             let record = ASRServiceValidationRecord(backendID: id, revision: captured.revision,
                 credentialGeneration: key.generation, validatedAt: coordinatorDate)
-            guard recordValidation(record) else { return false }
+            guard try persistValidation(record) else { return false }
             currentEvidence[id] = .init(profile: captured, record: record, coordinatorDate: coordinatorDate)
             invalidatedHistory.remove(id)
             observedProfiles[id] = captured; observedGenerations[id] = key.generation
@@ -280,18 +308,21 @@ import Foundation
     /// A5 may still own its transport slot during onVerified. This callback persists history only;
     /// the awaited model-center test separately checks its full captured input before publishing live evidence.
     @discardableResult func recordValidation(_ record: ASRServiceValidationRecord) -> Bool {
-        do {
-            let config = configuration()
-            guard let current = profile(record.backendID, in: config), current.revision == record.revision,
-                  try credential(record.backendID).generation == record.credentialGeneration,
-                  case .verified(let date, _) = validation.state(profileID: current.uuid), date == record.validatedAt else { return false }
-            if config.asrServiceValidationRecords.contains(record) { return true }
-            var latest = config
-            latest.asrServiceValidationRecords.removeAll { $0.backendID == record.backendID }
-            latest.asrServiceValidationRecords.append(record)
-            try persist(latest)
-            return true
-        } catch { notice = error.localizedDescription; return false }
+        // Historical callbacks are not UI actions and must not overwrite an admitted action's notice.
+        (try? persistValidation(record)) ?? false
+    }
+
+    private func persistValidation(_ record: ASRServiceValidationRecord) throws -> Bool {
+        let config = configuration()
+        guard let current = profile(record.backendID, in: config), current.revision == record.revision,
+              try credential(record.backendID).generation == record.credentialGeneration,
+              case .verified(let date, _) = validation.state(profileID: current.uuid), date == record.validatedAt else { return false }
+        if config.asrServiceValidationRecords.contains(record) { return true }
+        var latest = config
+        latest.asrServiceValidationRecords.removeAll { $0.backendID == record.backendID }
+        latest.asrServiceValidationRecords.append(record)
+        try persist(latest)
+        return true
     }
 
     /// C4 supplies only these live, matching, unexpired records to readiness; never persisted history.
@@ -304,6 +335,8 @@ import Foundation
     }
 
     func remove(_ id: ASRBackendID, deleteManagedFiles: Bool) async {
+        guard admitUserAction() else { return }
+        defer { finishUserAction() }
         notice = nil
         do {
             let config = configuration(); let selection = ASRBackendMigration.selection(from: config)

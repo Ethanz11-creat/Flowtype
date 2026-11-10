@@ -15,6 +15,113 @@ enum ASRModelCenterSelfTests {
         await testExplicitRequestGuardsAndUUIDDeselection(r)
         await testStaleAndDuplicateEffects(r)
         testInstallationAndHistoryProjection(r)
+        await testDistinctPrimaryAdmission(r)
+        await testCrossBackendAdmissionAndPreview(r)
+        await testMutationsRemovalAndRetryAdmission(r)
+    }
+
+    @MainActor static func testDistinctPrimaryAdmission(_ r: SelfTest.Reporter) async {
+        for finishSecondFirst in [false, true] {
+            let f = ModelCenterFixture(), gate = ModelCenterRecognitionGate()
+            var second = f.service; second.id = UUID(); second.revision = UUID(); second.name = "Second fixture service"
+            f.config.localASRServices.append(second)
+            let secondID = ASRBackendID(rawValue: "service:" + second.id.uuidString)
+            f.recognitionOverride = { try await gate.recognize($0.id) }
+            let vm = f.makeViewModel()
+            let first = Task { await vm.selectPrimary(f.serviceID) }
+            await gate.waitForCall(f.service.id)
+            r.check(vm.isBusy, "C1 I1 accepted primary exposes busy state")
+            var entered = false
+            let overlap = Task { entered = true; await vm.selectPrimary(secondID) }
+            await admissionTurns { entered }
+            r.eq(gate.calls, [f.service.id], "C1 I1 distinct service overlap is rejected before transport in either completion order")
+            r.check(vm.busyNotice != nil, "C1 I1 rejected overlap explains busy admission")
+            if finishSecondFirst { gate.finish(second.id); gate.finish(f.service.id) }
+            else { gate.finish(f.service.id); gate.finish(second.id) }
+            await first.value; await overlap.value
+            r.eq(f.config.asrBackendSelection?.primary, f.serviceID, "C1 I1 accepted primary alone commits in either completion order")
+            r.check(!vm.isBusy, "C1 I1 completed primary releases admission")
+            f.recognitionOverride = nil
+            await vm.selectPrimary(secondID)
+            r.eq(f.config.asrBackendSelection?.primary, secondID, "C1 I1 rejected primary can retry after accepted action finishes")
+        }
+    }
+
+    @MainActor static func testCrossBackendAdmissionAndPreview(_ r: SelfTest.Reporter) async {
+        let f = ModelCenterFixture(), gate = ModelCenterRecognitionGate()
+        f.recognitionOverride = { try await gate.recognize($0.id) }
+        let vm = f.makeViewModel()
+        let service = Task { await vm.selectPrimary(f.serviceID) }
+        await gate.waitForCall(f.service.id)
+        await vm.selectPrimary(f.nativeID)
+        r.eq(f.nativeLoads, 0, "C1 I1 pending service primary blocks native allocation")
+        r.eq(f.nativePersists, 0, "C1 I1 pending service primary blocks native commit")
+        gate.finish(f.service.id); await service.value
+        r.eq(f.config.asrBackendSelection?.primary, f.serviceID, "C1 I1 rejected native action cannot defeat admitted service action")
+        let g = ModelCenterFixture(); let gv = g.makeViewModel()
+        await gv.test(g.cloudID)
+        let preview = gv.lastTrialResult
+        g.blockNativeLoad = true
+        let native = Task { await gv.selectPrimary(g.nativeID) }
+        await g.waitForNativeLoad()
+        r.check(gv.isBusy, "C1 I1 native loading holds user admission")
+        let priorNotice = gv.notice
+        await gv.test(g.serviceID)
+        await gv.selectPrimary(g.serviceID)
+        r.eq(g.recognitions, 1, "C1 I1 pending native action blocks service recognition and primary work")
+        r.eq(gv.lastTrialResult, preview, "C1 I1 rejected Test preserves the valid existing preview")
+        r.eq(gv.notice, priorNotice, "C1 I1 busy rejection does not overwrite accepted-action notice")
+        r.check(gv.busyNotice != nil, "C1 I1 native overlap has separate busy feedback")
+        g.finishNativeLoad(); await native.value
+        r.eq(g.config.asrBackendSelection?.primary, g.nativeID, "C1 I1 admitted native action alone commits actual native ID")
+        await gv.test(g.serviceID)
+        r.eq(gv.lastTrialResult?.backendID, g.serviceID, "C1 I1 later accepted Test owns new preview")
+        r.check(!gv.isBusy && gv.busyNotice == nil, "C1 I1 retry clears busy feedback")
+    }
+
+    @MainActor static func testMutationsRemovalAndRetryAdmission(_ r: SelfTest.Reporter) async {
+        let f = ModelCenterFixture(), gate = ModelCenterRecognitionGate()
+        f.recognitionOverride = { try await gate.recognize($0.id) }
+        let vm = f.makeViewModel()
+        let first = Task { await vm.test(f.serviceID) }
+        await gate.waitForCall(f.service.id)
+        let selection = f.config.asrBackendSelection
+        vm.changePolicy(.localOnly); vm.setAllowsCloudFallback(true); vm.deselect(f.cloudID)
+        await vm.selectFallback(nil)
+        await vm.remove(f.nativeID, deleteManagedFiles: false)
+        r.eq(f.config.asrBackendSelection, selection, "C1 I1 busy sync mutations and fallback cannot alter selected roles/consent")
+        r.eq(f.config.asrRoutingPolicy, .auto, "C1 I1 busy policy mutation is rejected")
+        r.eq(f.centerPersists, 0, "C1 I1 conflicting mutations are rejected before persistence")
+        r.check(f.config.importedASRModels.contains { $0.id == f.model.id }, "C1 I1 busy removal cannot delete native record")
+        first.cancel()
+        await vm.test(f.cloudID)
+        r.eq(f.recognitions, 1, "C1 I1 cancelled but draining operation retains user admission")
+        gate.finish(f.service.id); await first.value
+        r.check(!vm.isBusy, "C1 I1 cancelled operation releases admission after domain completion")
+        f.recognitionOverride = nil
+        f.failRecognition = true
+        await vm.test(f.serviceID)
+        r.check(!vm.isBusy && vm.notice != nil, "C1 I1 failed Test releases admission with its own notice")
+        f.failRecognition = false
+        await vm.test(f.cloudID)
+        r.eq(vm.lastTrialResult?.backendID, f.cloudID, "C1 I1 Test retry after cancellation and failure owns preview")
+        r.eq(vm.notice, nil, "C1 I1 accepted successful retry clears prior action failure")
+        let g = ModelCenterFixture(); let gv = g.makeViewModel()
+        g.blockSnapshots = true
+        let removal = Task { await gv.remove(g.serviceID, deleteManagedFiles: false) }
+        await g.waitForSnapshots()
+        r.check(gv.isBusy, "C1 I1 removal holds admission through awaited domain refresh")
+        await gv.test(g.cloudID)
+        r.eq(g.recognitions, 0, "C1 I1 pending removal rejects another Test before recognition")
+        g.finishSnapshots(); await removal.value
+        r.check(!gv.isBusy, "C1 I1 completed removal releases admission")
+        await gv.test(g.cloudID)
+        r.eq(g.recognitions, 1, "C1 I1 rejected Test can retry after removal")
+    }
+
+    @MainActor private static func admissionTurns(_ ready: () -> Bool) async {
+        for _ in 0..<10_000 { if ready() { break }; await Task.yield() }
+        for _ in 0..<20 { await Task.yield() }
     }
 
     @MainActor static func testHonestStatusProjection(_ r: SelfTest.Reporter) async {
@@ -355,6 +462,23 @@ enum ASRModelCenterSelfTests {
     var sampleAvailable = true
     var canUnload = false
     let usage = NativeModelUsageRegistry()
+    var recognitionOverride: ((LocalASRServiceProfile) async throws -> String)?
+    var blockNativeLoad = false
+    var nativeContinuation: CheckedContinuation<Void, Never>?
+    func pauseNativeLoad() async {
+        nativeLoads += 1
+        if blockNativeLoad { await withCheckedContinuation { nativeContinuation = $0 } }
+    }
+    func waitForNativeLoad() async { for _ in 0..<10_000 { if nativeContinuation != nil { return }; await Task.yield() } }
+    func finishNativeLoad() { let c = nativeContinuation; nativeContinuation = nil; c?.resume() }
+    var blockSnapshots = false
+    var snapshotsContinuation: CheckedContinuation<Void, Never>?
+    func snapshots() async -> [ModelInstallSnapshot] {
+        if blockSnapshots { await withCheckedContinuation { snapshotsContinuation = $0 } }
+        return []
+    }
+    func waitForSnapshots() async { for _ in 0..<10_000 { if snapshotsContinuation != nil { return }; await Task.yield() } }
+    func finishSnapshots() { let c = snapshotsContinuation; snapshotsContinuation = nil; c?.resume() }
     var blockRecognition = false
     var continuation: CheckedContinuation<Void, Never>?
     func waitForRecognition(count: Int = 1) async { for _ in 0..<10_000 { if recognitions >= count && continuation != nil { return }; await Task.yield() } }
@@ -366,7 +490,7 @@ enum ASRModelCenterSelfTests {
     var cloudID: ASRBackendID { .init(rawValue: "cloud:" + cloud.id.uuidString) }
     var nativeID: ASRBackendID { .init(rawValue: "native:import:" + model.id.uuidString) }
     lazy var native = QwenModelState(preflight: { _, _ in }, load: { [model, weak self] _, _, _ in
-        await MainActor.run { self?.nativeLoads += 1 }
+        await self?.pauseNativeLoad()
         return LocalASRLease(id: UUID(), identity: .init(id: model.id.uuidString, displayName: model.name,
             engine: model.engine.rawValue, repoID: nil, directory: model.directory), provider: NativeActivationFixtures.Provider())
     }, configuration: { [self] in config }, localModel: { _ in nil }, environment: .init(read: { nil }, write: { _ in }), inspect: { [model] _ in model },
@@ -375,13 +499,17 @@ enum ASRModelCenterSelfTests {
             nativePersists += 1
             if persistFails { throw ASRCredentialError.persistence }; config = $0
         }, usageRegistry: usage, canUnload: { [self] in canUnload })
-    lazy var validation = ASRServiceValidationCoordinator(now: { [self] in date }, onVerified: { [self] in onVerified?($0) }, serviceRecognition: { [self] _, _, _ in
+    lazy var validation = makeValidation()
+    private func makeValidation() -> ASRServiceValidationCoordinator {
+        ASRServiceValidationCoordinator(session: nil, resolver: { _ in ["127.0.0.1"] }, now: { [self] in date }, onVerified: { [self] in onVerified?($0) }, serviceRecognition: { [self] profile, _, _ in
         recognitions += 1
+        if let recognitionOverride { return try await recognitionOverride(profile) }
         if blockRecognition { await withCheckedContinuation { continuation = $0 } }
         if editDuringRecognition { config.localASRServices[0].revision = UUID() }
         if failRecognition { throw CloudASRError.invalidResponse }
         return "fixture transcript"
     }, cloudRecognition: { [self] _, _, _ in recognitions += 1; return "fixture transcript" })
+    }
     init() {
         config.localASRServices = [service]
         config.cloudASRConfig.providers = [cloud]
@@ -395,6 +523,17 @@ enum ASRModelCenterSelfTests {
         }, native: native, validation: validation, credential: { [self] _ in .init(value: "fixture-only", generation: generation) },
               sample: { [self] in
                   guard sampleAvailable else { throw NativeASRActivationError.validationRequired }
-                  return try ASRValidationSample(samples: [0, 0.25], sampleRate: 16000, label: "synthetic") }, installationSnapshots: { [] }, now: { [self] in date })
+                  return try ASRValidationSample(samples: [0, 0.25], sampleRate: 16000, label: "synthetic") }, installationSnapshots: { [self] in await snapshots() }, now: { [self] in date })
     }
+}
+
+@MainActor private final class ModelCenterRecognitionGate {
+    var calls: [UUID] = []
+    private var pending: [UUID: CheckedContinuation<String, Error>] = [:]
+    func recognize(_ id: UUID) async throws -> String {
+        calls.append(id)
+        return try await withCheckedThrowingContinuation { pending[id] = $0 }
+    }
+    func waitForCall(_ id: UUID) async { for _ in 0..<10_000 { if pending[id] != nil { return }; await Task.yield() } }
+    func finish(_ id: UUID) { pending.removeValue(forKey: id)?.resume(returning: "recognized " + id.uuidString) }
 }
