@@ -1,0 +1,134 @@
+{
+  "candidate": {
+    "gitSHA": "d43a603c13b61b21de7cac4b44c51ceb54404a23",
+    "sourceTree": "40f3b4b1c763057f70810596b0eae02b7035c728",
+    "binarySHA256": "1c4efb28993f4dad954aff750ea9a1c8f7271615796218e68af41712b4d48854",
+    "appPath": "/Users/yiheng/pycode/flowtype-local/build/FlowType.app",
+    "packageSHA256": null
+  },
+  "cases": [
+    {
+      "id": "H1.repo",
+      "status": "Pending"
+    },
+    {
+      "id": "H1.variant",
+      "status": "Pending"
+    },
+    {
+      "id": "H1.tokenizer",
+      "status": "Pending"
+    },
+    {
+      "id": "H1.gated",
+      "status": "Pending"
+    },
+    {
+      "id": "H2.resume",
+      "status": "Pending"
+    },
+    {
+      "id": "H2.restart",
+      "status": "Pending"
+    },
+    {
+      "id": "H2.integrity",
+      "status": "Pending"
+    },
+    {
+      "id": "H2.disk",
+      "status": "Pending"
+    },
+    {
+      "id": "H3.qwen06",
+      "status": "Pending"
+    },
+    {
+      "id": "H3.qwen17",
+      "status": "Pending"
+    },
+    {
+      "id": "H3.whisperTiny",
+      "status": "Pending"
+    },
+    {
+      "id": "H3.whisperBase",
+      "status": "Pending"
+    },
+    {
+      "id": "H3.offlineLong",
+      "status": "Pending"
+    },
+    {
+      "id": "H4.mlxAudio",
+      "status": "Pending"
+    },
+    {
+      "id": "H4.whisperKit",
+      "status": "Pending"
+    },
+    {
+      "id": "H4.whisperCpp",
+      "status": "Pending"
+    },
+    {
+      "id": "H4.disconnect",
+      "status": "Pending"
+    },
+    {
+      "id": "H5.siliconCN",
+      "status": "Pending"
+    },
+    {
+      "id": "H5.openAI",
+      "status": "Pending"
+    },
+    {
+      "id": "H5.custom",
+      "status": "Pending"
+    },
+    {
+      "id": "H5.errors",
+      "status": "Pending"
+    },
+    {
+      "id": "H6.switch",
+      "status": "Pending"
+    },
+    {
+      "id": "H6.cancel",
+      "status": "Pending"
+    },
+    {
+      "id": "H6.delete",
+      "status": "Pending"
+    },
+    {
+      "id": "H6.credentials",
+      "status": "Pending"
+    },
+    {
+      "id": "H7.layout",
+      "status": "Pending"
+    },
+    {
+      "id": "H7.keyboard",
+      "status": "Pending"
+    },
+    {
+      "id": "H7.accessibility",
+      "status": "Pending"
+    },
+    {
+      "id": "H8.fresh",
+      "status": "Pending"
+    },
+    {
+      "id": "H8.upgrade",
+      "status": "Pending"
+    }
+  ],
+  "schema": "flowtype.model-center-acceptance",
+  "schemaVersion": 1,
+  "status": "Pending"
+}

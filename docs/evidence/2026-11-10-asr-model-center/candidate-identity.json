@@ -1,0 +1,23 @@
+{
+  "candidateGitSHA": "d43a603c13b61b21de7cac4b44c51ceb54404a23",
+  "sourceTree": "40f3b4b1c763057f70810596b0eae02b7035c728",
+  "scriptsTree": "95057298acb707b433912b0652c406a7865f3e6c",
+  "lockSHA256": "b37d08e8803698551e02714fd4d747025077ba6970e83856a02ebe0526838a37",
+  "shaderOriginalPath": "/Users/yiheng/pycode/flowtype-local/build/FlowType.app/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib",
+  "shaderStagedPath": "/Users/yiheng/pycode/flowtype-local/build/D3/default.metallib",
+  "shaderSHA256": "f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f",
+  "candidate": {
+    "gitSHA": "d43a603c13b61b21de7cac4b44c51ceb54404a23",
+    "sourceTree": "40f3b4b1c763057f70810596b0eae02b7035c728",
+    "binarySHA256": "1c4efb28993f4dad954aff750ea9a1c8f7271615796218e68af41712b4d48854",
+    "appPath": "/Users/yiheng/pycode/flowtype-local/build/FlowType.app",
+    "packageSHA256": null
+  },
+  "manifestSHA256": "ccce5d0497691a672c1ad4d9c6d8ebcea41fd224e80ad1c3430583f91607475f",
+  "binarySHA256": "1c4efb28993f4dad954aff750ea9a1c8f7271615796218e68af41712b4d48854",
+  "distributionStatus": "Pending",
+  "signatureKind": "ad-hoc",
+  "archiveCommit": "The commit containing this archive (git log -1 --format=%H -- docs/evidence/2026-11-10-asr-model-center/README.md); distinct from candidateGitSHA",
+  "reuseManifestUnchanged": true,
+  "reuseBinaryUnchanged": true
+}

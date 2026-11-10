@@ -1,8 +1,10 @@
 # ASR 模型中心验收（2026-11-09）
 
-本文为新增 H1–H8 真机验收清单，不替代原 V1–V5 / 41 项主线验收。C4 的隔离领域测试与离屏预览不构成下表的通过证据。D2 提供独立机器可读 ledger 和 gate，D3/D4 绑定最终候选身份；所有项目初始 **Pending**。
+本文为新增 H1–H8 真机验收清单，不替代原 V1–V5 / 41 项主线验收。C4 的隔离领域测试与离屏预览不构成下表的通过证据。D2 提供独立机器可读 ledger 和 gate，D3/D4 绑定最终候选身份；本轮所有 30 项仍为 **Pending**。
 
-候选 git SHA / Sources tree / binary SHA256 / 分发包 SHA256：Pending。
+2026-11-10 技术候选：git SHA `d43a603c13b61b21de7cac4b44c51ceb54404a23`；Sources tree `40f3b4b1c763057f70810596b0eae02b7035c728`；ad-hoc binary SHA256 `1c4efb28993f4dad954aff750ea9a1c8f7271615796218e68af41712b4d48854`；最终分发包 SHA256：Pending（未生成）。这是技术候选，尚非 Developer ID/公证后的真机验收候选。
+
+[归档与下一步](../../evidence/2026-11-10-asr-model-center/README.md) 保存真实 gate 报告、命令/退出码/hash、全部 Ruling 和最终审查。code 28,335/0；artifact 22/22 phase + 10 smoke Pass；release 复用原 App，24/24 技术 phase Pass，整体 Pending（exit 2）；D4 与本 D2 gate 均真实运行并返回 Pending（exit 2）。原 41 项仍独立 Pending，远端 CI 未运行，真实模型/服务/凭据/辅助功能/发行条件均未执行；无任何 manual Pass。签名改变后二进制身份及最终 package 需重新绑定并实测，不能把本候选 ledger 改 hash 当新观察。
 
 | 组 | 验收范围 | case ID | 状态 |
 | --- | --- | --- | --- |

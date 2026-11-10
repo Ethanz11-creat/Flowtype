@@ -42,8 +42,14 @@
 | 5 | [D2–D4：完整验收与发行](2026-11-09-asr-model-center-d-release-acceptance.md) | 新旧真机矩阵、独立代码审查、候选技术门禁与正式分发证据 |
 
 - [ ] 用户评审书面设计与本计划，确认本版目标与边界。
-- [ ] D1 通过后按 A1–A6 → B1–B6 → C1–C4 执行；最多 1 个子智能体同时运行，实施与审查顺序交接。
+- [x] D1 本地基线后已按 A1–A6 → B1–B6 → C1–C4 完成实现、聚焦回归与顺序审查；最终修复提交 `d43a603`。
 - [ ] D2–D4 收口；真实凭据/设备/签名条件缺失的项保留 Pending，不能报告发布完成。
+
+## 当前交付状态（2026-11-10）
+
+[最终证据归档](../../evidence/2026-11-10-asr-model-center/README.md) 与 [研究→owner→证据覆盖](../../evidence/2026-11-10-asr-model-center/coverage.md) 记录本轮结果。D1 本地 timer 修复、A1–A6、B1–B6、C1–C4、D2/D4 工具均已实现并审查；最终整体审查 I1/M1 经一次修复与 fresh scoped rereview 关闭。代码候选 `d43a603` 的 code gate 28,335/0；ad-hoc artifact 22/22 phase、10/10 smoke Pass；release 复用同一 App，24/24 技术 phase Pass，整体 exit 2 / Pending。D2/D4 对真实技术候选也均 exit 2 / Pending。
+
+原 41 项 + 新 30 项真机均 Pending；远端 CI 未运行，历史 run 41672136709 failure 不变；Developer ID/公证/最终 DMG/干净机器验收 Pending。因此 D2–D4 的代码工具完成不等于正式发行验收完成。证据归档仅改文档，归档 commit 与二进制候选 commit 分别记录，不将旧报告重标为文档 HEAD。所有 52 条 controller Ruling 及成本原文见 [rulings](../../evidence/2026-11-10-asr-model-center/rulings.md)。
 
 ## 执行约定
 
@@ -51,7 +57,7 @@
 
 代码开发使用隔离 worktree，执行时按 using-git-worktrees 选择位置；不要在计划阶段创建。自动化不安装真实服务或下载大模型；真机矩阵是单独的显式操作。阶段完成后才运行一次全量 code；没有新失败不重复跑全量。源码/候选需要干净且身份固定才进入 artifact/release。
 
-本组文档为研究与计划交付，所有开发 checkbox 初始未完成。现有 CI 失败不是本次文档造成的；不通过更改报告将它标为 Pass。未经本轮后续发布指令不 push、合并或发布分发包。
+本组文档最初为研究与计划交付；2026-11-10 已完成实现与技术候选验证，真实发行验收仍为 Pending。现有 CI 失败不是本次文档造成的；不通过更改报告将它标为 Pass。未经本轮后续发布指令不 push、合并或发布分发包。
 
 ## 计划自检与覆盖
 
