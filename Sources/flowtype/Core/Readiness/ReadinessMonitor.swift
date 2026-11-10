@@ -68,7 +68,8 @@ enum ReadinessSnapshotBuilder {
                      accessibility: PermissionState, microphone: PermissionState,
                      speechRecognition: PermissionState, networkReachable: Bool,
                      appleAvailable: Bool, computedAt: Date,
-                     backends: [ASRBackendDescriptor] = [], availableIDs: Set<ASRBackendID> = []) -> ReadinessSnapshot {
+                     backends: [ASRBackendDescriptor] = [], availableIDs: Set<ASRBackendID> = [],
+                     attemptableServiceIDs: Set<ASRBackendID> = []) -> ReadinessSnapshot {
         var projected = config
         projected.migrateASRBackendSelectionIfNeeded()
         var selection = ASRBackendMigration.selection(from: projected)
@@ -84,6 +85,10 @@ enum ReadinessSnapshotBuilder {
             descriptors: backends, availableIDs: Set(backends.map(\.id)), internetAvailable: true, degradedIDs: [])
         let ready = ASRBackendRouting.order(selection: selection, policy: config.asrRoutingPolicy,
             descriptors: backends, availableIDs: availableIDs, internetAvailable: networkReachable, degradedIDs: [])
+        let services = Set(backends.filter { $0.location == .loopbackService }.map(\.id))
+        let attemptable = ASRBackendRouting.order(selection: selection, policy: config.asrRoutingPolicy,
+            descriptors: backends, availableIDs: attemptableServiceIDs.intersection(services),
+            internetAvailable: networkReachable, degradedIDs: [])
         var states: [ASRBackendID: EngineReadiness] = [:]
         for descriptor in backends where eligible.contains(descriptor.id) {
             if ready.contains(descriptor.id) { states[descriptor.id] = .ready; continue }
@@ -95,7 +100,8 @@ enum ReadinessSnapshotBuilder {
                 case .error(let reason, _): states[descriptor.id] = .unavailable(reason: reason)
                 case .ready, .notLoaded: states[descriptor.id] = .unavailable(reason: "本地模型未加载")
                 }
-            case .loopbackService: states[descriptor.id] = .unavailable(reason: "本机服务尚未验证或不可用")
+            case .loopbackService: states[descriptor.id] = .unavailable(reason: attemptable.contains(descriptor.id)
+                ? ReadinessIssue.serviceCheckOnUse.reason : "本机服务尚未验证或不可用")
             case .cloud: states[descriptor.id] = .unavailable(reason: descriptor.requiresInternet && !networkReachable
                 ? "网络不可达" : "云端未配置或凭据不可用")
             }
@@ -115,7 +121,8 @@ enum ReadinessSnapshotBuilder {
         return ReadinessSnapshot(accessibility: accessibility, microphone: microphone,
             speechRecognition: speechRecognition, localModel: aggregate(cloud: false), cloudASR: aggregate(cloud: true),
             appleSpeech: apple, computedAt: computedAt, backends: backends, backendStates: states,
-            readyBackendIDs: ready, selectedBackendID: selection.primary ?? selection.fallback)
+            readyBackendIDs: ready, selectedBackendID: selection.primary ?? selection.fallback,
+            attemptableServiceIDs: attemptable)
     }
 
     static func logLine(level: ReadinessLevel, snapshot: ReadinessSnapshot) -> String {
@@ -268,6 +275,6 @@ final class ReadinessMonitor: ObservableObject {
             accessibility: PermissionHelper.accessibilityState(), microphone: PermissionHelper.microphoneState(),
             speechRecognition: speechRecognition, networkReachable: ASRRouter.shared.snapshot().networkReachable,
             appleAvailable: appleAvailable, computedAt: Date(), backends: backendAvailability.backends,
-            availableIDs: backendAvailability.availableIDs)
+            availableIDs: backendAvailability.availableIDs, attemptableServiceIDs: backendAvailability.attemptableServiceIDs)
     }
 }

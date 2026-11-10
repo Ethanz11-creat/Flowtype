@@ -35,22 +35,29 @@ final class ASRProviderDraftSession: ObservableObject {
         return profile
     }
 
-    private func effectiveKey(_ storedKey: String) -> String {
+    private func effectiveKey(_ storedKey: () throws -> String) rethrows -> String {
         switch draft.keyEdit {
-        case .preserve: return storedKey
         case .remove: return ""
-        case .replace(let value):
-            return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? storedKey : value
+        case .replace(let value) where !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
+            return value
+        case .preserve, .replace: break
         }
+        // Blank replacement preserves only an existing profile's credential.
+        if case .new = draft.target { return "" }
+        return try storedKey()
+    }
+
+    func checkConfiguration(storedKey: () throws -> String) rethrows {
+        checks.checkConfiguration(provider: checkProfile, apiKey: try effectiveKey(storedKey))
     }
 
     func checkConfiguration(storedKey: String) {
-        checks.checkConfiguration(provider: checkProfile, apiKey: effectiveKey(storedKey))
+        checkConfiguration(storedKey: { storedKey })
     }
 
     @discardableResult
     func testRecognition(storedKey: String) -> Task<Void, Never>? {
-        let task = checks.testRecognition(provider: checkProfile, apiKey: effectiveKey(storedKey))
+        let task = checks.testRecognition(provider: checkProfile, apiKey: effectiveKey({ storedKey }))
         if let task { checkTask = task }
         return task
     }
@@ -236,8 +243,7 @@ struct ASRProviderEditSheet: View {
 
     private func performConfigurationCheck() {
         do {
-            let key = try storedKey()
-            session.checkConfiguration(storedKey: key)
+            try session.checkConfiguration(storedKey: storedKey)
         } catch { validationError = ASRCredentialError.unavailable.localizedDescription }
     }
 

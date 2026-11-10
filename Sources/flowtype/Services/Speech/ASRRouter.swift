@@ -474,7 +474,7 @@ final class ASRRouter: @unchecked Sendable {
     /// or persisted legacy resolution. A constructed service is merely eligible to attempt.
     @MainActor
     func readinessBackends(currentValidatedServices: [ASRServiceValidationRecord] = [])
-        -> (backends: [ASRBackendDescriptor], availableIDs: Set<ASRBackendID>) {
+        -> (backends: [ASRBackendDescriptor], availableIDs: Set<ASRBackendID>, attemptableServiceIDs: Set<ASRBackendID>) {
         let route = makeBackendRoute(reserveRecovery: false, persistLegacyResolution: false)
         let available = route.bindings.filter { binding in
             guard binding.descriptor.location == .loopbackService else { return true }
@@ -483,7 +483,11 @@ final class ASRRouter: @unchecked Sendable {
                     && $0.credentialGeneration == binding.credentialGeneration
             }
         }
-        return (route.configuredBackends, Set(available.map { $0.descriptor.id }))
+        // Explicit selection + valid capture permits a user-started real request, including
+        // after restart. This is not live verification and never consumes persisted history.
+        let attemptableServices = route.bindings.filter { $0.descriptor.location == .loopbackService }
+        return (route.configuredBackends, Set(available.map { $0.descriptor.id }),
+                Set(attemptableServices.map { $0.descriptor.id }))
     }
 
     /// Resolve existing library identity without changing its ownership. Raw legacy

@@ -8,6 +8,7 @@ enum ASRModelCenterIntegrationSelfTests {
         await testRecoveryTargetsSpecificModel(r)
         await testLegacyEntryUsesSameSelection(r)
         await testClockCredentialAndSample(r)
+        await testExpiredServiceRecordingPreflight(r)
         await testSavedServiceRuntimeCredentials(r)
         await testNativeSampleAndReservation(r)
     }
@@ -98,6 +99,94 @@ enum ASRModelCenterIntegrationSelfTests {
             env.refresh()
             r.eq(env.model.rows.first(where: { $0.id == f.id })?.status, .installedUntested, "C4 edit refresh invalidates old evidence")
         } catch { r.check(false, "C4 snapshot fixture: \(error)") }
+    }
+
+    @MainActor static func testExpiredServiceRecordingPreflight(_ r: SelfTest.Reporter) async {
+        let f = Fixture(); defer { f.cleanup() }
+        let env = f.environment
+        f.store.current.asrRoutingPolicy = .localOnly
+        let router = ASRRouter(startMonitoring: false, internetAvailable: { false }, credentials: f.store.asrCredentials,
+            persistNativeResolution: { _ in }, configuration: { f.store.current }, localAvailable: { false }, localLease: { nil })
+        func snapshot(using source: ASRRouter? = nil, live: Bool = true, microphone: PermissionState = .granted, accessibility: PermissionState = .granted) -> ReadinessSnapshot {
+            let availability = (source ?? router).readinessBackends(currentValidatedServices: live ? env.model.currentValidatedServices : [])
+            return ReadinessSnapshotBuilder.make(config: f.store.current, modelStatus: .notLoaded,
+                accessibility: accessibility, microphone: microphone, speechRecognition: .denied,
+                networkReachable: false, appleAvailable: false, computedAt: f.date,
+                backends: availability.backends, availableIDs: availability.availableIDs,
+                attemptableServiceIDs: availability.attemptableServiceIDs)
+        }
+        r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), .noEngine,
+             "I1 unselected configured service cannot admit recording")
+        await env.model.selectPrimary(f.id)
+        r.eq(f.calls, 1, "I1 selection requires one explicit sample Test")
+        r.eq(snapshot().readyBackendIDs, [f.id], "I1 fresh success supplies live readiness")
+        f.date.addTimeInterval(60)
+        env.refresh()
+        r.eq(env.model.rows.first(where: { $0.id == f.id })?.status, .previouslyValidated,
+             "I1 expired service row is historical")
+        r.check(env.model.currentValidatedServices.isEmpty, "I1 expiry revokes live evidence")
+        r.eq(snapshot().readyBackendIDs, [], "I1 expiry never claims live ready")
+        r.eq(classifyReadiness(snapshot()), .degraded(.serviceCheckOnUse), "I1 expired route has honest attempt-only presentation")
+        let shown = ReadinessPresentation.make(snapshot: snapshot(), level: classifyReadiness(snapshot()))
+        r.check(!shown.details.contains(ReadinessIssue.noEngine.reason), "I1 settings does not contradict permitted attempt with no-engine issue")
+        r.check(shown.details.contains(ReadinessIssue.serviceCheckOnUse.reason), "I1 settings explains service check on real use")
+        r.check(!readinessMenuTitle(snapshot(accessibility: .denied)).contains("已就绪"),
+                "I1 missing accessibility must not relabel an unverified service as ready")
+        r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), nil,
+             "I1 expiry alone must allow real recording preflight")
+        r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot(microphone: .denied))), .microphoneDenied,
+             "I1 admitted service does not bypass microphone blocker")
+        r.eq((await router.captureStartRoute()).bindings.first?.descriptor.id, f.id,
+             "I1 expired selection captures actual service for runtime attempt")
+        r.eq(f.calls, 1, "I1 expiry refresh and preflight perform no hidden sample recognition")
+        f.store.current.asrRoutingPolicy = .cloudOnly
+        r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), .noEngine,
+             "I1 service attempt cannot bypass cloud-only policy")
+        f.store.current.asrRoutingPolicy = .localOnly
+        f.store.current.localASRServices[0].baseURL = "http://127.0.0.1:9124"
+        env.refresh()
+        r.check(env.model.currentValidatedServices.isEmpty, "I1 exact profile edit without revision rotation revokes live evidence")
+        r.eq(snapshot().readyBackendIDs, [], "I1 edited selected profile is not live verified")
+        r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), nil,
+             "I1 valid edited explicit selection can attempt a real request")
+        await env.model.test(f.id)
+        f.date.addTimeInterval(60)
+        env.refresh()
+        r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), nil,
+             "I1 retested selection remains attemptable beyond freshness")
+        do {
+            let draft = LocalASRServiceDraft(target: .existing(f.service.id), profile: f.store.current.localASRServices[0], keyEdit: .replace("new-key"))
+            try env.actions(navigation: nil).saveLocal!(draft)
+            r.check(env.model.currentValidatedServices.isEmpty, "I1 saved credential edit revokes verification evidence")
+            r.eq(snapshot().readyBackendIDs, [], "I1 changed credential is not live verified")
+            r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), nil,
+                 "I1 explicit selection with new valid credentials can attempt")
+            let persisted = try JSONEncoder().encode(f.store.current)
+            f.store.current = try JSONDecoder().decode(Configuration.self, from: persisted)
+            let restarted = ASRRouter(startMonitoring: false, internetAvailable: { false }, credentials: f.store.asrCredentials,
+                persistNativeResolution: { _ in }, configuration: { f.store.current }, localAvailable: { false }, localLease: { nil })
+            r.eq(snapshot(using: restarted, live: false).readyBackendIDs, [], "I1 restart selection/history never becomes live ready")
+            r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot(using: restarted, live: false))), nil,
+                 "I1 persisted explicit selection may attempt after restart without another sample")
+            var lockedAccess = ASRCredentialAccess.memory()
+            lockedAccess.read = { _ in throw ASRCredentialError.unavailable }
+            let locked = ASRRouter(startMonitoring: false, internetAvailable: { false },
+                credentials: KeychainASRCredentialStore(access: lockedAccess), configuration: { f.store.current },
+                localAvailable: { false }, localLease: { nil })
+            r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot(using: locked))), .noEngine,
+                 "I1 credential lookup failure still blocks recording")
+            f.store.current.localASRServices[0].baseURL = "https://remote.invalid/v1"
+            r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), .noEngine,
+                 "I1 invalid nonloopback profile cannot admit recording")
+            f.store.current.localASRServices[0].baseURL = "http://127.0.0.1:9124"
+            f.store.current.setASRBackendSelection(.init(primary: .init(rawValue: "service:unknown")))
+            r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), .noEngine,
+                 "I1 unknown selection cannot adopt configured unrelated service")
+            f.store.current.setASRBackendSelection(.init())
+            r.eq(SessionController.readinessPreflight(classifyReadiness(snapshot())), .noEngine,
+                 "I1 cleared selection cannot adopt historical configured service")
+            r.eq(f.calls, 2, "I1 restart and invalid routes perform no implicit recognition")
+        } catch { r.check(false, "I1 isolated credential edit: \(error)") }
     }
 
     @MainActor static func testSavedServiceRuntimeCredentials(_ r: SelfTest.Reporter) async {

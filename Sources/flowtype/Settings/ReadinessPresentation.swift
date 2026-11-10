@@ -28,7 +28,8 @@ struct ReadinessPresentation {
         // removed, so a primary microphone blocker cannot hide an engine issue.
         let engines = ReadinessSnapshot(accessibility: .granted, microphone: .granted,
             speechRecognition: snapshot.speechRecognition, localModel: snapshot.localModel,
-            cloudASR: snapshot.cloudASR, appleSpeech: snapshot.appleSpeech, computedAt: snapshot.computedAt)
+            cloudASR: snapshot.cloudASR, appleSpeech: snapshot.appleSpeech, computedAt: snapshot.computedAt,
+            attemptableServiceIDs: snapshot.attemptableServiceIDs)
         switch classifyReadiness(engines) {
         case .blocked(let issue), .degraded(let issue): add(issue, engineDestination)
         case .ready: break

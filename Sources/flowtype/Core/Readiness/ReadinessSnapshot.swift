@@ -22,11 +22,13 @@ struct ReadinessSnapshot: Equatable, Sendable {
     var backendStates: [ASRBackendID: EngineReadiness] = [:]
     var readyBackendIDs: [ASRBackendID] = []
     var selectedBackendID: ASRBackendID? = nil
+    /// Selected, valid loopback routes may be attempted without claiming live readiness.
+    var attemptableServiceIDs: [ASRBackendID] = []
 }
 
 enum ReadinessIssue: Equatable, Sendable {
     case microphoneDenied, microphoneNotDetermined, noEngine
-    case enginePreparing, basicOnly, accessibilityMissing
+    case enginePreparing, basicOnly, accessibilityMissing, serviceCheckOnUse
 
     var reason: String {
         switch self {
@@ -34,6 +36,7 @@ enum ReadinessIssue: Equatable, Sendable {
         case .microphoneNotDetermined: return "首次听写时会请求麦克风权限"
         case .noEngine: return "没有可用的语音识别引擎"
         case .enginePreparing: return "识别引擎正在准备"
+        case .serviceCheckOnUse: return "本机服务将在识别时检查"
         case .basicOnly: return "基础识别模式，准确率较低"
         case .accessibilityMissing: return "全局热键不可用；可从菜单开始，结果写入剪贴板"
         }
@@ -62,19 +65,21 @@ func classifyReadiness(_ s: ReadinessSnapshot) -> ReadinessLevel {
     if s.microphone == .denied { return .blocked(.microphoneDenied) }
 
     let primaryReady = s.localModel == .ready || s.cloudASR == .ready
+    let canAttemptService = !s.attemptableServiceIDs.isEmpty
     let primaryPreparing: Bool = {
         if case .provisioning = s.localModel { return true }
         if case .provisioning = s.cloudASR { return true }
         return false
     }()
 
-    if !primaryReady && s.appleSpeech != .ready && !primaryPreparing {
+    if !primaryReady && !canAttemptService && s.appleSpeech != .ready && !primaryPreparing {
         return .blocked(.noEngine)
     }
-    if !primaryReady && s.appleSpeech == .ready { return .degraded(.basicOnly) }
-    if !primaryReady && primaryPreparing { return .degraded(.enginePreparing) }
+    if !primaryReady && !canAttemptService && s.appleSpeech == .ready { return .degraded(.basicOnly) }
+    if !primaryReady && !canAttemptService && primaryPreparing { return .degraded(.enginePreparing) }
     if s.accessibility != .granted { return .degraded(.accessibilityMissing) }
     if s.microphone != .granted { return .degraded(.microphoneNotDetermined) }
+    if !primaryReady && canAttemptService { return .degraded(.serviceCheckOnUse) }
     return .ready
 }
 
@@ -88,6 +93,9 @@ func readinessMenuTitle(_ s: ReadinessSnapshot) -> String {
     case .degraded(.enginePreparing):
         return "识别：引擎准备中"
     case .degraded(.accessibilityMissing):
+        if s.localModel != .ready && s.cloudASR != .ready && !s.attemptableServiceIDs.isEmpty {
+            return "识别：可开始尝试（无辅助功能，结果写入剪贴板）"
+        }
         return "识别：已就绪（无辅助功能，结果写入剪贴板）"
     case .degraded(.microphoneNotDetermined):
         return "识别：首次听写将请求麦克风权限"

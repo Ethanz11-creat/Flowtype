@@ -14,6 +14,7 @@ enum ProviderDraftCheckSelfTests {
     }
 
     static func run(_ r: SelfTest.Reporter) async {
+        lazyDraftConfigurationKey(r)
         let effects = ValidationEffects.live.snapshot
         print("--- ProviderDraftCheckSelfTests.lateDraftCheckCannotPublish ---")
         await lateDraftCheckCannotPublish(r)
@@ -28,6 +29,45 @@ enum ProviderDraftCheckSelfTests {
         draftNavigationRequiresDecision(r)
         r.eq(ValidationEffects.live.snapshot.blocked, effects.blocked, "draftChecks: no attempted live effects")
         r.eq(ValidationEffects.live.snapshot.permitted, effects.permitted, "draftChecks: no live effects")
+    }
+
+    private static func lazyDraftConfigurationKey(_ r: SelfTest.Reporter) {
+        for isNew in [true, false] {
+            for edit: APIKeyEdit in [.replace(" exact-key "), .remove, .preserve, .replace("  \n")] {
+                var value = draft()
+                value.target = isNew ? .new(value.profile.id) : .existing(value.profile.id)
+                value.keyEdit = edit
+                let checks = CloudASRConnectionCheck()
+                let session = ASRProviderDraftSession(draft: value, checks: checks)
+                var reads = 0
+                let needsStored: Bool
+                switch edit {
+                case .preserve: needsStored = !isNew
+                case .replace(let key): needsStored = !isNew && key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                case .remove: needsStored = false
+                }
+                do {
+                    try session.checkConfiguration(storedKey: { reads += 1; throw ASRCredentialError.unavailable })
+                    r.check(!needsStored, "M1 existing preserve propagates lookup failure")
+                    if case .replace(let key) = edit, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        r.eq(checks.state(for: value.target.id), .configurationValid, "M1 replacement checks without saved profile/key")
+                    } else {
+                        if case .failure = checks.state(for: value.target.id) {
+                            r.check(true, "M1 removed or new empty key produces a configuration failure")
+                        } else { r.check(false, "M1 empty key must still run local configuration validation") }
+                    }
+                } catch {
+                    r.check(needsStored && (error as? ASRCredentialError) == .unavailable,
+                            "M1 only existing preserve may read and propagate unavailable key")
+                }
+                r.eq(reads, needsStored ? 1 : 0, "M1 draft intent lazily determines saved-key access")
+                if needsStored {
+                    session.checkConfiguration(storedKey: { reads += 1; return "saved-key" })
+                    r.eq(reads, 2, "M1 existing preserve reads available storage exactly once per check")
+                    r.eq(checks.state(for: value.target.id), .configurationValid, "M1 preserve and blank replacement use saved key")
+                }
+            }
+        }
     }
 
     private static func draft(_ vendor: CloudASRVendorID = .openAI) -> ASRProviderDraft {
@@ -101,10 +141,10 @@ enum ProviderDraftCheckSelfTests {
         } else { r.check(false, "checkDoesNotCommit: tested and saved profiles exist") }
         session.detach()
         r.eq(checks.state(for: value.target.id), .idle, "checkDoesNotCommit: save cleanup invalidates success")
-        session.draft.keyEdit = .replace("replacement")
+        session.draft.keyEdit = .replace(" replacement ")
         let replacement = session.testRecognition(storedKey: "current-key")
         await settle()
-        r.eq(transport.snapshots.last?.1, "replacement", "checkDoesNotCommit: replacement key tested without commit")
+        r.eq(transport.snapshots.last?.1, " replacement ", "checkDoesNotCommit: replacement key tested without commit")
         session.draft.keyEdit = .remove
         transport.finish()
         await replacement?.value

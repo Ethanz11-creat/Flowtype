@@ -750,6 +750,7 @@ final class SessionController: ObservableObject {
         case .degraded(.basicOnly): return "基础模式 · 准确率较低"
         case .degraded(.accessibilityMissing): return "无辅助功能 · 结果将复制"
         case .degraded(.enginePreparing): return "识别引擎准备中"
+        case .degraded(.serviceCheckOnUse): return ReadinessIssue.serviceCheckOnUse.reason
         case .degraded(.microphoneNotDetermined): return "首次使用 · 将请求麦克风权限"
         default: return nil
         }
