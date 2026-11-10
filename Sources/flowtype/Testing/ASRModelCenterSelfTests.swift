@@ -3,6 +3,10 @@ import Foundation
 enum ASRModelCenterSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
         await ASRAcquisitionSelfTests.run(r)
+        await testRowIdentityAfterReorder(r)
+        await testDownloadActionsTargetJobID(r)
+        testOccupiedRemovalGuard(r)
+        testValidationDisclosureRace(r)
         await testHonestStatusProjection(r)
         await testPrimarySelectionTransaction(r)
         await testPolicyConsentAndRemoval(r)
@@ -19,6 +23,49 @@ enum ASRModelCenterSelfTests {
         await testDistinctPrimaryAdmission(r)
         await testCrossBackendAdmissionAndPreview(r)
         await testMutationsRemovalAndRetryAdmission(r)
+    }
+
+    @MainActor static func testRowIdentityAfterReorder(_ r: SelfTest.Reporter) async {
+        let f = ModelCenterFixture(), vm = f.makeViewModel()
+        let row = vm.rows.first { $0.id == f.serviceID }!
+        let action = ASRModelRowAction(id: row.id, perform: { await vm.test($0) })
+        var other = f.service; other.id = UUID(); other.name = "Reordered service"
+        f.config.localASRServices = [other, f.service]; vm.refresh()
+        await action()
+        r.eq(vm.lastTrialResult?.backendID, f.serviceID, "C3 row action keeps backend identity after reorder")
+        f.config.localASRServices = [other]; vm.refresh()
+        await action()
+        r.check(vm.notice != nil, "C3 deleted row cannot target replacement at same index")
+    }
+
+    @MainActor static func testDownloadActionsTargetJobID(_ r: SelfTest.Reporter) async {
+        let first = UUID(), second = UUID()
+        var jobs = [first, second], calls: [UUID] = []
+        let actions = jobs.map { ModelInstallationAction(jobID: $0, perform: { calls.append($0) }) }
+        jobs.reverse(); jobs.removeLast()
+        do { try await actions[0](); try await actions[1]() }
+        catch { r.check(false, "C3 injected job actions succeed") }
+        r.eq(calls, [first, second], "C3 download actions target captured jobID after reorder and removal")
+    }
+
+    @MainActor static func testOccupiedRemovalGuard(_ r: SelfTest.Reporter) {
+        let row = ASRModelCenterRow(id: .init(rawValue: "native:import:fixture"), title: "fixture", subtitle: "", location: .native, status: .ready, isPrimary: false, isFallback: false)
+        r.eq(ASRModelRemovalGuard.reason(row: row, occupied: "录音仍在使用，等待实际计算结束。"), "录音仍在使用，等待实际计算结束。", "C3 occupied removal is disabled with readable reason")
+        let selected = ASRModelCenterRow(id: row.id, title: row.title, subtitle: "", location: .native, status: .ready, isPrimary: true, isFallback: false)
+        r.check(ASRModelRemovalGuard.reason(row: selected, occupied: nil) != nil, "C3 selected removal explains explicit deselection")
+        r.eq(ASRModelRemovalGuard.reason(row: row, occupied: nil), nil, "C3 unused unselected record can be removed")
+    }
+
+    @MainActor static func testValidationDisclosureRace(_ r: SelfTest.Reporter) {
+        let f = ModelCenterFixture()
+        let consent = ASRModelValidationConsent(backendID: f.serviceID, intent: .test, configuration: f.config)!
+        r.check(consent.matches(f.config), "C3 unchanged disclosed saved profile is eligible for confirmation")
+        f.config.localASRServices[0].baseURL = "http://127.0.0.1:9234"
+        r.check(!consent.matches(f.config), "C3 changed endpoint requires a fresh disclosure before upload")
+        f.config.localASRServices = [f.service]; f.config.asrLanguage = .en
+        r.check(!consent.matches(f.config), "C3 changed sample language requires fresh confirmation")
+        f.config.asrLanguage = .auto; f.config.localASRServices = []
+        r.check(!consent.matches(f.config), "C3 deleted disclosed profile cannot confirm against replacement")
     }
 
     @MainActor static func testDistinctPrimaryAdmission(_ r: SelfTest.Reporter) async {

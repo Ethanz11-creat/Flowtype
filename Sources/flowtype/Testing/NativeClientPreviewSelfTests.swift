@@ -126,6 +126,73 @@ enum NativeClientPreviewSelfTests {
                     records.append(.init(file: file, width: 1120, height: 760, appearance: dark ? "dark" : "light", destination: name, position: "top"))
                 }
             }
+            // C3: actual model-center views with isolated configuration and injected effects only.
+            for state in ["model-center", "model-center-loading", "model-center-empty", "model-center-error", "model-center-long-content", "model-center-download"] {
+                var centerConfig = Configuration()
+                centerConfig.asrRoutingPolicy = .auto
+                centerConfig.localASRServices = [LocalASRServicePreset.whisperCpp.makeProfile(baseURL: "http://127.0.0.1:8123", modelID: nil)]
+                centerConfig.cloudASRConfig.providers = state == "model-center-empty" ? [] : [provider]
+                let long = state == "model-center-long-content" || state == "model-center-error"
+                let imported = ImportedASRModel(name: long ? "团队离线转写模型 · Mixed Language Qwen3-ASR 0.6B 4-bit 长名称与兼容性说明" : "Qwen3-ASR 0.6B · 团队模型",
+                    directory: fixture.appendingPathComponent(long ? "Models/团队共享/2026/项目讨论与产品工程记录/aufklarer-Qwen3-ASR-0.6B-MLX-4bit-fixed-revision" : "Models/Qwen3-ASR-0.6B"),
+                    engine: .qwenMLX, variant: "0.6B", bits: 4, sizeBytes: 642_518_320, tokenizerDirectory: nil, fileFingerprint: "preview-only")
+                centerConfig.importedASRModels = [imported]
+                let nativeID = ASRBackendID(rawValue: "native:import:" + imported.id.uuidString)
+                centerConfig.setASRBackendSelection(.init(primary: nativeID))
+                store.save(centerConfig)
+                let plan = ASRInstallPlan(id: UUID(), displayName: "Whisper base · 多语言 Core ML", engine: .whisperCoreML, files: [], totalBytes: 318_000_000, recipeID: nil, recipeVersion: 1, credentialID: nil)
+                let failedPlan = ASRInstallPlan(id: UUID(), displayName: "Qwen3-ASR 1.7B · 暂停后可恢复", engine: .qwenMLX, files: [], totalBytes: 1_280_000_000, recipeID: nil, recipeVersion: 1, credentialID: nil)
+                let jobs: [ModelInstallSnapshot] = state == "model-center-download" ? [
+                    .init(jobID: plan.id, plan: plan, state: .downloading, receivedBytes: 124_500_000, errorCode: nil),
+                    .init(jobID: failedPlan.id, plan: failedPlan, state: .failed, receivedBytes: 28_300_000, errorCode: "network: 连接中断；已保留部分文件，请检查下载源后继续。")
+                ] : []
+                let generation = UUID()
+                let validation = ASRServiceValidationCoordinator(session: nil, resolver: { _ in ["127.0.0.1"] }, now: { now },
+                    serviceRecognition: { _, _, _ in "你好，这是语音识别测试。" }, cloudRecognition: { _, _, _ in "你好，这是语音识别测试。" })
+                let center = ASRModelCenterViewModel(configuration: { store.current }, persist: { store.save($0) }, native: coordinator,
+                    validation: validation, credential: { _ in .init(value: nil, generation: generation) },
+                    sample: { try ASRValidationSampleStore.load(language: .zh) }, installationSnapshots: { jobs }, now: { now })
+                await center.refreshInstallations()
+                center.selectedID = long ? nativeID : centerConfig.localASRServices.first.map { .init(rawValue: "service:" + $0.id.uuidString) }
+                if state == "model-center" { await center.test(center.selectedID!) }
+                if state == "model-center-empty" || state == "model-center-loading" { center.selectedID = nil }
+                let hf = HFModelInstallSession(resolve: { _, _, _ in throw FixtureError.unavailable }, plan: { _, _, _, _ in throw FixtureError.unavailable }, enqueue: { _ in throw FixtureError.unavailable })
+                let centerActions = ASRModelCenterUIActions(configuration: { store.current }, importedActions: actions,
+                    hfSession: hf, discovery: ASRModelDiscoveryClient(), draftChecks: draftChecks,
+                    chooseDirectory: { nil }, persistImported: { store.save($0) }, saveLocal: { _ in throw FixtureError.unavailable },
+                    saveCloud: { _ in throw FixtureError.unavailable }, hasCredential: { _ in false }, credential: { _ in nil },
+                    saveHFToken: { _ in throw FixtureError.unavailable }, copy: { _ in },
+                    removalReason: { _, _ in nil }, pause: { _ in }, resume: { _ in }, cancel: { _ in }, clearPartial: { _ in },
+                    loading: state == "model-center-loading", loadError: state == "model-center-error" ? "模型配置不可用：保留旧选择。候选目录缺少完整分词器与模型权重；请核对固定版本和目录结构，重新检查后再试用。错误详情保持完整展示，不以省略号隐藏恢复线索。" : nil)
+                for (width, height, size) in sizes {
+                    for dark in [false, true] {
+                        let navigation = SettingsNavigation(); navigation.navigate(to: .settings(.speech))
+                        let centerView = ScrollView {
+                            VStack(alignment: .leading, spacing: 18) {
+                                Text("识别设置").font(Theme.Typography.pageTitle)
+                                ASRModelCenterView(model: center, actions: centerActions, initialSource: state == "model-center-empty" ? ASRBackendLocation.cloud.rawValue : "all")
+                            }.padding(24).frame(maxWidth: 1160).frame(maxWidth: .infinity)
+                        }.background(Theme.pageBackground)
+                        let wrapped = MainWindowView(navigation: navigation, page: { _ in AnyView(centerView) })
+                        let file = "\(state)-\(size)-\(dark ? "dark" : "light").png"
+                        let host = await renderHost(AnyView(wrapped), width: width, height: height, dark: dark)
+                        try capture(host, to: root.appendingPathComponent(file))
+                        records.append(.init(file: file, width: width, height: height, appearance: dark ? "dark" : "light", destination: state, position: "top"))
+                        if state == "model-center-download" {
+                            let taskView = MainWindowView(navigation: navigation, page: { _ in AnyView(
+                                ScrollView { VStack(alignment: .leading, spacing: 18) {
+                                    Text("安装任务").font(Theme.Typography.pageTitle)
+                                    Text("下载由应用管理，关闭模型中心继续保留任务。").foregroundStyle(.secondary)
+                                    ModelInstallationList(installations: center.installations, actions: centerActions, refresh: {})
+                                }.padding(24).frame(maxWidth: 1000, alignment: .leading).frame(maxWidth: .infinity, alignment: .topLeading) }.background(Theme.pageBackground)) })
+                            let taskFile = "\(state)-tasks-\(size)-\(dark ? "dark" : "light").png"
+                            let taskHost = await renderHost(AnyView(taskView), width: width, height: height, dark: dark)
+                            try capture(taskHost, to: root.appendingPathComponent(taskFile))
+                            records.append(.init(file: taskFile, width: width, height: height, appearance: dark ? "dark" : "light", destination: state, position: "installation-component"))
+                        }
+                    }
+                }
+            }
             let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(records).write(to: root.appendingPathComponent("manifest.json"))
             r.check(!records.isEmpty, "native preview generated actual SwiftUI PNGs")

@@ -11,6 +11,8 @@ struct ASRSettingsContent: View {
     let navigation: SettingsNavigation?
     @ObservedObject var checks: CloudASRConnectionCheck
     @ObservedObject var draftChecks: CloudASRConnectionCheck
+    var modelCenter: ASRModelCenterViewModel? = nil
+    var modelCenterActions = ASRModelCenterUIActions()
     var target: SettingsTarget? = nil
     var requestID: UUID? = nil
     var devices: () -> [AudioDevice] = { AudioRecorder.availableInputDevices() }
@@ -29,21 +31,25 @@ struct ASRSettingsContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            modeSection
-            DisclosureGroup(isExpanded: $localExpanded) {
-                localModelPicker
-            } label: {
-                Text(store.current.asrRoutingPolicy == .cloudOnly ? "本地模型 · 此模式不使用" : "本地模型")
-                    .font(.system(size: 13, weight: .medium))
-            }.id(SettingsTarget.localModels)
-            Divider()
-            DisclosureGroup(isExpanded: $cloudExpanded) {
-                CloudASRProviderList(store: store, checks: checks, draftChecks: draftChecks, navigation: navigation)
-            } label: {
-                Text(store.current.asrRoutingPolicy == .localOnly ? "云端服务 · 此模式不使用" : "云端服务")
-                    .font(.system(size: 13, weight: .medium))
+            if let modelCenter {
+                ASRModelCenterView(model: modelCenter, actions: modelCenterActions)
+            } else {
+                modeSection
+                DisclosureGroup(isExpanded: $localExpanded) {
+                    localModelPicker
+                } label: {
+                    Text(store.current.asrRoutingPolicy == .cloudOnly ? "本地模型 · 此模式不使用" : "本地模型")
+                        .font(.system(size: 13, weight: .medium))
+                }.id(SettingsTarget.localModels)
+                Divider()
+                DisclosureGroup(isExpanded: $cloudExpanded) {
+                    CloudASRProviderList(store: store, checks: checks, draftChecks: draftChecks, navigation: navigation)
+                } label: {
+                    Text(store.current.asrRoutingPolicy == .localOnly ? "云端服务 · 此模式不使用" : "云端服务")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                Divider()
             }
-            Divider()
             inputSection
             Text("更改识别配置后，进行中的听写继续使用原配置。")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
