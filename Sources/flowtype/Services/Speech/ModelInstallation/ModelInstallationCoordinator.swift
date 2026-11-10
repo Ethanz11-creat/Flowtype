@@ -6,6 +6,7 @@ actor ModelInstallationCoordinator {
     typealias DiskSample = @Sendable (URL) throws -> Int64
     private let transport: Transfer
     private let publisher: ModelInstallationPublisher
+    private let verification: HFFileVerifier.Verification
     private let clock: @Sendable () -> Date
     private let diskSample: DiskSample
     let journalRoot: URL
@@ -16,18 +17,21 @@ actor ModelInstallationCoordinator {
     private var generation = UUID()
     private var permit: ModelPublicationPermit?
     private var isRecovering = false
+    private var currentTransferID: UUID?
 
     init(transport: @escaping Transfer, publisher: ModelInstallationPublisher,
+         verification: @escaping HFFileVerifier.Verification = { try HFFileVerifier.verify(file: $0, at: $1) },
          clock: @escaping @Sendable () -> Date = { Date() },
          diskSample: @escaping DiskSample = { url in
              let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
              guard let bytes = values.volumeAvailableCapacityForImportantUsage else { throw HFDownloadError(code: .diskFull) }
              return bytes
          }, journalRoot: URL) {
-        self.transport = transport; self.publisher = publisher; self.clock = clock
+        self.transport = transport; self.publisher = publisher; self.clock = clock; self.verification = verification
         self.diskSample = diskSample; self.journalRoot = journalRoot
     }
     init(transport: HFDownloadTransport = HFDownloadTransport(), publisher: ModelInstallationPublisher,
+         verification: @escaping HFFileVerifier.Verification = { try HFFileVerifier.verify(file: $0, at: $1) },
          clock: @escaping @Sendable () -> Date = { Date() },
          diskSample: @escaping DiskSample = { url in
              let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
@@ -35,7 +39,7 @@ actor ModelInstallationCoordinator {
          }, journalRoot: URL) {
         self.init(transport: { file, url, credential, progress in
             try await transport.transfer(file: file, partialURL: url, credentialID: credential, progress: progress)
-        }, publisher: publisher, clock: clock, diskSample: diskSample, journalRoot: journalRoot)
+        }, publisher: publisher, verification: verification, clock: clock, diskSample: diskSample, journalRoot: journalRoot)
     }
     func enqueue(_ plan: ASRInstallPlan) async throws -> UUID {
         guard !isRecovering, ownedJournalRoot else { throw HFDownloadError(code: .integrity) }
@@ -74,7 +78,7 @@ actor ModelInstallationCoordinator {
         if job.snapshot.state == .installed { return }
         try ModelInstallationPublisher.validate(job.snapshot.plan)
         try admission(job.snapshot.plan)
-        job.snapshot.receivedBytes = try received(job.snapshot.plan)
+        job.snapshot.receivedBytes = try publisher.hasCommittedPublication(for: job.snapshot.plan) ? job.snapshot.plan.totalBytes : received(job.snapshot.plan)
         job.snapshot.state = .queued; job.snapshot.errorCode = nil
         try persist(job); jobs[jobID] = job
         schedule()
@@ -144,14 +148,14 @@ actor ModelInstallationCoordinator {
     }
     private func run(_ id: UUID, generation token: UUID, permit: ModelPublicationPermit) async {
         defer {
-            activeTask = nil; activeID = nil; self.permit = nil
+            activeTask = nil; activeID = nil; self.permit = nil; currentTransferID = nil
             schedule()
         }
         guard let plan = jobs[id]?.snapshot.plan else { return }
         do {
             // A prior rename already owns the final directory. Retry registration offline,
             // retaining the commit boundary even if pause/cancel arrives during reinspection.
-            if FileManager.default.fileExists(atPath: publisher.directory(for: plan).path) {
+            if try publisher.hasCommittedPublication(for: plan) {
                 try permit.commit { }
                 try setState(id, .verifying)
                 _ = try await publisher.publish(plan: plan, staging: staging(id), permit: permit)
@@ -168,15 +172,25 @@ actor ModelInstallationCoordinator {
                 try ModelInstallationPublisher.ensureDirectory(url.deletingLastPathComponent())
                 try ModelInstallationPublisher.noSymlinks(url)
                 // Verified completed files skip HTTP on explicit resume. Sidecars remain transport-owned.
-                if (try? HFFileVerifier.verify(file: file, at: url)) != nil,
-                   !FileManager.default.fileExists(atPath: HFDownloadJournal.sidecarURL(for: url).path) { continue }
-                let base = try received(plan, excluding: file.relativeDestination)
-                try await transport(file, url, plan.credentialID) { bytes in
-                    Task { await self.progress(id, generation: token, bytes: base + min(max(0, bytes), file.sizeBytes)) }
-                }
+                let verified: Bool
+                do { try await HFFileVerifier.verifyAsync(file: file, at: url, verification: verification); verified = true }
+                catch is CancellationError { throw CancellationError() }
+                catch { verified = false }
                 try Task.checkCancellation()
                 guard generation == token else { return }
-                try HFFileVerifier.verify(file: file, at: url)
+                if verified, !FileManager.default.fileExists(atPath: HFDownloadJournal.sidecarURL(for: url).path) { continue }
+                let base = try received(plan, excluding: file.relativeDestination)
+                let transferID = UUID()
+                currentTransferID = transferID
+                try await transport(file, url, plan.credentialID) { bytes in
+                    Task { await self.progress(id, generation: token, transferID: transferID, bytes: base + min(max(0, bytes), file.sizeBytes)) }
+                }
+                currentTransferID = nil
+                try Task.checkCancellation()
+                guard generation == token else { return }
+                try await HFFileVerifier.verifyAsync(file: file, at: url, verification: verification)
+                try Task.checkCancellation()
+                guard generation == token else { return }
                 try setProgress(id, bytes: received(plan))
             }
             try Task.checkCancellation()
@@ -193,8 +207,8 @@ actor ModelInstallationCoordinator {
             update(id, state: failure?.requiresPause == true ? .paused : .failed, error: Self.code(error))
         }
     }
-    private func progress(_ id: UUID, generation token: UUID, bytes: Int64) {
-        guard generation == token, activeID == id, jobs[id]?.snapshot.state == .downloading else { return }
+    private func progress(_ id: UUID, generation token: UUID, transferID: UUID, bytes: Int64) {
+        guard generation == token, activeID == id, currentTransferID == transferID, jobs[id]?.snapshot.state == .downloading else { return }
         do { try setProgress(id, bytes: bytes) }
         catch {
             _ = permit?.revoke(); generation = UUID(); activeTask?.cancel()
@@ -202,7 +216,7 @@ actor ModelInstallationCoordinator {
         }
     }
     private func admission(_ plan: ASRInstallPlan) throws {
-        let remaining = plan.totalBytes - (try received(plan))
+        let remaining = try publisher.hasCommittedPublication(for: plan) ? 0 : plan.totalBytes - received(plan)
         let reserve = max(Int64(256 * 1024 * 1024), plan.totalBytes / 10)
         let required = remaining.addingReportingOverflow(reserve)
         guard !required.overflow, try diskSample(journalRoot) >= required.partialValue else { throw HFDownloadError(code: .diskFull) }

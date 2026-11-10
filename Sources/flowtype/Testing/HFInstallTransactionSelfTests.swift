@@ -90,6 +90,10 @@ enum HFInstallTransactionSelfTests {
         await testDurableProductionRegistration(r)
         await testFreshDiskAndUnsafePaths(r)
         await testPublisherRejectsExternalStaging(r)
+        await testVerificationCancellationDrain(r)
+        await testChunkVerificationCancellation(r)
+        await testCommittedDiskAdmission(r)
+        await testDelayedFileProgress(r)
     }
     // Break caught: two network owners, cancellation releasing a live writer, or recovery auto-networking.
     @MainActor static func testPersistentQueueRecovery(_ r: SelfTest.Reporter) async {
@@ -422,5 +426,152 @@ enum HFInstallTransactionSelfTests {
             r.check(FileManager.default.fileExists(atPath: external.appendingPathComponent("tokenizer.json").path), "B4 external model directory remains untouched")
             r.eq(library.config.installedASRModels.count, 0, "B4 external staging never registers")
         } catch { r.check(false, "B4 external staging fixture: \(error)") }
+    }
+
+    final class VerificationGate: Sendable {
+        struct State { var entered = false, exited = false, cancellationSeen = false, claimed = false, reads = 0 }
+        let state = OSAllocatedUnfairLock(initialState: State())
+        let release = DispatchSemaphore(value: 0)
+        func blockOnce() {
+            let claimed = state.withLock { value in
+                guard !value.claimed else { return false }; value.claimed = true; value.entered = true; return true
+            }
+            if claimed {
+                _ = release.wait(timeout: .now() + 2)
+                state.withLock { $0.exited = true; $0.cancellationSeen = Task.isCancelled }
+            }
+        }
+    }
+    // Break caught: hashing owns the coordinator actor or releases the job slot before its worker drains.
+    @MainActor static func testVerificationCancellationDrain(_ r: SelfTest.Reporter) async {
+        for cancel in [false, true] {
+            let f = Fixture(), library = Library(), source = Source(f.bytes), gate = VerificationGate()
+            defer { gate.release.signal(); try? FileManager.default.removeItem(at: f.root) }
+            do {
+                await source.release()
+                let c = ModelInstallationCoordinator(transport: { file, url, credential, progress in
+                    try await source.transfer(file, url, credential, progress)
+                }, publisher: f.publisher(library), verification: { file, url in
+                    if FileManager.default.fileExists(atPath: url.path) { gate.blockOnce() }
+                    try HFFileVerifier.verify(file: file, at: url)
+                }, diskSample: { _ in Int64.max }, journalRoot: f.jobs)
+                let id = try await c.enqueue(f.plan)
+                let next = ASRInstallPlan(id: UUID(), displayName: "Queued", engine: f.plan.engine, files: f.plan.files,
+                    totalBytes: f.plan.totalBytes, recipeID: nil, recipeVersion: 1, credentialID: f.plan.credentialID)
+                let nextID = try await c.enqueue(next)
+                r.check(await until { gate.state.withLock { $0.entered } }, "B4 fix hashing gate entered")
+                let stopping = Task { if cancel { await c.cancel(jobID: id) } else { await c.pause(jobID: id) } }
+                let expected: ModelInstallState = cancel ? .cancelled : .paused
+                r.check(await until { await c.snapshots().first(where: { $0.jobID == id })?.state == expected }, "B4 fix pause observable during hash")
+                r.check(!gate.state.withLock { $0.exited }, "B4 fix actor responds before hash completes")
+                r.eq(await source.requests, 1, "B4 fix next owner waits hashing drain")
+                gate.release.signal(); await stopping.value
+                r.check(gate.state.withLock { $0.cancellationSeen }, "B4 fix hash inherits parent cancellation")
+                r.check(await until { await c.snapshots().first(where: { $0.jobID == nextID })?.state == .installed }, "B4 fix next owner runs after hash drain")
+                r.check(!library.config.installedASRModels.contains { $0.id == id }, "B4 fix cancelled verification never publishes")
+            } catch { r.check(false, "B4 fix hash cancellation: \(error)") }
+        }
+    }
+    // Break caught: cancellation is checked only around a whole-file hash, or becomes a network error.
+    @MainActor static func testChunkVerificationCancellation(_ r: SelfTest.Reporter) async {
+        let f = Fixture(), gate = VerificationGate()
+        defer { gate.release.signal(); try? FileManager.default.removeItem(at: f.root) }
+        do {
+            let staging = try f.stage(), url = staging.appendingPathComponent("chunk-fixture.bin")
+            let data = Data(repeating: 97, count: 3 * 64 * 1024)
+            try data.write(to: url)
+            let original = f.plan.files[0]
+            let file = HFPlannedFile(source: original.source, downloadEndpoint: original.downloadEndpoint,
+                resolvedCommit: original.resolvedCommit, remotePath: original.remotePath, relativeDestination: original.relativeDestination,
+                sizeBytes: Int64(data.count), digest: .sha256(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()))
+            let task = Task.detached {
+                try HFFileVerifier.verify(file: file, at: url, readChunk: { handle, limit in
+                    gate.state.withLock { $0.reads += 1 }
+                    let chunk = try handle.read(upToCount: limit)
+                    gate.blockOnce()
+                    return chunk
+                })
+            }
+            r.check(await until { gate.state.withLock { $0.entered } }, "B4 fix chunk reader entered")
+            task.cancel(); gate.release.signal()
+            do { try await task.value; r.check(false, "B4 fix chunk cancellation throws") }
+            catch { r.check(error is CancellationError, "B4 fix cancellation remains cancellation") }
+            r.eq(gate.state.withLock { $0.reads }, 1, "B4 fix cancelled verifier does not read remaining chunks")
+        } catch { r.check(false, "B4 fix chunk fixture: \(error)") }
+    }
+    // Break caught: committed retry requires another payload allocation despite its valid manifest.
+    @MainActor static func testCommittedDiskAdmission(_ r: SelfTest.Reporter) async {
+        let f = Fixture(), library = Library(), source = Source(f.bytes)
+        let available = OSAllocatedUnfairLock(initialState: Int64(256 * 1024 * 1024))
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        do {
+            let staging = try f.stage(), target = "AudioEncoder.mlmodelc/weights/weight.bin"
+            let size: Int64 = 300 * 1024 * 1024
+            let handle = try FileHandle(forWritingTo: staging.appendingPathComponent(target))
+            try handle.truncate(atOffset: UInt64(size)); try handle.close()
+            // Sparse synthetic zeros: no model weights and no large Data allocation.
+            var sha = SHA256(); let chunk = Data(repeating: 0, count: 64 * 1024)
+            // Preserve the fixture's original leading byte, then hash the sparse zero remainder.
+            sha.update(data: Data([1])); var remaining = size - 1
+            while remaining > 0 { let count = Int(min(remaining, Int64(chunk.count))); sha.update(data: chunk.prefix(count)); remaining -= Int64(count) }
+            let digest = sha.finalize().map { String(format: "%02x", $0) }.joined()
+            let files = f.plan.files.map { file -> HFPlannedFile in
+                guard file.relativeDestination == target else { return file }
+                return .init(source: file.source, downloadEndpoint: file.downloadEndpoint, resolvedCommit: file.resolvedCommit,
+                    remotePath: file.remotePath, relativeDestination: file.relativeDestination, sizeBytes: size, digest: .sha256(digest))
+            }
+            let plan = ASRInstallPlan(id: f.plan.id, displayName: "Sparse synthetic", engine: f.plan.engine, files: files,
+                totalBytes: files.reduce(0) { $0 + $1.sizeBytes }, recipeID: nil, recipeVersion: 1, credentialID: nil)
+            let journal = ModelInstallationJobJournal(version: 1, snapshot: .init(jobID: plan.id, plan: plan, state: .verifying,
+                receivedBytes: plan.totalBytes, errorCode: nil), createdAt: Date(), libraryDetached: false)
+            try JSONEncoder().encode(journal).write(to: staging.deletingLastPathComponent().appendingPathComponent("job.json"))
+            library.shouldFail = true
+            do { _ = try await f.publisher(library).publish(plan: plan, staging: staging) } catch { }
+            let c = coordinator(f, library, source: source, disk: { _ in available.withLock { $0 } })
+            _ = try await c.recover()
+            library.shouldFail = false
+            available.withLock { $0 = 256 * 1024 * 1024 - 1 }
+            do { try await c.resume(jobID: plan.id); r.check(false, "B4 fix registration reserve still required") }
+            catch { r.eq((error as? HFDownloadError)?.code, .diskFull, "B4 fix fresh registration reserve rejects insufficient disk") }
+            available.withLock { $0 = 256 * 1024 * 1024 }
+            try await c.resume(jobID: plan.id)
+            r.check(await until { await c.snapshots().first?.state == .installed }, "B4 fix committed retry needs reserve only")
+            r.eq(await source.requests, 0, "B4 fix committed disk retry sends zero requests")
+            r.eq(library.config.installedASRModels.count, 1, "B4 fix committed disk retry registers once")
+        } catch { r.check(false, "B4 fix committed disk admission: \(error)") }
+    }
+    actor DelayedProgressSource {
+        let bytes: [String: Data]
+        var calls = 0, enteredSecond = false, open = false
+        var firstProgress: (@Sendable (Int64) -> Void)?
+        init(_ bytes: [String: Data]) { self.bytes = bytes }
+        func transfer(_ file: HFPlannedFile, _ url: URL, _ progress: @escaping @Sendable (Int64) -> Void) async throws {
+            calls += 1; try bytes[file.remotePath]!.write(to: url); progress(file.sizeBytes)
+            if calls == 1 { firstProgress = progress }
+            if calls == 2 {
+                enteredSecond = true
+                while !open { try? await Task.sleep(for: .milliseconds(2)); await Task.yield() }
+            }
+        }
+        func emitOld() { firstProgress?(0) }
+        func release() { open = true }
+    }
+    // Break caught: a delayed prior-file callback rewrites progress while the next file owns the slot.
+    @MainActor static func testDelayedFileProgress(_ r: SelfTest.Reporter) async {
+        let f = Fixture(), library = Library(), source = DelayedProgressSource(f.bytes)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        do {
+            let c = ModelInstallationCoordinator(transport: { file, url, _, progress in
+                try await source.transfer(file, url, progress)
+            }, publisher: f.publisher(library), diskSample: { _ in Int64.max }, journalRoot: f.jobs)
+            _ = try await c.enqueue(f.plan)
+            let expected = f.plan.files[0].sizeBytes + f.plan.files[1].sizeBytes
+            r.check(await until { await c.snapshots().first?.receivedBytes == expected }, "B4 fix second file byte progress recorded")
+            await source.emitOld()
+            let regressed = await until { await c.snapshots().first?.receivedBytes == 0 }
+            r.check(!regressed, "B4 fix completed-file callback cannot regress progress")
+            await source.release()
+            r.check(await until { await c.snapshots().first?.state == .installed }, "B4 fix delayed progress fixture drains")
+        } catch { r.check(false, "B4 fix delayed progress: \(error)") }
     }
 }

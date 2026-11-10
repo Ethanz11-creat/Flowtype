@@ -75,8 +75,11 @@ final class HFDownloadTransport: @unchecked Sendable {
                         hops += 1; bearerAllowed = bearerAllowed && Self.sameOrigin(currentURL, next) && HFMetadataRedirectPolicy.isOfficial(next)
                         currentURL = next
                     case .rangeUnsatisfied:
-                        if (try Self.length(partialURL)) == file.sizeBytes,
-                           (try? fileVerifier(file, partialURL)) != nil {
+                        if (try Self.length(partialURL)) == file.sizeBytes {
+                            do { try fileVerifier(file, partialURL) }
+                            catch is CancellationError { throw CancellationError() }
+                            catch { throw HFDownloadAttemptError.restartRange }
+                            try Task.checkCancellation()
                             try Self.removeSidecar(partialURL)
                             try Task.checkCancellation()
                             return
@@ -84,6 +87,7 @@ final class HFDownloadTransport: @unchecked Sendable {
                         throw HFDownloadAttemptError.restartRange
                     case .complete:
                         do { try fileVerifier(file, partialURL) }
+                        catch is CancellationError { throw CancellationError() }
                         catch { try? Self.discard(partialURL); throw error }
                         try Self.removeSidecar(partialURL)
                         try Task.checkCancellation()

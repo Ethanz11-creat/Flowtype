@@ -51,7 +51,7 @@ struct ModelInstallationPublisher: Sendable {
     func publish(plan: ASRInstallPlan, staging: URL) async throws -> ASRInstalledModelRecord {
         try await publish(plan: plan, staging: staging, permit: ModelPublicationPermit())
     }
-    func publish(plan: ASRInstallPlan, staging: URL, permit: ModelPublicationPermit) async throws -> ASRInstalledModelRecord {
+    @concurrent func publish(plan: ASRInstallPlan, staging: URL, permit: ModelPublicationPermit) async throws -> ASRInstalledModelRecord {
         try Self.validate(plan)
         // Coordinator binds jobID to plan.id. Only that UUID's managed staging is movable.
         let ownedStaging = jobsRoot.appendingPathComponent(plan.id.uuidString, isDirectory: true).appendingPathComponent("model", isDirectory: true)
@@ -61,23 +61,18 @@ struct ModelInstallationPublisher: Sendable {
         try Self.ensureDirectory(installedRoot)
         let destination = directory(for: plan)
         try Self.ensureDirectory(destination.deletingLastPathComponent())
-        let manifestURL = destination.appendingPathComponent("installation-manifest.json")
         let manifest: Manifest
         if FileManager.default.fileExists(atPath: destination.path) {
             // A prior rename is already committed. No replacement, even if its manifest is invalid.
-            try Self.noSymlinks(destination)
-            manifest = try Self.readManifest(manifestURL)
-            guard manifest.version == 1, manifest.record.id == plan.id, manifest.record.installPlan == plan,
-                  manifest.record.directory == destination, manifest.record.importedModelID != plan.id,
-                  manifest.record.ownership == .managed else { throw HFDownloadError(code: .integrity) }
-            try Self.verify(plan, directory: destination)
+            manifest = try committedManifest(for: plan)
+            try await Self.verify(plan, directory: destination)
         } else {
             try Self.noSymlinks(staging)
             // Staging and final roots must share a filesystem. rename never falls back to copy.
             var from = stat(), to = stat()
             guard lstat(staging.path, &from) == 0, lstat(installedRoot.path, &to) == 0,
                   from.st_dev == to.st_dev else { throw HFDownloadError(code: .integrity) }
-            try Self.verify(plan, directory: staging)
+            try await Self.verify(plan, directory: staging)
             try Task.checkCancellation()
             let model = try LocalASRRuntimeRegistry.standard.inspect(engine: plan.engine, directory: staging.standardizedFileURL.resolvingSymlinksInPath())
             try Task.checkCancellation()
@@ -125,12 +120,28 @@ struct ModelInstallationPublisher: Sendable {
         }
         guard total == plan.totalBytes else { throw HFDownloadError(code: .integrity) }
     }
-    private static func verify(_ plan: ASRInstallPlan, directory: URL) throws {
+    /// Manifest identity is enough for admission accounting; publish still rechecks every
+    /// payload hash and strict static layout before registration can succeed.
+    func hasCommittedPublication(for plan: ASRInstallPlan) throws -> Bool {
+        guard FileManager.default.fileExists(atPath: directory(for: plan).path) else { return false }
+        _ = try committedManifest(for: plan)
+        return true
+    }
+    private func committedManifest(for plan: ASRInstallPlan) throws -> Manifest {
+        let destination = directory(for: plan)
+        try Self.noSymlinks(destination)
+        let manifest = try Self.readManifest(destination.appendingPathComponent("installation-manifest.json"))
+        guard manifest.version == 1, manifest.record.id == plan.id, manifest.record.installPlan == plan,
+              manifest.record.directory == destination, manifest.record.importedModelID != plan.id,
+              manifest.record.ownership == .managed else { throw HFDownloadError(code: .integrity) }
+        return manifest
+    }
+    private static func verify(_ plan: ASRInstallPlan, directory: URL) async throws {
         for file in plan.files {
             try Task.checkCancellation()
             let url = directory.appendingPathComponent(file.relativeDestination)
             try noSymlinks(url)
-            try HFFileVerifier.verify(file: file, at: url)
+            try await HFFileVerifier.verifyAsync(file: file, at: url)
         }
         // Unexpected payloads and transport sidecars cannot become installed content.
         let expected = Set(plan.files.map(\.relativeDestination)).union(["installation-manifest.json"])

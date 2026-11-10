@@ -19,6 +19,7 @@ enum HFDownloadSelfTests {
         await testDiskCreationFailures(r)
         await testVerified416Cancellation(r)
         await testTransportCancellation(r)
+        await testHashCancellationPreservesPartial(r)
     }
     static func root() -> URL {
         let result = FileManager.default.temporaryDirectory.appendingPathComponent("flowtype-B3-" + UUID().uuidString)
@@ -190,6 +191,32 @@ enum HFDownloadSelfTests {
         r.eq(try? Data(contentsOf: url), bytes, "B3 416 cancellation preserves verified partial")
         r.eq(HFDownloadFixture.requests.count, 1, "B3 416 cancellation does not retry")
         r.eq(progress.values, [], "B3 drained 416 emits no progress")
+    }
+    // Break caught: chunk-verifier cancellation is mistaken for corruption and discards resumable bytes.
+    static func testHashCancellationPreservesPartial(_ r: SelfTest.Reporter) async {
+        for status in [200, 416] {
+            let dir = root(); defer { try? FileManager.default.removeItem(at: dir) }
+            let url = dir.appendingPathComponent("partial")
+            do {
+                if status == 416 {
+                    try bytes.write(to: url)
+                    try HFDownloadJournal(file: file(), writtenBytes: Int64(bytes.count), validator: nil, credentialID: nil).write(for: url)
+                }
+                let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [HFDownloadFixture.self]
+                let t = HFDownloadTransport(configuration: config, credentialStore: KeychainASRCredentialStore(access: .memory()),
+                    fileVerifier: { file, url in
+                        withUnsafeCurrentTask { $0?.cancel() }
+                        try HFFileVerifier.verify(file: file, at: url)
+                    })
+                HFDownloadFixture.reset { _, _ in status == 416 ? .init(status: 416) : .init(chunks: [bytes]) }
+                let task = Task { try await t.transfer(file: file(), partialURL: url, credentialID: nil, progress: { _ in }) }
+                do { try await task.value; r.check(false, "B3 hash cancellation must throw") }
+                catch { r.eq((error as? HFDownloadError)?.code, .cancelled, "B3 hash cancellation classified after \(status)") }
+                r.eq(try? Data(contentsOf: url), bytes, "B3 hash cancellation retains partial after \(status)")
+                r.check(FileManager.default.fileExists(atPath: HFDownloadJournal.sidecarURL(for: url).path), "B3 hash cancellation retains sidecar after \(status)")
+                r.eq(HFDownloadFixture.requests.count, 1, "B3 hash cancellation does not refetch after \(status)")
+            } catch { r.check(false, "B3 hash cancellation fixture: \(error)") }
+        }
     }
     static func testTransportCancellation(_ r: SelfTest.Reporter) async {
         let dir = root(); defer { try? FileManager.default.removeItem(at: dir) }; let url = dir.appendingPathComponent("partial")
