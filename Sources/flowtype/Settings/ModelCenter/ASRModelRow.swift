@@ -11,13 +11,14 @@ struct ASRModelRow: View {
     let row: ASRModelCenterRow
     private var accessibilitySummary: String {
         let role = row.isPrimary ? "，主选" : row.isFallback ? "，备选" : ""
-        return [row.title, row.location.label, row.status.label].joined(separator: "，") + role
+        return [row.title, row.subtitle, row.location.label, row.status.label].joined(separator: "，") + role
     }
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: row.location.symbol).foregroundStyle(Theme.textSecondary).frame(width: 17)
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.title).font(.system(size: 12, weight: .medium)).lineLimit(2)
+                Text(row.subtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 Text(row.status.label).font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
