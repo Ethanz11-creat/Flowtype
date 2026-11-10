@@ -4,6 +4,50 @@ import Foundation
 /// Application-owned projections. Native and transport work stays with the A/B coordinators.
 @MainActor final class ASRModelCenterViewModel: ObservableObject {
     @Published private(set) var rows: [ASRModelCenterRow] = []
+    @Published private(set) var unloadedNativeID: ASRBackendID?
+    var loadedNativeID: ASRBackendID? { native.activeLease.map(ASRBackendID.init(nativeLease:)) }
+    var nativeRecoveryDetail: String? {
+        if let detail = native.importFailureDetail { return detail }
+        guard let assessment = native.hardwareAssessment, assessment.compatibility != .compatible else { return nil }
+        return assessment.explanation
+    }
+    private struct UnloadedNative {
+        let id: ASRBackendID
+        let model: ImportedASRModel?
+        let selection: ASRBackendSelection
+        let policy: ASRRoutingPolicy
+    }
+    private var unloadedNative: UnloadedNative?
+
+    /// Confirmation captures an identity, never a lease that would keep its provider resident.
+    func unloadNative(_ expectedID: ASRBackendID) async {
+        guard admitUserAction() else { return }
+        defer { finishUserAction() }
+        notice = nil
+        do {
+            guard native.operationID == nil else { throw NativeASRActivationError.busy }
+            guard loadedNativeID == expectedID else { throw NativeASRActivationError.changedCandidate }
+            let config = configuration()
+            let recovery = UnloadedNative(id: expectedID, model: nativeModel(expectedID),
+                selection: ASRBackendMigration.selection(from: config), policy: config.asrRoutingPolicy)
+            try await activation.unloadCurrentAfterDrain()
+            unloadedNative = recovery; unloadedNativeID = expectedID
+        } catch { notice = error.localizedDescription }
+        refresh()
+    }
+
+    func reloadUnloadedNative() async {
+        guard admitUserAction() else { return }
+        defer { finishUserAction() }
+        notice = nil
+        refresh()
+        do {
+            guard let recovery = unloadedNative, loadedNativeID == nil else { throw NativeASRActivationError.changedCandidate }
+            try await selectNative(recovery.id, intent: .existingRole)
+        } catch { notice = error.localizedDescription }
+        refresh()
+    }
+
     @Published var selectedInstallationID: UUID?
     @Published var selectedID: ASRBackendID?
     @Published private(set) var installations: [ModelInstallSnapshot] = []
@@ -73,6 +117,13 @@ import Foundation
     func refresh() {
         let config = configuration()
         let selection = ASRBackendMigration.selection(from: config)
+        if let recovery = unloadedNative,
+           loadedNativeID != nil || selection != recovery.selection || config.asrRoutingPolicy != recovery.policy
+            || (selection.primary != recovery.id && selection.fallback != recovery.id)
+            || nativeModel(recovery.id) != recovery.model
+            || (recovery.model == nil && nativePreset(recovery.id) == nil) {
+            unloadedNative = nil; unloadedNativeID = nil
+        }
         var projected: [ASRModelCenterRow] = []
         func append(_ id: ASRBackendID, _ title: String, _ subtitle: String,
                     _ location: ASRBackendLocation, _ status: ASRModelCenterStatus) {

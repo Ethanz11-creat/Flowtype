@@ -42,6 +42,8 @@ struct ASRModelDetail: View {
     @State private var confirmsRemoval = false
     @State private var deletesFiles = false
     @State private var confirmsDeselection = false
+    @State private var confirmsUnload = false
+    @State private var unloadTarget: ASRBackendID?
     private var imported: ImportedASRModel? {
         guard let config else { return nil }
         return config.importedASRModels.first { ASRModelCenterPresentation.nativeID(for: $0, records: config.installedASRModels) == row.id }
@@ -87,6 +89,20 @@ struct ASRModelDetail: View {
                     } else if let preset = ModelPreset.allPresets.first(where: { "native:preset:" + $0.id == row.id.rawValue }) { field("来源仓库", preset.repoId, copyable: true) }
                     if imported != nil && record?.installPlan == nil { Text("来源为用户导入；仓库版本与许可证未记录，请自行核对。").foregroundStyle(.secondary) }
                     Text("峰值内存未知；磁盘大小不等于内存需求。切换时旧模型与候选同时保留，加载前仍需硬件准入检查。").foregroundStyle(.secondary)
+                    if let reason = model.nativeRecoveryDetail {
+                        Text(reason).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let loadedID = model.loadedNativeID {
+                        Button("卸载当前原生模型以释放内存…") {
+                            unloadTarget = loadedID; confirmsUnload = true
+                        }.disabled(model.isBusy)
+                        Text("请先结束录音并等待资源释放。卸载后可重新试用候选模型；记录与文件会保留。").foregroundStyle(.secondary)
+                    }
+                    if let oldID = model.unloadedNativeID {
+                        let name = model.rows.first { $0.id == oldID }?.title ?? oldID.rawValue
+                        Text("当前原生模型已卸载；原选择可能暂时未就绪。").foregroundStyle(.orange)
+                        Button("重新加载原模型：" + name) { Task { await model.reloadUnloadedNative() } }.disabled(model.isBusy)
+                    }
                     Text(record?.ownership == .managed ? "应用管理的下载；可分别移除记录或删除下载文件。" : "用户自有目录；移除记录不会删除原文件。")
                     if let validation = record?.validation { field("上次验证", validation.validatedAt.formatted() + " · \(validation.latencyMs) ms") }
                 } else {
@@ -166,6 +182,14 @@ struct ASRModelDetail: View {
                 }
             }.padding(20).frame(width: 520)
         }
+        .alert("卸载当前原生模型？", isPresented: $confirmsUnload) {
+            Button("取消", role: .cancel) { unloadTarget = nil }
+            Button("卸载并保留文件") {
+                guard let captured = unloadTarget else { return }
+                unloadTarget = nil
+                Task { await model.unloadNative(captured) }
+            }
+        } message: { Text("卸载会释放模型内存，保留原选择、模型记录与文件。原生识别将暂时未就绪；之后可试用候选模型或明确重新加载原模型。录音或捕获资源仍占用时会拒绝卸载。") }
         .alert("解除此后端的选择？", isPresented: $confirmsDeselection) {
             Button("取消", role: .cancel) {}
             Button("解除选择") { model.deselect(row.id) }

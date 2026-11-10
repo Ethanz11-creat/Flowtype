@@ -33,6 +33,7 @@ enum ASRServiceValidationState: Equatable, Sendable {
     private let onVerified: @MainActor (ASRServiceValidationRecord) -> Void
     private let serviceRecognition: ServiceRecognition
     private let cloudRecognition: CloudRecognition
+    private let realtimeRecognition: CloudRecognition
     private let session: URLSession?
     private let resolver: LocalASRServiceEndpoint.Resolver
 
@@ -40,7 +41,8 @@ enum ASRServiceValidationState: Equatable, Sendable {
          resolver: @escaping LocalASRServiceEndpoint.Resolver = LocalASRServiceEndpoint.resolve,
          now: @escaping @MainActor () -> Date = { Date() },
          onVerified: @escaping @MainActor (ASRServiceValidationRecord) -> Void = { _ in },
-         serviceRecognition: ServiceRecognition? = nil, cloudRecognition: CloudRecognition? = nil) {
+         serviceRecognition: ServiceRecognition? = nil, cloudRecognition: CloudRecognition? = nil,
+         realtimeFactory: @escaping RealtimeSessionFactory = liveRealtimeSessionFactory, realtimeTimeout: TimeInterval = 15) {
         self.session = session; self.resolver = resolver
         self.onVerified = onVerified; self.now = now
         self.serviceRecognition = serviceRecognition ?? { profile, credential, sample in
@@ -52,6 +54,25 @@ enum ASRServiceValidationState: Equatable, Sendable {
             }
             return try await provider.transcribe(.init(samples: sample.samples, sampleRate: sample.sampleRate,
                 language: nil, context: nil, timeout: 15)).text
+        }
+        self.realtimeRecognition = { profile, key, sample in
+            let configuration = try RealtimeASRConfiguration(provider: profile, apiKey: key, language: nil)
+            let handle = realtimeFactory(configuration)
+            let worker = Task { try await transcribeSavedRealtime(samples: sample.samples, handle: handle) }
+            let result: Result<ASRResult, Error>
+            do {
+                result = .success(try await withAsyncDeadline(seconds: realtimeTimeout) { try await worker.value })
+            } catch {
+                worker.cancel()
+                result = .failure(error)
+            }
+            // Deadline completion is not producer completion. Keep A5's owner until both
+            // transport cleanup and the actual sample worker have drained.
+            handle.ingress.cancel()
+            await handle.session.cancel()
+            _ = await worker.result
+            try Task.checkCancellation()
+            return try result.get().text
         }
         self.cloudRecognition = cloudRecognition ?? { profile, key, sample in
             let configuration = CloudASRRequestConfiguration(provider: profile, apiKey: key, sendContext: false)
@@ -106,9 +127,7 @@ enum ASRServiceValidationState: Equatable, Sendable {
         guard !isTesting(profileID: cloudProfile.id) else { return }
         do { try CloudTranscriptionRequestBuilder.validate(provider: cloudProfile, apiKey: apiKey) }
         catch { states[cloudProfile.id] = .failed(code: Self.code(error)); return }
-        // The current realtime implementation validates WSS configuration separately from a recording.
-        guard cloudProfile.protocolKind != .dashScopeRealtime else { states[cloudProfile.id] = .configurationValid; return }
-        let recognition = cloudRecognition
+        let recognition = cloudProfile.protocolKind == .dashScopeRealtime ? realtimeRecognition : cloudRecognition
         await run(profileID: cloudProfile.id, backendID: .init(rawValue: "cloud:" + cloudProfile.id.uuidString),
                   revision: cloudProfile.revision, credentialGeneration: credentialGeneration) {
             try await recognition(cloudProfile, apiKey, sample)
@@ -190,6 +209,9 @@ enum ASRServiceValidationState: Equatable, Sendable {
     /// Only stable categories reach UI state; arbitrary server/network descriptions never do.
     private static func code(_ error: Error) -> String {
         if isCancellation(error) { return "cancelled" }
+        if error is AsyncDeadlineError { return "timeout" }
+        if let realtime = error as? DashScopeRealtimeError,
+           realtime == .startTimeout || realtime == .finalTimeout { return "timeout" }
         guard let error = error as? CloudASRError else { return "network" }
         switch error {
         case .apiError(let status, _):

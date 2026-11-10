@@ -2,6 +2,7 @@ import Foundation
 
 enum ASRModelCenterSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
+        await ASRModelCenterReviewSelfTests.run(r)
         await ASRModelCenterIntegrationSelfTests.run(r)
         await ASRAcquisitionSelfTests.run(r)
         await testRowIdentityAfterReorder(r)

@@ -62,7 +62,11 @@ final class LocalASRServiceDraftSession: ObservableObject {
         do {
             let value: String?
             switch captured.keyEdit {
-            case .preserve: value = try credential()
+            case .preserve:
+                switch captured.target {
+                case .new: value = nil
+                case .existing: value = try credential()
+                }
             case .remove: value = nil
             case .replace(let key): value = key
             }

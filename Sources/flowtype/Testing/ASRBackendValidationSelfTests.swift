@@ -163,7 +163,7 @@ enum ASRBackendValidationSelfTests {
         r.eq(records.count, 1, "validation: cloud recognition emits record")
         r.eq(records.first?.backendID.rawValue, "cloud:" + cloud.id.uuidString, "validation: cloud record stable identity")
         let dash = CloudASRProviderConfig.defaultParaformer()
-        await coordinator.test(cloudProfile: dash, apiKey: "fixture", sample: sample)
+        coordinator.checkConfiguration(cloudProfile: dash, apiKey: "fixture")
         r.eq(coordinator.state(profileID: dash.id), .configurationValid, "validation: DashScope configuration cannot become recognition evidence")
         r.eq(records.count, 1, "validation: DashScope configuration check emits no record")
         let failed = ASRServiceValidationCoordinator(serviceRecognition: { _, _, _ in throw CloudASRError.apiError(statusCode: 401, message: "private") })
