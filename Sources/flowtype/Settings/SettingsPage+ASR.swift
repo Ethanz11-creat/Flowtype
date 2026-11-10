@@ -11,6 +11,7 @@ struct ASRSettingsContent: View {
     let navigation: SettingsNavigation?
     @ObservedObject var checks: CloudASRConnectionCheck
     @ObservedObject var draftChecks: CloudASRConnectionCheck
+    var environment: ASRModelCenterEnvironment? = nil
     var modelCenter: ASRModelCenterViewModel? = nil
     var modelCenterActions = ASRModelCenterUIActions()
     var target: SettingsTarget? = nil
@@ -22,7 +23,7 @@ struct ASRSettingsContent: View {
     @State private var policyMessage: String?
 
     var localModelPicker: LocalModelPicker {
-        LocalModelPicker(store: store, modelState: modelState, downloader: downloader, importedActions: importedActions)
+        LocalModelPicker(store: store, modelState: modelState, downloader: downloader, importedActions: importedActions, navigation: navigation)
     }
 
     var localModelStatus: QwenModelStatusCard {
@@ -31,7 +32,9 @@ struct ASRSettingsContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if let modelCenter {
+            if let environment {
+                ASRModelCenterHost(environment: environment, navigation: navigation, target: target, requestID: requestID)
+            } else if let modelCenter {
                 ASRModelCenterView(model: modelCenter, actions: modelCenterActions)
             } else {
                 modeSection

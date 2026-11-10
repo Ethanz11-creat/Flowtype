@@ -192,6 +192,11 @@ final class ReadinessMonitor: ObservableObject {
         permissionWatchTask?.cancel()
     }
 
+    func connectCurrentValidation(_ source: @escaping () -> [ASRServiceValidationRecord]) {
+        currentValidatedServices = source
+        refresh()
+    }
+
     func refresh() {
         let oldAccessibility = snapshot.accessibility
         snapshot = snapshotProvider?() ?? Self.makeSnapshot(currentValidatedServices: currentValidatedServices())

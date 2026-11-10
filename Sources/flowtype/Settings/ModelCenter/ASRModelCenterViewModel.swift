@@ -4,6 +4,7 @@ import Foundation
 /// Application-owned projections. Native and transport work stays with the A/B coordinators.
 @MainActor final class ASRModelCenterViewModel: ObservableObject {
     @Published private(set) var rows: [ASRModelCenterRow] = []
+    @Published var selectedInstallationID: UUID?
     @Published var selectedID: ASRBackendID?
     @Published private(set) var installations: [ModelInstallSnapshot] = []
     @Published private(set) var notice: String?

@@ -17,6 +17,7 @@ struct ModelInstallationList: View {
     let installations: [ModelInstallSnapshot]
     let actions: ASRModelCenterUIActions
     let refresh: () async -> Void
+    var selectedJobID: UUID? = nil
     @State private var expanded = true
     @State private var message: String?
     @State private var clearing: UUID?
@@ -53,6 +54,8 @@ struct ModelInstallationList: View {
                         }
                         Divider()
                     }
+                    .id(SettingsTarget.modelInstallation(job.jobID))
+                    .background(selectedJobID == job.jobID ? Theme.accent.opacity(0.08) : Color.clear)
                 }
                 if let message { Text(message).foregroundStyle(.orange).textSelection(.enabled) }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10).font(.system(size: 11))

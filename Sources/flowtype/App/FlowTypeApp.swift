@@ -91,6 +91,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // If a previous session crashed / was killed mid-recording, the system default
         // input device may still point at FlowType's configured mic. Restore it.
         AudioRecorder.restorePendingDeviceIfNeeded()
+        let modelCenter = ASRModelCenterEnvironment.shared
+        ReadinessMonitor.shared.connectCurrentValidation { modelCenter.model.currentValidatedServices }
+        modelCenter.start()
         StatusBarController.shared.setup()
 
         ReadinessMonitor.shared.onAccessibilityGranted = {
@@ -114,8 +117,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Load the ASR model in the background: checks for already-downloaded models and loads
-        // them offline; auto-download of the hardware-recommended model is skipped only if onboarding is incomplete.
+        // Restore only matching historical validation offline. Startup never downloads or trials.
         Task {
             await loadQwenASRModel()
         }

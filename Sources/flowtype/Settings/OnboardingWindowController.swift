@@ -16,9 +16,10 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         window.center()
 
         // Shared services are resolved only at this production composition boundary.
-        let store = ConfigurationStore.shared
+        let center = ASRModelCenterEnvironment.shared
+        let store = center.store
         let monitor = ReadinessMonitor.shared
-        let coordinator = QwenModelState.shared
+        let coordinator = center.native
         let presenter = TrialSessionPresenter(configuration: store, resources: .shared,
             refreshReadiness: { monitor.refresh(); return monitor.rawLevel },
             readinessLevel: { monitor.refresh(); return monitor.rawLevel },
@@ -32,8 +33,8 @@ class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         }
         let view = OnboardingView(flow: flow, store: store, monitor: monitor,
             modelState: coordinator, downloader: .shared,
-            importedActions: ImportedASRModelActions(coordinator: coordinator, configuration: { store.current }),
-            checks: CloudASRConnectionCheck(), draftChecks: CloudASRConnectionCheck())
+            importedActions: center.importedActions,
+            checks: center.checks.checks, draftChecks: center.checks.draftChecks, modelCenter: center)
         window.contentView = NSHostingView(rootView: view)
         self.init(window: window)
         self.flow = flow

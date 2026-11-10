@@ -533,7 +533,7 @@ extension ASRBackendRoutingSelfTests {
             configuration: { settings.config }, localAvailable: { false }, localLease: { nil })
         r.eq(router.readinessBackends().availableIDs, [], "A6 runtime construction is not service validation")
         let evidence = ASRServiceValidationRecord(backendID: config.asrBackendSelection!.primary!, revision: profile.revision,
-            credentialGeneration: nil, validatedAt: Date(timeIntervalSince1970: 1))
+            credentialGeneration: credentials.generation(id: "asr.service." + profile.id.uuidString), validatedAt: Date(timeIntervalSince1970: 1))
         r.eq(router.readinessBackends(currentValidatedServices: [evidence]).availableIDs, [evidence.backendID], "A6 runtime current validation admits offline service")
         settings.config.localASRServices[0].revision = UUID()
         r.eq(router.readinessBackends(currentValidatedServices: [evidence]).availableIDs, [], "A6 revision edit invalidates service readiness")

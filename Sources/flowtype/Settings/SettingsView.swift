@@ -9,6 +9,7 @@ struct SettingsPage: View {
     @ObservedObject var modelState: QwenModelState
     @ObservedObject var downloader: ModelDownloader
     @StateObject var importedActions: ImportedASRModelActions
+    let modelCenter: ASRModelCenterEnvironment?
     let connectionChecks: SettingsConnectionChecks
     @ObservedObject var checks: CloudASRConnectionCheck
     @ObservedObject var draftChecks: CloudASRConnectionCheck
@@ -19,24 +20,26 @@ struct SettingsPage: View {
     @State var providerDraft: LLMProviderDraft?
 
     /// Production composition boundary. Reusable constructors below resolve no singletons.
-    init(navigation: SettingsNavigation? = nil, connectionChecks: SettingsConnectionChecks = .shared) {
-        let store = ConfigurationStore.shared
-        let coordinator = QwenModelState.shared
+    init(navigation: SettingsNavigation? = nil, connectionChecks: SettingsConnectionChecks = .shared, modelCenter: ASRModelCenterEnvironment? = nil) {
+        let center = modelCenter ?? .shared
+        let store = center.store
+        let coordinator = center.native
         let monitor = ReadinessMonitor.shared
         self.init(navigation: navigation, store: store, styleStore: .shared, monitor: monitor,
                   modelState: coordinator, downloader: .shared,
-                  importedActions: ImportedASRModelActions(coordinator: coordinator, configuration: { store.current }),
+                  importedActions: center.importedActions,
                   trialPresenter: TrialSessionPresenter(configuration: store, resources: .shared,
                     refreshReadiness: { monitor.refresh(); return monitor.rawLevel },
                     readinessLevel: { monitor.refresh(); return monitor.rawLevel },
-                    copy: { KeyboardInjector.copyText($0) }), connectionChecks: connectionChecks)
+                    copy: { KeyboardInjector.copyText($0) }), connectionChecks: connectionChecks, modelCenter: center)
     }
 
     init(navigation: SettingsNavigation? = nil, store: ConfigurationStore, styleStore: StylePackStore,
          monitor: ReadinessMonitor, modelState: QwenModelState, downloader: ModelDownloader,
          importedActions: ImportedASRModelActions, trialPresenter: TrialSessionPresenter,
-         connectionChecks: SettingsConnectionChecks,
+         connectionChecks: SettingsConnectionChecks, modelCenter: ASRModelCenterEnvironment? = nil,
          devices: @escaping () -> [AudioDevice] = { AudioRecorder.availableInputDevices() }) {
+        self.modelCenter = modelCenter
         self.navigation = navigation
         self.devices = devices
         self.store = store
@@ -73,6 +76,16 @@ struct SettingsPage: View {
                 .frame(maxWidth: .infinity)
             }
             .task(id: location.requestID) {
+                if let modelCenter, location.section == .speech, location.target?.isModelCenterTarget ?? true {
+                    await modelCenter.model.refreshInstallations()
+                    guard !Task.isCancelled else { return }
+                    modelCenter.focus(location.target)
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    if let job = modelCenter.model.selectedInstallationID { proxy.scrollTo(SettingsTarget.modelInstallation(job), anchor: .top) }
+                    else { proxy.scrollTo("settings-top", anchor: .top) }
+                    return
+                }
                 // Wait for the selected group's layout before resolving a row anchor.
                 await Task.yield()
                 guard !Task.isCancelled else { return }
@@ -155,7 +168,7 @@ struct SettingsPage: View {
         case .speech:
             ASRSettingsContent(store: store, monitor: monitor, modelState: modelState,
                                downloader: downloader, importedActions: importedActions, navigation: navigation,
-                               checks: checks, draftChecks: draftChecks, target: location.target,
+                               checks: checks, draftChecks: draftChecks, environment: modelCenter, target: location.target,
                                requestID: location.requestID, devices: devices)
         case .text: llmSection
         case .general:

@@ -180,3 +180,20 @@ enum ASRCredentialMigration {
         return .init(configuration: next, pendingIDs: pending)
     }
 }
+
+extension LocalASRServiceProfile {
+    func credentialSnapshot(store: any ASRCredentialStore) throws -> ASRCredentialSnapshot {
+        let expected = "asr.service." + id.uuidString
+        switch authentication {
+        case .none: return .init(value: nil, generation: store.generation(id: expected))
+        case .bearer(let reference):
+            let prefix = expected + "."
+            guard reference == expected || (reference.hasPrefix(prefix) && UUID(uuidString: String(reference.dropFirst(prefix.count))) != nil) else {
+                throw ASRCredentialError.invalidData
+            }
+            let snapshot = try store.snapshot(id: reference)
+            guard let value = snapshot.value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ASRCredentialError.invalidData }
+            return snapshot
+        }
+    }
+}

@@ -573,16 +573,9 @@ final class ASRRouter: @unchecked Sendable {
         }
         for profile in cfg.localASRServices where eligibleIDs.contains(.init(rawValue: "service:" + profile.id.uuidString)) {
             do {
-                let credential: ASRCredentialSnapshot?
-                switch profile.authentication {
-                case .none: credential = nil
-                case .bearer(let id):
-                    guard id == "asr.service." + profile.id.uuidString else { throw ASRCredentialError.invalidData }
-                    credential = try credentials.snapshot(id: id)
-                    guard let value = credential?.value, !value.isEmpty else { throw ASRCredentialError.invalidData }
-                }
-                bindings.append(try registry.makeLocalServiceBinding(profile: profile, credential: credential?.value,
-                    credentialGeneration: credential?.generation))
+                let credential = try profile.credentialSnapshot(store: credentials)
+                bindings.append(try registry.makeLocalServiceBinding(profile: profile, credential: credential.value,
+                    credentialGeneration: credential.generation))
             } catch let error as ASRCredentialError { captureErrors[.init(rawValue: "service:" + profile.id.uuidString)] = error }
             catch { /* Invalid service profiles remain selected but unavailable. */ }
         }

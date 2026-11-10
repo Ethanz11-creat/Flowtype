@@ -81,11 +81,13 @@ struct MainWindowView: View {
     @ObservedObject private var navigation: SettingsNavigation
     private var injectedPage: ((AppTab) -> AnyView)?
     typealias SettingsPageFactory = @MainActor (SettingsNavigation, SettingsConnectionChecks) -> SettingsPage
+    let modelCenter: ASRModelCenterEnvironment?
     private let connectionChecks: SettingsConnectionChecks?
     private let settingsPageFactory: SettingsPageFactory?
 
     init(initialTab: AppTab = .overview, navigation: SettingsNavigation? = nil, page: ((AppTab) -> AnyView)? = nil,
-         connectionChecks: SettingsConnectionChecks? = nil, settingsPage: SettingsPageFactory? = nil) {
+         connectionChecks: SettingsConnectionChecks? = nil, modelCenter: ASRModelCenterEnvironment? = nil, settingsPage: SettingsPageFactory? = nil) {
+        self.modelCenter = modelCenter
         self.connectionChecks = connectionChecks
         settingsPageFactory = settingsPage
         _selectedTab = State(initialValue: navigation?.requestedTab ?? initialTab)
@@ -141,7 +143,7 @@ struct MainWindowView: View {
     func makeSettingsPage() -> SettingsPage {
         let owner = connectionChecks ?? .shared
         if let settingsPageFactory { return settingsPageFactory(navigation, owner) }
-        return SettingsPage(navigation: navigation, connectionChecks: owner)
+        return SettingsPage(navigation: navigation, connectionChecks: owner, modelCenter: modelCenter)
     }
 
     @ViewBuilder private var detail: some View {

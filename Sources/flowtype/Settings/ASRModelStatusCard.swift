@@ -1,96 +1,19 @@
 import SwiftUI
 
+/// Compatibility status entry. Uses the same projections and navigation as every other host.
 struct ASRModelStatusCard: View {
-    @ObservedObject private var store = ConfigurationStore.shared
-    @ObservedObject private var modelState = QwenModelState.shared
-    @StateObject private var importedActions = ImportedASRModelActions(
-        coordinator: .shared, configuration: { ConfigurationStore.shared.current })
-    @State private var cloudAvailable: Bool?
-
+    @ObservedObject private var model = ASRModelCenterEnvironment.shared.model
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            switch store.current.asrRoutingPolicy {
-            case .localOnly:
-                localStatusView
-            case .cloudOnly:
-                cloudStatusView
-            case .auto:
-                localStatusView
-                Divider().opacity(0.3)
-                cloudStatusView
-            }
-        }
-        .task(id: store.current.asrRoutingPolicy) {
-            await refreshCloudStatus()
-        }
-        .onChange(of: store.current.cloudASRConfig) { _, _ in
-            Task { await refreshCloudStatus() }
-        }
-    }
-
-    private var localStatusView: some View {
-        QwenModelStatusCard(modelState: modelState, store: store, importedActions: importedActions)
-    }
-
-    private var cloudStatusView: some View {
-        let provider = store.current.cloudASRConfig.activeProvider
-        let hasAPIKey: Bool
-        let credentialUnavailable: Bool
-        if let provider {
-            do {
-                hasAPIKey = try store.cloudASRCredential(profileID: provider.id).value?.isEmpty == false
-                credentialUnavailable = false
-            } catch {
-                hasAPIKey = false
-                credentialUnavailable = true
-            }
-        } else {
-            hasAPIKey = false
-            credentialUnavailable = false
-        }
-
-        let available = cloudAvailable ?? false
-        let statusText: String
-        if credentialUnavailable {
-            statusText = ASRCredentialError.unavailable.localizedDescription
-        } else if available {
-            statusText = "已配置"
-        } else if !hasAPIKey {
-            statusText = "未配置 API Key"
-        } else if let provider, provider.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            statusText = "未选择模型"
-        } else if let provider, provider.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            statusText = "未配置 Base URL"
-        } else {
-            statusText = "未配置"
-        }
-
-        return HStack(spacing: 8) {
-            Image(systemName: available && !credentialUnavailable ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                .font(.system(size: 16))
-                .foregroundColor(available && !credentialUnavailable ? .green : .orange)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(statusText)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(available && !credentialUnavailable ? .green : .orange)
-                if let provider {
-                    Text("\(provider.name) · \(provider.model)")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                } else {
-                    Text("未添加服务商")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(model.rows.filter { $0.isPrimary || $0.isFallback }) { row in
+                Text(row.title + " · " + row.status.label)
+                Button("在模型中心查看") {
+                    StatusBarController.shared.openSettings(destination: .settings(.speech, .asrBackend(row.id)))
                 }
             }
-            Spacer()
+            if !model.rows.contains(where: { $0.isPrimary || $0.isFallback }) {
+                Button("配置识别模型") { StatusBarController.shared.openSettings(destination: .settings(.speech)) }
+            }
         }
     }
-
-    private func refreshCloudStatus() async {
-        guard store.current.asrRoutingPolicy != .localOnly else { cloudAvailable = nil; return }
-        let provider = ASRProviderRegistry.shared.cloudProvider
-        cloudAvailable = await provider.isAvailable
-    }
-
 }

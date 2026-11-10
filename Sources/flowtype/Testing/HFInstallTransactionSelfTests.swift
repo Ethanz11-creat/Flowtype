@@ -180,6 +180,83 @@ enum HFInstallTransactionSelfTests {
         } catch { r.check(false, "B6 preset facade: \(error)") }
     }
 
+    @MainActor static func testClearPartialOwnership(_ r: SelfTest.Reporter) async {
+        for mode in ["clear", "extra", "symlink", "hardlink", "journal", "alias", "installed", "registered", "lateAlias"] {
+            let f = Fixture(), library = Library(), source = Source([:])
+            defer { try? FileManager.default.removeItem(at: f.root) }
+            let actual = Source(f.bytes), aliasState = PartialClearAliasState()
+            let owner = ModelInstallationCoordinator(transport: { file, url, key, progress in
+                try await actual.transfer(file, url, key, progress)
+            }, publisher: f.publisher(library), diskSample: { _ in .max }, journalRoot: f.jobs,
+               configuration: {
+                   let captured = library.config
+                   if mode == "lateAlias", aliasState.inject {
+                       aliasState.inject = false
+                       library.config.importedASRModels.append(NativeActivationFixtures.model(f.jobs.appendingPathComponent(f.plan.id.uuidString).appendingPathComponent("model")))
+                   }
+                   return captured
+               })
+            do {
+                let id = try await owner.enqueue(f.plan)
+                _ = await until { await actual.entered }
+                do { try await owner.clearPartial(jobID: id); r.check(false, "C4 clear rejects active writer") }
+                catch { r.check(true, "C4 clear rejects active writer") }
+                let stopping = Task { await owner.cancel(jobID: id) }
+                _ = await until { await owner.snapshots().first?.state == .cancelled }
+                do { try await owner.clearPartial(jobID: id); r.check(false, "C4 clear rejects cancelled writer still draining") }
+                catch { r.check(true, "C4 clear rejects cancelled writer still draining") }
+                await actual.release(); await stopping.value
+                let stage = f.jobs.appendingPathComponent(id.uuidString).appendingPathComponent("model")
+                let payload = stage.appendingPathComponent(f.plan.files[0].relativeDestination)
+                r.check(FileManager.default.fileExists(atPath: payload.path), "C4 cancel retains partial independently of clear")
+                if mode == "extra" { try Data([1]).write(to: stage.appendingPathComponent("user.txt")) }
+                if mode == "symlink" {
+                    try FileManager.default.removeItem(at: payload)
+                    try FileManager.default.createSymbolicLink(at: payload, withDestinationURL: f.root)
+                }
+                if mode == "hardlink" { try FileManager.default.linkItem(at: payload, to: f.root.appendingPathComponent("external")) }
+                if mode == "journal" { try Data("{}".utf8).write(to: stage.deletingLastPathComponent().appendingPathComponent("job.json")) }
+                if mode == "alias" {
+                    let parent = stage.deletingLastPathComponent()
+                    let alias = parent.deletingLastPathComponent().appendingPathComponent(id.uuidString.lowercased())
+                    guard Darwin.rename(parent.path, alias.path) == 0 else { throw NativeModelUsageError.invalidOwnership }
+                }
+                if mode == "registered" {
+                    library.config.installedASRModels = [.init(id: id, importedModelID: UUID(), ownership: .managed,
+                        installPlan: f.plan, directory: f.models.appendingPathComponent(id.uuidString).appendingPathComponent("model"), validation: nil)]
+                }
+                if mode == "installed" {
+                    try await owner.resume(jobID: id)
+                    _ = await until { await owner.snapshots().first?.state == .installed }
+                }
+                do { try await owner.clearPartial(jobID: id); r.check(mode == "clear", "C4 clear requires exact owned noncommitted staging \(mode)") }
+                catch { r.check(mode != "clear", "C4 safe partial clear succeeds \(mode): \(error)") }
+                if mode == "clear" {
+                    r.check(!FileManager.default.fileExists(atPath: stage.path), "C4 clear actually removes owned partial files")
+                    r.eq(await owner.snapshots().first?.receivedBytes, 0, "C4 clear resets progress")
+                    let recovered = coordinator(f, library, source: source)
+                    let snapshots = try await recovered.recover()
+                    r.eq(snapshots.first?.receivedBytes, 0, "C4 restart does not resurrect cleared progress")
+                    try await owner.resume(jobID: id)
+                    _ = await until { await owner.snapshots().first?.state == .installed }
+                    r.eq(await owner.snapshots().first?.state, .installed, "C4 cleared plan supports explicit fresh download")
+                } else if mode != "installed" && mode != "alias" {
+                    r.check(FileManager.default.fileExists(atPath: stage.path), "C4 refused clear preserves staging \(mode)")
+                    if mode == "lateAlias" {
+                        library.config.importedASRModels = []
+                        try await owner.clearPartial(jobID: id)
+                        r.check(!FileManager.default.fileExists(atPath: stage.path), "C4 failed clear releases reservation for explicit retry")
+                        try await owner.resume(jobID: id)
+                        _ = await until { await owner.snapshots().first?.state == .installed }
+                        r.eq(await owner.snapshots().first?.state, .installed, "C4 clear reservation releases before fresh transfer")
+                    }
+                }
+            } catch { r.check(false, "C4 partial clear fixture \(mode): \(error)") }
+        }
+    }
+
+    @MainActor final class PartialClearAliasState { var inject = true }
+
     struct Fixture: Sendable {
         let root: URL
         let bytes: [String: Data]
@@ -255,6 +332,7 @@ enum HFInstallTransactionSelfTests {
         return false
     }
     static func run(_ r: SelfTest.Reporter) async {
+        await testClearPartialOwnership(r)
         await testPlannerDirectorySpellingPublication(r)
         await testDeleteWhileOldSessionOwnsLease(r)
         await testExternalAndAliasProtection(r)

@@ -5,12 +5,20 @@ enum SettingsSection: String, CaseIterable, Sendable {
 }
 
 enum SettingsTarget: Hashable, Sendable {
+    case modelInstallation(UUID)
     case localModels
     case asrBackend(ASRBackendID)
     case provider(UUID)
     case microphone
     case accessibility
     case appleSpeech
+
+    var isModelCenterTarget: Bool {
+        switch self {
+        case .localModels, .asrBackend, .provider, .modelInstallation: true
+        case .microphone, .accessibility, .appleSpeech: false
+        }
+    }
 
     var legacyASRTarget: SettingsTarget? {
         guard case .asrBackend(let backendID) = self else { return self }

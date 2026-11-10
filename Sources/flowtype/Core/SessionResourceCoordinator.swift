@@ -26,6 +26,8 @@ final class SessionResourceCoordinator: ObservableObject {
         publishOwner()
     }
 
+    var isReserved: Bool { reservation != nil }
+
     func owns(token: UUID) -> Bool { reservation?.token == token }
 
     private func publishOwner() {

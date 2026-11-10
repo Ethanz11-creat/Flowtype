@@ -18,6 +18,7 @@ actor ModelInstallationCoordinator {
     private var permit: ModelPublicationPermit?
     private var isRecovering = false
     private var removalCount = 0
+    private var clearingIDs = Set<UUID>()
     private var currentTransferID: UUID?
     private let usageRegistry: NativeModelUsageRegistry
     private let configuration: @MainActor @Sendable () -> Configuration
@@ -117,7 +118,7 @@ actor ModelInstallationCoordinator {
     func pause(jobID: UUID) async { await stop(jobID, state: .paused) }
     func cancel(jobID: UUID) async { await stop(jobID, state: .cancelled) }
     private func stop(_ id: UUID, state: ModelInstallState) async {
-        guard let job = jobs[id], job.snapshot.state != .installed, job.snapshot.errorCode != "invalidJournal" else { return }
+        guard !clearingIDs.contains(id), let job = jobs[id], job.snapshot.state != .installed, job.snapshot.errorCode != "invalidJournal" else { return }
         if activeID == id, let task = activeTask {
             let committed = permit?.revoke() == true
             if !committed {
@@ -130,9 +131,9 @@ actor ModelInstallationCoordinator {
         } else { update(id, state: state) }
     }
     func resume(jobID: UUID) async throws {
-        guard !isRecovering else { throw HFDownloadError(code: .integrity) }
+        guard !isRecovering, !clearingIDs.contains(jobID) else { throw HFDownloadError(code: .integrity) }
         if activeID == jobID, let task = activeTask { await task.value }
-        guard var job = jobs[jobID], !job.libraryDetached, job.snapshot.errorCode != "invalidJournal" else { throw HFDownloadError(code: .integrity) }
+        guard !isRecovering, !clearingIDs.contains(jobID), var job = jobs[jobID], !job.libraryDetached, job.snapshot.errorCode != "invalidJournal" else { throw HFDownloadError(code: .integrity) }
         if job.snapshot.state == .installed { return }
         try ModelInstallationPublisher.validate(job.snapshot.plan)
         try admission(job.snapshot.plan)
@@ -141,6 +142,43 @@ actor ModelInstallationCoordinator {
         try persist(job); jobs[jobID] = job
         schedule()
     }
+    /// Independent explicit cleanup. Never waits for or cancels a live writer: the caller
+    /// must pause/cancel and await its real drain first. A reservation survives the final
+    /// MainActor configuration/deletion transaction; no suspension follows its final check.
+    func clearPartial(jobID: UUID) async throws {
+        guard !isRecovering, ownedJournalRoot, activeID != jobID, !clearingIDs.contains(jobID),
+              let initial = jobs[jobID] else { throw NativeModelUsageError.invalidOwnership }
+        clearingIDs.insert(jobID); removalCount += 1
+        defer { clearingIDs.remove(jobID); removalCount -= 1; schedule() }
+        let config = await configuration()
+        guard !isRecovering, activeID != jobID, let job = jobs[jobID],
+              job.snapshot == initial.snapshot, !job.libraryDetached,
+              [.paused, .cancelled, .failed].contains(job.snapshot.state),
+              job.snapshot.errorCode != "invalidJournal" else { throw NativeModelUsageError.inUse }
+        let directory = staging(jobID)
+        try publisher.validatePartialRemoval(job: job, journalRoot: journalRoot, configuration: config)
+        // The durable zero-byte paused state is written BEFORE removal. A crash before
+        // deletion merely leaves resumable bytes; recover recomputes them from disk.
+        var cleared = job
+        cleared.snapshot.state = .paused; cleared.snapshot.receivedBytes = 0; cleared.snapshot.errorCode = nil
+        try persist(cleared); jobs[jobID] = cleared
+        let publisher = self.publisher, journalRoot = self.journalRoot, configuration = self.configuration
+        let finalJournal = cleared
+        do {
+            try await MainActor.run {
+                // Configuration edits/imports serialize with this final authority check
+                // and deletion. The installer reservation prevents resume/stop/recovery
+                // from changing the same job while this actor hop is pending.
+                try publisher.validatePartialRemoval(job: finalJournal, journalRoot: journalRoot, configuration: configuration())
+                if FileManager.default.fileExists(atPath: directory.path) { try FileManager.default.removeItem(at: directory) }
+            }
+        } catch {
+            try? setProgress(jobID, bytes: received(job.snapshot.plan))
+            update(jobID, state: .failed, error: "partialClearFailed")
+            throw error
+        }
+    }
+
     func snapshots() async -> [ModelInstallSnapshot] { order.compactMap { jobs[$0]?.snapshot } }
 
     /// All unfinished network work becomes paused. Only already-renamed installations can register offline.
@@ -192,7 +230,7 @@ actor ModelInstallationCoordinator {
 
     /// Persist this before removing library records; B6 owns the actual remove/delete transaction.
     func markLibraryDetached(jobID: UUID) async throws {
-        guard !isRecovering, var job = jobs[jobID], activeID != jobID,
+        guard !isRecovering, !clearingIDs.contains(jobID), var job = jobs[jobID], activeID != jobID,
               job.snapshot.errorCode != "invalidJournal" else { throw HFDownloadError(code: .integrity) }
         try ModelInstallationPublisher.validate(job.snapshot.plan)
         job.libraryDetached = true
@@ -271,7 +309,7 @@ actor ModelInstallationCoordinator {
     }
 
     private func schedule() {
-        guard activeTask == nil, let id = order.first(where: { jobs[$0]?.snapshot.state == .queued && jobs[$0]?.libraryDetached == false }) else { return }
+        guard activeTask == nil, let id = order.first(where: { jobs[$0]?.snapshot.state == .queued && jobs[$0]?.libraryDetached == false && !clearingIDs.contains($0) }) else { return }
         let token = UUID(), publicationPermit = ModelPublicationPermit()
         generation = token; activeID = id; permit = publicationPermit
         activeTask = Task { await self.run(id, generation: token, permit: publicationPermit) }

@@ -66,7 +66,8 @@ private final class ProvisionProgress: @unchecked Sendable {
 final class QwenModelState: ObservableObject {
     static let shared = QwenModelState(saveConfiguration: { ConfigurationStore.shared.save($0) },
         persistActivation: { try ConfigurationStore.shared.commitNativeASRActivation($0) },
-        removeManagedRecord: removeManaged)
+        sampleProvider: { try ASRApplicationModelDependencies.sample() },
+        removeManagedRecord: removeManaged, canUnload: { ASRApplicationModelDependencies.canUnload() })
 
     private static func removeManaged(_ id: UUID, files: Bool) async throws {
         let installer = ModelInstallationCoordinator.shared

@@ -221,3 +221,86 @@ struct ModelInstallationPublisher: Sendable {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     }
 }
+
+extension ModelInstallationPublisher {
+    /// Cleanup authority is the matching durable job plus an exact physical staging inventory.
+    /// Never treats a decoded arbitrary directory, symlink, hardlink or unplanned file as owned.
+    func validatePartialRemoval(job: ModelInstallationJobJournal, journalRoot: URL,
+                                configuration: Configuration) throws {
+        let plan = job.snapshot.plan, id = job.snapshot.jobID
+        guard job.version == 1, id == plan.id, !job.libraryDetached,
+              journalRoot.standardizedFileURL.path == jobsRoot.standardizedFileURL.path else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        try Self.validate(plan)
+        let parent = jobsRoot.appendingPathComponent(id.uuidString), stage = parent.appendingPathComponent("model")
+        try Self.noSymlinks(stage)
+        try Self.noSymlinks(directory(for: plan))
+        guard !FileManager.default.fileExists(atPath: directory(for: plan).path),
+              !configuration.installedASRModels.contains(where: { $0.id == id || $0.installPlan?.id == id }),
+              try FileManager.default.contentsOfDirectory(atPath: jobsRoot.path).contains(id.uuidString) else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        let journalURL = parent.appendingPathComponent("job.json")
+        try Self.noSymlinks(journalURL)
+        let attributes = try FileManager.default.attributesOfItem(atPath: journalURL.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              (attributes[.referenceCount] as? NSNumber)?.intValue == 1,
+              (attributes[.size] as? NSNumber)?.int64Value ?? .max <= 32 * 1024 * 1024 else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        let saved = try JSONDecoder().decode(ModelInstallationJobJournal.self, from: Data(contentsOf: journalURL))
+        guard saved.version == job.version, saved.snapshot == job.snapshot,
+              saved.createdAt == job.createdAt, saved.libraryDetached == job.libraryDetached else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        let key = stage.standardizedFileURL.resolvingSymlinksInPath().path.lowercased()
+        for url in configuration.importedASRModels.map(\.directory) + configuration.installedASRModels.map(\.directory) {
+            let other = url.standardizedFileURL.resolvingSymlinksInPath().path.lowercased()
+            guard other != key, !other.hasPrefix(key + "/"), !key.hasPrefix(other + "/") else {
+                throw NativeModelUsageError.invalidOwnership
+            }
+        }
+        guard FileManager.default.fileExists(atPath: stage.path) else { return }
+        guard try FileManager.default.contentsOfDirectory(atPath: parent.path).contains("model"),
+              try FileManager.default.attributesOfItem(atPath: stage.path)[.type] as? FileAttributeType == .typeDirectory else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        let payloads = Dictionary(uniqueKeysWithValues: plan.files.map { ($0.relativeDestination, $0) })
+        let sidecars = Dictionary(uniqueKeysWithValues: plan.files.map { ($0.relativeDestination + ".hf-journal.json", $0) })
+        let files = Set(payloads.keys).union(sidecars.keys).union(["installation-manifest.json"])
+        var directories = Set<String>()
+        for path in files {
+            let components = path.split(separator: "/")
+            for depth in 1..<components.count { directories.insert(components.prefix(depth).joined(separator: "/")) }
+        }
+        guard let entries = FileManager.default.enumerator(at: stage, includingPropertiesForKeys: nil) else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        var count = 0
+        while let file = entries.nextObject() as? URL {
+            count += 1; guard count <= 100_000 else { throw NativeModelUsageError.invalidOwnership }
+            try Self.noSymlinks(file)
+            let relative = String(file.path.dropFirst(stage.path.count + 1))
+            let attrs = try FileManager.default.attributesOfItem(atPath: file.path)
+            if attrs[.type] as? FileAttributeType == .typeDirectory {
+                guard directories.contains(relative) else { throw NativeModelUsageError.invalidOwnership }
+                continue
+            }
+            guard attrs[.type] as? FileAttributeType == .typeRegular, files.contains(relative),
+                  (attrs[.referenceCount] as? NSNumber)?.intValue == 1 else { throw NativeModelUsageError.invalidOwnership }
+            if let planned = payloads[relative] {
+                guard (attrs[.size] as? NSNumber)?.int64Value ?? .max <= planned.sizeBytes else { throw NativeModelUsageError.invalidOwnership }
+            } else if let planned = sidecars[relative] {
+                let saved = try HFDownloadJournal.read(for: stage.appendingPathComponent(planned.relativeDestination))
+                guard saved.file == planned, saved.credentialID == plan.credentialID else { throw NativeModelUsageError.invalidOwnership }
+            } else {
+                let manifest = try Self.readManifest(file)
+                guard manifest.version == 1, manifest.record.id == id, manifest.record.installPlan == plan,
+                      manifest.record.ownership == .managed, manifest.record.directory == directory(for: plan) else {
+                    throw NativeModelUsageError.invalidOwnership
+                }
+            }
+        }
+    }
+}

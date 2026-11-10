@@ -25,7 +25,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         self.init(window: window)
         navigation.requestedTab = initialTab
-        window.contentView = NSHostingView(rootView: Self.makeRootView(initialTab: initialTab, navigation: navigation))
+        window.contentView = NSHostingView(rootView: Self.makeRootView(initialTab: initialTab, navigation: navigation, modelCenter: .shared))
         window.delegate = self
     }
 
@@ -33,9 +33,10 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     /// isolated services through this exact handoff without creating an NSWindow.
     static func makeRootView(initialTab: AppTab, navigation: SettingsNavigation,
                              connectionChecks: SettingsConnectionChecks? = nil,
+                             modelCenter: ASRModelCenterEnvironment? = nil,
                              settingsPage: MainWindowView.SettingsPageFactory? = nil) -> MainWindowView {
         MainWindowView(initialTab: initialTab, navigation: navigation,
-                       connectionChecks: connectionChecks, settingsPage: settingsPage)
+                       connectionChecks: connectionChecks, modelCenter: modelCenter, settingsPage: settingsPage)
     }
 
     func selectTab(_ tab: AppTab) {

@@ -29,78 +29,16 @@ struct LocalModelPicker: View {
     private var currentTier: HardwareTier { HardwareProfiler.currentTier() }
     var recommendedPreset: ModelPreset { ModelPreset.recommendedModel(for: currentTier) }
 
+    var navigation: SettingsNavigation? = nil
+
+    // Compatibility presentation delegates to the shared host; lifecycle helpers above
+    // remain available to isolated legacy fixtures, never as a second set of UI actions.
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            QwenModelStatusCard(modelState: modelState, store: store, importedActions: importedActions,
-                                showsLibraryButton: false, onCancel: cancelPreparation)
-            Divider()
-            HStack {
-                Text("内置模型").font(.system(size: 12, weight: .medium))
-                Spacer()
-                Button("按硬件推荐并加载") { Task { await selectPreset(nil, automatic: true) } }
-                    .controlSize(.small).disabled(modelState.operationID != nil)
-            }
-            Text(ModelPreset.hardwareTierDescription(currentTier))
-                .font(.system(size: 11)).foregroundStyle(.secondary)
-            ForEach(ImportedASRModelPresentation.downloadablePresets) { preset in
-                presetRow(preset)
-                if preset.id != ImportedASRModelPresentation.downloadablePresets.last?.id { Divider() }
-            }
-            if let deletionError {
-                Text(deletionError).font(.system(size: 11)).foregroundStyle(.orange)
-            }
-            Divider()
-            importedModels
+        VStack(alignment: .leading, spacing: 8) {
+            Text("离线模型的获取、测试与选择已移至模型中心。")
+                .foregroundStyle(.secondary)
+            Button("打开离线模型") { navigation?.navigate(to: .settings(.speech, .localModels)) }
+                .disabled(navigation == nil)
         }
-        .padding(.top, 8)
-    }
-
-    private func presetRow(_ preset: ModelPreset) -> some View {
-        let isPreparing = selectionPresentation.isBusy && selectionPresentation.targetID == preset.id
-        let isDownloaded = downloader.isModelDownloaded(preset)
-        let isRecommended = recommendedPreset.id == preset.id
-
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Text(preset.name).font(.system(size: 12, weight: .medium))
-                        if isRecommended {
-                            Text("推荐").font(.system(size: 11)).foregroundStyle(Brand.accent)
-                        }
-                    }
-                    Text("\(preset.modelDescription) · 下载 \(formatBytes(preset.expectedSizeBytes))")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(selectionPresentation.presetStatus(preset, filesDownloaded: isDownloaded))
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                if isPreparing {
-                    Text("准备中").font(.system(size: 11)).foregroundStyle(Brand.accent)
-                } else {
-                    Button(isDownloaded ? "加载并使用" : "下载并加载") {
-                        Task {
-                            if isDownloaded { await selectPreset(preset) }
-                            else { downloader.startDownload(preset: preset) }
-                        }
-                    }.controlSize(.small).disabled(modelState.operationID != nil)
-                    if isDownloaded {
-                        Button("删除下载") {
-                            Task {
-                                do { try await downloader.deleteModel(preset); deletionError = nil }
-                                catch { deletionError = error.localizedDescription }
-                            }
-                        }
-                        .buttonStyle(.borderless).controlSize(.small)
-                        .disabled(modelState.operationID != nil)
-                    }
-                }
-            }
-        }
-    }
-
-    private func formatBytes(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

@@ -68,12 +68,14 @@ struct OnboardingView: View {
     @StateObject var importedActions: ImportedASRModelActions
     @StateObject var checks: CloudASRConnectionCheck
     @StateObject var draftChecks: CloudASRConnectionCheck
+    let modelCenter: ASRModelCenterEnvironment?
     @ObservedObject var navigation: SettingsNavigation
 
     init(flow: OnboardingFlow, store: ConfigurationStore, monitor: ReadinessMonitor,
          modelState: QwenModelState, downloader: ModelDownloader,
          importedActions: ImportedASRModelActions, checks: CloudASRConnectionCheck,
-         draftChecks: CloudASRConnectionCheck) {
+         draftChecks: CloudASRConnectionCheck, modelCenter: ASRModelCenterEnvironment? = nil) {
+        self.modelCenter = modelCenter
         _flow = StateObject(wrappedValue: flow)
         self.store = store
         self.monitor = monitor
@@ -107,7 +109,7 @@ struct OnboardingView: View {
                     case .engine:
                         ASRSettingsContent(store: store, monitor: monitor, modelState: modelState,
                             downloader: downloader, importedActions: importedActions, navigation: navigation,
-                            checks: checks, draftChecks: draftChecks)
+                            checks: checks, draftChecks: draftChecks, environment: modelCenter)
                     case .permissions:
                         PermissionSettingsContent(store: store, monitor: monitor, navigation: navigation)
                     case .trial:

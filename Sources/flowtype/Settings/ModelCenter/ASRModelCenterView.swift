@@ -96,7 +96,7 @@ struct ASRModelCenterView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 9)).overlay(RoundedRectangle(cornerRadius: 9).stroke(Theme.cardBorder))
             acquisition
             Divider()
-            ModelInstallationList(installations: model.installations, actions: actions, refresh: { await model.refreshInstallations() })
+            ModelInstallationList(installations: model.installations, actions: actions, refresh: { await model.refreshInstallations() }, selectedJobID: model.selectedInstallationID)
         }.font(Theme.Typography.description).tint(Theme.accent)
             .sheet(item: $sheet) { item in sheetContent(item.kind) }
     }
