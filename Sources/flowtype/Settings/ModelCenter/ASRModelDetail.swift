@@ -39,6 +39,7 @@ struct ASRModelDetail: View {
     let edit: () -> Void
     @State private var consent: ASRModelValidationConsent?
     @State private var disclosureError: String?
+    @State private var showsRelocation = false
     @State private var confirmsRemoval = false
     @State private var deletesFiles = false
     @State private var confirmsDeselection = false
@@ -104,6 +105,13 @@ struct ASRModelDetail: View {
                         Button("重新加载原模型：" + name) { Task { await model.reloadUnloadedNative() } }.disabled(model.isBusy)
                     }
                     Text(record?.ownership == .managed ? "应用管理的下载；可分别移除记录或删除下载文件。" : "用户自有目录；移除记录不会删除原文件。")
+                    if imported != nil && record?.ownership != .managed {
+                        Button("重新定位模型目录…") {
+                            guard let directory = actions.chooseDirectory?(), let stage = actions.stageRelocation,
+                                  stage(row.id, directory) != nil else { return }
+                            showsRelocation = true
+                        }.disabled(model.isBusy || actions.stageRelocation == nil || actions.relocatePreview == nil)
+                    }
                     if let validation = record?.validation { field("上次验证", validation.validatedAt.formatted() + " · \(validation.latencyMs) ms") }
                 } else {
                     if let destination { ASRValidationNotice(disclosure: .init(destination: destination, language: config?.asrLanguage ?? .auto, isCloud: row.location == .cloud)) }
@@ -156,6 +164,15 @@ struct ASRModelDetail: View {
                 .font(.system(size: 10)).foregroundStyle(.secondary)
             if let disclosureError { Text(disclosureError).font(.system(size: 11)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
         }.padding(10)
+        }
+        .sheet(isPresented: $showsRelocation) {
+            if let imported = actions.importedActions {
+                ASRDirectoryPreview(actions: imported, save: {}, cancel: { imported.cancelInspection(); showsRelocation = false },
+                    relocate: { previewID in
+                        showsRelocation = false
+                        Task { await actions.relocatePreview?(previewID) }
+                    })
+            }
         }
         .sheet(item: $consent) { captured in
             VStack(alignment: .leading, spacing: 16) {

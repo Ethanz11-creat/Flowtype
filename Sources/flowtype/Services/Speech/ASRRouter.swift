@@ -246,6 +246,7 @@ enum ASRRouterProbeConfig {
     static let ttl: TimeInterval = interval * 0.6
     /// 真实请求延迟样本的有效期。超过它，陈旧的"快"样本不再可信；陈旧的"慢"样本依然有效。
     static let latencyTtl: TimeInterval = 300
+    static let recoveryAttemptSeconds: TimeInterval = 5
     static let recoveryIntervalNanoseconds: UInt64 = 60_000_000_000
 }
 
@@ -587,11 +588,13 @@ final class ASRRouter: @unchecked Sendable {
         var order = ASRBackendRouting.order(selection: selection, policy: cfg.asrRoutingPolicy,
             descriptors: descriptors, availableIDs: Set(bindings.map { $0.descriptor.id }),
             internetAvailable: internetAvailable, degradedIDs: degraded)
+        var isHealthRecovery = false
         if reserveRecovery, cfg.asrRoutingPolicy == .auto, order.count == 2,
            let primary = bindings.first(where: { $0.descriptor.id == selection.primary }),
-           primary.descriptor.location == .cloud, order.first != selection.primary,
+           order.first != selection.primary,
            backendHealth.reserveRecovery(binding: primary, uptime: uptimeNanoseconds()) {
             order = [primary.descriptor.id] + order.filter { $0 != primary.descriptor.id }
+            isHealthRecovery = true
         }
         var route = ASRRouteSnapshot(policy: cfg.asrRoutingPolicy,
             bindings: order.compactMap { id in bindings.first { $0.descriptor.id == id } },
@@ -601,7 +604,22 @@ final class ASRRouter: @unchecked Sendable {
             })
         route.configuredBackends = descriptors
         route.healthGeneration = backendHealth.networkGeneration
+        route.isHealthRecovery = isHealthRecovery
         return route
+    }
+
+    /// Capture without spending cooldown or making a network request. Completion is
+    /// called only after the model center proves its exact trial is still current.
+    @MainActor func explicitRecoveryCompletion(_ id: ASRBackendID) -> (() -> Void)? {
+        let route = makeBackendRoute(reserveRecovery: false, persistLegacyResolution: false)
+        guard let binding = route.bindings.first(where: { $0.descriptor.id == id }) else { return nil }
+        let key = ASRBackendHealthStore.Key(binding)
+        let complete = backendHealth.recoveryCompletion(binding: binding)
+        return { [weak self] in
+            guard let self, let current = self.makeBackendRoute(reserveRecovery: false, persistLegacyResolution: false)
+                .bindings.first(where: { $0.descriptor.id == id }), ASRBackendHealthStore.Key(current) == key else { return }
+            complete()
+        }
     }
 
     @MainActor

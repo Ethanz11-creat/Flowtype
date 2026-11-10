@@ -37,8 +37,9 @@ import Foundation
     }
 
     func reloadUnloadedNative() async {
-        guard admitUserAction() else { return }
-        defer { finishUserAction() }
+        await performUserOperation { await self.performReloadUnloadedNative() }
+    }
+    private func performReloadUnloadedNative() async {
         notice = nil
         refresh()
         do {
@@ -55,6 +56,31 @@ import Foundation
     @Published private(set) var lastTrialResult: ASRModelTrialResult?
     /// Observable through objectWillChange; stored before publishing so reentrant actions see admission.
     private(set) var isBusy = false
+    @Published private(set) var isCancelling = false
+    private var operationID: UUID?
+    private var operationTask: Task<Void, Never>?
+    var currentOperation: ASRModelOperationCancellation? {
+        guard let id = operationID, operationTask != nil else { return nil }
+        return .init(id: id, cancel: { [weak self] in self?.cancelOperation(id) })
+    }
+    private func cancelOperation(_ id: UUID) {
+        guard operationID == id, !isCancelling else { return }
+        isCancelling = true
+        operationTask?.cancel()
+    }
+    /// The application owns intent and awaits the domain owner's actual drain.
+    private func performUserOperation(_ action: @escaping @MainActor () async -> Void) async {
+        guard admitUserAction() else { return }
+        let id = UUID(); operationID = id; isCancelling = false
+        let task = Task { guard !Task.isCancelled else { return }; await action() }
+        operationTask = task
+        objectWillChange.send()
+        await withTaskCancellationHandler(operation: { await task.value }, onCancel: { task.cancel() })
+        guard operationID == id else { return }
+        if task.isCancelled { notice = "已取消操作。"; lastTrialResult = nil }
+        operationTask = nil; operationID = nil; isCancelling = false
+        finishUserAction()
+    }
     @Published private(set) var busyNotice: String?
     private let configuration: () -> Configuration
     private let persist: (Configuration) throws -> Void
@@ -65,6 +91,7 @@ import Foundation
     private let sample: () throws -> ASRValidationSample
     private let installationSnapshots: () async -> [ModelInstallSnapshot]
     private let now: () -> Date
+    private let beginHealthRecovery: (ASRBackendID) -> (() -> Void)?
     private var observations = Set<AnyCancellable>()
     private var observedProfiles: [ASRBackendID: Profile] = [:]
     private var observedGenerations: [ASRBackendID: UUID] = [:]
@@ -99,11 +126,13 @@ import Foundation
          credential: @escaping (ASRBackendID) throws -> ASRCredentialSnapshot,
          sample: @escaping () throws -> ASRValidationSample,
          installationSnapshots: @escaping () async -> [ModelInstallSnapshot],
-         now: @escaping () -> Date) {
+         now: @escaping () -> Date,
+         beginHealthRecovery: @escaping (ASRBackendID) -> (() -> Void)? = { _ in nil }) {
         self.configuration = configuration; self.persist = persist
         self.native = native; self.activation = .init(state: native); self.validation = validation
         self.credential = credential; self.sample = sample
         self.installationSnapshots = installationSnapshots; self.now = now
+        self.beginHealthRecovery = beginHealthRecovery
         native.objectWillChange.merge(with: validation.objectWillChange).sink { [weak self] in
             // Published emits before its value changes; observe the resulting domain snapshot.
             Task { @MainActor [weak self] in self?.refresh() }
@@ -226,7 +255,7 @@ import Foundation
         id.rawValue.hasPrefix("cloud:") ? .cloud : (id.rawValue.hasPrefix("service:") ? .loopbackService : .native)
     }
 
-    /// One UI intent at a time. This slot owns no Task, provider, or domain operation.
+    /// One UI intent at a time; async validation retains its task until domain drain.
     private func admitUserAction() -> Bool {
         guard !isBusy else {
             busyNotice = "模型中心正在执行另一项操作，请等待完成后重试。"
@@ -244,8 +273,9 @@ import Foundation
     }
 
     func selectPrimary(_ id: ASRBackendID) async {
-        guard admitUserAction() else { return }
-        defer { finishUserAction() }
+        await performUserOperation { await self.performSelectPrimary(id) }
+    }
+    private func performSelectPrimary(_ id: ASRBackendID) async {
         notice = nil
         do {
             let before = configuration()
@@ -267,8 +297,9 @@ import Foundation
         refresh()
     }
     func selectFallback(_ id: ASRBackendID?) async {
-        guard admitUserAction() else { return }
-        defer { finishUserAction() }
+        await performUserOperation { await self.performSelectFallback(id) }
+    }
+    private func performSelectFallback(_ id: ASRBackendID?) async {
         notice = nil
         do {
             var proposed = configuration()
@@ -297,15 +328,18 @@ import Foundation
     }
 
     func test(_ id: ASRBackendID) async {
-        guard admitUserAction() else { return }
-        defer { finishUserAction() }
+        await performUserOperation { await self.performTest(id) }
+    }
+    private func performTest(_ id: ASRBackendID) async {
         notice = nil; lastTrialResult = nil
         if location(id) == .native {
             do {
                 let pcm = try sample()
+                let recoverHealth = beginHealthRecovery(id)
                 if let model = nativeModel(id) { lastTrialResult = try await activation.test(modelID: model.id, sample: pcm) }
                 else if let preset = nativePreset(id) { lastTrialResult = try await activation.test(preset: preset, sample: pcm) }
                 else { throw NativeASRActivationError.missingModel }
+                recoverHealth?()
             } catch { notice = error.localizedDescription }
         } else { _ = await validate(id) }
         refresh()
@@ -335,6 +369,7 @@ import Foundation
             let started = now()
             let key = try credential(id)
             let pcm = try sample()
+            let recoverHealth = beginHealthRecovery(id)
             switch captured {
             case .service(let p): await validation.test(profile: p, credential: key.value, sample: pcm, credentialGeneration: key.generation)
             case .cloud(let p): await validation.test(cloudProfile: p, apiKey: key.value ?? "", sample: pcm, credentialGeneration: key.generation)
@@ -352,6 +387,7 @@ import Foundation
             currentEvidence[id] = .init(profile: captured, record: record, coordinatorDate: coordinatorDate)
             invalidatedHistory.remove(id)
             observedProfiles[id] = captured; observedGenerations[id] = key.generation
+            recoverHealth?()
             lastTrialResult = .init(backendID: id, text: text, latencyMs: Int(min(Double(Int32.max), max(0, now().timeIntervalSince(started) * 1000))))
             return true
         } catch { notice = error.localizedDescription; return false }
@@ -383,6 +419,32 @@ import Foundation
             guard matches(evidence, id: id), now().timeIntervalSince(evidence.record.validatedAt) >= 0,
                   now().timeIntervalSince(evidence.record.validatedAt) < 60 else { return nil }
             return evidence.record
+        }
+    }
+
+    func stageRelocation(_ id: ASRBackendID, directory: URL, using actions: ImportedASRModelActions) -> Task<Void, Never>? {
+        guard !isBusy else { return nil }
+        do {
+            guard native.operationID == nil, let original = nativeModel(id) else { throw NativeASRActivationError.missingModel }
+            var candidate = original; candidate.directory = directory
+            try native.checkRelocation(candidate, replacing: original)
+            notice = nil
+            return actions.stage(directory: directory, replacing: original.id)
+        } catch { notice = error.localizedDescription; return nil }
+    }
+
+    func relocatePreview(_ previewID: UUID, using actions: ImportedASRModelActions) async {
+        await performUserOperation {
+            self.notice = nil
+            do {
+                guard let preview = actions.preview, preview.id == previewID, !actions.isInspecting,
+                      preview.assessment.compatibility != .incompatible,
+                      let original = preview.replacingModel, preview.replacingID == original.id,
+                      self.configuration().installedASRModels.filter({ $0.importedModelID == original.id }) == preview.replacingRecords else { throw NativeASRActivationError.changedCandidate }
+                try await self.native.relocate(preview.model, replacing: original, sample: self.sample())
+                if actions.preview?.id == previewID { actions.cancelInspection() }
+            } catch { self.notice = error.localizedDescription }
+            self.refresh()
         }
     }
 

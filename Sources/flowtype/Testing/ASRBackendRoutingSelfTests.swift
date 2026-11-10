@@ -4,6 +4,8 @@ import os
 
 enum ASRBackendRoutingSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
+        await testNativeHealthRecoveryAndBudget(r)
+        await testServiceHealthRecovery(r)
         await testOfflineServiceReadiness(r)
         await testActualBackendHistoryAndRecovery(r)
         await testPolicyAndNetworkMatrix(r)
@@ -656,5 +658,107 @@ extension ASRBackendRoutingSelfTests {
         r.eq(previewHistory.asrBackendID, nil, "A6 preview does not invent selectable backend")
         r.eq(previewHistory.sttBackend, "apple", "A6 preview retains explicit Apple label")
         r.eq(SessionController.backendLabel(forProviderID: ASRProviderID.local), "local", "A6 legacy local without brand does not force Qwen")
+    }
+}
+
+
+extension ASRBackendRoutingSelfTests {
+    @MainActor static func testServiceHealthRecovery(_ r: SelfTest.Reporter) async {
+        let settings = RoutingSettings()
+        let service = ASRBackendTransportSelfTests.profile()
+        let cloud = CloudASRProviderConfig.defaultSiliconFlow(isActive: true)
+        let serviceID = ASRBackendID(rawValue: "service:" + service.id.uuidString)
+        let cloudID = ASRBackendID(rawValue: "cloud:" + cloud.id.uuidString)
+        settings.config.localASRServices = [service]
+        settings.config.cloudASRConfig.providers = [cloud]
+        settings.config.cloudASRConfig.providerAPIKeys[cloud.id.uuidString] = "fixture"
+        settings.config.setASRBackendSelection(.init(primary: serviceID, fallback: cloudID, allowsCloudFallback: true))
+        let clock = OSAllocatedUnfairLock(initialState: UInt64(1))
+        let c = URLSessionConfiguration.ephemeral; c.protocolClasses = [RoutingHTTPFixture.self]
+        let session = URLSession(configuration: c); defer { session.invalidateAndCancel() }
+        let registry = try! ASRProviderRegistry(adapters: [OpenAICompatibleASRAdapter(session: session, resolver: { _ in ["127.0.0.1"] })])
+        let router = ASRRouter(startMonitoring: false, credentials: KeychainASRCredentialStore(access: .memory()), registry: registry,
+            cloudProvider: CloudASRProvider(session: session, logger: { _ in }), persistNativeResolution: { _ in },
+            configuration: { settings.config }, localAvailable: { false }, localLease: { nil }, uptimeNanoseconds: { clock.withLock { $0 } })
+        let stage = ASRStage(healthRecorder: { id, latency, route in
+            if let latency { router.recordSuccess(providerID: id, latencyMs: latency, route: route) }
+            else { router.recordFailure(providerID: id, route: route) }
+        }, speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
+        RoutingHTTPFixture.failLoopback.withLock { $0 = true }
+        defer { RoutingHTTPFixture.failLoopback.withLock { $0 = false } }
+        for index in 0..<3 {
+            let context = SessionContext(sessionID: UInt64(97000 + index))
+            context.captureRoute = await router.captureStartRoute()
+            if index == 2 { r.eq(context.captureRoute?.candidateIDs.first, serviceID.rawValue, "I1 degraded service gets bounded capture recovery") }
+            _ = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: context)
+            r.eq(context.usedProviderID, cloudID.rawValue, "I1 failed service still falls back")
+        }
+        r.eq(await router.captureStartRoute().candidateIDs.first, cloudID.rawValue, "I1 cooldown keeps healthy fallback first")
+        RoutingHTTPFixture.failLoopback.withLock { $0 = false }
+        clock.withLock { $0 = 60_000_000_001 }
+        let context = SessionContext(sessionID: 97004)
+        context.captureRoute = await router.captureStartRoute()
+        RoutingHTTPFixture.requests.withLock { $0 = [] }
+        r.eq(context.captureRoute?.candidateIDs, [serviceID.rawValue, cloudID.rawValue], "I1 repaired service reenters existing candidate order")
+        _ = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: context)
+        r.eq(context.usedProviderID, serviceID.rawValue, "I1 real capture success restores service")
+        r.check((RoutingHTTPFixture.requests.withLock { $0.first?.timeoutInterval } ?? 99) <= 5, "I1 recovery preserves time for healthy fallback")
+        r.eq(await router.captureStartRoute().candidateIDs.first, serviceID.rawValue, "I1 successful recovery restores normal priority")
+    }
+}
+
+
+extension ASRBackendRoutingSelfTests {
+    @MainActor static func testNativeHealthRecoveryAndBudget(_ r: SelfTest.Reporter) async {
+        let settings = RoutingSettings(), failing = OSAllocatedUnfairLock(initialState: true)
+        let clock = OSAllocatedUnfairLock(initialState: UInt64(1))
+        let cloud = CloudASRProviderConfig.defaultSiliconFlow(isActive: true)
+        let model = NativeActivationFixtures.model(RuntimeEnvironment.current.paths.temporaryDirectory.appendingPathComponent("native-recovery"))
+        let usage = NativeModelUsageRegistry()
+        settings.lease = LocalASRLease(id: UUID(), identity: .init(id: model.id.uuidString, displayName: model.name, engine: model.engine.rawValue,
+            repoID: nil, directory: model.directory), provider: RoutingProvider(id: "native", operation: { _ in
+                if failing.withLock({ $0 }) { throw NativeASRActivationError.emptyResult }
+                return .init(text: "repaired native", providerID: "native", latencyMs: 1)
+            })).retainingUsage(try! usage.acquire(modelID: model.id))
+        settings.config.importedASRModels = [model]
+        settings.config.cloudASRConfig.providers = [cloud]
+        settings.config.cloudASRConfig.providerAPIKeys[cloud.id.uuidString] = "fixture"
+        let nativeID = ASRBackendID(nativeLease: settings.lease!), cloudID = ASRBackendID(rawValue: "cloud:" + cloud.id.uuidString)
+        settings.config.setASRBackendSelection(.init(primary: nativeID, fallback: cloudID, allowsCloudFallback: true))
+        let router = ASRRouter(startMonitoring: false, credentials: KeychainASRCredentialStore(access: .memory()),
+            cloudProvider: RoutingProvider(id: "cloud"), persistNativeResolution: { _ in }, configuration: { settings.config },
+            localAvailable: { true }, localLease: { settings.lease }, uptimeNanoseconds: { clock.withLock { $0 } })
+        let stage = ASRStage(healthRecorder: { id, latency, route in
+            if let latency { router.recordSuccess(providerID: id, latencyMs: latency, route: route) }
+            else { router.recordFailure(providerID: id, route: route) }
+        }, speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
+        for i in 0..<3 {
+            let context = SessionContext(sessionID: UInt64(97100 + i)); context.captureRoute = await router.captureStartRoute()
+            _ = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: context)
+            r.eq(context.usedProviderID, cloudID.rawValue, "I1 degraded native still uses permitted selected fallback")
+        }
+        r.eq(await router.captureStartRoute().candidateIDs.first, cloudID.rawValue, "I1 native recovery respects same cooldown")
+        clock.withLock { $0 = 60_000_000_001 }; failing.withLock { $0 = false }
+        let context = SessionContext(sessionID: 97104); context.captureRoute = await router.captureStartRoute()
+        r.check(context.captureRoute?.isHealthRecovery == true, "I1 native recovery captures explicit bounded attempt")
+        _ = await stage.execute(payload: .audio(samples: [0.2], previewText: ""), context: context)
+        r.eq(context.usedProviderID, nativeID.rawValue, "I1 native real capture restores original primary")
+        r.eq(await router.captureStartRoute().candidateIDs.first, nativeID.rawValue, "I1 recovered native remains first without new lease")
+
+        let gate = RoutingGate(), timeouts = OSAllocatedUnfairLock(initialState: [Double]())
+        let slow = RoutingProvider(id: "slow", operation: { request in
+            timeouts.withLock { $0.append(request.timeout) }; await gate.begin()
+            return .init(text: "too late", providerID: "slow", latencyMs: 1)
+        })
+        var route = ASRRouteSnapshot(policy: .auto, bindings: [
+            .init(descriptor: descriptor("service:recovery", .loopbackService), provider: slow, nativeLease: nil, credentialGeneration: nil),
+            .init(descriptor: descriptor("native:healthy", .native), provider: RoutingProvider(id: "healthy"), nativeLease: nil, credentialGeneration: nil)])
+        route.isHealthRecovery = true
+        let bounded = SessionContext(sessionID: 97105); bounded.captureRoute = route; bounded.completionBudget = .init(seconds: 0.5)
+        let boundedStage = ASRStage(healthRecorder: { _, _, _ in }, speechPreflight: { _, _ in .possiblySpeech }, phrases: { [] })
+        _ = await boundedStage.execute(payload: .audio(samples: [0.2], previewText: ""), context: bounded)
+        r.eq(bounded.usedProviderID, "native:healthy", "I1 timeout of uncooperative recovery leaves shared budget for healthy fallback")
+        r.check((timeouts.withLock { $0.first } ?? 99) <= 0.25, "I1 recovery receives at most half remaining shared budget")
+        await gate.release()
     }
 }

@@ -8,7 +8,8 @@ import Foundation
     static let shared = ASRModelCenterEnvironment(store: .shared, native: .shared, installer: .shared,
         resources: .shared, checks: .shared, usage: .shared,
         sample: { try ASRApplicationModelDependencies.sample() }, now: { Date() },
-        readinessRefresh: { ReadinessMonitor.shared.refresh() })
+        readinessRefresh: { ReadinessMonitor.shared.refresh() },
+        beginHealthRecovery: { ASRRouter.shared.explicitRecoveryCompletion($0) })
     let model: ASRModelCenterViewModel
     let native: QwenModelState
     let installer: ModelInstallationCoordinator
@@ -28,21 +29,22 @@ import Foundation
 
     init(store: ConfigurationStore, native: QwenModelState, installer: ModelInstallationCoordinator,
          resources: SessionResourceCoordinator, checks: SettingsConnectionChecks,
-         usage: NativeModelUsageRegistry, discovery: ASRModelDiscoveryClient = .init(),
+         usage: NativeModelUsageRegistry, importedActions: ImportedASRModelActions? = nil, discovery: ASRModelDiscoveryClient = .init(),
          sample: @escaping () throws -> ASRValidationSample, now: @escaping () -> Date,
          readinessRefresh: @escaping () -> Void = {},
+         beginHealthRecovery: @escaping (ASRBackendID) -> (() -> Void)? = { _ in nil },
          makeValidation: (@escaping @MainActor (ASRServiceValidationRecord) -> Void) -> ASRServiceValidationCoordinator = { ASRServiceValidationCoordinator(onVerified: $0) }) {
         self.store = store; self.native = native; self.installer = installer
         self.resources = resources; self.checks = checks; self.usage = usage; self.discovery = discovery
         self.readinessRefresh = readinessRefresh
-        importedActions = .init(coordinator: native, configuration: { store.current })
+        self.importedActions = importedActions ?? .init(coordinator: native, configuration: { store.current })
         hfSession = .init(credentialStore: store.asrCredentials, installer: installer)
         let receiver = HistoryReceiver()
         validation = makeValidation { [receiver] in _ = receiver.model?.recordValidation($0) }
         model = .init(configuration: { store.current }, persist: { try store.commitNativeASRActivation($0) },
             native: native, validation: validation,
             credential: { try Self.credential($0, store: store) }, sample: sample,
-            installationSnapshots: { await installer.snapshots() }, now: now)
+            installationSnapshots: { await installer.snapshots() }, now: now, beginHealthRecovery: beginHealthRecovery)
         receiver.model = model
     }
     static func credential(_ id: ASRBackendID, store: ConfigurationStore) throws -> ASRCredentialSnapshot {
@@ -116,7 +118,9 @@ import Foundation
     }
 
     func actions(navigation: SettingsNavigation?) -> ASRModelCenterUIActions {
-        .init(configuration: { [store] in store.current }, importedActions: importedActions,
+        .init(stageRelocation: { [model, importedActions] in model.stageRelocation($0, directory: $1, using: importedActions) },
+            relocatePreview: { [model, importedActions] in await model.relocatePreview($0, using: importedActions) },
+            currentOperation: { [model] in model.currentOperation }, configuration: { [store] in store.current }, importedActions: importedActions,
             hfSession: hfSession, discovery: discovery, draftChecks: checks.draftChecks, navigation: navigation,
             chooseDirectory: ASRModelCenterUIActions.openDirectory,
             persistImported: { [weak self, store] in try store.commitNativeASRActivation($0); self?.refresh() },

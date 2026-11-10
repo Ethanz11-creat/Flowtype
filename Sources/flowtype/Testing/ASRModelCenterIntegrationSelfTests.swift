@@ -4,6 +4,8 @@ import Combine
 /// Exercises the application composition with isolated persistence and synthetic recognition.
 enum ASRModelCenterIntegrationSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
+        await testUserCancellation(r)
+        await testExplicitHealthRecovery(r)
         await testWindowRecreationKeepsOwnership(r)
         await testRecoveryTargetsSpecificModel(r)
         await testLegacyEntryUsesSameSelection(r)
@@ -11,6 +13,68 @@ enum ASRModelCenterIntegrationSelfTests {
         await testExpiredServiceRecordingPreflight(r)
         await testSavedServiceRuntimeCredentials(r)
         await testNativeSampleAndReservation(r)
+    }
+    @MainActor static func testUserCancellation(_ r: SelfTest.Reporter) async {
+        let f = Fixture(); defer { f.cleanup() }
+        let env = f.environment, actions = env.actions(navigation: nil)
+        let before = f.store.current
+        f.block = true
+        let first = Task { await env.model.selectPrimary(f.id) }
+        await f.waitForRecognition()
+        let cancel = actions.currentOperation?()
+        r.check(cancel != nil, "I2 production host exposes captured operation cancellation")
+        cancel?.cancel()
+        r.check(env.model.isBusy && env.validation.isTesting(profileID: f.service.id), "I2 cancelled service retains admission through real drain")
+        await env.model.test(f.id)
+        r.eq(f.calls, 1, "I2 draining service refuses overlapping transport")
+        f.finish(); await first.value
+        r.eq(f.store.current, before, "I2 user cancellation prevents late service selection and evidence persistence")
+        r.check(env.model.currentValidatedServices.isEmpty && env.model.lastTrialResult == nil, "I2 cancellation cannot publish trial success")
+        let second = Task { await env.model.test(f.id) }
+        await f.waitForRecognition()
+        cancel?.cancel()
+        f.finish(); await second.value
+        r.check(env.model.lastTrialResult != nil, "I2 old captured cancel cannot affect new operation")
+    }
+    @MainActor static func testExplicitHealthRecovery(_ r: SelfTest.Reporter) async {
+        let f = Fixture(); defer { f.cleanup() }
+        f.store.current.setASRBackendSelection(.init(primary: f.id))
+        let router = ASRRouter(startMonitoring: false, credentials: f.store.asrCredentials, persistNativeResolution: { _ in },
+            configuration: { f.store.current }, localAvailable: { false }, localLease: { nil })
+        f.beginHealthRecovery = { router.explicitRecoveryCompletion($0) }
+        let route = await router.captureStartRoute(), binding = await router.captureStartRoute().bindings[0]
+        for _ in 0..<2 { router.recordFailure(providerID: f.id.rawValue, route: route) }
+        await f.environment.model.test(f.id)
+        r.check(!router.backendHealth.isDegraded(binding: binding), "I1 production model-center Test repairs same service health")
+        for _ in 0..<2 { router.recordFailure(providerID: f.id.rawValue, route: route) }
+        f.block = true
+        let trial = Task { await f.environment.model.selectPrimary(f.id) }
+        await f.waitForRecognition()
+        router.recordFailure(providerID: f.id.rawValue, route: route)
+        f.finish(); await trial.value
+        r.check(router.backendHealth.isDegraded(binding: binding), "I1 late explicit success cannot clear a newer real failure")
+        let stale = router.explicitRecoveryCompletion(f.id)
+        f.store.current.localASRServices[0].revision = UUID()
+        stale?()
+        r.check(router.backendHealth.isDegraded(binding: binding), "I1 old profile callback cannot clear route after revision change")
+        f.block = false
+        await f.environment.model.selectPrimary(f.id)
+        r.eq(f.store.current.asrBackendSelection?.primary, f.id, "I1 explicit successful reselect keeps exact primary")
+        let credentialID = "asr.service." + f.service.id.uuidString
+        try? f.store.asrCredentials.write("fixture-old", id: credentialID)
+        f.store.current.localASRServices[0].authentication = .bearer(credentialID: credentialID)
+        let keyed = await router.captureStartRoute()
+        for _ in 0..<2 { router.recordFailure(providerID: f.id.rawValue, route: keyed) }
+        f.block = true
+        let keyedTrial = Task { await f.environment.model.test(f.id) }
+        await f.waitForRecognition()
+        try? f.store.asrCredentials.write("fixture-new", id: credentialID)
+        let replacement = await router.captureStartRoute()
+        for _ in 0..<2 { router.recordFailure(providerID: f.id.rawValue, route: replacement) }
+        f.finish(); await keyedTrial.value
+        r.check(router.backendHealth.isDegraded(binding: keyed.bindings[0]) && router.backendHealth.isDegraded(binding: replacement.bindings[0]),
+                "I1 stale credential trial clears neither old nor replacement credential health")
+        r.check(f.environment.model.currentValidatedServices.isEmpty, "I1 credential edit invalidates explicit recovery evidence")
     }
     @MainActor static func testWindowRecreationKeepsOwnership(_ r: SelfTest.Reporter) async {
         let f = Fixture(); defer { f.cleanup() }
@@ -278,6 +342,7 @@ enum ASRModelCenterIntegrationSelfTests {
         let resources = SessionResourceCoordinator(), usage = NativeModelUsageRegistry()
         var date = Date(timeIntervalSince1970: 1000), calls = 0, block = false
         var capturedKey: String?, capturedSample: ASRValidationSample?
+        var beginHealthRecovery: (ASRBackendID) -> (() -> Void)? = { _ in nil }
         var continuation: CheckedContinuation<Void, Never>?
         let service = LocalASRServicePreset.whisperCpp.makeProfile(baseURL: "http://127.0.0.1:9123", modelID: nil)
         let cloud = CloudASRProviderConfig(name: "Fixture cloud", provider: "custom", baseURL: "https://fixture.invalid/v1", model: "fixture")
@@ -291,6 +356,7 @@ enum ASRModelCenterIntegrationSelfTests {
             diskSample: { _ in .max }, journalRoot: root.appendingPathComponent("installation-jobs"), usageRegistry: usage)
         lazy var environment = ASRModelCenterEnvironment(store: store, native: native, installer: installer,
             resources: resources, checks: checks, usage: usage, sample: { [self] in try sample() }, now: { [self] in date },
+            beginHealthRecovery: { [self] in beginHealthRecovery($0) },
             makeValidation: { [self] callback in .init(resolver: { _ in ["127.0.0.1"] }, now: { [self] in date }, onVerified: callback,
                 serviceRecognition: { [self] _, key, sample in
                     calls += 1; capturedKey = key; capturedSample = sample

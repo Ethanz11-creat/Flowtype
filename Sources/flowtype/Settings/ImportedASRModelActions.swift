@@ -9,6 +9,8 @@ final class ImportedASRModelActions: ObservableObject {
         let model: ImportedASRModel
         let assessment: LocalModelHardwareAssessment
         let replacingID: UUID?
+        let replacingModel: ImportedASRModel?
+        let replacingRecords: [ASRInstalledModelRecord]
     }
     @Published private(set) var preview: Preview?
     @Published private(set) var isInspecting = false
@@ -40,6 +42,8 @@ final class ImportedASRModelActions: ObservableObject {
         if let id, !configuration().importedASRModels.contains(where: { $0.id == id }) {
             message = "此模型记录已移除，请重新导入。"; return nil
         }
+        let original = id.flatMap { id in configuration().importedASRModels.first { $0.id == id } }
+        let originalRecords = configuration().installedASRModels.filter { $0.importedModelID == id }
         let token = UUID(); inspectionID = token; isInspecting = true; message = nil
         let inspect = self.inspect
         let task = Task {
@@ -51,12 +55,13 @@ final class ImportedASRModelActions: ObservableObject {
                     guard let existing = configuration().importedASRModels.first(where: { $0.id == id }) else {
                         throw ASRModelInspectionError(code: .unreadable, detail: "此模型记录已移除，请重新导入。")
                     }
+                    guard existing == original, configuration().installedASRModels.filter({ $0.importedModelID == id }) == originalRecords else { throw NativeASRActivationError.changedCandidate }
                     guard !relocationConflicts(directory: model.directory, id: id) else {
                         throw ASRModelInspectionError(code: .invalidMetadata, detail: "此目录属于另一条模型记录，请在模型库中选择该记录。")
                     }
                     model.id = id; model.name = existing.name
                 } else { model = LocalModelLibrary.canonicalizing(model, in: configuration()) }
-                preview = .init(model: model, assessment: assess(model), replacingID: id ?? configuration().importedASRModels.first(where: { $0.id == model.id })?.id)
+                preview = .init(model: model, assessment: assess(model), replacingID: id ?? configuration().importedASRModels.first(where: { $0.id == model.id })?.id, replacingModel: original, replacingRecords: originalRecords)
             } catch is CancellationError { /* Cancelled inspection never publishes a preview. */ }
             catch {
                 guard inspectionID == token else { return }

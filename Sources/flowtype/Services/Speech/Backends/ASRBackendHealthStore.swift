@@ -16,6 +16,7 @@ final class ASRBackendHealthStore: Sendable {
         }
     }
     private struct Sample: Sendable {
+        var mutation: UInt64 = 0
         var consecutiveFailures = 0
         var latencyEWMA: Double = 0
         var sampledAt: Date?
@@ -37,13 +38,30 @@ final class ASRBackendHealthStore: Sendable {
         state.withLock {
             var sample = $0.samples[Key(binding)] ?? Sample()
             sample.latencyEWMA = updateLatencyEWMA(previous: sample.degraded ? 0 : sample.latencyEWMA, sample: Double(latencyMs))
+            sample.mutation &+= 1
             sample.consecutiveFailures = 0; sample.sampledAt = Date()
             sample.probeFailed = false; sample.probeMs = nil; sample.probeAt = nil
             $0.samples[Key(binding)] = sample
         }
     }
     func recordFailure(binding: ASRBackendBinding) {
-        state.withLock { $0.samples[Key(binding), default: Sample()].consecutiveFailures += 1 }
+        state.withLock {
+            $0.samples[Key(binding), default: Sample()].consecutiveFailures += 1
+            $0.samples[Key(binding), default: Sample()].mutation &+= 1
+        }
+    }
+    /// A successful explicit trial may clear only the health observed before it started.
+    func recoveryCompletion(binding: ASRBackendBinding) -> @Sendable () -> Void {
+        let key = Key(binding)
+        let mutation = state.withLock { $0.samples[key]?.mutation ?? 0 }
+        return { [self] in
+            state.withLock { state in
+                guard (state.samples[key]?.mutation ?? 0) == mutation else { return }
+                var recovered = Sample()
+                recovered.mutation = mutation &+ 1
+                state.samples[key] = recovered
+            }
+        }
     }
     func isDegraded(binding: ASRBackendBinding) -> Bool {
         state.withLock { $0.samples[Key(binding)]?.degraded ?? false }
@@ -56,6 +74,7 @@ final class ASRBackendHealthStore: Sendable {
         state.withLock {
             guard $0.networkGeneration == generation else { return }
             var sample = $0.samples[Key(binding)] ?? Sample()
+            sample.mutation &+= 1
             sample.probeMs = latencyMs; sample.probeAt = Date(); sample.probeFailed = latencyMs == nil
             $0.samples[Key(binding)] = sample
         }
@@ -64,6 +83,7 @@ final class ASRBackendHealthStore: Sendable {
         state.withLock {
             $0.networkGeneration &+= 1
             for key in Array($0.samples.keys) where key.requiresInternet {
+                $0.samples[key]?.mutation &+= 1
                 $0.samples[key]?.latencyEWMA = 0; $0.samples[key]?.sampledAt = nil
                 $0.samples[key]?.probeMs = nil; $0.samples[key]?.probeAt = nil
                 $0.samples[key]?.probeFailed = false; $0.samples[key]?.lastRecoveryUptime = nil

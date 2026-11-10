@@ -1,6 +1,6 @@
 import Foundation
 
-enum NativeASRSelectionIntent: Sendable { case existingRole, primary, fallback, trialOnly }
+enum NativeASRSelectionIntent: Sendable { case existingRole, primary, fallback, trialOnly, relocation }
 
 /// Transient quality preview; never encoded into configuration or validation records.
 struct ASRModelTrialResult: Equatable, Sendable {

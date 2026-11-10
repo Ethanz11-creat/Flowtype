@@ -3,6 +3,9 @@ import AppKit
 
 /// Application composition supplies effects; a bare host fails closed and owns no service.
 @MainActor struct ASRModelCenterUIActions {
+    var stageRelocation: ((ASRBackendID, URL) -> Task<Void, Never>?)?
+    var relocatePreview: ((UUID) async -> Void)?
+    var currentOperation: (() -> ASRModelOperationCancellation?)?
     var configuration: (() -> Configuration)?
     var importedActions: ImportedASRModelActions?
     var hfSession: HFModelInstallSession?
@@ -25,6 +28,7 @@ import AppKit
     var clearPartial: ((UUID) async throws -> Void)?
     var loading = false
     var loadError: String?
+    func manageTextPolish() { navigation?.navigate(to: .settings(.text)) }
     func canEdit(_ location: ASRBackendLocation) -> Bool {
         switch location { case .native: false; case .loopbackService: saveLocal != nil && discovery != nil && credential != nil; case .cloud: saveCloud != nil && draftChecks != nil && credential != nil && hasCredential != nil }
     }
@@ -58,6 +62,7 @@ struct ASRModelCenterView: View {
     init(model: ASRModelCenterViewModel, actions: ASRModelCenterUIActions = .init(), initialSource: String = "all") {
         self.model = model; self.actions = actions; _filter = State(initialValue: initialSource)
     }
+    var policyDisclosure: String? { config.flatMap { SettingsPrivacyPresentation.make(config: $0).localPolishDisclosure } }
     private var config: Configuration? { actions.configuration?() }
     private var rows: [ASRModelCenterRow] { model.rows.filter { filter == "all" || $0.location.rawValue == filter } }
     private var selected: ASRModelCenterRow? { model.rows.first { $0.id == model.selectedID } }
@@ -65,7 +70,14 @@ struct ASRModelCenterView: View {
         VStack(alignment: .leading, spacing: 14) {
             selectionSummary
             if let reason = actions.loadError { Text(reason).foregroundStyle(.orange).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
-            if model.isBusy { Label("操作进行中；请等待验证与计算结束。仍可浏览和管理安装任务。", systemImage: "hourglass").foregroundStyle(.secondary) }
+            if model.isBusy {
+                HStack {
+                    Label(model.isCancelling ? "已取消；等待计算排空…" : "正在验证；仍可浏览模型。", systemImage: "hourglass").foregroundStyle(.secondary)
+                    if let operation = actions.currentOperation?() {
+                        Button("取消操作") { operation.cancel() }.keyboardShortcut(.cancelAction).disabled(model.isCancelling)
+                    }
+                }
+            }
             if let busy = model.busyNotice { Text(busy).foregroundStyle(.secondary) }
             if let notice = model.notice { Text(notice).foregroundStyle(.orange).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
             if let message { Text(message).foregroundStyle(.orange).textSelection(.enabled) }
@@ -115,6 +127,12 @@ struct ASRModelCenterView: View {
                 }.pickerStyle(.segmented).frame(maxWidth: 300).disabled(model.isBusy)
                 Toggle("允许云端备选上传识别音频（可能收费）", isOn: Binding(get: { ASRBackendMigration.selection(from: config).allowsCloudFallback }, set: { model.setAllowsCloudFallback($0) }))
                     .toggleStyle(.checkbox).disabled(model.isBusy)
+                if let disclosure = policyDisclosure {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(disclosure).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Button("管理文本整理") { actions.manageTextPolish() }.buttonStyle(.link).disabled(actions.navigation == nil)
+                    }
+                }
             } else { Text("配置尚未接线；策略与获取操作暂不可用。").foregroundStyle(.secondary) }
         }
     }
@@ -244,10 +262,11 @@ struct ASRModelCenterView: View {
 }
 
 /// Inspection preview observes the existing C2 owner; no filesystem or runtime work occurs here.
-private struct ASRDirectoryPreview: View {
+struct ASRDirectoryPreview: View {
     @ObservedObject var actions: ImportedASRModelActions
     let save: () throws -> Void
     let cancel: () -> Void
+    var relocate: ((UUID) -> Void)? = nil
     @State private var error: String?
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -261,7 +280,7 @@ private struct ASRDirectoryPreview: View {
                         Text(preview.model.directory.path).textSelection(.enabled)
                         Text("\(preview.model.sizeBytes) 字节 · 不复制权重")
                         Text(preview.assessment.explanation).fixedSize(horizontal: false, vertical: true)
-                        Text("加入后不会测试或选择。移除记录不删除原目录。")
+                        Text(relocate == nil ? "加入后不会测试或选择。移除记录不删除原目录。" : "重新检查并试识别成功后更新原记录，保留主选与备选。不会移动或删除文件。")
                     }
                     if let message = actions.message { Text(message).foregroundStyle(.orange).textSelection(.enabled) }
                     if let error { Text(error).foregroundStyle(.orange).textSelection(.enabled) }
@@ -270,9 +289,18 @@ private struct ASRDirectoryPreview: View {
             HStack {
                 Button("取消", action: cancel).keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("仅加入模型库") { do { try save() } catch { self.error = error.localizedDescription } }
+                Button(relocate == nil ? "仅加入模型库" : "验证并更新目录") {
+                    if let relocate, let preview = actions.preview { relocate(preview.id) }
+                    else { do { try save() } catch { self.error = error.localizedDescription } }
+                }
                     .buttonStyle(.borderedProminent).disabled(actions.isInspecting || actions.preview == nil || actions.preview?.assessment.compatibility == .incompatible)
             }
         }.padding(20).frame(width: 550, height: 420)
     }
+}
+
+/// A button captures one operation; retaining it cannot cancel its successor.
+@MainActor struct ASRModelOperationCancellation {
+    let id: UUID
+    let cancel: () -> Void
 }

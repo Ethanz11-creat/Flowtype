@@ -91,9 +91,13 @@ final class ASRStage: PipelineStage, @unchecked Sendable {
         for binding in route.bindings where !samples.isEmpty {
             let id = binding.descriptor.id.rawValue
             guard !Task.isCancelled, !context.isCancellationRequested else { return cancelled() }
-            let timeout = completionStageTimeout(remaining: budget.remainingSeconds,
+            var timeout = completionStageTimeout(remaining: budget.remainingSeconds,
                                                   cloud: binding.descriptor.location == .cloud,
                                                   policy: route.policy, localAvailable: route.localAvailable)
+            // A recovery attempt must leave at least half the shared remainder for the selected fallback.
+            if route.isHealthRecovery, binding.descriptor.id == route.bindings.first?.descriptor.id {
+                timeout = min(timeout, ASRRouterProbeConfig.recoveryAttemptSeconds, budget.remainingSeconds / 2)
+            }
             guard timeout > 0 else {
                 if firstFailure == nil {
                     firstFailure = AsyncDeadlineError.timedOut

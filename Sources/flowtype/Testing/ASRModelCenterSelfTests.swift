@@ -2,6 +2,8 @@ import Foundation
 
 enum ASRModelCenterSelfTests {
     @MainActor static func run(_ r: SelfTest.Reporter) async {
+        await ASRModelCenterFixSelfTests.run(r)
+        await testUserNativeCancellation(r)
         await ASRModelCenterReviewSelfTests.run(r)
         await ASRModelCenterIntegrationSelfTests.run(r)
         await ASRAcquisitionSelfTests.run(r)
@@ -25,6 +27,33 @@ enum ASRModelCenterSelfTests {
         await testDistinctPrimaryAdmission(r)
         await testCrossBackendAdmissionAndPreview(r)
         await testMutationsRemovalAndRetryAdmission(r)
+    }
+
+    @MainActor static func testUserNativeCancellation(_ r: SelfTest.Reporter) async {
+        for intent in ["test", "primary", "fallback"] {
+            let f = ModelCenterFixture(), vm = f.makeViewModel()
+            await vm.selectPrimary(f.nativeID)
+            // Fallback admission needs another primary.
+            if intent == "fallback" { f.config.setASRBackendSelection(.init(primary: f.serviceID, fallback: f.nativeID)); vm.refresh() }
+            let before = f.config, oldLease = f.native.activeLease
+            f.blockNativeLoad = true
+            let task = Task {
+                if intent == "test" { await vm.test(f.nativeID) }
+                else if intent == "fallback" { await vm.selectFallback(f.nativeID) }
+                else { await vm.selectPrimary(f.nativeID) }
+            }
+            await f.waitForNativeLoad()
+            let cancel = vm.currentOperation
+            r.check(cancel != nil, "I2 native \(intent) has application-owned cancel")
+            cancel?.cancel()
+            r.check(vm.isBusy && vm.isCancelling, "I2 native \(intent) shows cancel/drain distinction")
+            await vm.test(f.serviceID)
+            r.eq(f.recognitions, 0, "I2 native drain keeps cross-backend admission")
+            f.finishNativeLoad(); await task.value
+            r.eq(f.native.activeLease, oldLease, "I2 cancelled \(intent) keeps old lease despite uncancellable load")
+            r.eq(f.config, before, "I2 cancelled \(intent) keeps roles and evidence")
+            r.check(!vm.isBusy && f.native.operationID == nil, "I2 native \(intent) releases only after actual drain")
+        }
     }
 
     @MainActor static func testRowIdentityAfterReorder(_ r: SelfTest.Reporter) async {

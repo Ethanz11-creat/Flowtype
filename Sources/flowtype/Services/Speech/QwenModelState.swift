@@ -411,6 +411,36 @@ final class QwenModelState: ObservableObject {
         _ = try result.get()
     }
 
+    /// Relocation is a separate validated intent, never the add-only library path.
+    func checkRelocation(_ candidate: ImportedASRModel, replacing original: ImportedASRModel) throws {
+        let config = configuration()
+        guard candidate.id == original.id, config.importedASRModels.filter({ $0.id == original.id }) == [original],
+              config.installedASRModels.filter({ $0.importedModelID == original.id }).count <= 1 else {
+            throw NativeASRActivationError.changedCandidate
+        }
+        guard !config.installedASRModels.contains(where: { $0.importedModelID == original.id && $0.ownership == .managed }) else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        func path(_ url: URL) -> String { url.standardizedFileURL.resolvingSymlinksInPath().path.precomposedStringWithCanonicalMapping.lowercased() }
+        guard !config.importedASRModels.contains(where: { $0.id != original.id && path($0.directory) == path(candidate.directory) }),
+              !config.installedASRModels.contains(where: { $0.importedModelID != original.id && path($0.directory) == path(candidate.directory) }) else {
+            throw NativeModelUsageError.invalidOwnership
+        }
+        guard canUnload(), usageRegistry.hasNoCapturedUsage(modelID: original.id),
+              activeLease?.usageToken.map({ usageRegistry.hasNoCapturedUsage(modelID: $0.modelID) }) ?? true else {
+            throw NativeASRActivationError.resourcesInUse
+        }
+    }
+
+    func relocate(_ candidate: ImportedASRModel, replacing original: ImportedASRModel, sample: ASRValidationSample) async throws {
+        guard operationID == nil else { throw NativeASRActivationError.busy }
+        try checkRelocation(candidate, replacing: original)
+        let outcome = await execute(.init(target: .imported(candidate), source: configuration().downloadSource,
+            origin: .offlineImport, validationSample: sample, selectionIntent: .relocation))
+        try Task.checkCancellation()
+        _ = try outcome.get()
+    }
+
     /// External record removal requires explicit deselection and no retained runtime.
     @discardableResult func removeImportedModel(id: UUID) -> Bool {
         guard operationID == nil else { return false }
@@ -505,10 +535,15 @@ final class QwenModelState: ObservableObject {
             guard SelectionGeneration(configuration()) == capturedSelection else { throw NativeASRActivationError.changedCandidate }
             // Library removal/replacement during an await cannot resurrect the captured candidate.
             try checkGeneration(generation, modelID: model.id, directory: model.directory)
-            if request.selectionIntent == .trialOnly {
+            let selected = ASRBackendMigration.selection(from: configuration())
+            let candidateID = ASRBackendID(nativeLease: candidate)
+            let priorAssociation = generation.records.first(where: { $0.importedModelID == model.id })?.legacyPresetID
+            let priorID = priorAssociation.map { ASRBackendID(rawValue: "native:preset:" + $0) } ?? candidateID
+            let unselectedRelocation = request.selectionIntent == .relocation && selected.primary != priorID && selected.fallback != priorID
+            if request.selectionIntent == .trialOnly || unselectedRelocation {
                 guard let record, let trialOutput else { throw NativeASRActivationError.validationRequired }
                 let priorAssociation = configuration().installedASRModels.first { $0.importedModelID == model.id }?.legacyPresetID
-                let legacyID = priorAssociation ?? ModelPreset.preset(forID: candidate.identity.id)?.id
+                let legacyID = request.selectionIntent == .relocation ? nil : (priorAssociation ?? ModelPreset.preset(forID: candidate.identity.id)?.id)
                 let updated = recording(record, model: model, legacyPresetID: legacyID, in: configuration())
                 try persistActivation(updated)
                 failure = nil; status = activeLease == nil ? .notLoaded : .ready
@@ -592,6 +627,13 @@ final class QwenModelState: ObservableObject {
             if case .imported(let staged) = target {
                 current.id = staged.id
                 current.name = staged.name
+            }
+            if selectionRequest?.selectionIntent == .relocation, case .imported(let staged) = target {
+                guard let original = generation.models.first(where: { $0.id == staged.id }),
+                      current.fileFingerprint == staged.fileFingerprint, current.engine == staged.engine,
+                      current.tokenizerDirectory == staged.tokenizerDirectory,
+                      current.qwenCompatibilityModelID == staged.qwenCompatibilityModelID else { throw NativeASRActivationError.changedCandidate }
+                try checkRelocation(current, replacing: original)
             }
             current = LocalModelLibrary.canonicalizing(current, in: configuration())
             if let owned = configuration().installedASRModels.first(where: { $0.importedModelID == current.id && $0.ownership == .managed }),
@@ -698,6 +740,20 @@ final class QwenModelState: ObservableObject {
             else if request.restoringValidatedRuntime && config.pendingLegacyNativeResolution { config.resolveLegacyNativeSelection(lease: candidate) }
             else { config.selectNativeASRBackend(lease: candidate) }
             config = recording(validation, model: validatedModel, legacyPresetID: ModelPreset.preset(forID: candidate.identity.id)?.id, in: config)
+            try persistActivation(config)
+            return
+        }
+        if request.selectionIntent == .relocation {
+            let association = config.installedASRModels.first(where: { $0.importedModelID == validatedModel.id })?.legacyPresetID
+            config = recording(validation, model: validatedModel, legacyPresetID: nil, in: config)
+            if let association {
+                let oldID = ASRBackendID(rawValue: "native:preset:" + association)
+                let importedID = ASRBackendID(nativeLease: candidate)
+                var selection = ASRBackendMigration.selection(from: config)
+                if selection.primary == oldID { selection.primary = importedID }
+                if selection.fallback == oldID { selection.fallback = importedID }
+                config.setASRBackendSelection(selection)
+            }
             try persistActivation(config)
             return
         }
@@ -824,6 +880,11 @@ final class QwenModelState: ObservableObject {
 
     private func checkGeneration(_ generation: ActivationGeneration, modelID: UUID?, directory: URL) throws {
         guard SelectionGeneration(configuration()) == generation.selection else { throw NativeASRActivationError.changedCandidate }
+        if selectionRequest?.selectionIntent == .relocation,
+           let original = generation.models.first(where: { $0.id == modelID }) {
+            var candidate = original; candidate.directory = directory
+            try checkRelocation(candidate, replacing: original)
+        }
         let relevantModel: (ImportedASRModel) -> Bool = {
             $0.id == modelID || $0.directory.standardizedFileURL == directory.standardizedFileURL
         }
