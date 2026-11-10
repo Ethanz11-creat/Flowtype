@@ -166,13 +166,25 @@ struct ASRInstallPlanner: Sendable {
     }
     /// Conservatively require a portable case-insensitive macOS layout, even on case-sensitive volumes.
     /// A file cannot also name a directory after canonical Unicode normalization and case folding.
+    /// Every normalized directory must retain one spelling across all files. Canonically equivalent
+    /// Unicode spellings compare equal, matching the publisher's exact Swift String inventory.
     static func validateFilePaths(_ paths: [String]) throws {
         var files = Set<String>()
+        var directorySpellings: [String: String] = [:]
         for path in paths {
             guard HFRepositoryInput.validPath(path) else { throw ASRInstallPlanningError.invalidPath }
-            let components = path.components(separatedBy: "/").map {
+            let original = path.components(separatedBy: "/")
+            let components = original.map {
                 $0.folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
                     .precomposedStringWithCanonicalMapping
+            }
+            for depth in 1..<components.count {
+                let key = components.prefix(depth).joined(separator: "/")
+                let spelling = original.prefix(depth).joined(separator: "/")
+                if let previous = directorySpellings[key], previous != spelling {
+                    throw ASRInstallPlanningError.destinationCollision
+                }
+                directorySpellings[key] = spelling
             }
             guard files.insert(components.joined(separator: "/")).inserted else {
                 throw ASRInstallPlanningError.destinationCollision

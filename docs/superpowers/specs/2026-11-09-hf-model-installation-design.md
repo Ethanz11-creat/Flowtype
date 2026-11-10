@@ -66,6 +66,8 @@ struct ASRNativeValidationRecord: Codable, Equatable, Sendable {
 
 托管目录在 `RuntimePaths.modelsDirectory/installed/<install UUID>/model`；journal/staging 在同一文件系统的 `.../installation-jobs/<job UUID>/`。下载中目录不进入可用库。来源文件可映射到 model 根或 `tokenizer/`，必须由 plan 精确列出且目标不可冲突；不展开 zip/tar、不修改用户 HF 全局缓存。旧 preset 路径继续可识别，升级不强制搬动/重下载权重。
 
+规划器在下载前对每个来源清单及合并后的目标路径检查大小写折叠、Unicode 规范等价的文件重名和文件/目录冲突；同一规范化目录的所有祖先路径还必须保持一致拼写，拒绝 `weights/one.bin` 与 `Weights/two.bin` 等目录别名，包括嵌套父目录。NFC/NFD 规范等价拼写按 Swift String 相等规则视为一致，与发布及删除的清单比较保持一致；不重映射图资源路径，也不放宽托管归属检查。
+
 ## 3. Resolver
 
 `HFRepositoryClient.resolve(_ selection: HFRepositorySelection, credentialID: String?) async throws -> HFResolvedRepository` 返回 repo/commit/license 与完整文件元数据；`HFResolvedRepository` 字段为 selection、commit、downloadEndpoint、files（remotePath/sizeBytes/digest）、licenseURL。客户端初始化时注入下载 endpoint，plan 将其按文件捕获，恢复时不能重读设置换源。tree 分页跟随同 origin Link，cursor 循环拒绝；路径逐段编码，不把 revision 中的 slash 当文件路径。

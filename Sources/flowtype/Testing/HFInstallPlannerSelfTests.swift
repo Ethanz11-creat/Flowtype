@@ -198,7 +198,12 @@ enum HFInstallPlannerSelfTests {
             ["AudioEncoder.mlmodelc/weights", "AudioEncoder.mlmodelc/Weights/weight.bin"],
             ["AudioEncoder.mlmodelc/Café", "AudioEncoder.mlmodelc/Cafe\u{301}/weight.bin"],
             ["AudioEncoder.mlmodelc/straße", "AudioEncoder.mlmodelc/STRASSE/weight.bin"],
-            ["AudioEncoder.mlmodelc/Café.bin", "AudioEncoder.mlmodelc/Cafe\u{301}.BIN"]
+            ["AudioEncoder.mlmodelc/Café.bin", "AudioEncoder.mlmodelc/Cafe\u{301}.BIN"],
+            ["AudioEncoder.mlmodelc/weights/one.bin", "AudioEncoder.mlmodelc/Weights/two.bin"],
+            ["AudioEncoder.mlmodelc/resources/deep/one.bin", "AudioEncoder.mlmodelc/Resources/other/two.bin"],
+            ["AudioEncoder.mlmodelc/resources/deep/one.bin", "AudioEncoder.mlmodelc/resources/Deep/two.bin"],
+            ["AudioEncoder.mlmodelc/straße/one.bin", "AudioEncoder.mlmodelc/STRASSE/two.bin"],
+            ["AudioEncoder.mlmodelc/Café/one.bin", "AudioEncoder.mlmodelc/CAFE\u{301}/two.bin"]
         ]
         for pair in pairs {
             for paths in [pair, Array(pair.reversed())] {
@@ -209,7 +214,9 @@ enum HFInstallPlannerSelfTests {
         // These two manifests are individually safe, but their mapped installation paths collide.
         let model = Fixture(data: graphs(""))
         let tokens = Fixture(repoID: "custom/tokenizer", data: tokenizerData)
-        for paths in [["Tokenizer", "tokenizer/tokenizer.json"], ["TOKENIZER/TOKENIZER.JSON", "tokenizer/tokenizer.json"]] {
+        for paths in [["Tokenizer", "tokenizer/tokenizer.json"], ["TOKENIZER/TOKENIZER.JSON", "tokenizer/tokenizer.json"],
+                      ["Tokenizer/extra.json", "tokenizer/tokenizer.json"],
+                      ["tokenizer/Assets/one.bin", "tokenizer/assets/two.bin"]] {
             let mapped = [HFPlannedFile(source: model.repository.selection, downloadEndpoint: model.repository.downloadEndpoint,
                 resolvedCommit: commit, remotePath: "model-resource", relativeDestination: paths[0], sizeBytes: 1,
                 digest: .sha256(String(repeating: "d", count: 64))),
@@ -221,12 +228,12 @@ enum HFInstallPlannerSelfTests {
                 catch { r.eq(error as? ASRInstallPlanningError, .destinationCollision, "B2 complete mapped file set rejects cross-source collisions") }
             }
         }
-        let siblings = ["AudioEncoder.mlmodelc/weights/one.bin", "AudioEncoder.mlmodelc/Weights/two.bin",
+        let siblings = ["AudioEncoder.mlmodelc/weights/one.bin", "AudioEncoder.mlmodelc/weights/two.bin",
                         "AudioEncoder.mlmodelc/weights-extra", "AudioEncoder.mlmodelc/Café/a.bin", "AudioEncoder.mlmodelc/Cafe\u{301}/b.bin"]
         let fixture = Fixture(data: graphs(""), weights: siblings)
         do {
             let p = try await planner([fixture, tokens]).plan(repository: fixture.repository, variant: nil, tokenizer: tokens.repository)
-            r.eq(p.files.count, 16, "B2 shared normalized directories and distinct siblings remain installable")
+            r.eq(p.files.count, 16, "B2 exact and canonically equivalent directory siblings remain installable")
             r.check(p.files.contains { $0.relativeDestination == "tokenizer/tokenizer.json" }, "B2 noncolliding second-source tokenizer mapping retained")
         } catch { r.check(false, "B2 noncolliding normalized siblings failed: \(error)") }
     }

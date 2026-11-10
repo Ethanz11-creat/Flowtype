@@ -255,6 +255,7 @@ enum HFInstallTransactionSelfTests {
         return false
     }
     static func run(_ r: SelfTest.Reporter) async {
+        await testPlannerDirectorySpellingPublication(r)
         await testDeleteWhileOldSessionOwnsLease(r)
         await testExternalAndAliasProtection(r)
         await testRemovalBoundaries(r)
@@ -275,6 +276,80 @@ enum HFInstallTransactionSelfTests {
         await testChunkVerificationCancellation(r)
         await testCommittedDiskAdmission(r)
         await testDelayedFileProgress(r)
+    }
+    // The real planner must reject aliases before transfer; accepted siblings must survive
+    // byte verification, static inspection, exact inventory, atomic publication and registration.
+    @MainActor static func testPlannerDirectorySpellingPublication(_ r: SelfTest.Reporter) async {
+        let layouts: [(String, String, Bool)] = [
+            ("weights/one.bin", "Weights/two.bin", false),
+            ("resources/deep/one.bin", "Resources/other/two.bin", false),
+            ("resources/deep/one.bin", "resources/Deep/two.bin", false),
+            ("straße/one.bin", "STRASSE/two.bin", false),
+            ("Café/one.bin", "CAFE\u{301}/two.bin", false),
+            ("weights/one.bin", "weights/two.bin", true),
+            ("resources/deep/one.bin", "resources/deep/two.bin", true),
+            ("Café/one.bin", "Cafe\u{301}/two.bin", true)
+        ]
+        for (first, second, accepted) in layouts {
+            for reversed in [false, true] {
+                let f = Fixture(), library = Library()
+                defer { try? FileManager.default.removeItem(at: f.root) }
+                let paths = [first, second].map { "AudioEncoder.mlmodelc/" + $0 }
+                var payloads = f.bytes
+                payloads[paths[0]] = Data([21]); payloads[paths[1]] = Data([22])
+                // Keep graph resource references exact: no planner remapping is allowed.
+                payloads["AudioEncoder.mlmodelc/model.mil"] = Data("func main() { \"@model_path/\(first)\" \"@model_path/\(second)\" }".utf8)
+                let bytes = payloads
+                let orderedPaths = bytes.keys.sorted()
+                let repository = HFResolvedRepository(selection: f.plan.files[0].source,
+                    commit: HFInstallPlannerSelfTests.commit, downloadEndpoint: f.plan.files[0].downloadEndpoint,
+                    files: (reversed ? Array(orderedPaths.reversed()) : orderedPaths).map { path in
+                        .init(remotePath: path, sizeBytes: Int64(bytes[path]!.count),
+                              digest: .sha256(SHA256.hash(data: bytes[path]!).map { String(format: "%02x", $0) }.joined()))
+                    }, licenseURL: nil)
+                let planner = ASRInstallPlanner(readMetadata: { file, _ in bytes[file.remotePath]! },
+                    metadataContext: { _ in .init(credentialID: nil, receivedBytes: 0) })
+                let source = Source(bytes); await source.release()
+                let installer = coordinator(f, library, source: source)
+                let label = "B directory spelling \(first) / \(second), reversed=\(reversed)"
+                do {
+                    let plan = try await planner.plan(repository: repository, variant: nil, tokenizer: nil)
+                    r.check(accepted, label + " accepted only consistent directory spelling")
+                    let job = try await installer.enqueue(plan)
+                    let finished = await until {
+                        let state = await installer.snapshots().first?.state
+                        return state == .installed || state == .failed
+                    }
+                    r.check(finished, label + " installer completed")
+                    // Drain any final task cleanup before the temporary root is removed.
+                    if !accepted || !finished { await installer.cancel(jobID: job) }
+                    if accepted {
+                        r.eq(await installer.snapshots().first?.state, .installed, label + " published")
+                        r.eq(await source.requests, plan.files.count, label + " transferred exact closure")
+                        guard let record = library.config.installedASRModels.first else {
+                            r.check(false, label + " registered installed record"); continue
+                        }
+                        r.eq(library.config.importedASRModels.count, 1, label + " registered imported model")
+                        r.eq(record.installPlan, plan, label + " preserved exact plan")
+                        for path in paths {
+                            r.eq(try Data(contentsOf: record.directory.appendingPathComponent(path)), bytes[path], label + " retained sibling bytes")
+                        }
+                        try f.publisher(library).validateRemoval(record,
+                            model: library.config.importedASRModels[0], configuration: library.config)
+                        r.check(true, label + " preserved strict removal inventory")
+                    }
+                } catch {
+                    r.check(!accepted && error as? ASRInstallPlanningError == .destinationCollision,
+                            label + " preflight collision result: \(error)")
+                }
+                if !accepted {
+                    r.eq(await source.requests, 0, label + " rejected before any transfer")
+                    r.check(await installer.snapshots().isEmpty, label + " created no installation job")
+                    r.check(library.config.installedASRModels.isEmpty, label + " registered no model")
+                    r.check(!FileManager.default.fileExists(atPath: f.models.path), label + " published no files")
+                }
+            }
+        }
     }
     // Break caught: two network owners, cancellation releasing a live writer, or recovery auto-networking.
     @MainActor static func testPersistentQueueRecovery(_ r: SelfTest.Reporter) async {
