@@ -1,0 +1,887 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://flowtype.local/schemas/model-center-acceptance-v1.json",
+  "title": "FlowType model center acceptance v1 (independent of M5 manual v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schemaVersion",
+    "status",
+    "candidate",
+    "cases"
+  ],
+  "properties": {
+    "schema": {
+      "const": "flowtype.model-center-acceptance"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "status": {
+      "enum": [
+        "Pass",
+        "Fail",
+        "Pending"
+      ]
+    },
+    "candidate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/candidate"
+        },
+        {
+          "$ref": "#/$defs/emptyCandidate"
+        }
+      ]
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 30,
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/row"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H1.repo"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H1.variant"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H1.tokenizer"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H1.gated"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H2.resume"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H2.restart"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H2.integrity"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H2.disk"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H3.qwen06"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H3.qwen17"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H3.whisperTiny"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H3.whisperBase"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H3.offlineLong"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H4.mlxAudio"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H4.whisperKit"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H4.whisperCpp"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H4.disconnect"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H5.siliconCN"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H5.openAI"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H5.custom"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H5.errors"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H6.switch"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H6.cancel"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H6.delete"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H6.credentials"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H7.layout"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H7.keyboard"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H7.accessibility"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H8.fresh"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "H8.upgrade"
+              }
+            }
+          },
+          "minContains": 1,
+          "maxContains": 1
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "Pass"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "candidate": {
+            "$ref": "#/$defs/passCandidate"
+          },
+          "cases": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "Pass"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gitSHA",
+        "sourceTree",
+        "binarySHA256",
+        "appPath"
+      ],
+      "properties": {
+        "gitSHA": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceTree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "binarySHA256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "appPath": {
+          "type": "string",
+          "pattern": "^/.*\\.app$"
+        },
+        "packageSHA256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Exact candidate identity; sourceTree is git rev-parse <gitSHA>:Sources. packageSHA256 may be null/absent before distribution; Pass always requires final package hash."
+    },
+    "passCandidate": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/candidate"
+        },
+        {
+          "required": [
+            "packageSHA256"
+          ],
+          "properties": {
+            "packageSHA256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "emptyCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gitSHA",
+        "sourceTree",
+        "binarySHA256",
+        "appPath"
+      ],
+      "properties": {
+        "gitSHA": {
+          "const": ""
+        },
+        "sourceTree": {
+          "const": ""
+        },
+        "binarySHA256": {
+          "const": ""
+        },
+        "appPath": {
+          "const": ""
+        },
+        "packageSHA256": {
+          "type": "null"
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "verification",
+        "tester",
+        "testedAt",
+        "hardware",
+        "macOS",
+        "modelCommitOrServiceVersion",
+        "actions",
+        "observation",
+        "evidence"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "verification": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "tester": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "hardware": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "modelCommitOrServiceVersion": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "actions": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "observation": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "testedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+        },
+        "macOS": {
+          "type": "string",
+          "pattern": "^(?:1[5-9]|[2-9][0-9]|[1-9][0-9]{2,})(?:\\.[0-9]+){0,2}$"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
+          },
+          "description": "Paths relative to ledger directory; gate requires existing nonempty regular files, no symlinks or traversal."
+        }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "H1.repo",
+            "H1.variant",
+            "H1.tokenizer",
+            "H1.gated",
+            "H2.resume",
+            "H2.restart",
+            "H2.integrity",
+            "H2.disk",
+            "H3.qwen06",
+            "H3.qwen17",
+            "H3.whisperTiny",
+            "H3.whisperBase",
+            "H3.offlineLong",
+            "H4.mlxAudio",
+            "H4.whisperKit",
+            "H4.whisperCpp",
+            "H4.disconnect",
+            "H5.siliconCN",
+            "H5.openAI",
+            "H5.custom",
+            "H5.errors",
+            "H6.switch",
+            "H6.cancel",
+            "H6.delete",
+            "H6.credentials",
+            "H7.layout",
+            "H7.keyboard",
+            "H7.accessibility",
+            "H8.fresh",
+            "H8.upgrade"
+          ]
+        },
+        "status": {
+          "enum": [
+            "Pass",
+            "Fail",
+            "Pending"
+          ]
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/candidate"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attestation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/attestation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "Pass"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "candidate",
+              "attestation"
+            ],
+            "properties": {
+              "candidate": {
+                "$ref": "#/$defs/passCandidate"
+              },
+              "attestation": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/attestation"
+                  },
+                  {
+                    "properties": {
+                      "kind": {
+                        "const": "realManual"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "Pass"
+              },
+              "id": {
+                "enum": [
+                  "H3.qwen06",
+                  "H3.qwen17",
+                  "H3.whisperTiny",
+                  "H3.whisperBase",
+                  "H3.offlineLong",
+                  "H4.mlxAudio",
+                  "H4.whisperKit",
+                  "H4.whisperCpp",
+                  "H5.siliconCN",
+                  "H5.openAI",
+                  "H5.custom"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "attestation": {
+                "properties": {
+                  "verification": {
+                    "const": "realRecognition"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "Pass"
+              },
+              "id": {
+                "enum": [
+                  "H7.accessibility"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "attestation": {
+                "properties": {
+                  "verification": {
+                    "const": "realAccessibility"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "Pass"
+              },
+              "id": {
+                "enum": [
+                  "H1.repo",
+                  "H1.variant",
+                  "H1.tokenizer",
+                  "H1.gated",
+                  "H2.resume",
+                  "H2.restart",
+                  "H2.integrity",
+                  "H2.disk",
+                  "H4.disconnect",
+                  "H5.errors",
+                  "H6.switch",
+                  "H6.cancel",
+                  "H6.delete",
+                  "H6.credentials",
+                  "H7.layout",
+                  "H7.keyboard",
+                  "H8.fresh",
+                  "H8.upgrade"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "attestation": {
+                "properties": {
+                  "verification": {
+                    "const": "realInteraction"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "description": "JSON Schema validates structure. The Swift gate additionally validates aggregate status, exact document/row/manifest/D4 identity, UTC date roundtrip, macOS>=15, actual evidence files and D4 completeness. Fixture/metadata/configuration/offscreen checks cannot constitute realManual Pass. Existing 41-case manual report remains separately required."
+}
