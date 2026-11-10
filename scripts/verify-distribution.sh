@@ -15,6 +15,7 @@ trap 'exit 130' INT
     "$ROOT/scripts/verification/ArtifactPackaging.swift" \
     "$ROOT/scripts/verification/VerificationReport.swift" \
     "$ROOT/scripts/verification/ManualValidation.swift" \
+    "$ROOT/scripts/verification/ModelCenterAcceptance.swift" \
     "$ROOT/scripts/verification/DistributionVerification.swift" \
     "$ROOT/scripts/verification/DistributionVerificationSelfTests.swift" \
     "$ROOT/scripts/verification/DistributionVerificationCLI.swift" \

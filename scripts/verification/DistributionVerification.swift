@@ -131,7 +131,8 @@ enum DistributionVerification {
     }
 
     /// Live CLI invocation requires explicit --distribute; self-tests inject every external command.
-    static func distribute(repository: URL, app: URL, manifest: URL, dmg: URL, evidence: URL, identity: String, profile: String, command: DistributionCommand) throws {
+    @discardableResult
+    static func distribute(repository: URL, app: URL, manifest: URL, dmg: URL, evidence: URL, identity: String, profile: String, command: DistributionCommand, beforePublish: () throws -> Void = {}, publishReport: (DistributionVerificationReport) throws -> Void = { _ in }) throws -> DistributionVerificationReport {
         let fm = FileManager.default
         _ = try PackagingSigning.developerIdentity(identity)
         guard !profile.isEmpty, let signed = try signature(app, command: command), signed.identity == identity, signed.runtime else { throw VerificationFailure.signatureFailed }
@@ -179,7 +180,28 @@ enum DistributionVerification {
         try JSONEncoder().encode(record).write(to: evidence, options: .withoutOverwriting)
         let checked = try evaluate(app: app, manifest: manifest, dmg: final, evidence: evidence, profile: profile, command: command)
         guard checked.status == .pass else { throw VerificationFailure.artifactFailed }
-        // Atomic rename on this repository's build volume preserves any previous DMG on failure.
-        guard rename(final.path, dmg.path) == 0 else { throw VerificationFailure.outputUnavailable }
+        // Source/cancellation validation is the last pre-publication condition. Retain the
+        // previous bytes until the success report is durable; reporting failure rolls back.
+        try beforePublish()
+        let backup = root.appendingPathComponent("previous.dmg")
+        let hadPrevious = fm.fileExists(atPath: dmg.path)
+        guard (try? fm.destinationOfSymbolicLink(atPath: dmg.path)) == nil else { throw VerificationFailure.outputUnavailable }
+        if hadPrevious {
+            guard try dmg.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { throw VerificationFailure.outputUnavailable }
+            try fm.linkItem(at: dmg, to: backup)
+        }
+        guard rename(final.path, dmg.path) == 0 else {
+            if hadPrevious { try? fm.removeItem(at: backup) }
+            throw VerificationFailure.outputUnavailable
+        }
+        do { try publishReport(checked) }
+        catch {
+            if hadPrevious {
+                guard rename(backup.path, dmg.path) == 0 else { throw VerificationFailure.recoveryFailed }
+            } else { try fm.removeItem(at: dmg) }
+            throw error
+        }
+        if hadPrevious { try? fm.removeItem(at: backup) }
+        return checked
     }
 }
