@@ -136,6 +136,12 @@ class ConfigurationStore: ObservableObject, @unchecked Sendable {
         guard defaults.data(forKey: defaultsKey) == data else { throw ASRCredentialError.persistence }
     }
 
+    /// Native trial evidence and selection become visible only after one durable write.
+    @MainActor func commitNativeASRActivation(_ candidate: Configuration) throws {
+        try persist(candidate)
+        current = candidate
+    }
+
     /// Installation success is reported only after the complete library pair is durable.
     @MainActor func registerInstalledASRModel(_ record: ASRInstalledModelRecord, model: ImportedASRModel) throws {
         let candidate = try LocalModelLibrary.registering(record, model: model, in: current)

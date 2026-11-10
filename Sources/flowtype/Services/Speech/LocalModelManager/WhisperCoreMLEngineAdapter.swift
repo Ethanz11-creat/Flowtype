@@ -15,6 +15,6 @@ struct WhisperCoreMLEngineAdapter: LocalASREngineAdapter {
         let provider = try await WhisperASRProvider.load(model: model)
         try Task.checkCancellation()
         return LocalASRLease(id: UUID(), identity: provider.identity, provider: provider,
-                             whisperMetadata: provider.verifiedMetadata)
+                             whisperMetadata: provider.verifiedMetadata, drain: { await provider.drainInference() })
     }
 }

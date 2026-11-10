@@ -22,6 +22,8 @@ struct WhisperOfflineLoadOptions: Sendable, Equatable {
 private actor WhisperInferenceQueue {
     private var tail: Task<Void, Never>?
 
+    func drain() async { await tail?.value }
+
     func run(_ operation: @escaping @Sendable () async throws -> [String]) async throws -> [String] {
         let box = CancellableContinuationBox<[String]>()
         return try await withTaskCancellationHandler {
@@ -71,6 +73,8 @@ final class WhisperASRProvider: ASRProvider, @unchecked Sendable {
             displayName: "\(model.name) · Whisper \(variant)", engine: model.engine.rawValue,
             repoID: nil, directory: model.directory), backend: backend)
     }
+
+    func drainInference() async { await inference.drain() }
 
     func transcribe(_ request: ASRRequest) async throws -> ASRResult {
         guard request.sampleRate == 16_000 else { throw OfflineWhisperError.invalidSampleRate }

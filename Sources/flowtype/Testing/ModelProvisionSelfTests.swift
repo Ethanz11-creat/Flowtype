@@ -256,7 +256,7 @@ extension ModelProvisionSelfTests {
 
     private static func lease(_ id: String) -> LocalASRLease {
         .init(id: UUID(), identity: .init(id: id, displayName: id, engine: "qwen", repoID: id,
-                                        directory: URL(fileURLWithPath: "/fixture/" + id)), provider: QwenASRProvider())
+                                        directory: URL(fileURLWithPath: "/fixture/" + id)), provider: NativeActivationFixtures.Provider())
     }
 
     @MainActor
@@ -274,17 +274,21 @@ extension ModelProvisionSelfTests {
     ) -> QwenModelState {
         // A/B fixtures predate the imported descriptor. Adapt only their synthetic I/O;
         // coordinator ownership, persistence, retry and route code remain production code.
-        QwenModelState(preflight: preflight, load: { target, offline, progress in
+        let inspections = NativeActivationFixtures.Inspections()
+        return QwenModelState(preflight: preflight, load: { target, offline, progress in
             if case .imported(let model) = target {
                 let preset = model.variant == "1.7B" ? ModelPreset.qwen317B : .qwen306B
                 return try await load(.offline(.init(directory: model.directory, modelId: preset.repoId)), offline, progress)
             }
-            return try await load(target, offline, progress)
+            let lease = try await load(target, offline, progress)
+            inspections.remember(lease)
+            return lease
         }, sleep: sleep, now: { values.now() },
                        configuration: configuration, localModel: localModel,
                        destination: { URL(fileURLWithPath: "/fixture/" + $0.id) },
                        availableDisk: { _ in disk }, environment: .init(read: { values.read() }, write: { values.write($0) }),
                        inspect: { directory in
+                           if let remembered = inspections.model(at: directory) { return remembered }
                            var config = Configuration(); config.customLocalModelPath = directory.path
                            guard let resolved = localModel(config), resolved.directory == directory else {
                                throw ModelProvisionError.incompleteLocal()
@@ -295,7 +299,8 @@ extension ModelProvisionSelfTests {
                        }, assessHardware: { model, old in
                            .assess(model: model, physicalMemory: 32 * 1_073_741_824, availableMemory: nil,
                                    activeModelBytes: old, isAppleSilicon: true)
-                       }, saveConfiguration: saveConfiguration)
+                       }, saveConfiguration: saveConfiguration,
+                       persistActivation: saveConfiguration, sampleProvider: NativeActivationFixtures.sample)
     }
 
     @MainActor
@@ -730,9 +735,9 @@ extension ModelProvisionSelfTests {
         let modelA = ResolvedModel(directory: folderA, modelId: "aufklarer/Qwen3-ASR-1.7B-MLX-4bit")
         let modelB = ResolvedModel(directory: folderB, modelId: "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
         let leaseA = LocalASRLease(id: UUID(), identity: .init(id: "qwen3-1.7b-4bit", displayName: "Folder A", engine: "qwen",
-            repoID: modelA.modelId, directory: folderA), provider: QwenASRProvider())
+            repoID: modelA.modelId, directory: folderA), provider: NativeActivationFixtures.Provider())
         let leaseB = LocalASRLease(id: UUID(), identity: .init(id: "qwen3-0.6b-4bit", displayName: "Folder B", engine: "qwen",
-            repoID: modelB.modelId, directory: folderB), provider: QwenASRProvider())
+            repoID: modelB.modelId, directory: folderB), provider: NativeActivationFixtures.Provider())
         var configuredA = Configuration()
         configuredA.customLocalModelPath = folderA.path
         configuredA.localModelPath = "/fixture/legacy-A"
@@ -867,7 +872,7 @@ extension ModelProvisionSelfTests {
         let folder = URL(fileURLWithPath: "/fixture/stage-folder-A")
         let resolved = ResolvedModel(directory: folder, modelId: ModelPreset.qwen317B.repoId)
         let folderLease = LocalASRLease(id: UUID(), identity: .init(id: "folder-A", displayName: "Folder A", engine: "qwen",
-            repoID: resolved.modelId, directory: folder), provider: QwenASRProvider())
+            repoID: resolved.modelId, directory: folder), provider: NativeActivationFixtures.Provider())
         let presetLease = lease("preset-after-removal")
         let removalProbe = ProvisionProbe()
         let removal = fixture(load: { target, _, _ in

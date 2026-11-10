@@ -1,6 +1,14 @@
 import Foundation
 
 enum LocalASRRuntimeFactory {
+    /// Bump the adapter compatibility component whenever native loading/decoding changes.
+    static func engineVersion(for engine: LocalASREngine) -> String {
+        switch engine {
+        case .qwenMLX: return "speech-swift/0.0.15;swift-transformers/1.1.9;FlowType-Qwen/1"
+        case .whisperCoreML: return "WhisperKit/0.18.0;swift-transformers/1.1.9;FlowType-Whisper/1"
+        }
+    }
+
     static func load(_ model: ImportedASRModel, registry: LocalASRRuntimeRegistry = .standard) async throws -> LocalASRLease {
         try Task.checkCancellation()
         // Every adapter goes through the same fresh inspection before runtime allocation.

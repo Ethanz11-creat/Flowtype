@@ -29,6 +29,8 @@ enum ImportedLifecycleSelfTests {
         initial.activeImportedASRModelID = qwen.id
         initial.selectedLocalModelID = ModelPreset.qwen317B.id // stale legacy fields must not win
         initial.localModelPath = "/fixture/legacy-conflict"
+        initial.installedASRModels = [.init(id: UUID(), importedModelID: qwen.id, ownership: .external,
+            installPlan: nil, directory: qwen.directory, validation: try! NativeActivationFixtures.validation(qwen))]
         store.save(initial)
         let probe = ImportedLifecycleProbe()
         var saves = 0
@@ -37,12 +39,15 @@ enum ImportedLifecycleSelfTests {
                 try await io.load(target, offline: offline)
             }, configuration: { store.current }, localModel: { _ in nil }, availableDisk: { _ in .max },
                 environment: .init(read: { nil }, write: { _ in }), inspect: { directory in
+                    if directory.path == "/fixture/preset" { return NativeActivationFixtures.model(directory) }
                     guard let value = models.first(where: { $0.directory == directory }) else { throw ModelProvisionError.incompleteLocal() }
                     return value
                 }, assessHardware: { model, active in
                     .assess(model: model, physicalMemory: 32 * gib, availableMemory: 16 * gib,
                             activeModelBytes: active, isAppleSilicon: true)
-                }, saveConfiguration: { saves += 1; store.save($0) })
+                }, saveConfiguration: { saves += 1; store.save($0) },
+                persistActivation: { value in try store.commitNativeASRActivation(value); saves += 1 },
+                sampleProvider: NativeActivationFixtures.sample)
         }
         let state = makeState(probe)
         await state.loadModel()

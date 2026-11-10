@@ -24,13 +24,14 @@ enum WholeM2FixSelfTests {
                         decoder: graph, prefill: nil)
                     return LocalASRLease(id: UUID(), identity: .init(id: model.id.uuidString, displayName: model.name,
                         engine: model.engine.rawValue, repoID: nil, directory: model.directory),
-                        provider: QwenASRProvider(), whisperMetadata: metadata)
+                        provider: NativeActivationFixtures.Provider(), whisperMetadata: metadata)
                 }
                 return try await probe.load(target)
             }, configuration: { store.current }, localModel: { _ in nil }, availableDisk: { _ in .max },
-                environment: .init(read: { nil }, write: { _ in }), inspect: { _ in model },
+                environment: .init(read: { nil }, write: { _ in }), inspect: { directory in directory == model.directory ? model : NativeActivationFixtures.model(directory) },
                 assessHardware: { _, _ in .init(compatibility: .warning, explanation: "fixture", recommendedMinimumMemory: nil, minimumResidentBytes: nil) },
-                saveConfiguration: { store.save($0) })
+                saveConfiguration: { store.save($0) },
+                persistActivation: { try store.commitNativeASRActivation($0) }, sampleProvider: NativeActivationFixtures.sample)
             await state.selectPreset(.qwen306B)
             let previous = state.activeLease
             let before = store.current
@@ -60,9 +61,12 @@ enum WholeM2FixSelfTests {
                 load: { target, _, _ in try await probe.load(target) }, configuration: { configStore.current },
                 localModel: { config in
                     guard installed, config.selectedLocalModelID == nil || config.selectedLocalModelID == ModelPreset.qwen306B.id else { return nil }
-                    return ResolvedModel(directory: URL(fileURLWithPath: "/fixture/0.6B"), modelId: ModelPreset.qwen306B.repoId)
+                    return ResolvedModel(directory: URL(fileURLWithPath: "/fixture/" + ModelPreset.qwen306B.id), modelId: ModelPreset.qwen306B.repoId)
                 }, availableDisk: { _ in .max }, environment: .init(read: { nil }, write: { _ in }),
-                saveConfiguration: { configStore.save($0) })
+                inspect: { NativeActivationFixtures.model($0) },
+                assessHardware: { _, _ in .init(compatibility: .compatible, explanation: "fixture", recommendedMinimumMemory: nil, minimumResidentBytes: nil) },
+                saveConfiguration: { configStore.save($0) },
+                persistActivation: { try configStore.commitNativeASRActivation($0) }, sampleProvider: NativeActivationFixtures.sample)
         }
         let automatic = state(store)
         await automatic.selectPreset(.qwen317B, automatic: true)
@@ -117,6 +121,6 @@ private actor RetryIntentProbe {
         attempts.append(preset.id)
         guard preset.id == ModelPreset.qwen317B.id ? largeReady : smallReady else { throw ModelProvisionError.loadFailed() }
         return LocalASRLease(id: UUID(), identity: .init(id: preset.id, displayName: preset.name, engine: "qwen",
-            repoID: preset.repoId, directory: URL(fileURLWithPath: "/fixture/" + preset.id)), provider: QwenASRProvider())
+            repoID: preset.repoId, directory: URL(fileURLWithPath: "/fixture/" + preset.id)), provider: NativeActivationFixtures.Provider())
     }
 }

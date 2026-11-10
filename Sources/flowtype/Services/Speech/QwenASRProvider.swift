@@ -203,6 +203,14 @@ final class QwenASRProvider: ASRProvider, @unchecked Sendable {
         return text
     }
 
+    /// Barrier on the serial compute queue; cancellation may have already released
+    /// the caller's continuation while this provider still owns native inference.
+    func drainInference() async {
+        await withCheckedContinuation { continuation in
+            inferenceQueue.async { continuation.resume() }
+        }
+    }
+
     // MARK: - ASRProvider Conformance
 
     func transcribe(_ request: ASRRequest) async throws -> ASRResult {

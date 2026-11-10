@@ -20,6 +20,6 @@ struct QwenMLXEngineAdapter: LocalASREngineAdapter {
         try Task.checkCancellation()
         return LocalASRLease(id: UUID(), identity: LocalModelIdentity(id: model.id.uuidString,
             displayName: model.name, engine: model.engine.rawValue, repoID: nil, directory: model.directory),
-            provider: provider, minimumResidentBytes: model.minimumResidentBytes)
+            provider: provider, minimumResidentBytes: model.minimumResidentBytes, drain: { await provider.drainInference() })
     }
 }
