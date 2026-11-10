@@ -112,9 +112,13 @@ enum ModelCenterAcceptance {
         if id.hasPrefix("H3.") || ["H4.mlxAudio", "H4.whisperKit", "H4.whisperCpp", "H5.siliconCN", "H5.openAI", "H5.custom"].contains(id) { return "realRecognition" }
         return "realInteraction"
     }
+    private static func supportedMacOS(_ value: String) -> Bool {
+        // Same lexical rule as the published ledger schema; no whitespace/major normalization.
+        value.range(of: #"^(?:1[5-9]|[2-9][0-9]|[1-9][0-9]{2,})(?:\.[0-9]+){0,2}(?![\s\S])"#, options: .regularExpression) != nil
+    }
     private static func details(_ attestation: Attestation, root: URL) -> Bool {
         [attestation.tester, attestation.hardware, attestation.modelCommitOrServiceVersion, attestation.actions, attestation.observation].allSatisfy { filled($0) }
-            && utc(attestation.testedAt) && VerificationCapability.operatingSystem(attestation.macOS)
+            && utc(attestation.testedAt) && supportedMacOS(attestation.macOS)
             && evidence(attestation.evidence, root: root)
     }
     private static func keys(_ value: Any?, allowed: Set<String>) -> Bool {

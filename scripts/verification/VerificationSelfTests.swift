@@ -456,6 +456,46 @@ enum VerificationSelfTests {
         do { let files = try VerificationEvidence.exportRun(runRoot: oldRoot, destination: oldOut); check(files.contains("verify-report.json"), "historical schema1 reports without manual detail remain exportable") }
         catch { check(false, "historical schema1 reports without manual detail remain exportable") }
     }
+    /// The old runner delegates to the real standalone CLI; it never runs its CLI fixtures under the old executable.
+    static func runModelCenterSelfTests(_ command: BoundedCommand) throws -> Bool {
+        let result = try BoundedProcess.run(command)
+        guard result.termination == .normal, result.exitCode == 0, !result.timedOut else { return false }
+        let text = String(decoding: try Data(contentsOf: command.stdoutURL), as: UTF8.self)
+        let summaries = text.components(separatedBy: "\n").filter { $0.hasPrefix("Model center acceptance self-test:") }
+        return summaries.count == 1 && summaries[0].range(of: #"\AModel center acceptance self-test: [1-9][0-9]* passed, 0 failed\z"#, options: .regularExpression) != nil
+    }
+    static func testModelCenterSelfTestRegistration() throws {
+        let directory = root.appendingPathComponent("D2-registration-fixtures")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        let cases: [(String, String, Bool)] = [
+            ("valid", "printf 'Model center acceptance self-test: 3 passed, 0 failed\\n'\nexit 0\n", true),
+            ("failed-exit", "printf 'Model center acceptance self-test: 3 passed, 0 failed\\n'\nexit 1\n", false),
+            ("missing-summary", "printf 'done\\n'\nexit 0\n", false),
+            ("empty-suite", "printf 'Model center acceptance self-test: 0 passed, 0 failed\\n'\n", false),
+            ("failed-assertion", "printf 'Model center acceptance self-test: 3 passed, 1 failed\\n'\n", false),
+            ("duplicate-summary", "printf 'Model center acceptance self-test: 3 passed, 0 failed\\nModel center acceptance self-test: 3 passed, 0 failed\\n'\n", false)
+        ]
+        for (name, contents, expected) in cases {
+            let script = directory.appendingPathComponent(name + ".sh")
+            try Data(contents.utf8).write(to: script)
+            let command = BoundedCommand(executable: URL(fileURLWithPath: "/bin/bash"), arguments: [script.path], workingDirectory: root,
+                environment: ProcessInfo.processInfo.environment, stdoutURL: directory.appendingPathComponent(name + ".stdout"),
+                stderrURL: directory.appendingPathComponent(name + ".stderr"), timeoutSeconds: 10)
+            check(try runModelCenterSelfTests(command) == expected, "D2 registration \(name) propagates child result")
+        }
+    }
+    static func testRegisteredModelCenterSuite() throws {
+        let repository = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let directory = root.appendingPathComponent("D2-registered-suite")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        let command = BoundedCommand(executable: URL(fileURLWithPath: "/bin/bash"), arguments: [repository.appendingPathComponent("scripts/verify-model-center.sh").path, "--self-test"], workingDirectory: repository,
+            environment: ProcessInfo.processInfo.environment, stdoutURL: directory.appendingPathComponent("D2.stdout"), stderrURL: directory.appendingPathComponent("D2.stderr"), timeoutSeconds: 120)
+        let passed = try runModelCenterSelfTests(command)
+        if FileManager.default.fileExists(atPath: command.stdoutURL.path) {
+            print(String(decoding: try Data(contentsOf: command.stdoutURL), as: UTF8.self), terminator: "")
+        }
+        check(passed, "registered standalone model center CLI self-test passes")
+    }
     static func run() -> Int32 {
         let fm = FileManager.default
         root = fm.temporaryDirectory.appendingPathComponent("flowtype-verification-\(UUID())")
@@ -468,7 +508,7 @@ enum VerificationSelfTests {
             let compiled = try BoundedProcess.run(BoundedCommand(executable: URL(fileURLWithPath: "/usr/bin/swiftc"), arguments: ["-parse-as-library", source.path, "-o", fixture.path], workingDirectory: root,
                 environment: ProcessInfo.processInfo.environment, stdoutURL: root.appendingPathComponent("compile.stdout"), stderrURL: root.appendingPathComponent("compile.stderr"), timeoutSeconds: 30))
             guard compiled.cliExitCode == 0 else { throw VerificationFailure.toolFailed }
-            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks, testManualIdentityAndRequiredCases] {
+            for test in [testExitZeroCannotForgeArtifactPass, testPartialReportAndSkipAggregation, testCheckTimeoutUsesOwnedRecovery, testRecoveryPreservesInUseCandidate, testSourceAndOutputBoundaries, testEvidenceAllowlist, testCIInvocationFallbacks, testManualIdentityAndRequiredCases, testModelCenterSelfTestRegistration, testRegisteredModelCenterSuite] {
                 do { try test() } catch { failed += 1; print("FAIL: fixture \((error as? VerificationFailure)?.rawValue ?? String((error as NSError).code))") }
             }
             testFullRunnerRequired()

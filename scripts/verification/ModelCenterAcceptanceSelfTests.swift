@@ -55,6 +55,13 @@ enum ModelCenterAcceptanceSelfTests {
             }
             rejects(changedAttestation("testedAt", "2026-02-30T00:00:00Z"), "invalid date fails")
             rejects(changedAttestation("macOS", "14.0"), "unsupported macOS fails")
+            for version in [" 15.0 ", "015.0", "v15.0", "15.0-beta", "15..0", "15.0\n"] {
+                rejects(changedAttestation("macOS", version), "malformed macOS \(version.debugDescription) fails")
+            }
+            for version in ["15", "15.8.2", "26.0", "100.0"] {
+                check(try evaluate(changedAttestation("macOS", version)) == .pass, "valid macOS \(version) passes")
+            }
+
             for kind in ["configurationValid", "metadata", "fixture", "offscreen"] { rejects(changedAttestation("kind", kind), "\(kind) cannot attest real manual Pass") }
             rejects(changedAttestation("verification", "configurationValid", index: 8), "configurationValid cannot replace recognition")
             rejects(changedAttestation("verification", "realInteraction", index: 8), "interaction cannot replace recognition")
