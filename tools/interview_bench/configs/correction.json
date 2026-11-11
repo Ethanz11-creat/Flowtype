@@ -1,0 +1,7 @@
+{
+  "provider": "SiliconFlow", "model": "deepseek-ai/DeepSeek-V3",
+  "conditions_english": ["plain", "contextual", "mismatched"],
+  "conditions_mixed": ["plain", "static_tech"],
+  "temperature": 0, "max_tokens": 512, "workers": 4,
+  "max_requests": 1000, "max_reported_tokens": 1000000
+}
