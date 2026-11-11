@@ -89,3 +89,28 @@ class VerificationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);write_json(root/'manual-demonstrations.json',[])
             self.assertEqual(verify_manual(root)['microphone_demo']['status'],'failed')
+
+    def test_compact_matrix_and_eval_only_human_boundaries(self):
+        from tools.interview_bench.verify import validate_correction_matrix,boundaries_confirmed
+        tasks=[dict(dataset='librispeech',id=str(i),condition='mismatched') for i in range(200)]
+        validate_correction_matrix(tasks,tasks,profile='compact')
+        with self.assertRaises(ValueError):validate_correction_matrix(tasks,tasks[:-1],profile='compact')
+        with self.assertRaises(ValueError):validate_correction_matrix(tasks,tasks,profile='full')
+        annotations=[dict(id='dev',status='pending',annotator='',spans=[]),dict(id='eval',status='confirmed',annotator='human',spans=[dict(start_sample=0,end_sample=1)])]
+        self.assertTrue(boundaries_confirmed(annotations,{'eval'}))
+        self.assertFalse(boundaries_confirmed(annotations,{'dev','eval'}))
+
+    def test_compact_history_requires_matching_inputs_and_all_400_outputs(self):
+        from tools.interview_bench.verify import historical_corrections
+        import shutil
+        evidence=Path('docs/evidence')
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);prepared=root/'prepared/librispeech';prepared.mkdir(parents=True)
+            frozen=evidence/'iflytek-interview/2026-11-11-four-modules/prepared/librispeech'
+            for name in ['references.jsonl','baseline-predictions.jsonl']:shutil.copyfile(frozen/name,prepared/name)
+            history=root/'history';shutil.copytree(evidence/'2026-11-11-contextual-asr-correction',history)
+            tasks,rows=historical_corrections(root,history)
+            self.assertEqual(len(tasks),400);self.assertEqual(len(rows),400)
+            completions=__import__('tools.interview_bench.schema',fromlist=['read_rows']).read_rows(history/'completions.jsonl')
+            write_rows(history/'completions.jsonl',completions[:-1])
+            with self.assertRaises(ValueError):historical_corrections(root,history)

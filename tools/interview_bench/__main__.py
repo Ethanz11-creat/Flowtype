@@ -24,6 +24,7 @@ def main():
     p = commands.add_parser('correction')
     p.add_argument('--root', type=Path, required=True)
     p.add_argument('--allow-cloud', action='store_true')
+    p.add_argument('--profile', choices=['full','compact'], default='full')
     for command in ['report','verify']:
         p = commands.add_parser(command)
         p.add_argument('--root', type=Path, required=True)
@@ -38,7 +39,7 @@ def main():
     elif args.command == 'correction':
         if not args.allow_cloud: parser.error('Cloud requests require --allow-cloud')
         from .correction import run_correction
-        print(run_correction(args.root))
+        print(run_correction(args.root,profile=args.profile))
     elif args.command == 'replay':
         from .annotate import prepare_annotations, import_annotations
         from .replay import run_sessions

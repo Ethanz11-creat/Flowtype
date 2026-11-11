@@ -8,6 +8,20 @@ Custom clean-reference subset, not official full validation. Failures retain emp
 | qwen-0.6b | Swift/MLX/speech-swift 0.0.15 / mixed BF16/4bit affine group64 / 4bit / Apple Metal / SPM debug dependency objects | 1394/11479 (12.14%) | 443/2997 (14.78%) | 0 | 0.216 | 0.94 / 1.51 / 718.64 | 849362944 |
 | whisper-base | PyTorch/openai-whisper / FP32 / none / CPU 4 threads / Python package | 5005/11479 (43.60%) | 1535/2997 (51.22%) | 0 | 0.259 | 0.52 / 1.87 / 861.91 | 805076992 |
 
+| Language | Rows / reference units | Model | Edits | MER |
+|---|---|---|---:|---:|
+| en | 236 / 1505 | qwen-1.7b | 300 | 19.93% |
+| mixed | 191 / 2997 | qwen-1.7b | 419 | 13.98% |
+| zh | 640 / 6977 | qwen-1.7b | 643 | 9.22% |
+| en | 236 / 1505 | qwen-0.6b | 330 | 21.93% |
+| mixed | 191 / 2997 | qwen-0.6b | 443 | 14.78% |
+| zh | 640 / 6977 | qwen-0.6b | 621 | 8.90% |
+| en | 236 / 1505 | whisper-base | 577 | 38.34% |
+| mixed | 191 / 2997 | whisper-base | 1535 | 51.22% |
+| zh | 640 / 6977 | whisper-base | 2893 | 41.46% |
+
+Load timers cover model loading inside the worker, excluding process launch and dependency imports; this is not product cold-start latency.
+
 **Different performance protocols/backends/build modes** are shown above; RSS is macOS process memory, not complete GPU allocation. Warmup is separate; all scoring rows are rerun. Desktop/client load is uncontrolled. Historical baseline is separate.
 
 Examples: first three nonzero-error rows by ID per model, plus first cross-model disagreement; illustrative, not a random distribution.

@@ -1,0 +1,96 @@
+{
+  "qwen_06_revision": "bc441bd1e4295c1f42d9879f056049a925b6e013",
+  "silero_revision": "84768cefdf5a3852400e9d8237f7315d14b64a08",
+  "paths": {
+    "qwen-0.6b": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b",
+    "qwen-1.7b": "/Users/yiheng/Library/Application Support/Flowtype/models/aufklarer/Qwen3-ASR-1.7B-MLX-4bit",
+    "whisper-base": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/whisper-base/base.pt"
+  },
+  "licenses": {
+    "qwen-0.6b": "Apache-2.0 (pinned model card)",
+    "qwen-1.7b": "Apache-2.0",
+    "whisper-base": "MIT",
+    "silero-v5.1": "MIT"
+  },
+  "files": [
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/README.md",
+      "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/README.md",
+      "sha256": "225f13ecdd9a64c642b685a0fcfecb4c533856d4add4cc6eff0d18c3f1724f9c",
+      "bytes": 1065
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/config.json",
+      "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/config.json",
+      "sha256": "923618cf5ca452fda0253a6be5c1a17f94a2e4851d3b98beb45848565587bd72",
+      "bytes": 7187
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/merges.txt",
+      "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/merges.txt",
+      "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+      "bytes": 1671853
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/model.safetensors",
+      "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/model.safetensors",
+      "sha256": "70c7e67e588062adce4f10796e47ad42ead51c6671eda61a0987eae38ca95ddf",
+      "bytes": 708236945
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/model.safetensors.index.json",
+      "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/model.safetensors.index.json",
+      "sha256": "e3bb80ef0fd42a5be07b04e90c97d60460bbde8af3531e0bfe9100a61404d81a",
+      "bytes": 71814
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/tokenizer_config.json",
+      "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/tokenizer_config.json",
+      "sha256": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c",
+      "bytes": 12487
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/vocab.json",
+      "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/vocab.json",
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+      "bytes": 2776833
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/whisper-base/base.pt",
+      "source": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
+      "sha256": "ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e",
+      "bytes": 145262807
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/silero-v5.1/silero_vad.jit",
+      "source": "https://api.github.com/repos/snakers4/silero-vad/git/blobs/63cb73be394528ef8d4936fdaa4884890754d065",
+      "sha256": "85c48e1f0ecb604e5d2a268f3ccfb912d4f7e935acdc86af5a3fc5b0aea7b29a",
+      "bytes": 2269612
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/silero-v5.1/LICENSE",
+      "source": "https://api.github.com/repos/snakers4/silero-vad/contents/LICENSE?ref=84768cefdf5a3852400e9d8237f7315d14b64a08",
+      "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b",
+      "bytes": 1075
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/whisper-base/LICENSE",
+      "source": "https://api.github.com/repos/openai/whisper/contents/LICENSE?ref=v20250625",
+      "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+      "bytes": 1063
+    },
+    {
+      "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/LICENSE",
+      "source": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    }
+  ],
+  "existing_17_files": {
+    "config.json": "1928d5e62e90f1c0b085c655fce43ef74ace6731ebf79ec2229729c99a1cf732",
+    "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+    "model.safetensors": "6d3ded9f339df22308f57f3287b32940a7297c4ffc597debcfbeff41ca0ff8bd",
+    "tokenizer_config.json": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c",
+    "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+  }
+}

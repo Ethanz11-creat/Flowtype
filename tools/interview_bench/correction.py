@@ -86,10 +86,8 @@ def request_cloud(task,provider,key,url):
     return result
 
 
-def run_correction(root,max_requests=1000,max_reported_tokens=1000000):
-    provider,key,url=load_provider()
-    if provider.get('provider')!='SiliconFlow' or provider.get('model')!='deepseek-ai/DeepSeek-V3' or urlsplit(url).hostname!='api.siliconflow.cn':
-        raise ValueError('Configured provider/model differs from frozen protocol; no requests sent')
+def correction_tasks(root,profile='full'):
+    if profile not in ['full','compact']:raise ValueError('Unknown profile')
     tasks=[]
     for dataset in ['librispeech','ascend']:
         directory=root/'prepared'/dataset
@@ -101,10 +99,21 @@ def run_correction(root,max_requests=1000,max_reported_tokens=1000000):
         vocab=json.loads((root/'prepared/technical-vocabulary.json').read_text())['words']
         tasks+=build_conditions(rows,vocab,dataset)
     if len(tasks)!=982:raise ValueError('Unexpected correction matrix')
+    return [t for t in tasks if t['dataset']=='librispeech' and t['condition']=='mismatched'] if profile=='compact' else tasks
+
+
+def run_correction(root,max_requests=1000,max_reported_tokens=1000000,profile='full'):
+    provider,key,url=load_provider()
+    if provider.get('provider')!='SiliconFlow' or provider.get('model')!='deepseek-ai/DeepSeek-V3' or urlsplit(url).hostname!='api.siliconflow.cn':
+        raise ValueError('Configured provider/model differs from frozen protocol; no requests sent')
+    tasks=correction_tasks(root,profile)
+    if profile=='compact':
+        from .verify import historical_corrections
+        historical_corrections(root)  # Validate old400 before spending on new200.
     directory=root/'correction-runs'/datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     directory.parent.mkdir(parents=True,exist_ok=True)
     inputfile=directory.parent/(directory.name+'-inputs.jsonl');write_rows(inputfile,tasks)
-    freeze_run(dict(provider='SiliconFlow',host=urlsplit(url).hostname,requested_model=provider['model'],
+    freeze_run(dict(profile=profile,provider='SiliconFlow',host=urlsplit(url).hostname,requested_model=provider['model'],
                     settings=SETTINGS,system_prompt=SYSTEM,context_suffix=CONTEXT,max_requests=max_requests,max_reported_tokens=max_reported_tokens,
                     baseline_hashes={d:sha(root/'prepared'/d/'baseline-predictions.jsonl') for d in ['librispeech','ascend']},
                     mixed_baseline_sha256=sha(root/'prepared/ascend/mixed-baseline.jsonl'),vocab_sha256=sha(root/'prepared/technical-vocabulary.json'),
@@ -133,13 +142,19 @@ def score_correction(run_dir,root=None):
         if r['status']!='ok' and r['text']!=expected[identity(r)]['asr_text']:raise ValueError('Fallback changed original')
     if any(r['status']=='not_requested' for r in rows):
         result={'complete':False,'reason':'budget_stop','scored':False};write_json(run_dir/'summary.json',result);return result
+    compact=json.loads((run_dir/'protocol.json').read_text())['config'].get('profile','full')=='compact'
+    if compact:
+        from .verify import historical_corrections
+        old_tasks,old_rows=historical_corrections(root)
+        tasks=tasks+old_tasks;rows=rows+old_rows
+        expected.update({identity(t):t for t in old_tasks})
     result=dict(complete=True,conditions={},analysis_sha256=sha(Path(__file__)),
                 completion_sha256=sha(run_dir/'completions.jsonl'),inference_input_sha256=sha(run_dir/'inference-inputs.jsonl'),
                 mixed_scorer_sha256=sha(Path('tools/score_asr_baseline.py')),
                 official_scorer_sha256=sha(root.parent/'asr-baseline-20261111/official_biasing_score.py'));diagnostics=[]
     (run_dir/'analysis-source').mkdir(exist_ok=True)
     shutil.copyfile(Path(__file__),run_dir/'analysis-source/correction.py')
-    for dataset in ['librispeech','ascend']:
+    for dataset in (['librispeech'] if compact else ['librispeech','ascend']):
         prepared=root/'prepared'/dataset
         refs=read_rows(prepared/('references.jsonl' if dataset=='librispeech' else 'mixed-references.jsonl'))
         refs_by={r['id']:r for r in refs}
@@ -183,7 +198,11 @@ def score_correction(run_dir,root=None):
                 served_models=dict(Counter(r.get('served_model','not_reported') for r in group)),
                 posthoc_candidate_sentence_coverage=covered/len(group),candidate_count=candidate_total,
                 alignment_note='paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment')
-    result['posthoc_coverage']={d:posthoc_coverage(tasks,read_rows(root/'prepared'/d/('references.jsonl' if d=='librispeech' else 'mixed-references.jsonl')),d) for d in ['librispeech','ascend']}
+    result['posthoc_coverage']={d:posthoc_coverage(tasks,read_rows(root/'prepared'/d/('references.jsonl' if d=='librispeech' else 'mixed-references.jsonl')),d) for d in (['librispeech'] if compact else ['librispeech','ascend'])}
+    if compact:
+        history=Path('docs/evidence/2026-11-11-contextual-asr-correction')
+        result['cross_batch_history']={str(p):sha(p) for p in [history/'protocol.json',history/'completions.jsonl']}
+        result['mixed_status']='not_run'
     write_rows(run_dir/'paired-diagnostics.jsonl',diagnostics);write_json(run_dir/'summary.json',result)
     lines=['# Fixed correction matrix','', 'English 200-row custom pilot, mixed ASCEND 191; neither is a technical-term specialist benchmark. Full candidate lists include distractors; mismatched lists are cyclically reassigned and can accidentally contain useful words. Posthoc coverage is scored only after inference. No prompt tuning on these outputs.','', '| Condition | metrics | harmed / originally correct harmed | fallback | median LLM network s | reported tokens / missing |','|---|---|---|---:|---:|---|']
     for name,s in result['conditions'].items():

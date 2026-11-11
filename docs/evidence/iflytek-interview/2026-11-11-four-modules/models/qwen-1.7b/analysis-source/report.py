@@ -36,7 +36,11 @@ def render_model_comparison(runs, output):
         group=lambda g:f"{g['edit_errors']}/{g['reference_units']} ({g['mer']:.2%})"
         t=s['timing'];rss=s['resource']['maximum_resident_set_size_bytes']
         lines.append(f"| {s['model_id']} | {' / '.join(d.values())} | {group(s['clean'])} | {group(s['by_language'].get('mixed',s['clean']))} | {s['failure_count']} | {s['latency']['aggregate_rtf']:.3f} | {t['load_seconds']:.2f} / {t['warmup_seconds']:.2f} / {t['batch_wall_seconds']:.2f} | {rss} |")
-    lines += ['', '**Different performance protocols/backends/build modes** are shown above; RSS is macOS process memory, not complete GPU allocation. Warmup is separate; all scoring rows are rerun. Desktop/client load is uncontrolled. Historical baseline is separate.', '']
+    lines += ['', '| Language | Rows / reference units | Model | Edits | MER |', '|---|---|---|---:|---:|']
+    for s in summaries:
+        for language,g in s['by_language'].items():
+            lines.append(f"| {language} | {g['rows']} / {g['reference_units']} | {s['model_id']} | {g['edit_errors']} | {g['mer']:.2%} |")
+    lines += ['', 'Load timers cover model loading inside the worker, excluding process launch and dependency imports; this is not product cold-start latency.', '', '**Different performance protocols/backends/build modes** are shown above; RSS is macOS process memory, not complete GPU allocation. Warmup is separate; all scoring rows are rerun. Desktop/client load is uncontrolled. Historical baseline is separate.', '']
     examples=[]
     for p in runs:
         errors=sorted((r for r in read_rows(p/'scored_rows.jsonl') if r.get('mer')),key=lambda r:r['id'])[:3]

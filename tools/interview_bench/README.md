@@ -63,3 +63,7 @@ python -m tools.interview_bench replay --root build/interview-bench --import-ann
 ASCEND（Lovenia et al., LREC 2022，https://huggingface.co/datasets/CAiRE/ASCEND）CC-BY-SA-4.0；LibriSpeech（Panayotov et al., ICASSP 2015，https://www.openslr.org/12/）CC-BY-4.0；contextual biasing资源（Le et al., INTERSPEECH 2021，facebookresearch/fbai-speech/is21_deep_bias）评分软件MIT。公开转写及派生预测随证据记录来源；音频/权重留在ignored build，不嵌入客户端发布包。Qwen转换模型卡Apache-2.0、Whisper代码/权重MIT、Silero MIT；`models/`保留许可文本与来源/hash。
 
 人工演示记录：复制 `configs/manual-demonstrations.template.json` 到运行根目录 `build/interview-bench/manual-demonstrations.json`。仅在实际完成操作后填写观察者、带时区时间、说出文本与TextEdit实际文字，并确认三个case；`dispatch_sent`字段不能替代`observed_text/confirmed_inserted`。回放录制需填写真实媒体路径/SHA256及观察者，verify用ffprobe核验60–90秒长度。该记录是人工证据声明，不冒充机器独立证明；没有记录时始终manual_pending。
+
+## compact 收缩模式
+
+实际本轮执行 full，无需为收缩模式追加请求。`correction --profile compact --allow-cloud`只请求固定的200条英语mismatched；运行前核验历史plain/contextual400条的输入、候选表、输出和协议哈希。评分注明跨批次服务版本限制、mixed not_run。`report/verify --profile compact`接受full超集，或上述带历史来源的缩减矩阵；模型0.6与dev回放不必执行，人工边界只要求eval使用的24条来源。缩减项不是full完成；人工记录要求仍有效。

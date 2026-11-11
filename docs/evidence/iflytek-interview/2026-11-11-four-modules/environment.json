@@ -1,0 +1,17 @@
+{
+  "capture": "after batches; isolated environment unchanged during inference",
+  "python": "3.11.9 (v3.11.9:de54cf5be3, Apr  2 2024, 07:12:50) [Clang 13.0.0 (clang-1300.0.29.30)]",
+  "platform": "macOS-15.7.9-arm64-arm-64bit",
+  "cpu": "Apple M1",
+  "memory_bytes": 17179869184,
+  "packages": {
+    "torch": "2.8.0",
+    "openai-whisper": "20250625",
+    "numpy": "2.2.6",
+    "soundfile": "0.13.1",
+    "jiwer": "4.0.0",
+    "numba": "0.68.1"
+  },
+  "swift_version": "Apple Swift version 6.2.1 (swiftlang-6.2.1.4.8 clang-1700.4.4.1)\nTarget: arm64-apple-macosx15.0",
+  "background_load": "Uncontrolled desktop. Qwen1.7 phase overlapped four cloud requests in flight; Qwen0.6 phase included brief VAD-only smoke checks. No competing ASR performance batches. No user process terminated."
+}

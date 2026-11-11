@@ -85,11 +85,11 @@ Task 1 冻结数据与公共协议
 - `prepare(root: Path, source_root: Path) -> Path`：生成 `root/prepared/manifest.json`、各集 inputs/references、词表与 VAD 划分；不做模型推理。
 - `freeze_run(config: dict, inputs: Path, output: Path) -> dict`：创建新目录，保存配置、输入、来源/工具哈希和 UTC 时间；已有目录拒绝覆盖。
 
-- [ ] **1.1 写失败测试。** 重复/缺失/额外 ID 均抛 `ValueError`；故意含 `transcription='SECRET'` 的参考不进入 id/path 推理清单；已有输出目录拒绝覆盖。VAD 36 来源无重复、zh/en/mixed 各12、开发12/评测24无交集；同一输入重复准备得到相同划分。
-- [ ] **1.2 跑红灯。** `python -m unittest discover -s tools/interview_bench/tests -p 'test_schema.py'`，确认因尚无接口失败；prepare 测试同理。
-- [ ] **1.3 实现接口。** 优先读取既有导出 JSONL；按 `SHA256('iflytek-vad-v1:'+id)` 每语言选12条，前4开发/后8评测。技术词表为 `tech_terms.json` 所有规范值的去重排序结果、最多100项，先独立冻结再分析参考覆盖；该文件当前只有29条映射，不能假称已有100词。LibriSpeech 保留原200条，不重选。
-- [ ] **1.4 跑绿灯及真实准备。** `python -m tools.interview_bench prepare --root build/interview-bench --source-root build/asr-baseline-20261111`；检查 ASCEND 1130/1067/191、LibriSpeech200、VAD36及来源哈希。
-- [ ] **1.5 独立检查本任务差异并记录提交。** 只纳入本任务工具和配置；提交不得夹带旧实验未提交文件或用户其他修改。
+- [x] **1.1 写失败测试。** 重复/缺失/额外 ID 均抛 `ValueError`；故意含 `transcription='SECRET'` 的参考不进入 id/path 推理清单；已有输出目录拒绝覆盖。VAD 36 来源无重复、zh/en/mixed 各12、开发12/评测24无交集；同一输入重复准备得到相同划分。
+- [x] **1.2 跑红灯。** `python -m unittest discover -s tools/interview_bench/tests -p 'test_schema.py'`，确认因尚无接口失败；prepare 测试同理。
+- [x] **1.3 实现接口。** 优先读取既有导出 JSONL；按 `SHA256('iflytek-vad-v1:'+id)` 每语言选12条，前4开发/后8评测。技术词表为 `tech_terms.json` 所有规范值的去重排序结果、最多100项，先独立冻结再分析参考覆盖；该文件当前只有29条映射，不能假称已有100词。LibriSpeech 保留原200条，不重选。
+- [x] **1.4 跑绿灯及真实准备。** `python -m tools.interview_bench prepare --root build/interview-bench --source-root build/asr-baseline-20261111`；检查 ASCEND 1130/1067/191、LibriSpeech200、VAD36及来源哈希。
+- [x] **1.5 独立检查本任务差异并记录提交。** 只纳入本任务工具和配置；提交不得夹带旧实验未提交文件或用户其他修改。
 
 ## Task 2：隔离环境、模型资产与推理 worker
 
@@ -101,13 +101,13 @@ Task 1 冻结数据与公共协议
 - `WhisperBackend(model_path: Path, threads: int = 4)`，同名 `transcribe/close`；本地权重加载，音频由 SoundFile 转16kHz float32数组。
 - `run_models(root: Path, model_ids: list[str]) -> Path`：每模型独立进程串行执行，写 `model-runs/<run-id>/<model-id>/`。
 
-- [ ] **2.1 写失败测试。** 未找到权重时加载立即失败且网络 spy 调用为0；响应 ID 不匹配、worker退出或非JSON时产生明确错误；两个并发请求进入原生 worker 时最大活跃推理数仍为1；close 后无子进程。失败样本仍占据完整预测ID，不换模型。
-- [ ] **2.2 跑红灯。** `python -m unittest discover -s tools/interview_bench/tests -p 'test_backends.py'`。
-- [ ] **2.3 建隔离环境并冻结依赖。** `uv venv build/interview-bench/.venv --python 3.11`；requirements.in 固定 torch==2.8.0、openai-whisper==20250625、numpy==2.2.6、soundfile==0.13.1、jiwer==4.0.0；使用 `uv pip compile` 解析传递依赖并冻结，安装到新环境。torch2.8 的 cp311 macOS arm64 wheel 已核存在，但安装与运行仍须验证。
-- [ ] **2.4 下载并验证资产。** Qwen0.6按固定HF revision；Whisper base使用包内官方模型URL，核对SHA-256 `ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e`；Silero用固定commit，核对JIT 2,269,612 bytes和Git blob `63cb73be394528ef8d4936fdaa4884890754d065`，另存SHA-256。模型存 `build/interview-bench/models/`；已有1.7目录只读。保留来源、许可、文件hash，不下载整个 WhisperKit 仓库，不把 LFS 指针当权重，不修改全局 HF_ENDPOINT。
-- [ ] **2.5 实现两种 backend 与新 Swift worker。** 从旧原生推理器复用已确认的调用方式，新增明确model_id参数，禁止仍把0.6B写成1.7B。`build_native.py` 输出新路径，保存命令与二进制hash。Whisper参数按全局约束，明确禁用默认多温度重试。
-- [ ] **2.6 跑绿灯、构建与10条接入检查。** Python测试通过；`python -m tools.interview_bench assets --root build/interview-bench --download`；`python -m tools.interview_bench models --root build/interview-bench --admission-only`。admission 选择同一固定10条、不得据识别好坏改选。加载失败、权重未校验或非预期身份均不启动正式批次。
-- [ ] **2.7 独立检查任务差异并记录提交。** 10条输出只作为接入/资源证据；无模型准确率达标门槛，不以预期收益决定是否允许跑全量。
+- [x] **2.1 写失败测试。** 未找到权重时加载立即失败且网络 spy 调用为0；响应 ID 不匹配、worker退出或非JSON时产生明确错误；两个并发请求进入原生 worker 时最大活跃推理数仍为1；close 后无子进程。失败样本仍占据完整预测ID，不换模型。
+- [x] **2.2 跑红灯。** `python -m unittest discover -s tools/interview_bench/tests -p 'test_backends.py'`。
+- [x] **2.3 建隔离环境并冻结依赖。** `uv venv build/interview-bench/.venv --python 3.11`；requirements.in 固定 torch==2.8.0、openai-whisper==20250625、numpy==2.2.6、soundfile==0.13.1、jiwer==4.0.0；使用 `uv pip compile` 解析传递依赖并冻结，安装到新环境。torch2.8 的 cp311 macOS arm64 wheel 已核存在，但安装与运行仍须验证。
+- [x] **2.4 下载并验证资产。** Qwen0.6按固定HF revision；Whisper base使用包内官方模型URL，核对SHA-256 `ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e`；Silero用固定commit，核对JIT 2,269,612 bytes和Git blob `63cb73be394528ef8d4936fdaa4884890754d065`，另存SHA-256。模型存 `build/interview-bench/models/`；已有1.7目录只读。保留来源、许可、文件hash，不下载整个 WhisperKit 仓库，不把 LFS 指针当权重，不修改全局 HF_ENDPOINT。
+- [x] **2.5 实现两种 backend 与新 Swift worker。** 从旧原生推理器复用已确认的调用方式，新增明确model_id参数，禁止仍把0.6B写成1.7B。`build_native.py` 输出新路径，保存命令与二进制hash。Whisper参数按全局约束，明确禁用默认多温度重试。
+- [x] **2.6 跑绿灯、构建与10条接入检查。** Python测试通过；`python -m tools.interview_bench assets --root build/interview-bench --download`；`python -m tools.interview_bench models --root build/interview-bench --admission-only`。admission 选择同一固定10条、不得据识别好坏改选。加载失败、权重未校验或非预期身份均不启动正式批次。
+- [x] **2.7 独立检查任务差异并记录提交。** 10条输出只作为接入/资源证据；无模型准确率达标门槛，不以预期收益决定是否允许跑全量。
 
 ## Task 3：完成三模型同集真实评测
 
@@ -117,11 +117,11 @@ Task 1 冻结数据与公共协议
 - `score_model_run(run_dir: Path, references: Path) -> dict`：复用 `tools/score_asr_baseline.py`，不改冻结 tokenization。
 - `render_model_comparison(runs: list[Path], output: Path) -> None`：输出分组MER、编辑分母、耗时、RSS、加载时间、后端和失败数。
 
-- [ ] **3.1 写并跑报告行为红灯。** 1130预测缺1条不得给完整报告；63条UNK不进入clean分母；混合MLX/PyTorch时报告必须列engine、dtype、quantization、device。不同性能协议/构建模式出现显著标记，不把旧数据无标识拼入同一表。
-- [ ] **3.2 实现批次计时与评分。** 每模型新进程，加载计时后固定3条预热（仅计预热耗时），再重新执行全部1130条计正式耗时；预热不减少评分样本。保留首条、每条耗时与整批墙钟。`/usr/bin/time -l` 记录进程峰值RSS，单位bytes并注明其覆盖范围。
-- [ ] **3.3 正式运行。** `python -m tools.interview_bench models --root build/interview-bench --models qwen-1.7b,qwen-0.6b,whisper-base`。不同时跑其他模型批次；记录客户端/后台负载状态，不能自动杀用户进程。缺失或错误结果不得悄悄重试为成功。
-- [ ] **3.4 验证与出表。** 三模型各1130条、clean1067、mixed191，ID完整，模型身份/输入hash匹配；输出完整计分和10个固定规则选取案例（每模型先按ID选前3个非零错误，另选1个跨模型差异），说明是示例而非随机分布。
-- [ ] **3.5 归档、复核并记录提交。** 保留旧1.7基线；新结果与旧结果有差异时记录差异条数和构建身份。报告如实描述效果，不以“某模型必须赢”作为成功条件。
+- [x] **3.1 写并跑报告行为红灯。** 1130预测缺1条不得给完整报告；63条UNK不进入clean分母；混合MLX/PyTorch时报告必须列engine、dtype、quantization、device。不同性能协议/构建模式出现显著标记，不把旧数据无标识拼入同一表。
+- [x] **3.2 实现批次计时与评分。** 每模型新进程，加载计时后固定3条预热（仅计预热耗时），再重新执行全部1130条计正式耗时；预热不减少评分样本。保留首条、每条耗时与整批墙钟。`/usr/bin/time -l` 记录进程峰值RSS，单位bytes并注明其覆盖范围。
+- [x] **3.3 正式运行。** `python -m tools.interview_bench models --root build/interview-bench --models qwen-1.7b,qwen-0.6b,whisper-base`。不同时跑其他模型批次；记录客户端/后台负载状态，不能自动杀用户进程。缺失或错误结果不得悄悄重试为成功。
+- [x] **3.4 验证与出表。** 三模型各1130条、clean1067、mixed191，ID完整，模型身份/输入hash匹配；输出完整计分和10个固定规则选取案例（每模型先按ID选前3个非零错误，另选1个跨模型差异），说明是示例而非随机分布。
+- [x] **3.5 归档、复核并记录提交。** 保留旧1.7基线；新结果与旧结果有差异时记录差异条数和构建身份。报告如实描述效果，不以“某模型必须赢”作为成功条件。
 
 **完成标准：** 同数据的三模型真实结果及可复现命令齐全；若进入时间收缩，至少两个不同架构配置完成相同全部1130条，缺少的配置明确标为not_run。
 
@@ -136,13 +136,13 @@ Task 1 冻结数据与公共协议
 - `run_replay(audio_path: Path, segmenter: Segmenter, worker: NativeWorker, clock: ReplayClock) -> dict`：保存分段、入队/出队/结果事件、样本所有权和失败状态。
 - annotations为 `{id,status,annotator,spans:[{start_sample,end_sample}]}`；仅 `status=confirmed` 可用于语音结束延迟评分，推理接口不接收annotations。
 
-- [ ] **4.1 写并跑红灯。** 末帧不足512补零处理后输出边界不得超过原样本数；不同会话reset；不足96ms但有语音概率的候选在EOS仍以short_candidate提交；恒定高概率超过10s强制切且无采样缺口；相邻padding不重复样本；队列第5个等待片段使会话明确failed，不能丢弃后继续报成功。
-- [ ] **4.2 写计时/因果红灯。** 同一音频前缀配两个不同未来尾部时，该前缀内事件完全相同；模拟慢ASR时音频投递时钟继续前进、等待时间增加；过早结束得到负endpoint延迟；ASR ready/load完成前不开始回放计时。取消后停止投递并等待未取消的底层计算退出，再关闭worker。
-- [ ] **4.3 实现固定Silero加载和分段器。** TorchScript CPU1线程；512样本输入；模型与状态机独立重置。min_speech用于确认事件；未确认候选遇结束/EOF时输出short_candidate交给ASR，不暗中丢短词。三种结束静音参数按研究设计固定，最长10s和缓冲所有权均写入事件。
+- [x] **4.1 写并跑红灯。** 末帧不足512补零处理后输出边界不得超过原样本数；不同会话reset；不足96ms但有语音概率的候选在EOS仍以short_candidate提交；恒定高概率超过10s强制切且无采样缺口；相邻padding不重复样本；队列第5个等待片段使会话明确failed，不能丢弃后继续报成功。
+- [x] **4.2 写计时/因果红灯。** 同一音频前缀配两个不同未来尾部时，该前缀内事件完全相同；模拟慢ASR时音频投递时钟继续前进、等待时间增加；过早结束得到负endpoint延迟；ASR ready/load完成前不开始回放计时。取消后停止投递并等待未取消的底层计算退出，再关闭worker。
+- [x] **4.3 实现固定Silero加载和分段器。** TorchScript CPU1线程；512样本输入；模型与状态机独立重置。min_speech用于确认事件；未确认候选遇结束/EOF时输出short_candidate交给ASR，不暗中丢短词。三种结束静音参数按研究设计固定，最长10s和缓冲所有权均写入事件。
 - [ ] **4.4 生成人工标注包。** `python -m tools.interview_bench replay --root build/interview-bench --prepare-annotations`；试听36条并确认起止/停顿，保留标注者。未试听不得将自动估计标为confirmed。没有confirmed边界时仍可跑MER与首段结果计时，但endpoint/final-from-speech延迟字段为null并给出manual_pending原因。
-- [ ] **4.5 构造固定回放并运行。** 3个dev/6个eval会话、每个4条、不跨划分复用来源；静音布局固定，运行前冻结当前人工标注及音频hash，之后修改标注需另起批次。dev跑整段/固定5s/VAD300/600/900；eval固定整段/固定5s/VAD600，不根据dev或eval成绩自动换参数。`python -m tools.interview_bench replay --root build/interview-bench --split dev`，再执行 `--split eval`。
+- [x] **4.5 构造固定回放并运行。** 3个dev/6个eval会话、每个4条、不跨划分复用来源；静音布局固定，运行前冻结当前人工标注及音频hash，之后修改标注需另起批次。dev跑整段/固定5s/VAD300/600/900；eval固定整段/固定5s/VAD600，不根据dev或eval成绩自动换参数。`python -m tools.interview_bench replay --root build/interview-bench --split dev`，再执行 `--split eval`。
 - [ ] **4.6 验证、报告与演示。** eval三策略各6会话，在同一Qwen1.7worker配置上完整计MER、等待、首段文字和每会话延迟；6条延迟逐条展示，不包装为稳定p95。生成终端逐段文字演示及一个可播放/查看事件的HTML报告，录制60～90秒演示，注明构造回放。
-- [ ] **4.7 独立检查任务差异并记录提交。** 清楚区分分段增量输出、模型token streaming、现有客户端落字。若未人工标注或未录演示，标pending，不由自动测试代签。
+- [x] **4.7 独立检查任务差异并记录提交。** 清楚区分分段增量输出、模型token streaming、现有客户端落字。若未人工标注或未录演示，标pending，不由自动测试代签。
 
 ## Task 5：英语错配词表与中英混说纠错实测
 
@@ -153,11 +153,11 @@ Task 1 冻结数据与公共协议
 - `run_correction(root: Path, max_requests: int = 1000, max_reported_tokens: int = 1000000) -> Path`：固定一次加载的provider/model，写完协议后4路交错请求。
 - `score_correction(run_dir: Path) -> dict`：计有效原文回退、官方B/U或冻结mixed MER、误改、用量缺失与请求延迟。
 
-- [ ] **5.1 写并跑红灯。** 故意含SECRET参考/目标稀有词的输入不得出现在请求；错配为完整词表循环置换且不偷偷去重合目标词；达到请求硬上限或已报告token软阈值后不启动新请求并标incomplete，在途至多4个请求仍须归档；HTTP失败/截断/空返回逐字保留原始ASR。原始ASR为空时不调用LLM，保留空文本和baseline_empty状态。
-- [ ] **5.2 实现准备与冻结。** 从旧protocol读取准确提示与参数；错配词表按既有200条ID排序循环分配下一行列表。ASCEND使用Task1冻结的规范技术词值，不读逐句答案构造词表。reference、rare_words、语言标签等字段禁止进入请求payload。
-- [ ] **5.3 小规模接入后运行固定矩阵。** 最多6次接入不调提示；`python -m tools.interview_bench correction --root build/interview-bench --allow-cloud`。英语3×200，上限600；ASCEND2×191，上限382。当前厂商/模型与预期SiliconFlow/DeepSeek-V3不一致时停止并报告，禁止静默替换；密钥仅内存读配置，不存CLI参数、协议、日志或服务器错误体。
-- [ ] **5.4 评分与控制核验。** 英语用同一官方脚本及hash；mixed用同一MER；额外读取参考计算正确/错配/技术词表覆盖率，但仅在推理后评分阶段。缺失、重复、额外condition/ID不得出完整结论；旧历史两组结果只作单独参照。
-- [ ] **5.5 出报告并记录提交。** 所有组同时列收益、普通词损失、原本正确句子误改、fallback、延迟和用量缺失。保留`ardor/ardour`等书写差异说明；ASCEND结果不命名为技术术语专项成绩。不开启根据本批错误逐句特判或反复调prompt的新迭代。
+- [x] **5.1 写并跑红灯。** 故意含SECRET参考/目标稀有词的输入不得出现在请求；错配为完整词表循环置换且不偷偷去重合目标词；达到请求硬上限或已报告token软阈值后不启动新请求并标incomplete，在途至多4个请求仍须归档；HTTP失败/截断/空返回逐字保留原始ASR。原始ASR为空时不调用LLM，保留空文本和baseline_empty状态。
+- [x] **5.2 实现准备与冻结。** 从旧protocol读取准确提示与参数；错配词表按既有200条ID排序循环分配下一行列表。ASCEND使用Task1冻结的规范技术词值，不读逐句答案构造词表。reference、rare_words、语言标签等字段禁止进入请求payload。
+- [x] **5.3 小规模接入后运行固定矩阵。** 最多6次接入不调提示；`python -m tools.interview_bench correction --root build/interview-bench --allow-cloud`。英语3×200，上限600；ASCEND2×191，上限382。当前厂商/模型与预期SiliconFlow/DeepSeek-V3不一致时停止并报告，禁止静默替换；密钥仅内存读配置，不存CLI参数、协议、日志或服务器错误体。
+- [x] **5.4 评分与控制核验。** 英语用同一官方脚本及hash；mixed用同一MER；额外读取参考计算正确/错配/技术词表覆盖率，但仅在推理后评分阶段。缺失、重复、额外condition/ID不得出完整结论；旧历史两组结果只作单独参照。
+- [x] **5.5 出报告并记录提交。** 所有组同时列收益、普通词损失、原本正确句子误改、fallback、延迟和用量缺失。保留`ardor/ardour`等书写差异说明；ASCEND结果不命名为技术术语专项成绩。不开启根据本批错误逐句特判或反复调prompt的新迭代。
 
 ## Task 6：整体核验、面试材料与冻结
 
@@ -167,10 +167,10 @@ Task 1 冻结数据与公共协议
 - `verify(root: Path, profile: str) -> dict`：profile为full/compact，按下方明确矩阵验证，输出passed/failed/not_run/manual_pending；不得把not_run计成通过。
 - `report(root: Path, profile: str) -> Path`：输出总报告，链接每批协议、原始输出、单独指标和限制。
 
-- [ ] **6.1 写并跑报告红灯。** 缺少VAD人工边界时显示manual_pending；只完成两模型不得显示full完成；MLX与PyTorch对比始终列后端；ASR的RTF与LLM网络耗时不能混为产品端到端速度；dispatch只能标发送事件，不能标已确认落字。
-- [ ] **6.2 生成和复核完整报告。** `python -m tools.interview_bench report --root build/interview-bench --profile full`；`python -m tools.interview_bench verify --root build/interview-bench --profile full`。核对数据/模型/源码/二进制/评分器hash、全部IDs、单位分母、API原文回退与凭据不落盘。
-- [ ] **6.3 完成必要测试。** `PYTHONDONTWRITEBYTECODE=1 build/interview-bench/.venv/bin/python -m unittest discover -s tools/interview_bench/tests -p 'test_*.py'`；原有12项研究行为测试在旧隔离环境重跑。不改客户端代码时不将全应用自测当成本轮算法效果证据；实际触及产品代码则补对应原有回归。
-- [ ] **6.4 整理面试讲述。** 写30秒/3分钟两版介绍；每模块列“问题→实现→实际数字→失败案例→取舍”。准备Qwen/Whisper差异、量化、VAD与ASR边界、MER/WER与微平均、流式/分段、上下文误改、PyTorch张量与推理模式、原型与产品边界等至少12条追问。
+- [x] **6.1 写并跑报告红灯。** 缺少VAD人工边界时显示manual_pending；只完成两模型不得显示full完成；MLX与PyTorch对比始终列后端；ASR的RTF与LLM网络耗时不能混为产品端到端速度；dispatch只能标发送事件，不能标已确认落字。
+- [x] **6.2 生成和复核完整报告。** `python -m tools.interview_bench report --root build/interview-bench --profile full`；`python -m tools.interview_bench verify --root build/interview-bench --profile full`。核对数据/模型/源码/二进制/评分器hash、全部IDs、单位分母、API原文回退与凭据不落盘。
+- [x] **6.3 完成必要测试。** `PYTHONDONTWRITEBYTECODE=1 build/interview-bench/.venv/bin/python -m unittest discover -s tools/interview_bench/tests -p 'test_*.py'`；原有12项研究行为测试在旧隔离环境重跑。不改客户端代码时不将全应用自测当成本轮算法效果证据；实际触及产品代码则补对应原有回归。
+- [x] **6.4 整理面试讲述。** 写30秒/3分钟两版介绍；每模块列“问题→实现→实际数字→失败案例→取舍”。准备Qwen/Whisper差异、量化、VAD与ASR边界、MER/WER与微平均、流式/分段、上下文误改、PyTorch张量与推理模式、原型与产品边界等至少12条追问。
 - [ ] **6.5 演示并冻结。** 保留CLI运行/报告/分段演示；现有客户端做至少3次短句/混说/术语真实麦克风演示，并人工确认TextEdit实际文字。未完成时标产品演示pending，不虚构真机通过。客户端演示不自动注入私密文档，不改变用户长期模型设置。面试前一天停止新增方法，最后一天用于用户阅读代码与演练。
 - [ ] **6.6 独立检查所有改动、归档并按用户指令提交。** 本任务不包含自动push或发布；以测试/核验结果和实际完成矩阵说明状态，不以预期改进数字宣布成功。
 
@@ -207,4 +207,4 @@ Task 1 冻结数据与公共协议
 - [x] 写出四模块整体范围、接口、测试、实测矩阵、时间收缩与事实边界。
 - [ ] 按本计划实施新增工具、下载模型、执行新批次和人工演示。
 
-本次仅完成调研与计划；已有基线/pilot是真实历史结果，新矩阵的成绩待执行后填写。
+实施状态（2026-11-11）：自动矩阵已完成，整体为 partial。三模型各1130、dev3×5/eval6×3回放、982次纠错均有真实归档；36条人工试听、60–90秒录制、三次麦克风实际落字尚待完成。4.4/4.6/6.5保留未勾选表示其中人工部分待验证；6.6等待最终独立审查。详见 [证据总览](../../evidence/iflytek-interview/2026-11-11-four-modules/README.md)。

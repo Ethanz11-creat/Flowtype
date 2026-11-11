@@ -18,6 +18,8 @@ def score_model_run(run_dir: Path, references: Path):
                    scorer_sha256=sha(Path('tools/score_asr_baseline.py')),analysis_sha256=sha(Path(__file__)),
                    timing=json.loads((run_dir/'timing.json').read_text()),
                    resource=json.loads((run_dir/'resource.json').read_text()))
+    if summary.get('cross_batch_history'):
+        lines+=['','compact：plain/contextual来自历史400请求，mismatched来自本批200请求；跨批次服务别名可能漂移。mixed扩展not_run，本报告中相关分母/局限为full设计说明，不能视作compact实测。','']
     (run_dir/'analysis-source').mkdir(exist_ok=True)
     __import__('shutil').copyfile(Path(__file__),run_dir/'analysis-source/report.py')
     write_json(run_dir/'summary.json',summary);write_rows(run_dir/'scored_rows.jsonl',rows)
@@ -36,7 +38,11 @@ def render_model_comparison(runs, output):
         group=lambda g:f"{g['edit_errors']}/{g['reference_units']} ({g['mer']:.2%})"
         t=s['timing'];rss=s['resource']['maximum_resident_set_size_bytes']
         lines.append(f"| {s['model_id']} | {' / '.join(d.values())} | {group(s['clean'])} | {group(s['by_language'].get('mixed',s['clean']))} | {s['failure_count']} | {s['latency']['aggregate_rtf']:.3f} | {t['load_seconds']:.2f} / {t['warmup_seconds']:.2f} / {t['batch_wall_seconds']:.2f} | {rss} |")
-    lines += ['', '**Different performance protocols/backends/build modes** are shown above; RSS is macOS process memory, not complete GPU allocation. Warmup is separate; all scoring rows are rerun. Desktop/client load is uncontrolled. Historical baseline is separate.', '']
+    lines += ['', '| Language | Rows / reference units | Model | Edits | MER |', '|---|---|---|---:|---:|']
+    for s in summaries:
+        for language,g in s['by_language'].items():
+            lines.append(f"| {language} | {g['rows']} / {g['reference_units']} | {s['model_id']} | {g['edit_errors']} | {g['mer']:.2%} |")
+    lines += ['', 'Load timers cover model loading inside the worker, excluding process launch and dependency imports; this is not product cold-start latency.', '', '**Different performance protocols/backends/build modes** are shown above; RSS is macOS process memory, not complete GPU allocation. Warmup is separate; all scoring rows are rerun. Desktop/client load is uncontrolled. Historical baseline is separate.', '']
     examples=[]
     for p in runs:
         errors=sorted((r for r in read_rows(p/'scored_rows.jsonl') if r.get('mer')),key=lambda r:r['id'])[:3]
@@ -100,6 +106,7 @@ def render_correction(run_dir):
         lines.append(f"| {condition} | {m['WER']['rate_percent']:.2f}% | {m['B-WER']['rate_percent']:.2f}% | {m['U-WER']['rate_percent']:.2f}% | {d.get('changed',0)} | {d.get('harmed',0)} | {d.get('previously_correct_harmed',0)} | {s['fallback_count']} | {s['latency_median_seconds']:.2f} |")
     lines+=['','| 中英混说条件 | 编辑数/2997（MER） | 变更句 | 改坏句 | 原本正确的42句中改坏 | fallback | 网络中位秒 |','|---|---:|---:|---:|---:|---:|---:|']
     for condition in ['raw','plain','static_tech']:
+        if 'ascend-'+condition not in summary['conditions']:continue
         s=summary['conditions']['ascend-'+condition];m=s['metrics']['clean'];d=s['paired_diagnostics']
         lines.append(f"| {condition} | {m['edit_errors']}/{m['reference_units']} ({m['mer']:.2%}) | {d.get('changed',0)} | {d.get('harmed',0)} | {d.get('previously_correct_harmed',0)} | {s['fallback_count']} | {s['latency_median_seconds']:.2f} |")
     lines+=['','参考分母：英语总4449，B506，U3943；mixed2997。官方B/U使用冻结加权对齐；逐句改好/改坏使用单位编辑代价，口径分别保留。','',
@@ -117,6 +124,8 @@ def render_correction(run_dir):
     lines+=['',f"本批请求{execution['requests']}次，服务报告{execution['reported_tokens']} tokens，usage缺失{execution['usage_missing']}次。模型为服务别名，不是固定权重快照。失败保留原文计分，不重试。网络耗时不等于ASR RTF或已确认落字的端到端时延。", '',
             '历史pilot单独保留；ardor→ardour一类收益含书写差异，不解释为声学理解。不能按本批错误继续逐句特判或刷提示。','']
     lines += ['推断限制：plain与有词表组的系统提示还相差固定CONTEXT后缀。英语正确/错配两组共享该后缀，能更直接比较候选表匹配性；mixed词表零命中时两组差异也可能来自提示后缀或服务波动，不能解释为技术词纠错收益。', '']
+    if summary.get('cross_batch_history'):
+        lines+=['','compact：plain/contextual来自历史400请求，mismatched来自本批200请求；跨批次服务别名可能漂移。mixed扩展not_run，本报告中相关分母/局限为full设计说明，不能视作compact实测。','']
     (run_dir/'analysis-source').mkdir(exist_ok=True)
     __import__('shutil').copyfile(Path(__file__),run_dir/'analysis-source/report.py')
     (run_dir/'report.md').write_text('\n'.join(lines))

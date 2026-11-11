@@ -1,7 +1,7 @@
 {
-  "rows": 1130,
   "changed_text_rows": 0,
-  "old_sha256": "d973d85243b58084447fd05d5db12bbae0870e5798bb86eaa384a4fd53f93663",
-  "new_sha256": "da64c3173a126805bfc4cd521c2f6864a914877cef41f2811e60b25cd1157db7",
-  "note": "Historical first-use timing separate; not pooled into new performance table"
+  "rows": 1130,
+  "old_prediction_sha256": "d973d85243b58084447fd05d5db12bbae0870e5798bb86eaa384a4fd53f93663",
+  "new_prediction_sha256": "da64c3173a126805bfc4cd521c2f6864a914877cef41f2811e60b25cd1157db7",
+  "note": "Historical baseline had no separate warmup; new worker has explicit identity and copied Metal resources; deployment build remains SPM debug. Historical run is not pooled into new performance table."
 }

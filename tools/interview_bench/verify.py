@@ -65,19 +65,62 @@ def latest(root,folder):
     return paths[-1].parent if paths else None
 
 
-def validate_correction_matrix(tasks, rows):
+def validate_correction_matrix(tasks, rows, profile='full'):
+    if profile not in ['full','compact']:raise ValueError('Unknown profile')
     from collections import Counter
     expected={('librispeech',c):200 for c in ['plain','contextual','mismatched']}
     expected.update({('ascend',c):191 for c in ['plain','static_tech']})
+    if profile=='compact' and len(tasks)==200:expected={('librispeech','mismatched'):200}
+    size=sum(expected.values())
     identity=lambda r:(r['dataset'],r['id'],r['condition'])
     if Counter((t['dataset'],t['condition']) for t in tasks)!=expected:
         raise ValueError('Wrong fixed correction matrix')
     keys=[identity(t) for t in tasks];actual=[identity(r) for r in rows]
-    if len(set(keys))!=982 or len(set(actual))!=982 or len(actual)!=982 or set(keys)!=set(actual):
+    if len(set(keys))!=size or len(set(actual))!=size or len(actual)!=size or set(keys)!=set(actual):
         raise ValueError('Incomplete/extra/duplicate corrections')
     for dataset in ['librispeech','ascend']:
         groups=[{t['id'] for t in tasks if t['dataset']==d and t['condition']==c} for d,c in expected if d==dataset]
-        if any(g!=groups[0] for g in groups):raise ValueError('Condition IDs differ')
+        if groups and any(g!=groups[0] for g in groups):raise ValueError('Condition IDs differ')
+
+
+def historical_corrections(root, directory=None):
+    """Validate the frozen 400-output pilot before a compact cross-batch analysis."""
+    from tools.run_contextual_asr_correction import SYSTEM, CONTEXT, SETTINGS
+    directory=directory or Path('docs/evidence/2026-11-11-contextual-asr-correction')
+    protocol=json.loads((directory/'protocol.json').read_text())
+    summary=json.loads((directory/'comparison-summary.json').read_text())
+    prepared=root/'prepared/librispeech'
+    for name,key in [('baseline-predictions.jsonl','baseline_predictions_sha256'),('references.jsonl','candidate_source_sha256')]:
+        if sha(prepared/name)!=protocol[key]:raise ValueError('Historical baseline/candidates changed')
+    if sha(directory/'inference-inputs.jsonl')!=protocol['inputs_sha256'] or sha(directory/'completions.jsonl')!=summary['completions_sha256'] or sha(directory/'protocol.json')!=summary['protocol_sha256']:raise ValueError('Historical artifact changed')
+    if protocol['system_prompt']!=SYSTEM or protocol['contextual_suffix']!=CONTEXT or protocol['settings']!=SETTINGS or protocol['requested_model']!='deepseek-ai/DeepSeek-V3' or protocol['provider']!='SiliconFlow':raise ValueError('Historical method changed')
+    inputs=read_rows(directory/'inference-inputs.jsonl');rows=read_rows(directory/'completions.jsonl')
+    refs={r['id']:r for r in read_rows(prepared/'references.jsonl')}
+    base={r['id']:r for r in read_rows(prepared/'baseline-predictions.jsonl')}
+    if len(inputs)!=200 or len({r['id'] for r in inputs})!=200 or {r['id'] for r in inputs}!=set(base) or set(refs)!=set(base):raise ValueError('Historical input scope')
+    for r in inputs:
+        if r['asr_text']!=base[r['id']]['text'] or r['candidates']!=refs[r['id']]['biasing_words']:raise ValueError('Historical input contents')
+    expected={(r['id'],c) for r in inputs for c in ['plain','contextual']}
+    if len(rows)!=400 or {(r['id'],r['condition']) for r in rows}!=expected:raise ValueError('Historical completion scope')
+    for r in rows:
+        if not isinstance(r['text'],str) or r['status'] not in ['ok','fallback','baseline_empty'] or (r['status']!='ok' and r['text']!=base[r['id']]['text']):raise ValueError('Historical fallback changed')
+    tasks=[dict(id=r['id'],dataset='librispeech',condition=c,asr_text=r['asr_text'],candidates=r['candidates'] if c=='contextual' else []) for r in inputs for c in ['plain','contextual']]
+    return tasks,[dict(dataset='librispeech',**r) for r in rows]
+
+
+def boundaries_confirmed(annotations, required_ids):
+    """Only human-confirmed boundaries for the selected source IDs count."""
+    by={r['id']:r for r in annotations}
+    if len(by)!=len(annotations) or not required_ids:return False
+    for id in required_ids:
+        r=by.get(id,{})
+        if r.get('status')!='confirmed' or not r.get('annotator','').strip() or not r.get('spans'):return False
+        last=0
+        for span in r['spans']:
+            a,b=span['start_sample'],span['end_sample']
+            if type(a)!=int or type(b)!=int or not last<=a<b<=r.get('frames',b):return False
+            last=b
+    return True
 
 
 def verify_manual(root):
@@ -178,12 +221,18 @@ def verify(root,profile='full'):
                     if r['annotation_status']!='confirmed' and (r['endpoint_latency_seconds'] is not None or r['final_from_speech_seconds'] is not None):raise ValueError('invented human timing')
             checks['replay-'+split]=check('passed',run=str(p))
         except (KeyError,ValueError,FileNotFoundError,TypeError):checks['replay-'+split]=check('failed',run=str(p))
-    evaluation=replay_by_split.get('eval')
-    confirmed=False
-    if evaluation:
-        annotations=json.loads((evaluation/'annotations.json').read_text())
-        confirmed=len(annotations)==36 and all(r['status']=='confirmed' and r['annotator'] and r['spans'] for r in annotations)
-    checks['human_boundaries']=check('passed' if confirmed else 'manual_pending',reason='36 real listening confirmations required')
+    required_ids=set();confirmed=True
+    for split in (['eval'] if profile=='compact' else ['dev','eval']):
+        p=replay_by_split.get(split)
+        if not p:confirmed=False;continue
+        try:
+            sessions=json.loads((p/'sessions.json').read_text())
+            ids={r['id'] for session in sessions if session['split']==split for r in session['sources']}
+            if len(ids)!=(24 if split=='eval' else 12):raise ValueError('boundary source count')
+            required_ids.update(ids)
+            confirmed=boundaries_confirmed(json.loads((p/'annotations.json').read_text()),ids) and confirmed
+        except (ValueError,KeyError,TypeError,FileNotFoundError):confirmed=False
+    checks['human_boundaries']=check('passed' if confirmed else 'manual_pending',reason=f'{24 if profile=="compact" else 36} real listening confirmations required')
     correction=latest(root,'correction-runs')
     if correction:
         try:
@@ -191,11 +240,17 @@ def verify(root,profile='full'):
             s=json.loads((correction/'summary.json').read_text());execution=json.loads((correction/'execution.json').read_text())
             tasks=read_rows(correction/'inference-inputs.jsonl');rows=read_rows(correction/'completions.jsonl')
             if s['completion_sha256']!=sha(correction/'completions.jsonl') or s['inference_input_sha256']!=sha(correction/'inference-inputs.jsonl'):raise ValueError('correction scoring hashes changed')
-            validate_correction_matrix(tasks,rows)
+            validate_correction_matrix(tasks,rows,profile)
+            compact_only=profile=='compact' and len(tasks)==200
+            if compact_only:historical_corrections(root)
             expected_conditions={f'{d}-{c}' for d,cs in [('librispeech',['raw','plain','contextual','mismatched']),('ascend',['raw','plain','static_tech'])] for c in cs}
+            if compact_only:expected_conditions={f'librispeech-{c}' for c in ['raw','plain','contextual','mismatched']}
+            if compact_only:
+                history=Path('docs/evidence/2026-11-11-contextual-asr-correction')
+                if s['cross_batch_history']!={str(p):sha(p) for p in [history/'protocol.json',history/'completions.jsonl']} or s['mixed_status']!='not_run':raise ValueError('Historical analysis provenance')
             if set(s['conditions'])!=expected_conditions:raise ValueError('Missing condition summary')
             key=lambda r:(r['dataset'],r['id'],r['condition'])
-            if not s['complete'] or not execution['complete'] or len(tasks)!=982 or len(rows)!=982 or len({key(r) for r in rows})!=982 or {key(r) for r in rows}!={key(r) for r in tasks}:raise ValueError('incomplete correction')
+            if not s['complete'] or not execution['complete'] or len(tasks)!=(200 if compact_only else 982) or len(rows)!=len(tasks) or len({key(r) for r in rows})!=len(tasks) or {key(r) for r in rows}!={key(r) for r in tasks}:raise ValueError('incomplete correction')
             protocol=json.loads((correction/'protocol.json').read_text())
             if protocol['input_sha256']!=sha(correction/'inference-inputs.jsonl') or execution['requests']>1000:raise ValueError('correction identity/budget')
             for d in ['librispeech','ascend']:
@@ -204,7 +259,8 @@ def verify(root,profile='full'):
             if protocol['config']['requested_model']!='deepseek-ai/DeepSeek-V3' or protocol['config']['provider']!='SiliconFlow':raise ValueError('provider identity')
             originals={key(t):t['asr_text'] for t in tasks}
             if any(r['status']!='ok' and r['text']!=originals[key(r)] for r in rows):raise ValueError('fallback changed original')
-            checks['correction']=check('passed',run=str(correction),requests=execution['requests'],reported_tokens=execution['reported_tokens'])
+            checks['correction']=check('passed',run=str(correction),requests=execution['requests'],reported_tokens=execution['reported_tokens'],
+                scope='cross-batch: historical plain/contextual400 plus mismatched200; mixed not_run' if compact_only else 'full982 (superset of compact)')
         except (ValueError,KeyError,FileNotFoundError,TypeError):checks['correction']=check('failed',run=str(correction))
     else:checks['correction']=check('not_run')
     checks.update(verify_manual(root))

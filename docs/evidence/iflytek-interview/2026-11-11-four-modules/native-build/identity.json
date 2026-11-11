@@ -1,0 +1,6 @@
+{
+  "sha256": "d7db25c8400bc0ede8f5c76915dd381f5f4c1e8fdf08f87e5e139452cec0c5dc",
+  "metal_sha256": "f36b01c44dd5f2d9020deb1ac6ad53dc085de81af19396694c5963ef3a12137f",
+  "objects": 739,
+  "build_mode": "SPM debug dependency objects"
+}

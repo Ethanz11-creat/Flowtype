@@ -1,0 +1,25 @@
+{
+  "datasets": {
+    "ascend": {
+      "rows": 1130,
+      "clean_rows": 1067,
+      "mixed_clean_rows": 191,
+      "input_sha256": "82f6c26fa929320760ee0f4d5467be655af703ff136a539d8a503fd11c8a2a8d",
+      "reference_sha256": "68d0940fb05475c36ba98beee9e6b5edc29d0dad5f1685d716089e7817100b6c",
+      "baseline_sha256": "d973d85243b58084447fd05d5db12bbae0870e5798bb86eaa384a4fd53f93663",
+      "audio_manifest_sha256": "7a6001d949fe158cef657b7c47889ddfbceb2773b91794db08e20e2bc1069b7a"
+    },
+    "librispeech": {
+      "rows": 200,
+      "clean_rows": 200,
+      "mixed_clean_rows": 0,
+      "input_sha256": "b263772178cbafa11cae7c087ec445869178d215911cf3de8489368a0c009040",
+      "reference_sha256": "abe054ad3ff60cbcc041fff7cefb0b3be83b6c2929b2ac6a4f7f7b67f98518e1",
+      "baseline_sha256": "04c1d1c8855f9705a9013bfaa28d5872aa410e111abd204224967301cc003bb9",
+      "audio_manifest_sha256": "620841b5f014a5dc3771a2ed1b2b70c23046f4ef1d9c439c4c60ef41314baa64"
+    }
+  },
+  "technical_vocabulary_sha256": "58ce3df54f2e3f4dcf180db92fb14daf81f5daac6b982a330700e7fa6f630ebf",
+  "vad_selection_sha256": "093865adff3aa4d8dd059c66ef742982c4ab6278a4470c043f3974908a0e9516",
+  "source_root": "/Users/yiheng/pycode/flowtype-local/build/asr-baseline-20261111"
+}

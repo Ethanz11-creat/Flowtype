@@ -1,0 +1,59 @@
+{
+  "profile": "full",
+  "status": "partial",
+  "checks": {
+    "prepared": {
+      "status": "passed"
+    },
+    "assets": {
+      "status": "passed"
+    },
+    "model-qwen-1.7b": {
+      "status": "passed",
+      "run": "build/interview-bench/model-runs/20261111T080223324612Z/qwen-1.7b",
+      "failures": 0
+    },
+    "model-qwen-0.6b": {
+      "status": "passed",
+      "run": "build/interview-bench/model-runs/20261111T080223324612Z/qwen-0.6b",
+      "failures": 0
+    },
+    "model-whisper-base": {
+      "status": "passed",
+      "run": "build/interview-bench/model-runs/20261111T080223324612Z/whisper-base",
+      "failures": 0
+    },
+    "replay-dev": {
+      "status": "passed",
+      "run": "build/interview-bench/replay-runs/20261111T084344485283Z"
+    },
+    "replay-eval": {
+      "status": "passed",
+      "run": "build/interview-bench/replay-runs/20261111T084753091986Z"
+    },
+    "human_boundaries": {
+      "status": "manual_pending",
+      "reason": "36 real listening confirmations required"
+    },
+    "correction": {
+      "status": "passed",
+      "run": "build/interview-bench/correction-runs/20261111T080603494245Z",
+      "requests": 982,
+      "reported_tokens": 374876,
+      "scope": "full982 (superset of compact)"
+    },
+    "microphone_demo": {
+      "status": "manual_pending",
+      "reason": "3 real microphone/TextEdit insertions require a human observation record"
+    },
+    "recorded_replay_demo": {
+      "status": "manual_pending",
+      "reason": "60–90s replay recording requires a real media file and human observation"
+    }
+  },
+  "limitations": [
+    "Not a blind benchmark; public custom subsets",
+    "ASR RTF, LLM network time, and confirmed product insertion are different quantities",
+    "dispatch is an attempt, never proof of inserted text"
+  ]
+}

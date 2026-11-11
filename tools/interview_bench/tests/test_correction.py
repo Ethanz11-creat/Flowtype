@@ -46,3 +46,13 @@ class CorrectionTests(unittest.TestCase):
         self.assertEqual(coverage['contextual']['rare_targets_covered'],2)
         self.assertEqual(coverage['mismatched']['rare_targets_covered'],0)
         self.assertEqual(json.dumps(tasks),before)
+
+    def test_compact_requests_only_the_fixed_200_mismatches(self):
+        from pathlib import Path
+        from tools.interview_bench.correction import correction_tasks
+        root=Path('docs/evidence/iflytek-interview/2026-11-11-four-modules')
+        tasks=correction_tasks(root,'compact')
+        self.assertEqual(len(tasks),200)
+        self.assertEqual({(t['dataset'],t['condition']) for t in tasks},{('librispeech','mismatched')})
+        all_tasks=correction_tasks(root,'full')
+        self.assertEqual(tasks,[t for t in all_tasks if t['dataset']=='librispeech' and t['condition']=='mismatched'])
