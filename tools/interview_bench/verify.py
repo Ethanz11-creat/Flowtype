@@ -125,6 +125,7 @@ def verify(root,profile='full'):
         try:
             s=json.loads((correction/'summary.json').read_text());execution=json.loads((correction/'execution.json').read_text())
             tasks=read_rows(correction/'inference-inputs.jsonl');rows=read_rows(correction/'completions.jsonl')
+            if s['completion_sha256']!=sha(correction/'completions.jsonl') or s['inference_input_sha256']!=sha(correction/'inference-inputs.jsonl'):raise ValueError('correction scoring hashes changed')
             validate_correction_matrix(tasks,rows)
             expected_conditions={f'{d}-{c}' for d,cs in [('librispeech',['raw','plain','contextual','mismatched']),('ascend',['raw','plain','static_tech'])] for c in cs}
             if set(s['conditions'])!=expected_conditions:raise ValueError('Missing condition summary')

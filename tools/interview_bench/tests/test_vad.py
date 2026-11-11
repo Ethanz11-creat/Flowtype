@@ -15,7 +15,7 @@ class VADTests(unittest.TestCase):
         self.assertEqual(s.process(np.zeros(100,dtype='float32')),[])
         segments=s.flush()
         self.assertEqual((segments[0].end_sample,segments[0].reason),(100,'short_candidate'))
-        s.reset();self.assertEqual(s.samples_seen,0);self.assertGreater(model.resets,0)
+        s.reset();self.assertEqual(s.samples_seen,0);self.assertEqual(model.resets,2)
 
     def test_long_speech_no_gap_or_duplicate_padding(self):
         s=Segmenter(Prob(.9));events=[]

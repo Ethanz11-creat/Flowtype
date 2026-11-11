@@ -8,8 +8,17 @@ import subprocess
 import sys
 import time
 import wave
-from .backends import NativeWorker, WhisperBackend, effective_prediction
+from .backends import NativeWorker, WhisperBackend, effective_prediction, stop_process_tree
 from .schema import freeze_run, load_audio_inputs, read_rows, sha, validate_predictions, write_json, write_rows
+
+
+def run_isolated(command,stdout,stderr,timeout=10800):
+    process=subprocess.Popen(command,stdout=stdout,stderr=stderr,start_new_session=True)
+    try:
+        return process.wait(timeout=timeout)
+    except (subprocess.TimeoutExpired,KeyboardInterrupt):
+        stop_process_tree(process)
+        raise
 
 
 def backend(root, model_id, log=None):
@@ -88,9 +97,13 @@ def run_models(root: Path, model_ids=None, admission_only=False):
         with (target/'progress.log').open('w') as progress, (target/'process.time').open('w') as timing:
             command = ['/usr/bin/time','-l',sys.executable,'-m','tools.interview_bench.models',
                        '--root',str(root.resolve()),'--single',model_id,'--output',str(target.resolve())]
-            result = subprocess.run(command, stdout=progress, stderr=timing, timeout=10800)
-        if result.returncode:
-            write_json(target/'failure.json', {'error':'model_process_failed','returncode':result.returncode})
+            try:
+                returncode = run_isolated(command,progress,timing)
+            except subprocess.TimeoutExpired:
+                write_json(target/'failure.json',{'error':'model_process_timeout','timeout_seconds':10800})
+                raise
+        if returncode:
+            write_json(target/'failure.json', {'error':'model_process_failed','returncode':returncode})
             raise RuntimeError(f'Model process failed: {model_id}; inspect {target}')
         text = (target/'native.stderr').read_text() if model_id != 'whisper-base' else (target/'process.time').read_text()
         matches = re.findall(r'(\d+)\s+maximum resident set size', text)

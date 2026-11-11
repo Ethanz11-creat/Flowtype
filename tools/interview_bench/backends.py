@@ -1,11 +1,37 @@
 """Offline-only inference adapters. No implicit model downloads or fallback."""
 import json
+import os
+import signal
 from pathlib import Path
 import select
 import subprocess
 import threading
 import time
 import uuid
+
+
+def stop_process_tree(process):
+    """Stop an owned session plus descendant sessions (e.g. time→Python→MLX)."""
+    listing=subprocess.run(['ps','-Ao','pid=,ppid='],capture_output=True,text=True,check=True)
+    parents=[tuple(map(int,line.split())) for line in listing.stdout.splitlines() if line.strip()]
+    descendants={process.pid}
+    while True:
+        expanded=descendants|{pid for pid,parent in parents if parent in descendants}
+        if expanded==descendants:break
+        descendants=expanded
+    groups={process.pid}
+    for pid in descendants:
+        try:groups.add(os.getpgid(pid))
+        except ProcessLookupError:pass
+    groups.discard(os.getpgrp())
+    for sig in [signal.SIGTERM,signal.SIGKILL]:
+        for group in groups:
+            try:os.killpg(group,sig)
+            except ProcessLookupError:pass
+        if sig==signal.SIGTERM:
+            try:process.wait(timeout=2)
+            except subprocess.TimeoutExpired:pass
+    process.wait()
 
 
 class BackendError(RuntimeError):
@@ -20,10 +46,11 @@ def effective_prediction(id, model_id, audio_seconds, latency_seconds, text='', 
 
 
 class NativeWorker:
-    def __init__(self, model_dir: Path, model_id: str, binary: Path, command=None, stderr=None):
+    def __init__(self, model_dir: Path, model_id: str, binary: Path, command=None, stderr=None, shutdown_timeout=30):
         self.model_dir, self.model_id, self.binary = model_dir, model_id, binary
         self.command = command
         self.stderr = stderr
+        self.shutdown_timeout = shutdown_timeout
         self.lock = threading.Lock()
         self.process = None
 
@@ -43,7 +70,7 @@ class NativeWorker:
             raise FileNotFoundError('Missing local model or worker')
         self.process = subprocess.Popen(self.command or [str(self.binary), str(self.model_dir), self.model_id],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=self.stderr, text=True, bufsize=1)
+                                        stderr=self.stderr, text=True, bufsize=1, start_new_session=True)
         try:
             ready = self._read()
             if ready.get('event') != 'ready' or ready.get('model_id') != self.model_id:
@@ -74,13 +101,9 @@ class NativeWorker:
             if self.process.stdin:
                 self.process.stdin.close()
             try:
-                self.process.wait(timeout=30)
+                self.process.wait(timeout=self.shutdown_timeout)
             except subprocess.TimeoutExpired:
-                self.process.terminate()
-                try:
-                    self.process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    self.process.kill(); self.process.wait()
+                stop_process_tree(self.process)
             self.process.stdout.close()
 
 

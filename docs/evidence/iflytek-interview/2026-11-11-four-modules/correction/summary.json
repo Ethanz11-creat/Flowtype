@@ -316,6 +316,11 @@
       "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
     }
   },
+  "analysis_sha256": "f17491113c8a1c541d484fcb942a9cf1a21fc54092269a20d2a9f39b9343c219",
+  "completion_sha256": "d733fffb13553ac4b79fdf02f292980a55ccae5d2ce303dc6937f73e53429fee",
+  "inference_input_sha256": "eb3993cf4a1fb1345a34f8a6dc86c827d21ce20b488080d46d85dd2a30e4860e",
+  "mixed_scorer_sha256": "3ae91e900cc1fd18784ae3896a7041b430968f0f8b434aede34a5e851cc9164f",
+  "official_scorer_sha256": "669de80a61cf84ac34aacc18cf4813ca0cf1cae32d6435b3763dfa586ea89649",
   "posthoc_coverage": {
     "librispeech": {
       "plain": {

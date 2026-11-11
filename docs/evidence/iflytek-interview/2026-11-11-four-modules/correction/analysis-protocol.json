@@ -1,0 +1,10 @@
+{
+  "generated_at_utc": "2026-11-11T08:27:54.236424+00:00",
+  "additional_cloud_requests": 0,
+  "completion_sha256": "d733fffb13553ac4b79fdf02f292980a55ccae5d2ce303dc6937f73e53429fee",
+  "scoring_sources": {
+    "correction.py": "f17491113c8a1c541d484fcb942a9cf1a21fc54092269a20d2a9f39b9343c219",
+    "report.py": "d186734513d6a6229eb25cca2664384c3e21c1f8828f69a5d2f12c102f34fcbd"
+  },
+  "note": "Posthoc coverage and report rendering are derived after frozen inference. Original inference sources remain in source-snapshot; no raw outputs changed."
+}

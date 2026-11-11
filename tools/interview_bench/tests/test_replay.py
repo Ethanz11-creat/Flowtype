@@ -33,6 +33,7 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(result['status'],'failed')
             self.assertEqual(result['error_code'],'queue_overflow')
             self.assertGreater(len(clock.delivered),4)
+            self.assertTrue(any(r['wait_seconds']>0 for r in result['segments']))
             self.assertLess(clock.now(),.64)
             self.assertTrue(all(not t.name.startswith('asr-replay') for t in threading.enumerate()))
 

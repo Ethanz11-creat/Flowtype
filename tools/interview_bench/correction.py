@@ -133,7 +133,12 @@ def score_correction(run_dir,root=None):
         if r['status']!='ok' and r['text']!=expected[identity(r)]['asr_text']:raise ValueError('Fallback changed original')
     if any(r['status']=='not_requested' for r in rows):
         result={'complete':False,'reason':'budget_stop','scored':False};write_json(run_dir/'summary.json',result);return result
-    result=dict(complete=True,conditions={});diagnostics=[]
+    result=dict(complete=True,conditions={},analysis_sha256=sha(Path(__file__)),
+                completion_sha256=sha(run_dir/'completions.jsonl'),inference_input_sha256=sha(run_dir/'inference-inputs.jsonl'),
+                mixed_scorer_sha256=sha(Path('tools/score_asr_baseline.py')),
+                official_scorer_sha256=sha(root.parent/'asr-baseline-20261111/official_biasing_score.py'));diagnostics=[]
+    (run_dir/'analysis-source').mkdir(exist_ok=True)
+    shutil.copyfile(Path(__file__),run_dir/'analysis-source/correction.py')
     for dataset in ['librispeech','ascend']:
         prepared=root/'prepared'/dataset
         refs=read_rows(prepared/('references.jsonl' if dataset=='librispeech' else 'mixed-references.jsonl'))
