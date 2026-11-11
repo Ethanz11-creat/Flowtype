@@ -1,0 +1,7 @@
+{
+  "models": ["qwen-1.7b", "qwen-0.6b", "whisper-base"],
+  "warmup_rows": 3,
+  "admission_rows": 10,
+  "qwen_options": {"maxTokens": 448, "temperature": 0, "repetitionPenalty": 1.1, "noRepeatNgramSize": 3, "language": null, "context": null},
+  "whisper_options": {"device": "cpu", "fp16": false, "threads": 4, "language": null, "temperature": 0.0, "condition_on_previous_text": false, "task": "transcribe", "initial_prompt": null}
+}

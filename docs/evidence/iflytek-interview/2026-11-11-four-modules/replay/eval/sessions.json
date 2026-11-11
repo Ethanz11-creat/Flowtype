@@ -1,0 +1,200 @@
+[
+  {
+    "id": "eval-zh-1",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/eval-zh-1.wav",
+    "split": "eval",
+    "language": "zh",
+    "sources": [
+      {
+        "id": "00804",
+        "offset_sample": 16000,
+        "frames": 10720,
+        "sha256": "fa53c80fa30f1dcc474b350c334be2f5afbd6d54ecf7fe0f8cfdc16e928891da"
+      },
+      {
+        "id": "00548",
+        "offset_sample": 33120,
+        "frames": 47200,
+        "sha256": "2b94ec058efeb4124e03cbbcfbdfb8355d446af16d613c20bb90eb1c56653d36"
+      },
+      {
+        "id": "01099",
+        "offset_sample": 89920,
+        "frames": 23040,
+        "sha256": "fa628da0de545705f2afcd3129e0868ea2703ce008f54ab766866f466e5106c5"
+      },
+      {
+        "id": "00510",
+        "offset_sample": 132160,
+        "frames": 7040,
+        "sha256": "3a25884a0433f60494068ccd27b2d97b3a5ea39951e4fbd1c906a479935cef81"
+      }
+    ],
+    "sha256": "6755f1bdf3b71f23d3a35a1d2f7fe5c6ad7df53b0332ac276623ed65dc71ec67"
+  },
+  {
+    "id": "eval-zh-2",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/eval-zh-2.wav",
+    "split": "eval",
+    "language": "zh",
+    "sources": [
+      {
+        "id": "00058",
+        "offset_sample": 16000,
+        "frames": 12800,
+        "sha256": "132122fccedd9968c3757ba155a9dc8259469cf5ae91bc730c7128c1691ed21b"
+      },
+      {
+        "id": "00283",
+        "offset_sample": 35200,
+        "frames": 59200,
+        "sha256": "0ba9cda379eef9e23efbe0f96a5d00cd0c9278ff1e71106da2f6f6e85ca7c583"
+      },
+      {
+        "id": "00955",
+        "offset_sample": 104000,
+        "frames": 24640,
+        "sha256": "2386f3c9dac26adddd8431e35e86728eb55c7cbc520c697a309b2ff03f1898bb"
+      },
+      {
+        "id": "01106",
+        "offset_sample": 147840,
+        "frames": 16960,
+        "sha256": "495999efd8c9af686bf6d2541768256996ad1ba1d6f0dc58cea454ac61d7cbf7"
+      }
+    ],
+    "sha256": "38150eb1574c64315d1bec4abc376c85997f3bf64a40c69ed97aec7888d3d29b"
+  },
+  {
+    "id": "eval-en-1",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/eval-en-1.wav",
+    "split": "eval",
+    "language": "en",
+    "sources": [
+      {
+        "id": "00477",
+        "offset_sample": 16000,
+        "frames": 72960,
+        "sha256": "4fb411f783347fd3be41797c28aaaa2fcbe33d5d64ab7999430a6e4985c8ceeb"
+      },
+      {
+        "id": "01097",
+        "offset_sample": 95360,
+        "frames": 55040,
+        "sha256": "8921ce50259eabf11a9a322105f13af3cf667d28f23a8bc513ef985ebd2caec5"
+      },
+      {
+        "id": "00849",
+        "offset_sample": 160000,
+        "frames": 33920,
+        "sha256": "e0b6c36952a480ff921673c368745c96963491197a85e7b0ad3c2a30a6a49adb"
+      },
+      {
+        "id": "00765",
+        "offset_sample": 213120,
+        "frames": 55840,
+        "sha256": "221965a51b7f84b3ee8623a10e37a756c53ac5c5412500a95b6ace4b322d7a0c"
+      }
+    ],
+    "sha256": "6cf0582980b35ef08a075428bf3c996480bf4da646e96d984863fcacd9d68cab"
+  },
+  {
+    "id": "eval-en-2",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/eval-en-2.wav",
+    "split": "eval",
+    "language": "en",
+    "sources": [
+      {
+        "id": "00343",
+        "offset_sample": 16000,
+        "frames": 45920,
+        "sha256": "50520a8da0a608a0084e788afd54a70fae16547ae4bc3a53b2d2133917aa7c8a"
+      },
+      {
+        "id": "00287",
+        "offset_sample": 68320,
+        "frames": 40960,
+        "sha256": "bcc012fb6ea953b9e7bdb424eb884575522d8514a3bfc35a8943de43b7fa1798"
+      },
+      {
+        "id": "00920",
+        "offset_sample": 118880,
+        "frames": 32480,
+        "sha256": "f67309d2f37bfca0127031f6672007361c509a725eb942e138b74d0ebaf764dc"
+      },
+      {
+        "id": "00382",
+        "offset_sample": 170560,
+        "frames": 27200,
+        "sha256": "8eb81f16cad1fa71fce692e167a92a236a355971c3e95d076631103f178dc9c1"
+      }
+    ],
+    "sha256": "a6248688a575fdeef945a0e0d64606cca9fa8a86b31108c239e61f89181992e1"
+  },
+  {
+    "id": "eval-mixed-1",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/eval-mixed-1.wav",
+    "split": "eval",
+    "language": "mixed",
+    "sources": [
+      {
+        "id": "00874",
+        "offset_sample": 16000,
+        "frames": 38720,
+        "sha256": "a1a99dfbca988e4d819dcbaa37ff478008aa06bb97b5f0882575ac935ad32ba3"
+      },
+      {
+        "id": "00454",
+        "offset_sample": 61120,
+        "frames": 57600,
+        "sha256": "056de86e9c537a4527120ac465a0c2e58bf54a6f927d4cb540747f73da6a8e52"
+      },
+      {
+        "id": "00068",
+        "offset_sample": 128320,
+        "frames": 102719,
+        "sha256": "c41c701afb9f4b2da69601ff39f7b2e19ca7f15ce77932ea9993e7c597afb56a"
+      },
+      {
+        "id": "00778",
+        "offset_sample": 250239,
+        "frames": 13280,
+        "sha256": "73ba8cd71da52e1efe8c6ef9bcbefdea36356d447d9a5cbe23a3b18dc6d9613c"
+      }
+    ],
+    "sha256": "55362f6b1b4b317894dcd7e81a1f381bed797d216ee5d8ba7af65d850872527c"
+  },
+  {
+    "id": "eval-mixed-2",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/eval-mixed-2.wav",
+    "split": "eval",
+    "language": "mixed",
+    "sources": [
+      {
+        "id": "01113",
+        "offset_sample": 16000,
+        "frames": 37760,
+        "sha256": "5499a05b0a69bdfc2ea620ba3c12944b3c1e7b2b52f34cbe4dc058d2f52d1a26"
+      },
+      {
+        "id": "00983",
+        "offset_sample": 60160,
+        "frames": 62563,
+        "sha256": "5ab8c704c8b462c67d107254d6863313fe2b5a44928fdbfa9cc91f9538f078c4"
+      },
+      {
+        "id": "00974",
+        "offset_sample": 132323,
+        "frames": 66240,
+        "sha256": "38dc6a1ed9b794c668d78ce57c7ebbfafda2d13237c04bd3e58321e2bbe3fce1"
+      },
+      {
+        "id": "01043",
+        "offset_sample": 217763,
+        "frames": 77120,
+        "sha256": "36d80b13fbe68fafb0ea929ec52b449884b992ce02a95c268e9afd19957c7202"
+      }
+    ],
+    "sha256": "f9323a1b591d885e3566677d3cfc6de0cb99cf0339b5a390dd29ecd5984000b2"
+  }
+]

@@ -1,0 +1,86 @@
+{
+  "scope": "offline boundary sanity only; not real-clock ASR evaluation",
+  "sessions": [
+    {
+      "id": "dev-zh-1",
+      "segments": [
+        {
+          "start_sample": 20480,
+          "end_sample": 104512,
+          "decision_sample": 112640,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 115200,
+          "end_sample": 151616,
+          "decision_sample": 159744,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 169472,
+          "end_sample": 184384,
+          "decision_sample": 192512,
+          "reason": "endpoint"
+        }
+      ]
+    },
+    {
+      "id": "dev-en-1",
+      "segments": [
+        {
+          "start_sample": 14336,
+          "end_sample": 24128,
+          "decision_sample": 32256,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 30720,
+          "end_sample": 65088,
+          "decision_sample": 73216,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 74240,
+          "end_sample": 83520,
+          "decision_sample": 91648,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 101376,
+          "end_sample": 146496,
+          "decision_sample": 154624,
+          "reason": "endpoint"
+        }
+      ]
+    },
+    {
+      "id": "dev-mixed-1",
+      "segments": [
+        {
+          "start_sample": 13824,
+          "end_sample": 90176,
+          "decision_sample": 98304,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 96768,
+          "end_sample": 115264,
+          "decision_sample": 123392,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 124928,
+          "end_sample": 267840,
+          "decision_sample": 275968,
+          "reason": "endpoint"
+        },
+        {
+          "start_sample": 285696,
+          "end_sample": 352832,
+          "decision_sample": 360960,
+          "reason": "endpoint"
+        }
+      ]
+    }
+  ]
+}

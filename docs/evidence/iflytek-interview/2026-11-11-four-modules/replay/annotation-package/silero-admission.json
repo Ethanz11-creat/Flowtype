@@ -1,0 +1,9 @@
+{
+  "load_seconds": 1.6740300829987973,
+  "two_frames_seconds": 0.10872670798562467,
+  "probability": 0.012012063525617123,
+  "reset_reproducible": true,
+  "torch_version": "2.8.0",
+  "device": "cpu",
+  "threads": 1
+}

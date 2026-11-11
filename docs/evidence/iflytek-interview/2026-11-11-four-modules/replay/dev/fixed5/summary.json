@@ -1,0 +1,128 @@
+{
+  "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+  "rows": 3,
+  "unknown_reference_rows": 0,
+  "failure_count": 0,
+  "empty_output_count": 0,
+  "clean": {
+    "rows": 3,
+    "reference_units": 112,
+    "hits": 105,
+    "substitutions": 4,
+    "deletions": 3,
+    "insertions": 1,
+    "edit_errors": 8,
+    "mer": 0.07142857142857142
+  },
+  "by_language": {
+    "en": {
+      "rows": 1,
+      "reference_units": 18,
+      "hits": 16,
+      "substitutions": 0,
+      "deletions": 2,
+      "insertions": 0,
+      "edit_errors": 2,
+      "mer": 0.1111111111111111
+    },
+    "mixed": {
+      "rows": 1,
+      "reference_units": 59,
+      "hits": 54,
+      "substitutions": 4,
+      "deletions": 1,
+      "insertions": 1,
+      "edit_errors": 6,
+      "mer": 0.1016949152542373
+    },
+    "zh": {
+      "rows": 1,
+      "reference_units": 35,
+      "hits": 35,
+      "substitutions": 0,
+      "deletions": 0,
+      "insertions": 0,
+      "edit_errors": 0,
+      "mer": 0.0
+    }
+  },
+  "by_topic": {
+    "constructed_replay": {
+      "rows": 3,
+      "reference_units": 112,
+      "hits": 105,
+      "substitutions": 4,
+      "deletions": 3,
+      "insertions": 1,
+      "edit_errors": 8,
+      "mer": 0.07142857142857142
+    }
+  },
+  "by_original_speaker_id": {
+    "multiple": {
+      "rows": 3,
+      "reference_units": 112,
+      "hits": 105,
+      "substitutions": 4,
+      "deletions": 3,
+      "insertions": 1,
+      "edit_errors": 8,
+      "mer": 0.07142857142857142
+    }
+  },
+  "latency": {
+    "total_seconds": 48.95046674995683,
+    "median_seconds": 13.057974625029601,
+    "p95_seconds": 24.706520707928576,
+    "decoded_audio_seconds": 45.530125,
+    "aggregate_rtf": 1.0751226083819632,
+    "first_sample_seconds": 13.057974625029601
+  },
+  "sessions": [
+    {
+      "id": "dev-zh-1",
+      "status": "ok",
+      "first_result_seconds": 6.142935625044629,
+      "final_result_seconds": 13.057974625029601,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        5.520891863852739e-05,
+        0.0006428329506888986,
+        9.908294305205345e-05
+      ]
+    },
+    {
+      "id": "dev-en-1",
+      "status": "ok",
+      "first_result_seconds": 6.101527792052366,
+      "final_result_seconds": 11.185971416998655,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        5.674990825355053e-05,
+        9.37500735744834e-05,
+        0.8423487499821931
+      ]
+    },
+    {
+      "id": "dev-mixed-1",
+      "status": "ok",
+      "first_result_seconds": 6.2441020829137415,
+      "final_result_seconds": 24.706520707928576,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        6.962497718632221e-05,
+        5.76250022277236e-05,
+        6.320793181657791e-05,
+        6.53750030323863e-05,
+        7.316702976822853e-05
+      ]
+    }
+  ],
+  "annotation_status": "manual_pending"
+}

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-11-11T08:43:44.486520+00:00",
+  "config": {
+    "split": "dev",
+    "model_id": "qwen-1.7b",
+    "annotations_sha256": "ae7bba420edc1a72d3bc0ea3d611880497408b78e7488fe40252968caa76b80a",
+    "sessions_sha256": "8b66eaac492d1862f95c06f4ae5e02c69a6b3bae514441f5b532b53d393ee43b",
+    "vad": {
+      "sample_rate": 16000,
+      "chunk_samples": 512,
+      "onset": 0.5,
+      "offset": 0.35,
+      "min_speech_ms": 96,
+      "silence_ms": [
+        300,
+        600,
+        900
+      ],
+      "eval_silence_ms": 600,
+      "pre_roll_ms": 160,
+      "post_roll_ms": 100,
+      "max_segment_ms": 10000,
+      "queue_limit": 4,
+      "fixed_segment_ms": 5000
+    },
+    "constructed": true,
+    "token_streaming": false
+  },
+  "input_sha256": "8b66eaac492d1862f95c06f4ae5e02c69a6b3bae514441f5b532b53d393ee43b",
+  "input_path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/sessions.json",
+  "tool_sha256": {
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/__init__.py": "eb9bf26d77adef17b7b2f58b6f5d82ab8e7faa9802dec1dd25a6c91d13272353",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/__main__.py": "5a131035862ad6b3f79b8a2d43d2176f25d9f54b776c1558cd4c78d20e8be244",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/annotate.py": "b27131a7e4e9f4a5593418904f9d446a2305359268fb9f91e2671eba38b711e8",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/assets.py": "6387cbb83737f5fb41ad04a891c88e2b4c64c2780c25165117eaf576c13bafde",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/backends.py": "07592466906e12cbbddbd6f5ce03f0d4ec597191a0cb22b55b648543838d5152",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/build_native.py": "2ec872a2a9c92caad94bc91d766a38c7a0485bf1770398f1ab4cea50f9da41a8",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/configs/correction.json": "e4e83dfc735a58d7af7c5442775ee54273ad125f84eb434f3a6f2ce31f4d962b",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/configs/manual-demonstrations.template.json": "d20508c32342c31f786f8adf9a7c24f61ef2f0b19c18bd25d3d03000206d6db6",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/configs/models.json": "be889db98ea0e4399f8ce7b2205127c39488c02b3273b01de1b7a6faea1f474b",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/configs/vad.json": "6789fc62eb5c1fc7236618ad796d93b7f1af82501f38e8e859b5c0bbad7c8b3c",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/correction.py": "f17491113c8a1c541d484fcb942a9cf1a21fc54092269a20d2a9f39b9343c219",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/models.py": "2c8b862d57fcf7b6934b9fe5859bcf2ec2d27dddd3da6235785865bdd5f06275",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/prepare.py": "669a3ac5de49683c2444fb24e4c091a74ee972d9a06395e933162646e429e32a",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/replay.py": "2046e301a22e96a72a02bf65047e43502ce529f08e1c19286495bc4063c3e208",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/report.py": "d186734513d6a6229eb25cca2664384c3e21c1f8828f69a5d2f12c102f34fcbd",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/requirements.in": "c93624cf62331404470003bd487e508cc9e2adfd1bbb96a45a531f63e1709575",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/requirements.lock.txt": "5dcc75f942c5b0e173edc629c7aa6ba21c81327e9ebad05efef9c47452eb775f",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/schema.py": "e836f1c723b9a3741374af7cf0b572ad188df9a90601a0cc3fdd01445c71c722",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/swift/NativeASRBench.swift": "d3d19ff732bbbd8c2697dc1f9077af626fe2b8321eee65fad7a5860366aaab0d",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_backends.py": "fe27079848cd5edd9ed81c404115a2022a678c57ff21fbb3952ec294e566ffad",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_correction.py": "4d2cd6620b057db3ecfd78ac48ea7496fafbb1f48cfcf11cef05032b2dba5887",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_prepare.py": "6a1bddad6a248c8d229c7ab86819afd57822b1db114ee6b2c3fccef4dc377b26",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_replay.py": "b24b8a410023f41098d4c6e2668cbc2822d4ffc228dd7114c9dbe6b31da6f85a",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_reporting.py": "8f9eff6d39fc117a9a829c9c9610d7b31717947d6f7a08d5b9a31e5590399513",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_schema.py": "dad4d34fa82391b4ba848158211ae793757ae3d42608081a3e4868b6c9d7f3be",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_vad.py": "6c3dcf27abf1a95d38fa7d904114c545b94e79aa3eec301c89902a9cde8fd038",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/vad.py": "6830dcff9fd37a9f99c03f0cd89a4aac1a1bd0f6db0e1ac5533f5893c60038b3",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/verify.py": "a71bab53355269a9035a7f71536659da8d3ccec9bb332d19dbfa7c70f963f2d4"
+  }
+}

@@ -1,0 +1,634 @@
+{
+  "whole": {
+    "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+    "rows": 3,
+    "unknown_reference_rows": 0,
+    "failure_count": 0,
+    "empty_output_count": 0,
+    "clean": {
+      "rows": 3,
+      "reference_units": 112,
+      "hits": 108,
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 1,
+      "edit_errors": 5,
+      "mer": 0.044642857142857144
+    },
+    "by_language": {
+      "en": {
+        "rows": 1,
+        "reference_units": 18,
+        "hits": 16,
+        "substitutions": 1,
+        "deletions": 1,
+        "insertions": 0,
+        "edit_errors": 2,
+        "mer": 0.1111111111111111
+      },
+      "mixed": {
+        "rows": 1,
+        "reference_units": 59,
+        "hits": 57,
+        "substitutions": 2,
+        "deletions": 0,
+        "insertions": 1,
+        "edit_errors": 3,
+        "mer": 0.05084745762711865
+      },
+      "zh": {
+        "rows": 1,
+        "reference_units": 35,
+        "hits": 35,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "edit_errors": 0,
+        "mer": 0.0
+      }
+    },
+    "by_topic": {
+      "constructed_replay": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 108,
+        "substitutions": 3,
+        "deletions": 1,
+        "insertions": 1,
+        "edit_errors": 5,
+        "mer": 0.044642857142857144
+      }
+    },
+    "by_original_speaker_id": {
+      "multiple": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 108,
+        "substitutions": 3,
+        "deletions": 1,
+        "insertions": 1,
+        "edit_errors": 5,
+        "mer": 0.044642857142857144
+      }
+    },
+    "latency": {
+      "total_seconds": 54.56017387495376,
+      "median_seconds": 15.444129499956034,
+      "p95_seconds": 27.25051929196343,
+      "decoded_audio_seconds": 45.530125,
+      "aggregate_rtf": 1.1983312998801072,
+      "first_sample_seconds": 15.444129499956034
+    },
+    "sessions": [
+      {
+        "id": "dev-zh-1",
+        "status": "ok",
+        "first_result_seconds": 15.444129499956034,
+        "final_result_seconds": 15.444129499956034,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          0.00013833295088261366
+        ]
+      },
+      {
+        "id": "dev-en-1",
+        "status": "ok",
+        "first_result_seconds": 11.8655250830343,
+        "final_result_seconds": 11.8655250830343,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          8.625001646578312e-05
+        ]
+      },
+      {
+        "id": "dev-mixed-1",
+        "status": "ok",
+        "first_result_seconds": 27.25051929196343,
+        "final_result_seconds": 27.25051929196343,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          0.0003435829421505332
+        ]
+      }
+    ],
+    "annotation_status": "manual_pending"
+  },
+  "fixed5": {
+    "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+    "rows": 3,
+    "unknown_reference_rows": 0,
+    "failure_count": 0,
+    "empty_output_count": 0,
+    "clean": {
+      "rows": 3,
+      "reference_units": 112,
+      "hits": 105,
+      "substitutions": 4,
+      "deletions": 3,
+      "insertions": 1,
+      "edit_errors": 8,
+      "mer": 0.07142857142857142
+    },
+    "by_language": {
+      "en": {
+        "rows": 1,
+        "reference_units": 18,
+        "hits": 16,
+        "substitutions": 0,
+        "deletions": 2,
+        "insertions": 0,
+        "edit_errors": 2,
+        "mer": 0.1111111111111111
+      },
+      "mixed": {
+        "rows": 1,
+        "reference_units": 59,
+        "hits": 54,
+        "substitutions": 4,
+        "deletions": 1,
+        "insertions": 1,
+        "edit_errors": 6,
+        "mer": 0.1016949152542373
+      },
+      "zh": {
+        "rows": 1,
+        "reference_units": 35,
+        "hits": 35,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "edit_errors": 0,
+        "mer": 0.0
+      }
+    },
+    "by_topic": {
+      "constructed_replay": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 105,
+        "substitutions": 4,
+        "deletions": 3,
+        "insertions": 1,
+        "edit_errors": 8,
+        "mer": 0.07142857142857142
+      }
+    },
+    "by_original_speaker_id": {
+      "multiple": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 105,
+        "substitutions": 4,
+        "deletions": 3,
+        "insertions": 1,
+        "edit_errors": 8,
+        "mer": 0.07142857142857142
+      }
+    },
+    "latency": {
+      "total_seconds": 48.95046674995683,
+      "median_seconds": 13.057974625029601,
+      "p95_seconds": 24.706520707928576,
+      "decoded_audio_seconds": 45.530125,
+      "aggregate_rtf": 1.0751226083819632,
+      "first_sample_seconds": 13.057974625029601
+    },
+    "sessions": [
+      {
+        "id": "dev-zh-1",
+        "status": "ok",
+        "first_result_seconds": 6.142935625044629,
+        "final_result_seconds": 13.057974625029601,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          5.520891863852739e-05,
+          0.0006428329506888986,
+          9.908294305205345e-05
+        ]
+      },
+      {
+        "id": "dev-en-1",
+        "status": "ok",
+        "first_result_seconds": 6.101527792052366,
+        "final_result_seconds": 11.185971416998655,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          5.674990825355053e-05,
+          9.37500735744834e-05,
+          0.8423487499821931
+        ]
+      },
+      {
+        "id": "dev-mixed-1",
+        "status": "ok",
+        "first_result_seconds": 6.2441020829137415,
+        "final_result_seconds": 24.706520707928576,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          6.962497718632221e-05,
+          5.76250022277236e-05,
+          6.320793181657791e-05,
+          6.53750030323863e-05,
+          7.316702976822853e-05
+        ]
+      }
+    ],
+    "annotation_status": "manual_pending"
+  },
+  "vad300": {
+    "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+    "rows": 3,
+    "unknown_reference_rows": 0,
+    "failure_count": 0,
+    "empty_output_count": 0,
+    "clean": {
+      "rows": 3,
+      "reference_units": 112,
+      "hits": 107,
+      "substitutions": 4,
+      "deletions": 1,
+      "insertions": 1,
+      "edit_errors": 6,
+      "mer": 0.05357142857142857
+    },
+    "by_language": {
+      "en": {
+        "rows": 1,
+        "reference_units": 18,
+        "hits": 16,
+        "substitutions": 1,
+        "deletions": 1,
+        "insertions": 0,
+        "edit_errors": 2,
+        "mer": 0.1111111111111111
+      },
+      "mixed": {
+        "rows": 1,
+        "reference_units": 59,
+        "hits": 56,
+        "substitutions": 3,
+        "deletions": 0,
+        "insertions": 1,
+        "edit_errors": 4,
+        "mer": 0.06779661016949153
+      },
+      "zh": {
+        "rows": 1,
+        "reference_units": 35,
+        "hits": 35,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "edit_errors": 0,
+        "mer": 0.0
+      }
+    },
+    "by_topic": {
+      "constructed_replay": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 107,
+        "substitutions": 4,
+        "deletions": 1,
+        "insertions": 1,
+        "edit_errors": 6,
+        "mer": 0.05357142857142857
+      }
+    },
+    "by_original_speaker_id": {
+      "multiple": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 107,
+        "substitutions": 4,
+        "deletions": 1,
+        "insertions": 1,
+        "edit_errors": 6,
+        "mer": 0.05357142857142857
+      }
+    },
+    "latency": {
+      "total_seconds": 46.151244292152114,
+      "median_seconds": 12.168529583024792,
+      "p95_seconds": 23.672077542054467,
+      "decoded_audio_seconds": 45.530125,
+      "aggregate_rtf": 1.0136419412894675,
+      "first_sample_seconds": 12.168529583024792
+    },
+    "sessions": [
+      {
+        "id": "dev-zh-1",
+        "status": "ok",
+        "first_result_seconds": 4.686144958017394,
+        "final_result_seconds": 12.168529583024792,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          4.816602449864149e-05,
+          0.00011999998241662979,
+          6.60410150885582e-05,
+          6.212503649294376e-05
+        ]
+      },
+      {
+        "id": "dev-en-1",
+        "status": "ok",
+        "first_result_seconds": 2.2002029590075836,
+        "final_result_seconds": 10.310637167072855,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          0.0007270410424098372,
+          6.466696504503489e-05,
+          2.7957954443991184e-05,
+          5.0541944801807404e-05
+        ]
+      },
+      {
+        "id": "dev-mixed-1",
+        "status": "ok",
+        "first_result_seconds": 7.175613458035514,
+        "final_result_seconds": 23.672077542054467,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          6.666698027402163e-05,
+          2.0749983377754688e-05,
+          4.3792068026959896e-05,
+          0.12793424993287772,
+          4.529207944869995e-05,
+          4.8874993808567524e-05,
+          8.916598744690418e-05
+        ]
+      }
+    ],
+    "annotation_status": "manual_pending"
+  },
+  "vad600": {
+    "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+    "rows": 3,
+    "unknown_reference_rows": 0,
+    "failure_count": 0,
+    "empty_output_count": 0,
+    "clean": {
+      "rows": 3,
+      "reference_units": 112,
+      "hits": 107,
+      "substitutions": 4,
+      "deletions": 1,
+      "insertions": 1,
+      "edit_errors": 6,
+      "mer": 0.05357142857142857
+    },
+    "by_language": {
+      "en": {
+        "rows": 1,
+        "reference_units": 18,
+        "hits": 16,
+        "substitutions": 1,
+        "deletions": 1,
+        "insertions": 0,
+        "edit_errors": 2,
+        "mer": 0.1111111111111111
+      },
+      "mixed": {
+        "rows": 1,
+        "reference_units": 59,
+        "hits": 56,
+        "substitutions": 3,
+        "deletions": 0,
+        "insertions": 1,
+        "edit_errors": 4,
+        "mer": 0.06779661016949153
+      },
+      "zh": {
+        "rows": 1,
+        "reference_units": 35,
+        "hits": 35,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "edit_errors": 0,
+        "mer": 0.0
+      }
+    },
+    "by_topic": {
+      "constructed_replay": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 107,
+        "substitutions": 4,
+        "deletions": 1,
+        "insertions": 1,
+        "edit_errors": 6,
+        "mer": 0.05357142857142857
+      }
+    },
+    "by_original_speaker_id": {
+      "multiple": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 107,
+        "substitutions": 4,
+        "deletions": 1,
+        "insertions": 1,
+        "edit_errors": 6,
+        "mer": 0.05357142857142857
+      }
+    },
+    "latency": {
+      "total_seconds": 46.45966224989388,
+      "median_seconds": 12.458472333964892,
+      "p95_seconds": 23.487599957967177,
+      "decoded_audio_seconds": 45.530125,
+      "aggregate_rtf": 1.0204158730048267,
+      "first_sample_seconds": 12.458472333964892
+    },
+    "sessions": [
+      {
+        "id": "dev-zh-1",
+        "status": "ok",
+        "first_result_seconds": 8.59278258390259,
+        "final_result_seconds": 12.458472333964892,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          6.570795085281134e-05,
+          7.866695523262024e-05,
+          5.837494973093271e-05
+        ]
+      },
+      {
+        "id": "dev-en-1",
+        "status": "ok",
+        "first_result_seconds": 2.340233749942854,
+        "final_result_seconds": 10.513589957961813,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          6.395799573510885e-05,
+          8.970906492322683e-05,
+          4.7625042498111725e-05,
+          6.679201032966375e-05
+        ]
+      },
+      {
+        "id": "dev-mixed-1",
+        "status": "ok",
+        "first_result_seconds": 8.440371749922633,
+        "final_result_seconds": 23.487599957967177,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          0.0049142499919980764,
+          0.7235829170094803,
+          0.00035141699481755495,
+          9.158393368124962e-05
+        ]
+      }
+    ],
+    "annotation_status": "manual_pending"
+  },
+  "vad900": {
+    "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+    "rows": 3,
+    "unknown_reference_rows": 0,
+    "failure_count": 0,
+    "empty_output_count": 0,
+    "clean": {
+      "rows": 3,
+      "reference_units": 112,
+      "hits": 110,
+      "substitutions": 1,
+      "deletions": 1,
+      "insertions": 2,
+      "edit_errors": 4,
+      "mer": 0.03571428571428571
+    },
+    "by_language": {
+      "en": {
+        "rows": 1,
+        "reference_units": 18,
+        "hits": 17,
+        "substitutions": 0,
+        "deletions": 1,
+        "insertions": 0,
+        "edit_errors": 1,
+        "mer": 0.05555555555555555
+      },
+      "mixed": {
+        "rows": 1,
+        "reference_units": 59,
+        "hits": 58,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 2,
+        "edit_errors": 3,
+        "mer": 0.05084745762711865
+      },
+      "zh": {
+        "rows": 1,
+        "reference_units": 35,
+        "hits": 35,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "edit_errors": 0,
+        "mer": 0.0
+      }
+    },
+    "by_topic": {
+      "constructed_replay": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 110,
+        "substitutions": 1,
+        "deletions": 1,
+        "insertions": 2,
+        "edit_errors": 4,
+        "mer": 0.03571428571428571
+      }
+    },
+    "by_original_speaker_id": {
+      "multiple": {
+        "rows": 3,
+        "reference_units": 112,
+        "hits": 110,
+        "substitutions": 1,
+        "deletions": 1,
+        "insertions": 2,
+        "edit_errors": 4,
+        "mer": 0.03571428571428571
+      }
+    },
+    "latency": {
+      "total_seconds": 47.91630741604604,
+      "median_seconds": 12.934436166891828,
+      "p95_seconds": 23.94848208304029,
+      "decoded_audio_seconds": 45.530125,
+      "aggregate_rtf": 1.052408870303915,
+      "first_sample_seconds": 12.934436166891828
+    },
+    "sessions": [
+      {
+        "id": "dev-zh-1",
+        "status": "ok",
+        "first_result_seconds": 12.51136099989526,
+        "final_result_seconds": 12.934436166891828,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          0.0006090840324759483,
+          0.15734083391726017
+        ]
+      },
+      {
+        "id": "dev-en-1",
+        "status": "ok",
+        "first_result_seconds": 7.6968665830791,
+        "final_result_seconds": 11.03338916611392,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          0.00021870795171707869,
+          4.912505391985178e-05
+        ]
+      },
+      {
+        "id": "dev-mixed-1",
+        "status": "ok",
+        "first_result_seconds": 13.38112675002776,
+        "final_result_seconds": 23.94848208304029,
+        "endpoint_latency_seconds": null,
+        "final_from_speech_seconds": null,
+        "annotation_status": "manual_pending",
+        "wait_seconds": [
+          0.00021324993576854467,
+          8.195906411856413e-05,
+          8.954096119850874e-05
+        ]
+      }
+    ],
+    "annotation_status": "manual_pending"
+  }
+}

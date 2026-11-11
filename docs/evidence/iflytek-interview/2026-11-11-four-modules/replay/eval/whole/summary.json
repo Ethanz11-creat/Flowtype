@@ -1,0 +1,156 @@
+{
+  "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+  "rows": 6,
+  "unknown_reference_rows": 0,
+  "failure_count": 0,
+  "empty_output_count": 0,
+  "clean": {
+    "rows": 6,
+    "reference_units": 235,
+    "hits": 216,
+    "substitutions": 17,
+    "deletions": 2,
+    "insertions": 3,
+    "edit_errors": 22,
+    "mer": 0.09361702127659574
+  },
+  "by_language": {
+    "en": {
+      "rows": 2,
+      "reference_units": 52,
+      "hits": 45,
+      "substitutions": 7,
+      "deletions": 0,
+      "insertions": 1,
+      "edit_errors": 8,
+      "mer": 0.15384615384615385
+    },
+    "mixed": {
+      "rows": 2,
+      "reference_units": 125,
+      "hits": 115,
+      "substitutions": 8,
+      "deletions": 2,
+      "insertions": 1,
+      "edit_errors": 11,
+      "mer": 0.088
+    },
+    "zh": {
+      "rows": 2,
+      "reference_units": 58,
+      "hits": 56,
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 1,
+      "edit_errors": 3,
+      "mer": 0.05172413793103448
+    }
+  },
+  "by_topic": {
+    "constructed_replay": {
+      "rows": 6,
+      "reference_units": 235,
+      "hits": 216,
+      "substitutions": 17,
+      "deletions": 2,
+      "insertions": 3,
+      "edit_errors": 22,
+      "mer": 0.09361702127659574
+    }
+  },
+  "by_original_speaker_id": {
+    "multiple": {
+      "rows": 6,
+      "reference_units": 235,
+      "hits": 216,
+      "substitutions": 17,
+      "deletions": 2,
+      "insertions": 3,
+      "edit_errors": 22,
+      "mer": 0.09361702127659574
+    }
+  },
+  "latency": {
+    "total_seconds": 109.03636558307335,
+    "median_seconds": 18.20841687452048,
+    "p95_seconds": 24.855712832999416,
+    "decoded_audio_seconds": 89.070125,
+    "aggregate_rtf": 1.2241631588938866,
+    "first_sample_seconds": 12.920730666955933
+  },
+  "sessions": [
+    {
+      "id": "eval-zh-1",
+      "status": "ok",
+      "first_result_seconds": 12.920730666955933,
+      "final_result_seconds": 12.920730666955933,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        8.466700091958046e-05
+      ]
+    },
+    {
+      "id": "eval-zh-2",
+      "status": "ok",
+      "first_result_seconds": 13.244595917058177,
+      "final_result_seconds": 13.244595917058177,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        0.00036675005685538054
+      ]
+    },
+    {
+      "id": "eval-en-1",
+      "status": "ok",
+      "first_result_seconds": 21.59849241701886,
+      "final_result_seconds": 21.59849241701886,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        0.00024579092860221863
+      ]
+    },
+    {
+      "id": "eval-en-2",
+      "status": "ok",
+      "first_result_seconds": 15.800341458059847,
+      "final_result_seconds": 15.800341458059847,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        0.00018450000789016485
+      ]
+    },
+    {
+      "id": "eval-mixed-1",
+      "status": "ok",
+      "first_result_seconds": 20.616492290981114,
+      "final_result_seconds": 20.616492290981114,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        0.0009709169389680028
+      ]
+    },
+    {
+      "id": "eval-mixed-2",
+      "status": "ok",
+      "first_result_seconds": 24.855712832999416,
+      "final_result_seconds": 24.855712832999416,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        0.00016549997963011265
+      ]
+    }
+  ],
+  "annotation_status": "manual_pending"
+}

@@ -1,0 +1,101 @@
+[
+  {
+    "id": "dev-zh-1",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/dev-zh-1.wav",
+    "split": "dev",
+    "language": "zh",
+    "sources": [
+      {
+        "id": "00623",
+        "offset_sample": 16000,
+        "frames": 40160,
+        "sha256": "0b714ef3664ab1a65c7c4659777f672bc52d0eda8b2efeee3a788c75426997f8"
+      },
+      {
+        "id": "00854",
+        "offset_sample": 62560,
+        "frames": 43840,
+        "sha256": "d891a878bc6cb5f95b51c015e8831e2d79b85cfbcdf50d806ddcf3e54e9139bc"
+      },
+      {
+        "id": "00314",
+        "offset_sample": 116000,
+        "frames": 34239,
+        "sha256": "274ed456e6dbfeb4756164ad82e37897b125e77da59e5f766f87e60fece7af42"
+      },
+      {
+        "id": "01037",
+        "offset_sample": 169439,
+        "frames": 14080,
+        "sha256": "3d6d5142294a9b99506fb17443864c3b4f5da8d6dfc24ef1e89dba1d9c833157"
+      }
+    ],
+    "sha256": "dd29c94e1029be295b2693a7fa2c66821a79276978dee6f29cd1d4739094cace"
+  },
+  {
+    "id": "dev-en-1",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/dev-en-1.wav",
+    "split": "dev",
+    "language": "en",
+    "sources": [
+      {
+        "id": "00784",
+        "offset_sample": 16000,
+        "frames": 7360,
+        "sha256": "8b35b35e212e19dd85799f945acb11ba66a85ee5f38f0a422f2a0fb1cd925332"
+      },
+      {
+        "id": "01005",
+        "offset_sample": 29760,
+        "frames": 35200,
+        "sha256": "7736fa7b18b8b50c3c0ad119f0f6695a944ce099b2513404b87507dc31c297f0"
+      },
+      {
+        "id": "00785",
+        "offset_sample": 74560,
+        "frames": 8959,
+        "sha256": "535816ff02afbe6a54430a6f85ad4e0576f9c24089f7bae0b306ef0022e2056b"
+      },
+      {
+        "id": "00545",
+        "offset_sample": 102719,
+        "frames": 42240,
+        "sha256": "a24ec3cba509f5b831b5fc14f44826bb149c9149fe84fcd7581c3fcbe1da9697"
+      }
+    ],
+    "sha256": "aec3c3d02c6255ef109e19ffb9febc983b625577202a1c118b76e09552a15829"
+  },
+  {
+    "id": "dev-mixed-1",
+    "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/replay-prepared/dev-mixed-1.wav",
+    "split": "dev",
+    "language": "mixed",
+    "sources": [
+      {
+        "id": "01095",
+        "offset_sample": 16000,
+        "frames": 73763,
+        "sha256": "7a03f55bd7fa22c90bc13e0d9ae5dbc67c6138b804d5a433526decea61dcd814"
+      },
+      {
+        "id": "00953",
+        "offset_sample": 96163,
+        "frames": 19840,
+        "sha256": "cbd45e4a7ee502915b5d02f019696844c357d996a255433d61f5ce5f5b08ab3d"
+      },
+      {
+        "id": "00251",
+        "offset_sample": 125603,
+        "frames": 143521,
+        "sha256": "4ecf3829d3f5f33058b2d07be3275c41490c30407e5ff67b05ebe29ca6c9d546"
+      },
+      {
+        "id": "00508",
+        "offset_sample": 288324,
+        "frames": 63680,
+        "sha256": "83fae2509ac0171a4679f0512ba18df2b7470748881958ac6e0c6ba78dc59a8d"
+      }
+    ],
+    "sha256": "a097c94ecb1921782f224b73fafa40475d807cc3852395d79853229a0f9e92ae"
+  }
+]
