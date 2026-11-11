@@ -1,0 +1,20 @@
+=== FlowType --self-test ===
+--- ProviderDraftSelfTests.dirtyDraftNavigationRequiresDecision ---
+--- ProviderDraftSelfTests.cleanDraftNavigationAndDetach ---
+--- ProviderDraftSelfTests.deletedDraftCannotResurrect ---
+--- ProviderDraftSelfTests.mergePreservesConcurrentSettings ---
+--- ProviderDraftSelfTests.blankKeyPreservesAndRemovalIsExplicit ---
+--- ProviderDraftSelfTests.vendorChangePreservesFields ---
+--- ProviderDraftSelfTests.cancellationDoesNotMutate ---
+--- ProviderDraftSelfTests.invalidCommitIsAtomic ---
+--- ProviderDraftCheckSelfTests.lateDraftCheckCannotPublish ---
+--- ProviderDraftCheckSelfTests.checkDoesNotCommitOrActivate ---
+--- ProviderDraftCheckSelfTests.deletedDraftCheckCannotPublish ---
+--- ProviderDraftCheckSelfTests.wssHasConfigurationCheckOnly ---
+--- ProviderDraftCheckSelfTests.draftNavigationRequiresDecision ---
+--- SettingsChangeSelfTests.unrelatedSettingsDoNotReloadHotkey ---
+--- SettingsChangeSelfTests.hotkeySettingsReloadOnce ---
+--- SettingsChangeSelfTests.saveSurvivesPageClose ---
+--- SettingsChangeSelfTests.sameTurnChangesKeepLatestSettings ---
+--- SettingsChangeSelfTests.duplicatePublicationsDoNotResave ---
+=== ASR backend self-test: 1128 passed, 0 failed ===

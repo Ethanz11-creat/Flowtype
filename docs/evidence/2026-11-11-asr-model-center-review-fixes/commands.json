@@ -1,0 +1,1525 @@
+{
+  "schemaVersion": 1,
+  "sequential": true,
+  "trackedEditsDuringGates": false,
+  "commands": [
+    {
+      "name": "code",
+      "argv": [
+        "env",
+        "-u",
+        "FLOWTYPE_SIGNING_IDENTITY",
+        "-u",
+        "FLOWTYPE_NOTARY_PROFILE",
+        "scripts/verify.sh",
+        "--lane",
+        "code"
+      ],
+      "cwd": "/Users/yiheng/pycode/flowtype-local",
+      "exitCode": 0,
+      "logPath": "build/review-fixes-validation-20261111-005928/code.log",
+      "command": "env -u FLOWTYPE_SIGNING_IDENTITY -u FLOWTYPE_NOTARY_PROFILE scripts/verify.sh --lane code",
+      "logSHA256": "2b5550a882125648c8f00fd1b248fe28d30e0c37aa6b807fef10c353ddf7cbf0",
+      "output": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/verify-report.json\nVerification code: Pass\n",
+      "reportPath": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/verify-report.json",
+      "reportSHA256": "9b0de0cc7cc559b09ae8c6c72c7fd04f4001bd5ee906d113aebb41f411361fcf",
+      "status": "Pass",
+      "phaseCount": 7,
+      "phaseEvidence": [
+        {
+          "phase": "source-start",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/11ED2F3C-17EB-4AC5-A34B-9D849C3229B3.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/11ED2F3C-17EB-4AC5-A34B-9D849C3229B3.stdout",
+              "sha256": "c9d8f068d1645015ab14afcbdceda434b330e635fd6609b1abf06bd73752169a",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/5C416552-4340-4CBF-85CB-85359B5F9F3B.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/5C416552-4340-4CBF-85CB-85359B5F9F3B.stdout",
+              "sha256": "7950c0b76805dee566ed0311baca003bf84b8f9a49d245cb6bf4f7fc01a32bbc",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/82346D7A-017C-44B6-9888-CA499DD2D018.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/82346D7A-017C-44B6-9888-CA499DD2D018.stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/AD66CC39-F7B3-43EB-B696-82742724C8C2.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/AD66CC39-F7B3-43EB-B696-82742724C8C2.stdout",
+              "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/CFB2AE98-1152-48D3-BD9F-099AF9BA65BF.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-BCFF8EC3-D78F-4A9A-B5AD-62A95FA59F3E/CFB2AE98-1152-48D3-BD9F-099AF9BA65BF.stdout",
+              "sha256": "5b4d407b8458b4fa27d350c943f923f41939abf87bde7397346c102c07415983",
+              "bytes": 17997
+            }
+          ]
+        },
+        {
+          "phase": "platform-os",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/A3C6436F-E825-438B-A89C-266146C5646F/stdout",
+              "sha256": "3e7f3aac6ec05838460f29272ec4647dbdf438a5b83be784975079531ab79eb1",
+              "bytes": 7
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/A3C6436F-E825-438B-A89C-266146C5646F/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/A3C6436F-E825-438B-A89C-266146C5646F/process-result.json",
+              "sha256": "04b38219eb9b8ca44c2533b4a5704e3d41b221143a96d6ae09a707a442a84cf4",
+              "bytes": 107
+            }
+          ]
+        },
+        {
+          "phase": "platform-arch",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/F3378083-E822-484C-A353-A481B694C4AF/stdout",
+              "sha256": "c1669e1d8edca98769c37d494b76442a1d6e5ffffd7b4da1fb63aef8ebaf6f01",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/F3378083-E822-484C-A353-A481B694C4AF/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/F3378083-E822-484C-A353-A481B694C4AF/process-result.json",
+              "sha256": "6e3e95de3147bbef03cb2eeebe47645dac0718e5d1cdd27c27d4951280a579c5",
+              "bytes": 107
+            }
+          ]
+        },
+        {
+          "phase": "platform-swift",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/F5908CAB-61AB-4F8D-BCEF-92CF7E3C27F0/stdout",
+              "sha256": "1542c4efed5df8f785540d8d6b187ed2fd098c2d545162f5f16963476d0d864c",
+              "bytes": 96
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/F5908CAB-61AB-4F8D-BCEF-92CF7E3C27F0/stderr",
+              "sha256": "d8703093a2c6cd995cd176c1526a239bb529ad836758f7d25dd73398a21f235f",
+              "bytes": 33
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/F5908CAB-61AB-4F8D-BCEF-92CF7E3C27F0/process-result.json",
+              "sha256": "721b1376feed54c5318dc01510129e90eb63886b3f42c40d514368e5c6b7b79e",
+              "bytes": 108
+            }
+          ]
+        },
+        {
+          "phase": "code-build",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/AD812FD8-D9B3-425E-A89A-60CC71906B48/stdout",
+              "sha256": "74d6ccce2fe2ba0c945b8f3751b2fd4f32b682590ef5a960a07690fb62d55dc0",
+              "bytes": 203
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/AD812FD8-D9B3-425E-A89A-60CC71906B48/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/AD812FD8-D9B3-425E-A89A-60CC71906B48/process-result.json",
+              "sha256": "fe02f5a5cc6ea1ac2f1ae555d1d894659919b288c24a6d489e028500bacfaa2d",
+              "bytes": 110
+            }
+          ]
+        },
+        {
+          "phase": "code-full",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/305C614B-1D97-4EBD-A925-1FB4BD8BFDC6/stdout",
+              "sha256": "ed5285e5456cbc41590dcd6772dbbb7219f82c586058a5b0a5f3edf04280b80e",
+              "bytes": 4964
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/305C614B-1D97-4EBD-A925-1FB4BD8BFDC6/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/children/305C614B-1D97-4EBD-A925-1FB4BD8BFDC6/process-result.json",
+              "sha256": "7a55b34eb36937c499297b4b0b3ab3858afbd470d5dfa5091aee1c04b672f2ee",
+              "bytes": 111
+            }
+          ]
+        },
+        {
+          "phase": "source-end",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/17BBA206-480B-4763-A19C-8F0D1EE7395D.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/17BBA206-480B-4763-A19C-8F0D1EE7395D.stdout",
+              "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/21A9BC92-19B8-4C94-828E-AE3D4B8590C6.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/21A9BC92-19B8-4C94-828E-AE3D4B8590C6.stdout",
+              "sha256": "7950c0b76805dee566ed0311baca003bf84b8f9a49d245cb6bf4f7fc01a32bbc",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/3F05FAB9-1129-4A82-9071-AD684C2BE7B0.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/3F05FAB9-1129-4A82-9071-AD684C2BE7B0.stdout",
+              "sha256": "c9d8f068d1645015ab14afcbdceda434b330e635fd6609b1abf06bd73752169a",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/76D7BCAF-1FC7-4DC8-A824-DDB6F08F4C76.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/76D7BCAF-1FC7-4DC8-A824-DDB6F08F4C76.stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/9E7C1040-B0F2-4351-B436-9C0DD9A5D77F.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/99D34C19-7A64-45F2-A8AA-F15B38E8DA01/internal-DCDE1518-AC5D-4180-98AF-E5E175136F3F/9E7C1040-B0F2-4351-B436-9C0DD9A5D77F.stdout",
+              "sha256": "5b4d407b8458b4fa27d350c943f923f41939abf87bde7397346c102c07415983",
+              "bytes": 17997
+            }
+          ]
+        }
+      ],
+      "fullSuite": {
+        "passed": 28484,
+        "failed": 0
+      }
+    },
+    {
+      "name": "artifact",
+      "argv": [
+        "env",
+        "-u",
+        "FLOWTYPE_SIGNING_IDENTITY",
+        "-u",
+        "FLOWTYPE_NOTARY_PROFILE",
+        "MLX_METALLIB_PATH=/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/shader/default.metallib",
+        "scripts/verify.sh",
+        "--lane",
+        "artifact"
+      ],
+      "cwd": "/Users/yiheng/pycode/flowtype-local",
+      "exitCode": 0,
+      "logPath": "build/review-fixes-validation-20261111-005928/artifact.log",
+      "command": "env -u FLOWTYPE_SIGNING_IDENTITY -u FLOWTYPE_NOTARY_PROFILE MLX_METALLIB_PATH=/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/shader/default.metallib scripts/verify.sh --lane artifact",
+      "logSHA256": "fe752e2d0dcbc5ed5e849e7e9fef93725bf5d0d78255aa3e873037b55f87d668",
+      "output": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/verify-report.json\nVerification artifact: Pass\n",
+      "reportPath": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/verify-report.json",
+      "reportSHA256": "1c2c089f2a2b621548dd383bf593ec110c3e556fee6fffa934f5c9e436e31ce2",
+      "status": "Pass",
+      "phaseCount": 22,
+      "phaseEvidence": [
+        {
+          "phase": "source-start",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/00141AEC-786C-4637-85A6-5AAD2570C5A3.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/00141AEC-786C-4637-85A6-5AAD2570C5A3.stdout",
+              "sha256": "5b4d407b8458b4fa27d350c943f923f41939abf87bde7397346c102c07415983",
+              "bytes": 17997
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/606C19E6-600A-46C7-9E8E-B77BDAC3A218.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/606C19E6-600A-46C7-9E8E-B77BDAC3A218.stdout",
+              "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/62C27F30-DC3C-4E67-BFAB-1FDDA461A7B9.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/62C27F30-DC3C-4E67-BFAB-1FDDA461A7B9.stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/A1C1AC34-7273-4AAF-B008-30EF13DFCDA1.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/A1C1AC34-7273-4AAF-B008-30EF13DFCDA1.stdout",
+              "sha256": "c9d8f068d1645015ab14afcbdceda434b330e635fd6609b1abf06bd73752169a",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/B51E0398-9A91-489A-AF30-8D4E3B7ADD09.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-EB46E752-1815-427D-9317-F2D603DFA302/B51E0398-9A91-489A-AF30-8D4E3B7ADD09.stdout",
+              "sha256": "7950c0b76805dee566ed0311baca003bf84b8f9a49d245cb6bf4f7fc01a32bbc",
+              "bytes": 41
+            }
+          ]
+        },
+        {
+          "phase": "platform-os",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/E1122776-6B26-4A12-A7D6-F2450979D177/stdout",
+              "sha256": "3e7f3aac6ec05838460f29272ec4647dbdf438a5b83be784975079531ab79eb1",
+              "bytes": 7
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/E1122776-6B26-4A12-A7D6-F2450979D177/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/E1122776-6B26-4A12-A7D6-F2450979D177/process-result.json",
+              "sha256": "b6c5f52c825e208be89a6d399b7ca3db336d5bdd3ca61041b97a5834321e5e0f",
+              "bytes": 107
+            }
+          ]
+        },
+        {
+          "phase": "platform-arch",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/A4E18E3A-83F4-4F0B-AD33-4969430A0586/stdout",
+              "sha256": "c1669e1d8edca98769c37d494b76442a1d6e5ffffd7b4da1fb63aef8ebaf6f01",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/A4E18E3A-83F4-4F0B-AD33-4969430A0586/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/A4E18E3A-83F4-4F0B-AD33-4969430A0586/process-result.json",
+              "sha256": "0586266e9775304ce6a991a9fb005deacf9fa32be0edcbc4bda81f4755736c04",
+              "bytes": 106
+            }
+          ]
+        },
+        {
+          "phase": "platform-swift",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/5F4CF2E3-8E69-457F-B377-11CC4E22599B/stdout",
+              "sha256": "1542c4efed5df8f785540d8d6b187ed2fd098c2d545162f5f16963476d0d864c",
+              "bytes": 96
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/5F4CF2E3-8E69-457F-B377-11CC4E22599B/stderr",
+              "sha256": "d8703093a2c6cd995cd176c1526a239bb529ad836758f7d25dd73398a21f235f",
+              "bytes": 33
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/5F4CF2E3-8E69-457F-B377-11CC4E22599B/process-result.json",
+              "sha256": "aa3e430e2672aea78c33f8748231a171172ef9b0ad184ed631054819af57d4d6",
+              "bytes": 107
+            }
+          ]
+        },
+        {
+          "phase": "artifact-recovery-before",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "artifact-source",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "artifact-build",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/4FD964F9-F01D-45BE-A007-6FE3A90E76FB/stdout",
+              "sha256": "15fa012121b53347cb511552673ea2a52d9066a78db514b6d3e935fa2f568ab7",
+              "bytes": 62
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/4FD964F9-F01D-45BE-A007-6FE3A90E76FB/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/4FD964F9-F01D-45BE-A007-6FE3A90E76FB/process-result.json",
+              "sha256": "bdbc291c6c401f049c7c0f1a57cd8ed2a12e165d8c98cfdb37946ea695788065",
+              "bytes": 111
+            }
+          ]
+        },
+        {
+          "phase": "artifact-manifest",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "artifact-signature",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/95693292-4D08-4A53-BF16-4043D4E481E6/stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/95693292-4D08-4A53-BF16-4043D4E481E6/stderr",
+              "sha256": "9e16e5b9b22d74e464530b4ab4ce9cd6e68a46021c5fd7c09db69f69189c7df3",
+              "bytes": 163
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/95693292-4D08-4A53-BF16-4043D4E481E6/process-result.json",
+              "sha256": "b7816d57a94a36d940cad175b5f07aecee8c647a6eec319d01453558ae2f8b3e",
+              "bytes": 108
+            }
+          ]
+        },
+        {
+          "phase": "artifact-check",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/C689F2E8-E73A-4E37-9CD9-462D68F4ED6F/stdout",
+              "sha256": "fb198394c60ef08f8928e40e1fa422c5b3fd1e4af7487603eb79ceb8044969e6",
+              "bytes": 37
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/C689F2E8-E73A-4E37-9CD9-462D68F4ED6F/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/C689F2E8-E73A-4E37-9CD9-462D68F4ED6F/process-result.json",
+              "sha256": "4ea756f271dd284e748c778ea8f79aec20f179c56616d3ce6f187270946e6b09",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "artifact-recovery-after",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "smoke-01",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B166E817-D86F-4E50-A819-5E3DB380836F/stdout",
+              "sha256": "0050c1f0fb20a9723e48aa2b2d87065ada78196657dc7a838c0e893645d09275",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B166E817-D86F-4E50-A819-5E3DB380836F/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B166E817-D86F-4E50-A819-5E3DB380836F/process-result.json",
+              "sha256": "82bf9e33af872a98dbeacaf61fb7d604b7728c12c6be9aca307fc9be9b4f80f3",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-02",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/9277A5B5-CCFF-44AB-B716-0943E0133F30/stdout",
+              "sha256": "60a6f59589a49f0a7acf666cceb4f7a4a6f136066edcb470fbb309e05f9bcc74",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/9277A5B5-CCFF-44AB-B716-0943E0133F30/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/9277A5B5-CCFF-44AB-B716-0943E0133F30/process-result.json",
+              "sha256": "6bc7ccf227f9fcd732e9c33e76bcd71226da3fc8ffa4a7c3f260bb448f57e51e",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-03",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B873F116-199C-403B-ABE6-10C151B1FE1D/stdout",
+              "sha256": "d397098c72485c439c3d40b3b006577f002c7741512f99f0c16ad66b74a3ca8c",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B873F116-199C-403B-ABE6-10C151B1FE1D/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B873F116-199C-403B-ABE6-10C151B1FE1D/process-result.json",
+              "sha256": "ae8f4ab64876fb6622b8a321211de4340b821e01d70af4b3e77cdf9dad77a8a6",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-04",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/4AA7C777-2A97-4894-8B1F-4DBBA3116D30/stdout",
+              "sha256": "82c605328589064b5e59e649986a073c64742ec1018cdc6b338cb5bf284a690c",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/4AA7C777-2A97-4894-8B1F-4DBBA3116D30/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/4AA7C777-2A97-4894-8B1F-4DBBA3116D30/process-result.json",
+              "sha256": "5eac54df6a0f18af157e4fd0e36543309414a20cafe73b027fdecae0ed9d0fbf",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-05",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/D2C35045-F377-4460-B748-B88F4D6F9822/stdout",
+              "sha256": "b66368544d1adb67f7458de35b97a53e137d11617b67396ff67724ce2a40079f",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/D2C35045-F377-4460-B748-B88F4D6F9822/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/D2C35045-F377-4460-B748-B88F4D6F9822/process-result.json",
+              "sha256": "d89a170bd06645e07801dd16326a2843749b2fe8f30df1cae87ecf1232136497",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-06",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B1361AE7-3721-4D59-B285-5753ED09DB34/stdout",
+              "sha256": "235a610940eaefb2849752ec50ca3bd2c6959884bfc6397a1180221fa7c7a868",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B1361AE7-3721-4D59-B285-5753ED09DB34/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/B1361AE7-3721-4D59-B285-5753ED09DB34/process-result.json",
+              "sha256": "5010fa6e999db48870f37ec061e67c977b353c8e14f8107b2c08dd1f9ced963a",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-07",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/1D356CBC-F3DE-4B31-88BB-C0B5060B2DEB/stdout",
+              "sha256": "a84e4a1342bbf849c5447b001e4747b2c9686f75003135aa8242838316e86fcd",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/1D356CBC-F3DE-4B31-88BB-C0B5060B2DEB/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/1D356CBC-F3DE-4B31-88BB-C0B5060B2DEB/process-result.json",
+              "sha256": "c8dc906df4a8fe090411f729668aa95531b1245d2a30c76bda665c6f6db25be8",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-08",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/AE1B3B40-332F-4708-B455-44C0C898B2DE/stdout",
+              "sha256": "9b9a663621eaef10878e3d9631b96bc4a4e36a11a5303b36f8724005c97cb42c",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/AE1B3B40-332F-4708-B455-44C0C898B2DE/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/AE1B3B40-332F-4708-B455-44C0C898B2DE/process-result.json",
+              "sha256": "d21230cd1d686ca03ab8156807f3d349ee4a7af958565ac9d5ac02f1d9a6db16",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-09",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/16226068-EC47-40D0-8247-F6CC9928C2E8/stdout",
+              "sha256": "09cbeda1f7770e463b8e9667eed4d043dd7111b71970635b01724ca0de49f92d",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/16226068-EC47-40D0-8247-F6CC9928C2E8/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/16226068-EC47-40D0-8247-F6CC9928C2E8/process-result.json",
+              "sha256": "05561b4a05e2579a7cd338a443184ee4dc0b29cb4148674f6c48a6446e33d74e",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-10",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/70CC539B-0956-4AA3-BFFC-AF56D364EF88/stdout",
+              "sha256": "0c7834229c52983fa996e1f090e9810bf694ba3113f9ea5499a856cc0bd892d0",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/70CC539B-0956-4AA3-BFFC-AF56D364EF88/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/children/70CC539B-0956-4AA3-BFFC-AF56D364EF88/process-result.json",
+              "sha256": "f10acd813e7414ee37362f8857dd1fdba9670bdd4963952d15d274a1c4049e94",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "source-end",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/6D9EAC2A-8B1A-4632-99B6-D1E731DF2B51.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/6D9EAC2A-8B1A-4632-99B6-D1E731DF2B51.stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/7363F86C-8C49-4CCF-BB6A-BA73F03649F5.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/7363F86C-8C49-4CCF-BB6A-BA73F03649F5.stdout",
+              "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/960390AA-1F2B-4D48-A6F2-6C0E23655D9E.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/960390AA-1F2B-4D48-A6F2-6C0E23655D9E.stdout",
+              "sha256": "5b4d407b8458b4fa27d350c943f923f41939abf87bde7397346c102c07415983",
+              "bytes": 17997
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/9D484577-B2CF-4D32-B153-7039E764BFBE.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/9D484577-B2CF-4D32-B153-7039E764BFBE.stdout",
+              "sha256": "c9d8f068d1645015ab14afcbdceda434b330e635fd6609b1abf06bd73752169a",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/BB3B35FC-EE00-40AA-9094-E61A8FCB1E84.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD/internal-3B183E1D-312C-4C39-9BDD-DC42101631EC/BB3B35FC-EE00-40AA-9094-E61A8FCB1E84.stdout",
+              "sha256": "7950c0b76805dee566ed0311baca003bf84b8f9a49d245cb6bf4f7fc01a32bbc",
+              "bytes": 41
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "template-mainline",
+      "argv": [
+        "env",
+        "-u",
+        "FLOWTYPE_SIGNING_IDENTITY",
+        "-u",
+        "FLOWTYPE_NOTARY_PROFILE",
+        "scripts/verify.sh",
+        "--write-manual-template",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-mainline.json"
+      ],
+      "cwd": "/Users/yiheng/pycode/flowtype-local",
+      "exitCode": 0,
+      "logPath": "build/review-fixes-validation-20261111-005928/template-mainline.log",
+      "command": "env -u FLOWTYPE_SIGNING_IDENTITY -u FLOWTYPE_NOTARY_PROFILE scripts/verify.sh --write-manual-template /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-mainline.json",
+      "logSHA256": "38ef25ee26189d5b6db97eedbf57eb902a9fa7131aae2dc6d1bb184c46f97f84",
+      "output": "Manual template: 41 Pending\n",
+      "status": "Pass"
+    },
+    {
+      "name": "template-model-center",
+      "argv": [
+        "env",
+        "-u",
+        "FLOWTYPE_SIGNING_IDENTITY",
+        "-u",
+        "FLOWTYPE_NOTARY_PROFILE",
+        "scripts/verify-model-center.sh",
+        "--write-template",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-model-center.json"
+      ],
+      "cwd": "/Users/yiheng/pycode/flowtype-local",
+      "exitCode": 0,
+      "logPath": "build/review-fixes-validation-20261111-005928/template-model-center.log",
+      "command": "env -u FLOWTYPE_SIGNING_IDENTITY -u FLOWTYPE_NOTARY_PROFILE scripts/verify-model-center.sh --write-template /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-model-center.json",
+      "logSHA256": "1bd4c8487e0300a4041115313e9464b7d7e1349d41305b369d81afa96ddc2465",
+      "output": "Model center template: 30 Pending\n",
+      "status": "Pass"
+    },
+    {
+      "name": "release",
+      "argv": [
+        "env",
+        "-u",
+        "FLOWTYPE_SIGNING_IDENTITY",
+        "-u",
+        "FLOWTYPE_NOTARY_PROFILE",
+        "scripts/verify.sh",
+        "--lane",
+        "release",
+        "--candidate-manifest",
+        "/Users/yiheng/pycode/flowtype-local/build/FlowType.manifest.json",
+        "--manual-report",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-mainline.json",
+        "--ci-report",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/remote-code.json"
+      ],
+      "cwd": "/Users/yiheng/pycode/flowtype-local",
+      "exitCode": 2,
+      "logPath": "build/review-fixes-validation-20261111-005928/release.log",
+      "command": "env -u FLOWTYPE_SIGNING_IDENTITY -u FLOWTYPE_NOTARY_PROFILE scripts/verify.sh --lane release --candidate-manifest /Users/yiheng/pycode/flowtype-local/build/FlowType.manifest.json --manual-report /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-mainline.json --ci-report /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/remote-code.json",
+      "logSHA256": "e530c2a2329e1d82b1027a8de65aedbd851ee3c165066a84b7f8e65bbc9aeefb",
+      "output": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/verify-report.json\nVerification release: Pending\n",
+      "reportPath": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/verify-report.json",
+      "reportSHA256": "2abbbbb95acbfe476ed4c3f75d56733af0a9257e7b237426a6a8a73fb368d9b7",
+      "status": "Pending",
+      "phaseCount": 24,
+      "phaseEvidence": [
+        {
+          "phase": "source-start",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/37C922F8-3F3E-4775-A8F2-0F3C7CA81B8A.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/37C922F8-3F3E-4775-A8F2-0F3C7CA81B8A.stdout",
+              "sha256": "7950c0b76805dee566ed0311baca003bf84b8f9a49d245cb6bf4f7fc01a32bbc",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/4D71E0EF-4FCE-475E-A910-E2FCBD0C5769.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/4D71E0EF-4FCE-475E-A910-E2FCBD0C5769.stdout",
+              "sha256": "c9d8f068d1645015ab14afcbdceda434b330e635fd6609b1abf06bd73752169a",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/BE5CF33A-7B8B-4AEB-8035-1623004179B9.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/BE5CF33A-7B8B-4AEB-8035-1623004179B9.stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/CAD54C99-9CCD-4CD3-9393-3D7D19760FE5.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/CAD54C99-9CCD-4CD3-9393-3D7D19760FE5.stdout",
+              "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/DB46F2BB-1A5C-4357-A8F4-5D2EF4976F1A.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-92557A04-B8F4-4DBC-8BDA-AC567F62998F/DB46F2BB-1A5C-4357-A8F4-5D2EF4976F1A.stdout",
+              "sha256": "5b4d407b8458b4fa27d350c943f923f41939abf87bde7397346c102c07415983",
+              "bytes": 17997
+            }
+          ]
+        },
+        {
+          "phase": "platform-os",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/1FEABFB1-9AD5-44D4-8BB1-F46376BC0E5A/stdout",
+              "sha256": "3e7f3aac6ec05838460f29272ec4647dbdf438a5b83be784975079531ab79eb1",
+              "bytes": 7
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/1FEABFB1-9AD5-44D4-8BB1-F46376BC0E5A/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/1FEABFB1-9AD5-44D4-8BB1-F46376BC0E5A/process-result.json",
+              "sha256": "c0ed9c0ae5bf81cae0fdd1fbdf36d72489b1ae012f9325ac666e57cd67ccfe60",
+              "bytes": 107
+            }
+          ]
+        },
+        {
+          "phase": "platform-arch",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/77C3A932-9CDF-4772-A845-3B1810F45D2C/stdout",
+              "sha256": "c1669e1d8edca98769c37d494b76442a1d6e5ffffd7b4da1fb63aef8ebaf6f01",
+              "bytes": 6
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/77C3A932-9CDF-4772-A845-3B1810F45D2C/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/77C3A932-9CDF-4772-A845-3B1810F45D2C/process-result.json",
+              "sha256": "d8810166590ae55987ad6f416a690b0e6f4902597ebbd035032688cb4bd322e0",
+              "bytes": 106
+            }
+          ]
+        },
+        {
+          "phase": "platform-swift",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E4483323-76E6-4F3A-9967-894FFD76E23C/stdout",
+              "sha256": "1542c4efed5df8f785540d8d6b187ed2fd098c2d545162f5f16963476d0d864c",
+              "bytes": 96
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E4483323-76E6-4F3A-9967-894FFD76E23C/stderr",
+              "sha256": "d8703093a2c6cd995cd176c1526a239bb529ad836758f7d25dd73398a21f235f",
+              "bytes": 33
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E4483323-76E6-4F3A-9967-894FFD76E23C/process-result.json",
+              "sha256": "aad98bbeafef832fc1d351c69a19efb322c86e0731e99c71f1941d76f93b3333",
+              "bytes": 107
+            }
+          ]
+        },
+        {
+          "phase": "code-build",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/F720DE6A-642A-4254-868F-A2B9F52F1068/stdout",
+              "sha256": "18006c645f5a4acca7786463fff305e0609da09a5573706f888f337c8ed72f30",
+              "bytes": 203
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/F720DE6A-642A-4254-868F-A2B9F52F1068/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/F720DE6A-642A-4254-868F-A2B9F52F1068/process-result.json",
+              "sha256": "ab15bc2042094acffafb128017774a0a97d6639bd93f1011efc419f41200d15a",
+              "bytes": 110
+            }
+          ]
+        },
+        {
+          "phase": "code-full",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/6C22520C-2B07-4173-BA2D-83C16D05D885/stdout",
+              "sha256": "186becf7fd3adbaebe3868e5aa79b8f4c8443e69494217e5c18362cb7e4a4ab0",
+              "bytes": 4963
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/6C22520C-2B07-4173-BA2D-83C16D05D885/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/6C22520C-2B07-4173-BA2D-83C16D05D885/process-result.json",
+              "sha256": "938f993dafacb25247e98beb7bf81ee0667d244196a59483a1105a8a62b84d95",
+              "bytes": 111
+            }
+          ]
+        },
+        {
+          "phase": "artifact-recovery-before",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "artifact-source",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "artifact-reuse",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "artifact-manifest",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "artifact-signature",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E79ADB38-CB22-44B1-BFFC-9D6B8E821BB1/stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E79ADB38-CB22-44B1-BFFC-9D6B8E821BB1/stderr",
+              "sha256": "9e16e5b9b22d74e464530b4ab4ce9cd6e68a46021c5fd7c09db69f69189c7df3",
+              "bytes": 163
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E79ADB38-CB22-44B1-BFFC-9D6B8E821BB1/process-result.json",
+              "sha256": "e19cc9c8f85eea52d36e70951153717b202d24428934bcda8f4f02d25965f8c5",
+              "bytes": 108
+            }
+          ]
+        },
+        {
+          "phase": "artifact-check",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/7ECA09B9-830F-42DE-83A7-AFD69433141E/stdout",
+              "sha256": "fb198394c60ef08f8928e40e1fa422c5b3fd1e4af7487603eb79ceb8044969e6",
+              "bytes": 37
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/7ECA09B9-830F-42DE-83A7-AFD69433141E/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/7ECA09B9-830F-42DE-83A7-AFD69433141E/process-result.json",
+              "sha256": "ca922732a3077406cb28f0f177a6118eb6345c4ed05663e3458a2bcb944044fe",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "artifact-recovery-after",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": []
+        },
+        {
+          "phase": "smoke-01",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/06594E5D-22DE-4294-B61D-E3FE6E908EF1/stdout",
+              "sha256": "763de5fb47921058b4a3b8e865f953e011e5a64c2ddb4348c143f45158b168bd",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/06594E5D-22DE-4294-B61D-E3FE6E908EF1/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/06594E5D-22DE-4294-B61D-E3FE6E908EF1/process-result.json",
+              "sha256": "d97b0439284e97e57000de8c6b55b02d67b71ad6651fb53693e71eabf435fda7",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-02",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/4801AF14-6D5D-4F46-8B2E-F6F751748056/stdout",
+              "sha256": "806530c168e5ac6fc05d7e407473149da5d4483c2809db89b431e0b1f1baa551",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/4801AF14-6D5D-4F46-8B2E-F6F751748056/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/4801AF14-6D5D-4F46-8B2E-F6F751748056/process-result.json",
+              "sha256": "797190652e7e4f366ad06a4b61cc9f33e006e23b8ad306259d088c311a9764de",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-03",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E268F437-24BC-49FD-B15B-DB388AD713A8/stdout",
+              "sha256": "4c76735b8e489625fa2f5e9e0265d8b682f1a0177c11c021e00b9c283e090c95",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E268F437-24BC-49FD-B15B-DB388AD713A8/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/E268F437-24BC-49FD-B15B-DB388AD713A8/process-result.json",
+              "sha256": "007ae862f889de263c104021e2f9d97dd8b907d40b301728f6b738080ba39dc1",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-04",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/73E73B5B-DA1B-4237-8030-6114B129FE9C/stdout",
+              "sha256": "d3a0833fa21cfcb82fb8143797ae7624c7eb294a4134e298e0250b8b044151a4",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/73E73B5B-DA1B-4237-8030-6114B129FE9C/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/73E73B5B-DA1B-4237-8030-6114B129FE9C/process-result.json",
+              "sha256": "e5a5d15e86a130f88d55d4b4ab1e091b1139968b3d81bf7769566fbc877eeb71",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-05",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/F19FF13E-412C-4E39-BA62-8F0E63ED5106/stdout",
+              "sha256": "e9a0179e7299a7a6a80a4eb9b53a260b1e83cd37451ab8da4ca5343047af9ecb",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/F19FF13E-412C-4E39-BA62-8F0E63ED5106/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/F19FF13E-412C-4E39-BA62-8F0E63ED5106/process-result.json",
+              "sha256": "6868846b23bdcb30e78d373168c6567abd894a6bbc2efe0d94941b64afc1b1c2",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-06",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/FC4135E5-8C71-4F74-91F4-C714E5B9CD8B/stdout",
+              "sha256": "f93ef3da6e3f853aa3cd5ee7907f67f6fcb0c62ffc1977667c2f977e2feedd1d",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/FC4135E5-8C71-4F74-91F4-C714E5B9CD8B/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/FC4135E5-8C71-4F74-91F4-C714E5B9CD8B/process-result.json",
+              "sha256": "4f8be59925a44df073dafe33e881cdeb247bafc0be330635ba26bc9a383b7483",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-07",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/72B7B592-EED3-4930-B203-AF5148A2F5ED/stdout",
+              "sha256": "87d78d28a7a1ec64d8f36f320226fe70f0a2a0d36a819dada818f2574edf537e",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/72B7B592-EED3-4930-B203-AF5148A2F5ED/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/72B7B592-EED3-4930-B203-AF5148A2F5ED/process-result.json",
+              "sha256": "3470ad3df2157685dcd7bdea03861886dc6e299944299ceff145f8d8ba2eb511",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-08",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/88B28CEC-64C0-43B9-8DE0-578C3C99B42F/stdout",
+              "sha256": "6f64bad177cea943bf2dea71404f3f4b27087ca7cf1092e26374b68784407b7f",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/88B28CEC-64C0-43B9-8DE0-578C3C99B42F/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/88B28CEC-64C0-43B9-8DE0-578C3C99B42F/process-result.json",
+              "sha256": "824bea2816d3c0f263f200d9921235ee96321ad7f1fa486610d7da977644a395",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-09",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/63796B80-3ECC-4316-A67B-41EB87A7452E/stdout",
+              "sha256": "a879486b592620b8bbd36491f713e744b83406593b6d110ce6ad63caf91d4215",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/63796B80-3ECC-4316-A67B-41EB87A7452E/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/63796B80-3ECC-4316-A67B-41EB87A7452E/process-result.json",
+              "sha256": "b6c36ef3caa20aa9c28b4783c7c6d35e81abd521221e5d0a5453a203a06da036",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "smoke-10",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/AF24664F-E528-43BA-A0C8-CF7CE75753D0/stdout",
+              "sha256": "b35952a49ef819381befdf9ad0b3e6536d7375625a5e68d3844ab485d9139566",
+              "bytes": 581
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/AF24664F-E528-43BA-A0C8-CF7CE75753D0/stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/children/AF24664F-E528-43BA-A0C8-CF7CE75753D0/process-result.json",
+              "sha256": "d0047fc3d9ad440be2866b30e4929205cd1ec90642058443c5fd649a01e42e60",
+              "bytes": 109
+            }
+          ]
+        },
+        {
+          "phase": "source-end",
+          "status": "Pass",
+          "exitCode": 0,
+          "failureCode": null,
+          "timedOut": false,
+          "files": [
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/536974B0-09DB-4675-8168-390D502C9941.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/536974B0-09DB-4675-8168-390D502C9941.stdout",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/64960043-A6DE-4764-B85C-8D2B78828904.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/64960043-A6DE-4764-B85C-8D2B78828904.stdout",
+              "sha256": "c9d8f068d1645015ab14afcbdceda434b330e635fd6609b1abf06bd73752169a",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/6C859AE9-D5A6-4399-98CD-1C933D6D7AC7.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/6C859AE9-D5A6-4399-98CD-1C933D6D7AC7.stdout",
+              "sha256": "7950c0b76805dee566ed0311baca003bf84b8f9a49d245cb6bf4f7fc01a32bbc",
+              "bytes": 41
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/8CA953CE-9541-4F36-B235-7F49D20ACAF4.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/8CA953CE-9541-4F36-B235-7F49D20ACAF4.stdout",
+              "sha256": "5b4d407b8458b4fa27d350c943f923f41939abf87bde7397346c102c07415983",
+              "bytes": 17997
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/9B813B82-39D1-4497-A627-00A8CF8E04DB.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "bytes": 0
+            },
+            {
+              "path": "build/verification/E7F81B80-D916-4D91-9DEF-F4892CDA5F09/internal-6DEA95A5-AA6B-41AF-BC60-F9913FC9B555/9B813B82-39D1-4497-A627-00A8CF8E04DB.stdout",
+              "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0",
+              "bytes": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "distribution",
+      "argv": [
+        "env",
+        "-u",
+        "FLOWTYPE_SIGNING_IDENTITY",
+        "-u",
+        "FLOWTYPE_NOTARY_PROFILE",
+        "scripts/verify-distribution.sh",
+        "--app",
+        "/Users/yiheng/pycode/flowtype-local/build/FlowType.app",
+        "--manifest",
+        "/Users/yiheng/pycode/flowtype-local/build/FlowType.manifest.json",
+        "--dmg",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/FlowType-pending.dmg",
+        "--notary-evidence",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/notary-evidence-pending.json",
+        "--output",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/distribution-report.json"
+      ],
+      "cwd": "/Users/yiheng/pycode/flowtype-local",
+      "exitCode": 2,
+      "logPath": "build/review-fixes-validation-20261111-005928/distribution.log",
+      "command": "env -u FLOWTYPE_SIGNING_IDENTITY -u FLOWTYPE_NOTARY_PROFILE scripts/verify-distribution.sh --app /Users/yiheng/pycode/flowtype-local/build/FlowType.app --manifest /Users/yiheng/pycode/flowtype-local/build/FlowType.manifest.json --dmg /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/FlowType-pending.dmg --notary-evidence /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/notary-evidence-pending.json --output /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/distribution-report.json",
+      "logSHA256": "f681401646de593cb304463ba1891e4508fe12fad5e4da0e714f99e60f2e8afc",
+      "output": "Distribution verification: Pending\n",
+      "status": "Pending",
+      "reportPath": "build/review-fixes-validation-20261111-005928/distribution-report.json",
+      "reportSHA256": "cb0ad67fbffe0d6122a4f56f5fedd9d8e9cbe9cd229b400beb5a278ff73dc1fa"
+    },
+    {
+      "name": "model-center",
+      "argv": [
+        "env",
+        "-u",
+        "FLOWTYPE_SIGNING_IDENTITY",
+        "-u",
+        "FLOWTYPE_NOTARY_PROFILE",
+        "scripts/verify-model-center.sh",
+        "--report",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-model-center.json",
+        "--manifest",
+        "/Users/yiheng/pycode/flowtype-local/build/FlowType.manifest.json",
+        "--distribution-report",
+        "/Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/distribution-report.json"
+      ],
+      "cwd": "/Users/yiheng/pycode/flowtype-local",
+      "exitCode": 2,
+      "logPath": "build/review-fixes-validation-20261111-005928/model-center.log",
+      "command": "env -u FLOWTYPE_SIGNING_IDENTITY -u FLOWTYPE_NOTARY_PROFILE scripts/verify-model-center.sh --report /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/manual-model-center.json --manifest /Users/yiheng/pycode/flowtype-local/build/FlowType.manifest.json --distribution-report /Users/yiheng/pycode/flowtype-local/build/review-fixes-validation-20261111-005928/distribution-report.json",
+      "logSHA256": "e8630bc8a581263f64673c9ff3ca28ee792e5e10501d9a08c28d40b02c6daa4e",
+      "output": "Model center acceptance: Pending\n",
+      "status": "Pending"
+    }
+  ]
+}

@@ -29,11 +29,13 @@
 4. ad-hoc签名验证不等于Developer ID/公证；重签后的binary hash不能复用旧manual（D4）。
 5. 签名/公证/DMG复制后资源、Metal与Keychain访问仍须可用，未签名构建可用不足以证明发行可用（D3/D4）。
 
-## 执行状态（2026-11-10）
+## 执行状态（2026-11-11）
 
-实现/审查与技术候选的完成记录见 [归档](../../evidence/2026-11-10-asr-model-center/README.md)。checkbox 只表示对应已执行的代码/文档步骤；D3 step 3/4 与 D4 step 4 的真实条件仍未执行，不从 fixture 推导 Pass。D1 step 4 本地 GREEN 已完成，远端复核仍 Pending。D2 实现与注册回归完成；D4 实现/事务/过期报告修复与审查完成，真实发行保持 Pending。
+[当前 review-fix 归档](../../evidence/2026-11-11-asr-model-center-review-fixes/README.md) 绑定代码候选 `76757c7e5693c0350b67093d1a0750c21b0b214b`（Sources `a3fb7822700cc8bfda8d8d36240619d13f9bec18`）。原 I1/I2/I3/M1、后续 R1 及 gate 同步 fixture 修正均有独立 clean scoped review。当前 code **28,484/0**；artifact **22/22 phase + 10 smoke Pass**；release 复用同一 App，**24/24 技术 phase + 10 smoke Pass**，整体 **Pending / exit 2**；实际 D4 与 D2 也是 **Pending / exit 2**。原 `e0980ec` full gate **28,471/1 / Fail / exit 1** 原样保留；其具体历史调度未知，受控诊断证明 finite-yield waiter 的 false-readiness，确定性修正未削弱 owner/drain 断言。
 
-D3 step 1 整体审查及 I1/M1 修复/复审已完成；step 2 的本地 code/artifact 已完成，远端 CI 仍 Pending；step 5 已如实运行 release 复用/D4/D2 gate 并归档：三者都是 exit 2 / Pending。原 41 项和新 30 项全部 Pending。当前仅有 ad-hoc 技术 App，没有 Developer ID/公证/最终 DMG/干净机器通过证据，不能报告可发布。归档 commit 不改变代码候选 `d43a603` 的身份。
+checkbox 仅表示执行过的代码/文档步骤。D1 本地 GREEN 完成、当前远端复核仍 Pending，历史 CI run 41672136709 保持 failure。D2/D4 工具实现已完成；D3 step 3/4、D4 step 4 的真实验收未执行：原 41 项和新 30 项全部 Pending，真实模型/厂商/三种本地服务、Developer ID/公证/最终 DMG/干净机器仍 Pending，不报告可发布。DashScope 真实 actor 内部 cleanup joining 证明限制仍保留。
+
+[历史归档](../../evidence/2026-11-10-asr-model-center/README.md) 的代码候选 `d43a603`、code **28,335/0** 及旧阶段报告保持不变；新归档不重标旧报告。文档 commit 与技术候选身份分开，归档不改变 Sources/scripts/依赖文件，也不因 docs HEAD 重跑候选 gate。
 
 ## File Structure
 

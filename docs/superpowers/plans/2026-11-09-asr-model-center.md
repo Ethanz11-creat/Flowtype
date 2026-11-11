@@ -42,14 +42,16 @@
 | 5 | [D2–D4：完整验收与发行](2026-11-09-asr-model-center-d-release-acceptance.md) | 新旧真机矩阵、独立代码审查、候选技术门禁与正式分发证据 |
 
 - [ ] 用户评审书面设计与本计划，确认本版目标与边界。
-- [x] D1 本地基线后已按 A1–A6 → B1–B6 → C1–C4 完成实现、聚焦回归与顺序审查；最终修复提交 `d43a603`。
+- [x] 初始阶段在 D1 本地基线后按 A1–A6 → B1–B6 → C1–C4 完成实现、聚焦回归与顺序审查；历史代码候选为 `d43a603`，当前 review-fix 候选见下文。
 - [ ] D2–D4 收口；真实凭据/设备/签名条件缺失的项保留 Pending，不能报告发布完成。
 
-## 当前交付状态（2026-11-10）
+## 当前交付状态（2026-11-11）
 
-[最终证据归档](../../evidence/2026-11-10-asr-model-center/README.md) 与 [研究→owner→证据覆盖](../../evidence/2026-11-10-asr-model-center/coverage.md) 记录本轮结果。D1 本地 timer 修复、A1–A6、B1–B6、C1–C4、D2/D4 工具均已实现并审查；最终整体审查 I1/M1 经一次修复与 fresh scoped rereview 关闭。代码候选 `d43a603` 的 code gate 28,335/0；ad-hoc artifact 22/22 phase、10/10 smoke Pass；release 复用同一 App，24/24 技术 phase Pass，整体 exit 2 / Pending。D2/D4 对真实技术候选也均 exit 2 / Pending。
+[当前 review-fix 证据归档](../../evidence/2026-11-11-asr-model-center-review-fixes/README.md) 绑定最终代码候选 `76757c7e5693c0350b67093d1a0750c21b0b214b`、Sources tree `a3fb7822700cc8bfda8d8d36240619d13f9bec18`。新独立审查 I1/I2/I3/M1 及后续 R1 均已修复并通过 scoped rereview；full gate 的同步 fixture 问题经受控诊断、确定性修正及独立复审关闭，未确立产品 ownership 缺陷。当前 code gate **28,484/0**；ad-hoc artifact **22/22 phase、10/10 smoke Pass**；release 复用同一 App，**24/24 技术 phase、10/10 smoke Pass**，整体 **exit 2 / Pending**。实际 D4/D2 均 **exit 2 / Pending**。
 
-原 41 项 + 新 30 项真机均 Pending；远端 CI 未运行，历史 run 41672136709 failure 不变；Developer ID/公证/最终 DMG/干净机器验收 Pending。因此 D2–D4 的代码工具完成不等于正式发行验收完成。证据归档仅改文档，归档 commit 与二进制候选 commit 分别记录，不将旧报告重标为文档 HEAD。所有 52 条 controller Ruling 及成本原文见 [rulings](../../evidence/2026-11-10-asr-model-center/rulings.md)。
+原 `e0980ec` code gate **28,471/1、exit 1 / Fail** 在新归档中保留，历史 scheduler interleaving 未知，不改写成 Pending。新源码修正后才运行上述 renewed gate。原 41 项 + 新 30 项真机全部 Pending；真实模型/厂商/三种本地服务、当前远端 CI、Developer ID/公证/最终 DMG/干净机器验收仍 Pending。历史 run 41672136709 failure 不变，fixture 不提升为实际验收。因此 D2–D4 工具完成不等于可正式发行。归档 commit 与代码候选分别记录，Sources/scripts/依赖文件无归档 delta。
+
+历史代码候选 `d43a603` 的 **28,335/0** 和原阶段审查/owner 证据保留在[原归档](../../evidence/2026-11-10-asr-model-center/README.md)，内容未改。原 [52 条 Ruling 及成本](../../evidence/2026-11-10-asr-model-center/rulings.md) 与 [本轮 4 条原文及成本](../../evidence/2026-11-11-asr-model-center-review-fixes/rulings.md) 分别记录。DashScope 真实 actor 内部 cleanup joining 仍为已记录的证明限制，并非本轮新确立缺陷。
 
 ## 执行约定
 

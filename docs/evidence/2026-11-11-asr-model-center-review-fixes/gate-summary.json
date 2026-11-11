@@ -1,0 +1,59 @@
+{
+  "candidateGitSHA": "76757c7e5693c0350b67093d1a0750c21b0b214b",
+  "sourceTree": "a3fb7822700cc8bfda8d8d36240619d13f9bec18",
+  "binarySHA256": "cbefddba7165b06ef60f78189ef7b4ca8ec73ec68b2529397064e63f8c5b54c5",
+  "fullSuite": {
+    "passed": 28484,
+    "failed": 0
+  },
+  "statuses": {
+    "code": {
+      "status": "Pass",
+      "exitCode": 0,
+      "phasesPass": 7,
+      "phaseCount": 7,
+      "smokePass": 0,
+      "runID": "99D34C19-7A64-45F2-A8AA-F15B38E8DA01"
+    },
+    "artifact": {
+      "status": "Pass",
+      "exitCode": 0,
+      "phasesPass": 22,
+      "phaseCount": 22,
+      "smokePass": 10,
+      "runID": "7421FE2E-1B4C-42E9-BCE1-EAEF8D76EBDD"
+    },
+    "template-mainline": {
+      "status": "Pass",
+      "exitCode": 0
+    },
+    "template-model-center": {
+      "status": "Pass",
+      "exitCode": 0
+    },
+    "release": {
+      "status": "Pending",
+      "exitCode": 2,
+      "phasesPass": 24,
+      "phaseCount": 24,
+      "smokePass": 10,
+      "runID": "E7F81B80-D916-4D91-9DEF-F4892CDA5F09"
+    },
+    "distribution": {
+      "status": "Pending",
+      "exitCode": 2
+    },
+    "model-center": {
+      "status": "Pending",
+      "exitCode": 2
+    }
+  },
+  "pendingManualCounts": {
+    "mainline": 41,
+    "modelCenter": 30
+  },
+  "remoteCI": "Pending; not run",
+  "formalDistribution": "Pending; actual ad-hoc App only",
+  "newRulingCount": 4,
+  "historicalRulingCount": 52
+}

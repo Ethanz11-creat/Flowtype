@@ -1,0 +1,7 @@
+=== FlowType --self-test ===
+Model center fix preview: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-validation/B3957924-753C-4F3E-9164-0B54248CFBC0/Tmp/model-center-fix-previews
+C4 recovery preview: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-validation/B3957924-753C-4F3E-9164-0B54248CFBC0/Tmp/c4-recovery-previews / memory-refusal
+C4 recovery preview: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-validation/B3957924-753C-4F3E-9164-0B54248CFBC0/Tmp/c4-recovery-previews / unloaded-recovery
+C4 cancellation barrier: session=4 starts=1 finishes=1 finishHeld=true cancelled=true cleanupHeld=true vmBusy=true a5Owner=true
+C4 timeout barrier: session=5 starts=1 finishes=1 finishHeld=true cancelled=true cleanupHeld=true vmBusy=true a5Owner=true
+=== ASR model center self-test: 496 passed, 0 failed ===

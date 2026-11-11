@@ -1,0 +1,147 @@
+[
+  {
+    "path": "README.md",
+    "sha256": "fef1645799b1cc6ac4b89230926c5cf524cdf0776bcef196998f66aad5b63fd8",
+    "bytes": 9856
+  },
+  {
+    "path": "candidate-identity.json",
+    "sha256": "f5681e060882bb605cd8dfdf71cce62876ba8eb094f4ad818e34c88b895ca685",
+    "bytes": 5289
+  },
+  {
+    "path": "closeout-validation.json",
+    "sha256": "9cac362627423ac8980b6f390a30f23f8b271361a48c64af9762c13a0e15974e",
+    "bytes": 1048
+  },
+  {
+    "path": "commands.json",
+    "sha256": "ee1989688cdf4fd9ba690dab10a99b76844d3e20e0428b0f838adb0b6b4331b3",
+    "bytes": 71408
+  },
+  {
+    "path": "focused-evidence-sha256.json",
+    "sha256": "0186de3651043f620a2581df8fe85bdec2de45ee63828a667357d71b52abbad8",
+    "bytes": 7727
+  },
+  {
+    "path": "gate-summary.json",
+    "sha256": "40783377afa3ab89ac2fda4df9a7bb374d6ffcdd38dab2eebedab045789fdc33",
+    "bytes": 1406
+  },
+  {
+    "path": "historical-e0980ec-failed-code-evidence.json",
+    "sha256": "48e7f1c37af6639448273d0880d1f386ce32741675f4d5c942469320e6cacaf0",
+    "bytes": 11125
+  },
+  {
+    "path": "reports/FlowType.manifest.json",
+    "sha256": "0c36f75e5194ca679b76e0b3c74e3544bf2d826c8c135e0132628ce8d16aa88d",
+    "bytes": 3639
+  },
+  {
+    "path": "reports/artifact-report.json",
+    "sha256": "1c2c089f2a2b621548dd383bf593ec110c3e556fee6fffa934f5c9e436e31ce2",
+    "bytes": 12129
+  },
+  {
+    "path": "reports/code-report.json",
+    "sha256": "9b0de0cc7cc559b09ae8c6c72c7fd04f4001bd5ee906d113aebb41f411361fcf",
+    "bytes": 5493
+  },
+  {
+    "path": "reports/distribution-report.json",
+    "sha256": "cb0ad67fbffe0d6122a4f56f5fedd9d8e9cbe9cd229b400beb5a278ff73dc1fa",
+    "bytes": 517
+  },
+  {
+    "path": "reports/historical-e0980ec-code-report.json",
+    "sha256": "beb13f3a30f9293400ab00ed537b1acb97037a439b3b6cf2dd5dee731607596f",
+    "bytes": 5505
+  },
+  {
+    "path": "reports/manual-mainline.json",
+    "sha256": "3969148d7d594ea2188399b1ec3f01529d6ffa0397fe723ac740859118b10430",
+    "bytes": 3089
+  },
+  {
+    "path": "reports/manual-model-center.json",
+    "sha256": "103767b841a41f24558653394a576c720ece8e4f656e93711aa7bcde558ef2b1",
+    "bytes": 2411
+  },
+  {
+    "path": "reports/release-report.json",
+    "sha256": "2abbbbb95acbfe476ed4c3f75d56733af0a9257e7b237426a6a8a73fb368d9b7",
+    "bytes": 12515
+  },
+  {
+    "path": "reports/remote-code.json",
+    "sha256": "13e595227ba8caf60a0379e94f7ad3f78842d59458d52dc5f8e44141669237ed",
+    "bytes": 136
+  },
+  {
+    "path": "reviews/fix-report.md",
+    "sha256": "f3d84b1930f74e9f7f7e64eb4d891ad7a81290407bb2428102f5a244ea92e6cd",
+    "bytes": 14273
+  },
+  {
+    "path": "reviews/gate-diagnostic-instrumentation.patch",
+    "sha256": "5157dccc92ce510245c3d41912a71e73240ff0e77dfb14bb22defe11f3934425",
+    "bytes": 3927
+  },
+  {
+    "path": "reviews/gate-diagnostic-red2.log",
+    "sha256": "bf7c88bbe68b831d3722108200fa720cc05ef97cd994dab618cbc548b88457d9",
+    "bytes": 1026
+  },
+  {
+    "path": "reviews/gate-failure-fix-report.md",
+    "sha256": "74f4eb796115458b6ffa8a1be491ffe81507ae29ad35b4779eed50dc970c8c42",
+    "bytes": 11225
+  },
+  {
+    "path": "reviews/gate-failure-rereview.md",
+    "sha256": "27b90a1a7b01385ebad6a4403f970714261669ecc99f5393e3811f113293c8b9",
+    "bytes": 7582
+  },
+  {
+    "path": "reviews/gate-fix-final-backends.log",
+    "sha256": "952c70309b2a06834250e56db73ac350a0d5f76274452e74160bae8fd7b34627",
+    "bytes": 1210
+  },
+  {
+    "path": "reviews/gate-fix-final-model-center.log",
+    "sha256": "7afb0068b9033d5dc0874ef9b61ddf1482ec8c38720edbc5e7fbafedacb3b924",
+    "bytes": 864
+  },
+  {
+    "path": "reviews/historical-e0980ec-stop.md",
+    "sha256": "97b88cb0466e12eba81a877647ecbce241bd3b974dd0d7ca0ddaa22d7d221a01",
+    "bytes": 1747
+  },
+  {
+    "path": "reviews/r1-fix-report.md",
+    "sha256": "1eecb90698679d5009ce0495e308a87015dc9a557dcce4cb51afba2705a2c987",
+    "bytes": 4909
+  },
+  {
+    "path": "reviews/r1-rereview.md",
+    "sha256": "c9e98fdb74a1c185ca0e0e9f28018c8ce96f4a139f3cd6c2fe845d26338e8d4e",
+    "bytes": 3873
+  },
+  {
+    "path": "reviews/report.md",
+    "sha256": "46fcaf88a704a7bf995c2cfb1416e78d1e2b3ff23ecf9b87d6842718fca4054e",
+    "bytes": 14331
+  },
+  {
+    "path": "reviews/rereview.md",
+    "sha256": "064653a5f3697b3175eeb371af89d6b172718fb2463c906b4fa4bedbd7d37ceb",
+    "bytes": 11643
+  },
+  {
+    "path": "rulings.md",
+    "sha256": "85bdc40613915777dbd3aebb3da55e765d49858d6c510b3b67192b7179977d66",
+    "bytes": 3039
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "candidate" : {
+    "appPath" : "\/Users\/yiheng\/pycode\/flowtype-local\/build\/FlowType.app",
+    "binarySHA256" : "cbefddba7165b06ef60f78189ef7b4ca8ec73ec68b2529397064e63f8c5b54c5",
+    "gitSHA" : "76757c7e5693c0350b67093d1a0750c21b0b214b",
+    "sourceTree" : "a3fb7822700cc8bfda8d8d36240619d13f9bec18"
+  },
+  "gatekeeperAccepted" : false,
+  "hardenedRuntime" : false,
+  "issues" : [
+    "Developer ID Application signature unavailable"
+  ],
+  "schemaVersion" : 1,
+  "stapled" : false,
+  "status" : "Pending"
+}

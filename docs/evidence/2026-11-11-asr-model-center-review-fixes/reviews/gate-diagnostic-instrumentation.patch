@@ -1,0 +1,59 @@
+diff --git a/Sources/flowtype/Testing/ASRModelCenterReviewSelfTests.swift b/Sources/flowtype/Testing/ASRModelCenterReviewSelfTests.swift
+index 27b97a7..b314519 100644
+--- a/Sources/flowtype/Testing/ASRModelCenterReviewSelfTests.swift
++++ b/Sources/flowtype/Testing/ASRModelCenterReviewSelfTests.swift
+@@ -109,6 +109,42 @@ enum ASRModelCenterReviewSelfTests {
+         withExtendedLifetime(captured) {}
+     }
+ 
++    @MainActor static func diagnoseDelayedAdmission(_ r: SelfTest.Reporter) async {
++        let f = ASRModelCenterIntegrationSelfTests.Fixture(); defer { f.cleanup() }
++        let probe = RealtimeProbe(), gate = DiagnosticAdmissionGate()
++        probe.mode = .held
++        let dash = CloudASRProviderConfig.defaultParaformer()
++        let id = ASRBackendID(rawValue: "cloud:" + dash.id.uuidString)
++        let env = ASRModelCenterEnvironment(store: f.store, native: f.native, installer: f.installer, resources: f.resources,
++            checks: f.checks, usage: f.usage, sample: { try f.sample() }, now: { f.date },
++            makeValidation: { callback in .init(now: { f.date }, onVerified: callback,
++                realtimeFactory: { probe.make($0) }, realtimeTimeout: 0.1) })
++        do { try env.actions(navigation: nil).saveCloud!(.init(target: .new(dash.id), profile: dash, keyEdit: .replace("fixture-key"))) }
++        catch { r.check(false, "diagnostic fixture setup"); return }
++        let operation = Task { await gate.hold(); await env.model.selectPrimary(id) }
++        await gate.waitUntilHeld()
++        print("DIAG before existing wait: caller=heldBeforeVM sessions=\(probe.configurations.count) vmBusy=\(env.model.isBusy) a5Owner=\(env.validation.isTesting(profileID: dash.id))")
++        await probe.waitForFinish()
++        let waiting = await probe.latest?.waiting ?? false
++        print("DIAG existing wait returned: sessions=\(probe.configurations.count) finishWaiting=\(waiting) vmBusy=\(env.model.isBusy) a5Owner=\(env.validation.isTesting(profileID: dash.id))")
++        r.check(waiting, "DIAG finite helper must not report readiness before held session exists")
++        operation.cancel()
++        print("DIAG after caller cancel, before admission release: vmBusy=\(env.model.isBusy) a5Owner=\(env.validation.isTesting(profileID: dash.id))")
++        r.check(env.model.isBusy && env.validation.isTesting(profileID: dash.id), "C4 I3 cancelled producer retains owner until actual cleanup drain")
++        await gate.release(); await operation.value
++        r.eq(probe.configurations.count, 0, "DIAG canceled-before-admission starts no transport")
++    }
++    actor DiagnosticAdmissionGate {
++        var held = false
++        var waiter: CheckedContinuation<Void, Never>?, started: CheckedContinuation<Void, Never>?
++        func hold() async {
++            held = true; started?.resume(); started = nil
++            await withCheckedContinuation { waiter = $0 }
++        }
++        func waitUntilHeld() async { if held { return }; await withCheckedContinuation { started = $0 } }
++        func release() { waiter?.resume(); waiter = nil }
++    }
++
+     @MainActor static func realtimeSelection(_ r: SelfTest.Reporter) async {
+         let f = ASRModelCenterIntegrationSelfTests.Fixture(); defer { f.cleanup() }
+         let probe = RealtimeProbe()
+diff --git a/Sources/flowtype/Testing/ASRModelCenterSelfTests.swift b/Sources/flowtype/Testing/ASRModelCenterSelfTests.swift
+index 5c234d2..30f94c2 100644
+--- a/Sources/flowtype/Testing/ASRModelCenterSelfTests.swift
++++ b/Sources/flowtype/Testing/ASRModelCenterSelfTests.swift
+@@ -2,6 +2,7 @@ import Foundation
+ 
+ enum ASRModelCenterSelfTests {
+     @MainActor static func run(_ r: SelfTest.Reporter) async {
++        await ASRModelCenterReviewSelfTests.diagnoseDelayedAdmission(r)
+         await ASRModelCenterFixSelfTests.run(r)
+         await testUserNativeCancellation(r)
+         await ASRModelCenterReviewSelfTests.run(r)

@@ -1,0 +1,10 @@
+  ✗ FAIL: DIAG finite helper must not report readiness before held session exists
+  ✗ FAIL: C4 I3 cancelled producer retains owner until actual cleanup drain
+=== FlowType --self-test ===
+DIAG before existing wait: caller=heldBeforeVM sessions=0 vmBusy=false a5Owner=false
+DIAG existing wait returned: sessions=0 finishWaiting=false vmBusy=false a5Owner=false
+DIAG after caller cancel, before admission release: vmBusy=false a5Owner=false
+Model center fix preview: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-validation/3DBF365E-7C70-4B39-B107-C92864E0F4D7/Tmp/model-center-fix-previews
+C4 recovery preview: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-validation/3DBF365E-7C70-4B39-B107-C92864E0F4D7/Tmp/c4-recovery-previews / memory-refusal
+C4 recovery preview: /private/var/folders/40/tymbl3bj6hv92j3rzcpqyqf00000gn/T/flowtype-validation/3DBF365E-7C70-4B39-B107-C92864E0F4D7/Tmp/c4-recovery-previews / unloaded-recovery
+=== ASR model center self-test: 480 passed, 2 failed ===

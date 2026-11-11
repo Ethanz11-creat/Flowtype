@@ -1,0 +1,26 @@
+{
+  "stagedWhitespaceCheck": {
+    "fullExitCode": 2,
+    "scopedDocsExitCode": 0,
+    "exception": "Two required single-space blank context markers in byte-identical archived diagnostic patch, lines 8 and 53; all other documentation passes.",
+    "archivedPatchByteIdentical": true
+  },
+  "schemaVersion": 1,
+  "candidateGitSHA": "76757c7e5693c0350b67093d1a0750c21b0b214b",
+  "sourceTree": "a3fb7822700cc8bfda8d8d36240619d13f9bec18",
+  "scriptsTree": "95057298acb707b433912b0652c406a7865f3e6c",
+  "trackedSourceScriptsDependenciesDelta": "empty",
+  "resourcesPhysicallyMatched": 17,
+  "releaseManifestBinaryResourcesUnchanged": true,
+  "pendingManualRows": 71,
+  "freshNotRunCI": "Pending",
+  "exactNewRulingLines": 4,
+  "exactReviewReportCopies": 7,
+  "historicalArchiveBase": "6e0f09f",
+  "historicalArchiveFilesByteIdentical": 38,
+  "historicalFailedGateRetained": true,
+  "localLinksChecked": 57,
+  "markdownFragmentsChecked": 2,
+  "noTrackedEditsDuringGates": true,
+  "gateRerunAfterDocsCommit": "not needed; candidate remains code commit"
+}

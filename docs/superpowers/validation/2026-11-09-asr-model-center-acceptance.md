@@ -2,9 +2,11 @@
 
 本文为新增 H1–H8 真机验收清单，不替代原 V1–V5 / 41 项主线验收。C4 的隔离领域测试与离屏预览不构成下表的通过证据。D2 提供独立机器可读 ledger 和 gate，D3/D4 绑定最终候选身份；本轮所有 30 项仍为 **Pending**。
 
-2026-11-10 技术候选：git SHA `d43a603c13b61b21de7cac4b44c51ceb54404a23`；Sources tree `40f3b4b1c763057f70810596b0eae02b7035c728`；ad-hoc binary SHA256 `1c4efb28993f4dad954aff750ea9a1c8f7271615796218e68af41712b4d48854`；最终分发包 SHA256：Pending（未生成）。这是技术候选，尚非 Developer ID/公证后的真机验收候选。
+2026-11-11 当前技术候选：git SHA `76757c7e5693c0350b67093d1a0750c21b0b214b`；Sources tree `a3fb7822700cc8bfda8d8d36240619d13f9bec18`；ad-hoc binary SHA256 `cbefddba7165b06ef60f78189ef7b4ca8ec73ec68b2529397064e63f8c5b54c5`；最终分发包 SHA256：Pending（null，未生成）。这是技术候选，尚非 Developer ID/公证后的真机验收候选。
 
-[归档与下一步](../../evidence/2026-11-10-asr-model-center/README.md) 保存真实 gate 报告、命令/退出码/hash、全部 Ruling 和最终审查。code 28,335/0；artifact 22/22 phase + 10 smoke Pass；release 复用原 App，24/24 技术 phase Pass，整体 Pending（exit 2）；D4 与本 D2 gate 均真实运行并返回 Pending（exit 2）。原 41 项仍独立 Pending，远端 CI 未运行，真实模型/服务/凭据/辅助功能/发行条件均未执行；无任何 manual Pass。签名改变后二进制身份及最终 package 需重新绑定并实测，不能把本候选 ledger 改 hash 当新观察。
+[当前归档与下一步](../../evidence/2026-11-11-asr-model-center-review-fixes/README.md) 保存真实 gate 报告、命令/退出码/hash、4 条新增 Ruling 及全部 fix scoped review。当前 code **28,484/0**；artifact **22/22 phase + 10 smoke Pass**；release 复用同一 App，**24/24 技术 phase + 10 smoke Pass**，整体 **Pending（exit 2）**；实际 D4 与本 D2 均 **Pending（exit 2）**。原 41 项与本表 30 项全部 Pending；无任何 manual Pass。真实模型/厂商/三种本地服务、Keychain/权限/辅助功能、当前远端 CI 与正式发行未完成；历史 CI run 41672136709 failure 不变。
+
+原 `e0980ec` 的 code **28,471/1、Fail（exit 1）** 原样保留；具体历史调度未知，确定性 fixture 同步修正经独立复审后运行当前新候选 gate，未确立产品 ownership 缺陷。[历史 `d43a603` 归档](../../evidence/2026-11-10-asr-model-center/README.md) 的 **28,335/0** 是旧候选证据。已记录的 DashScope 真实 actor 内部 cleanup joining 证明限制继续保留。签名/资源/package 改变需 fresh ledger 和真实观察，不能改旧 hash 复用验收。当前两份 ledger 仅绑定技术身份，所有行保持 Pending。
 
 | 组 | 验收范围 | case ID | 状态 |
 | --- | --- | --- | --- |
