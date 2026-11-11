@@ -45,3 +45,6 @@ Final: Ruling: Keep immutable historical inference snapshots including old bugs 
 Final: Ruling: Product integration/noise robustness/training/optional models remain outside this interview delivery — preserve the agreed experiment scope — cost if wrong: these experiments do not establish product release readiness or general noise robustness.
 Final: Ruling: Annotation paths accept only fixed public-dataset IDs, not arbitrary user imports — current preparation scope makes filename construction bounded — cost if wrong: a future generic dataset importer must validate IDs before reusing it.
 Final verification:41/41 new tests and12/12 original research tests pass;8 automatic checks passed,3 manual_pending; compact full-superset also partial. No further model/cloud batches, no client/settings changes. Keep feat/iflytek-interview and this worktree; no push/merge.
+
+Final freeze regression: last copy updated derived metadata without its matching renderer snapshot; new checksum test caught the mismatch. Synchronized source+metadata together and all model-derived summaries/sources; no inference outputs changed. Final verification rerun below.
+Final freeze rerun:41/41 tests passed after source/metadata synchronization; original12/12 green. Archive/source hashes verified before final commit.
