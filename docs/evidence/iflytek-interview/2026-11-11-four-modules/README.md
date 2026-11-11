@@ -30,7 +30,7 @@
 
 `prepared/`保留冻结id/path、参考、基线、音频manifest、候选表/词表与划分。`models/`、`replay/`、`correction/`各保留协议、逐条输出、汇总与冻结源码；推理源码在source-snapshot，推理后的评分/排版源码在analysis-source（如有）。原始输出不覆写。`assets/`与`native-build/`保留权重身份/许可、链接命令及二进制/Metal资源hash，不含模型或可执行文件。
 
-`replay/annotation-package/annotate.html`需本地音频；`replay/*/*/*.html`按实际事件回放文字，音频URI指向本次ignored build。其他机器请按工具README重新准备/下载，或调整本地音频位置；GitHub直接查看HTML源码不等于运行演示。原始音频、权重、二进制不进入本目录。`reports/report.md`来自本机CLI，含运行目录URI；此README提供仓库内相对链接。
+`replay/annotation-package/annotate.html`需本地音频；新版播放器见 [eval目录](replay-player/eval/index.html)和[dev目录](replay-player/dev/index.html)，支持暂停、拖动、倍速及音频结束后的等待控制。`replay/*/*/*.html`是原始冻结批次的旧展示页，保留供追溯。音频URI指向本次ignored build。其他机器请按工具README重新准备/下载，或调整本地音频位置；GitHub直接查看HTML源码不等于运行演示。原始音频、权重、二进制不进入本目录。`reports/report.md`来自本机CLI，含运行目录URI；此README提供仓库内相对链接。
 
 验证命令：`python -m tools.interview_bench report/verify --root build/interview-bench --profile full`（report和verify分别调用）；Python指新隔离环境。已有冻结prepare目录禁止覆盖，新的推理/标注批次新建身份。人工确认按README导入边界或填写人工演示记录，不补写自动通过。
 
@@ -44,4 +44,8 @@ Qwen转换模型卡Apache-2.0，Whisper代码/权重MIT，Silero MIT；资产身
 
 ## 最终审查
 
-[独立审查与处理](audit/final-review.md)、[执行台账与取舍](audit/progress.md)。修复了回放磁盘写入失败误报/退出阻塞、会话ID核验及派生源码哈希；新测试41/41、原有研究测试12/12通过。HTML暂停/拖动/变速与文字事件不同步暂缓，不影响归档事件和评分。文件全集见 `SHA256SUMS.json`（不包含自身）。分支保留供后续人工验收，本轮不自动推送或合并。
+[独立审查与处理](audit/final-review.md)、[执行台账与取舍](audit/progress.md)。修复了回放磁盘写入失败误报/退出阻塞、会话ID核验及派生源码哈希；原修复批次测试41/41、原有研究测试12/12通过。文件全集见 `SHA256SUMS.json`（不包含自身）。分支保留供后续人工验收，本轮不自动推送或合并。
+
+后续已关闭播放器同步延后项：新增8项行为/只渲染测试，总计49/49；原有研究测试12/12通过。真实Chromium检查了暂停、向后拖动、2倍速与音频结束后的暂停/继续，见 [浏览器检查](replay-player/browser-checks.json)和[截图](replay-player/browser-checked.png)。新版33页从既有真实JSON事件重新生成，未追加推理或云端请求；每个新目录保留渲染来源/输出哈希与源码，旧批次不修改。
+
+三项人工待验证保持不变，操作入口、口述句与录屏脚本见 [最后验收清单](../../../interviews/2026-11-11-iflytek-final-acceptance.md)。自动浏览器检查与截图不替代真人录制或麦克风落字。

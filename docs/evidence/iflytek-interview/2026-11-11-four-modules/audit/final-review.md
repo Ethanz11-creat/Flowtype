@@ -35,3 +35,9 @@ Assessment: **With fixes**. Findings do not invalidate recorded measurements. Hu
 - One fix pass, no second reviewer. Final new suite41/41 and old research suite12/12 passed. Automatic verification8passed/3manual_pending remains partial. Full inference snapshots and original predictions unchanged.
 
 All execution rulings, their costs and task/test history are retained in [progress.md](progress.md). The final checksum manifest includes both audit documents.
+
+## Subsequent authorized follow-up
+
+After the user requested continued work, Minor3 was fixed with6 RED→GREEN player-script regressions (pause, bidirectional seeking, rate, stalled media and post-audio controls) and2 RED→GREEN render-only regressions. New suite49/49, original research suite12/12 passed. Actual Chromium playback confirmed pause stability, backward seeking,2× playback and post-audio pause/resume. See [browser-checks.json](../replay-player/browser-checks.json).
+
+`replay --render-run` creates a separate view with source/output hashes and renderer source, without audio/model loading. Original inference snapshots, JSON events, metrics and old HTML are immutable. This closes the deferred presentation issue; human listening, recording and microphone acceptance remain pending. This was a targeted follow-up, not a second independent review of the original implementation.

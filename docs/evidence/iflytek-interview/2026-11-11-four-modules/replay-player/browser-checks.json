@@ -1,0 +1,22 @@
+{
+  "observed_at_utc": "2026-11-11T09:16:39.082032+00:00",
+  "automation": "ego-browser real Chromium media playback; human acceptance is separate",
+  "checks": {
+    "pause_text_and_audio_stable": true,
+    "paused_media_seconds": 6.961464,
+    "backward_seek_clears_later_results": true,
+    "post_audio_wait_pause_resume": true,
+    "double_speed": {
+      "rate": 2,
+      "media_seconds": 7.093439,
+      "nonempty_text": true
+    }
+  },
+  "screenshot": "browser-checked.png",
+  "tested_whole_page_sha256": "6d03d63fcdc8ed675af6f5c7527b6535d181beca06e6236847c36f875d08b937",
+  "tested_vad_page_sha256": "99fad206d264b0574c25c23a621f260e7cdfc4a2e677b24cf163d0870882f0f0",
+  "inference_runs_added": 0,
+  "microphone_tested": false,
+  "human_boundaries_confirmed": false,
+  "recorded_demo_confirmed": false
+}

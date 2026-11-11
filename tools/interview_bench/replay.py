@@ -126,9 +126,89 @@ def replay_html(run, session, result):
     import html
     payload=json.dumps(result,ensure_ascii=False).replace('<','\\u003c')
     page='''<!doctype html><meta charset="utf-8"><title>Constructed VAD replay</title><style>body{font:17px system-ui;max-width:1000px;margin:30px auto;background:#eff1f8}pre{white-space:pre-wrap}#text{font-size:26px;min-height:100px;background:white;padding:24px}audio{width:100%}</style><h1>Constructed public-audio replay</h1><p>Incremental segment results, not token streaming or confirmed client insertion. Endpoint timing requires human boundaries.</p>'''
-    page+=f'<audio id="audio" controls src="{html.escape(Path(session["path"]).as_uri())}"></audio><div id="text"></div><pre id="events"></pre><script>let r={payload};'
-    page+='''let a=document.querySelector('audio'),origin=null;a.onplay=()=>{origin=performance.now()-a.currentTime*1000};setInterval(()=>{if(origin===null)return;let t=(performance.now()-origin)/1000;document.querySelector('#text').textContent=r.segments.filter(s=>s.returned_seconds<=t).map(s=>s.text).join(' ');document.querySelector('#events').textContent=JSON.stringify(r.events.filter(e=>e.at_seconds<=t).slice(-8),null,2)},50)</script>'''
+    page+=f'<audio id="audio" controls src="{html.escape(Path(session["path"]).as_uri())}"></audio><p id="playback-status" role="status"></p><button id="tail-toggle" type="button" hidden>暂停等待</button><div id="text"></div><pre id="events"></pre><script>let r={payload};'
+    page+='''
+const a=document.querySelector('audio'),tailButton=document.querySelector('#tail-toggle');
+const status=document.querySelector('#playback-status');
+const finishAt=Math.max(r.audio_seconds||0,...r.segments.map(s=>s.returned_seconds),...r.events.map(e=>e.at_seconds));
+let tailBase=null,tailStarted=null,tailRate=1;
+function timelineTime(){
+  if(tailBase===null)return a.currentTime;
+  return Math.min(finishAt,tailBase+(tailStarted===null?0:(performance.now()-tailStarted)/1000*tailRate));
+}
+function render(){
+  const t=timelineTime();
+  document.querySelector('#text').textContent=r.segments.filter(s=>s.returned_seconds<=t).map(s=>s.text).join(' ');
+  document.querySelector('#events').textContent=JSON.stringify(r.events.filter(e=>e.at_seconds<=t).slice(-8),null,2);
+  const waiting=tailBase!==null&&t<finishAt;
+  tailButton.hidden=!waiting;
+  tailButton.textContent=tailStarted===null?'继续等待':'暂停等待';
+  if(tailBase!==null&&!waiting){tailBase=finishAt;tailStarted=null;}
+  status.textContent=tailBase!==null?(waiting?(tailStarted===null?'音频已结束 · 等待已暂停':'音频已结束 · 等待已记录的 ASR 结果'):'回放完成'):(a.paused?'已暂停':'播放中');
+}
+function followAudio(){tailBase=null;tailStarted=null;render();}
+function startTail(){
+  tailBase=a.currentTime;tailRate=a.playbackRate;tailStarted=performance.now();render();
+}
+for(const name of ['play','playing','pause','waiting','timeupdate','loadedmetadata']){
+  a.addEventListener(name,()=>{if(tailBase===null)render();});
+}
+a.addEventListener('play',followAudio);
+a.addEventListener('seeking',followAudio);
+a.addEventListener('seeked',()=>{if(a.ended)startTail();else followAudio();});
+a.addEventListener('ended',startTail);
+a.addEventListener('ratechange',()=>{
+  if(tailBase!==null){tailBase=timelineTime();if(tailStarted!==null)tailStarted=performance.now();tailRate=a.playbackRate;}
+  render();
+});
+tailButton.addEventListener('click',()=>{
+  if(tailBase===null)return;
+  tailBase=timelineTime();tailStarted=tailStarted===null?performance.now():null;render();
+});
+setInterval(render,50);render();
+</script>'''
     (run/f'{session["id"]}.html').write_text(page)
+
+
+def render_run(run, output):
+    """Create a separate view of frozen events without starting inference."""
+    from datetime import datetime, timezone
+    import html
+    import re
+    import shutil
+    from .schema import sha
+    run=run.resolve();output=output.resolve()
+    if output.is_relative_to(run):raise ValueError('Keep views outside the frozen run')
+    if output.exists():raise FileExistsError(output)
+    protocol=json.loads((run/'protocol.json').read_text())
+    sessions=json.loads((run/'sessions.json').read_text())
+    by_id={s['id']:s for s in sessions}
+    if not sessions or len(by_id)!=len(sessions) or any(not re.fullmatch(r'[A-Za-z0-9_-]+',id) for id in by_id):raise ValueError('Invalid/duplicate session IDs')
+    summaries=json.loads((run/'summary.json').read_text())
+    if not summaries or set(summaries)-{'whole','fixed5','vad300','vad600','vad900'}:raise ValueError('Unknown replay strategy')
+    traces=[];source_hashes={}
+    for strategy,summary in summaries.items():
+        ids=[r['id'] for r in summary['sessions']]
+        if len(ids)!=len(by_id) or set(ids)!=set(by_id):raise ValueError('Mismatched replay session IDs')
+        for id in ids:
+            relative=f'{strategy}/{id}.json';source=run/relative
+            traces.append((strategy,by_id[id],json.loads(source.read_text())))
+            source_hashes[relative]=sha(source)
+    output.mkdir(parents=True,exist_ok=False);links=[]
+    for strategy,session,result in traces:
+        target=output/strategy;target.mkdir(exist_ok=True)
+        replay_html(target,session,result)
+        relative=f'{strategy}/{session["id"]}.html'
+        links.append(f'<li><a href="{relative}">{html.escape(strategy)} · {html.escape(session["id"])}</a></li>')
+    (output/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>FlowType 回放演示</title><style>body{font:17px system-ui;max-width:950px;margin:40px auto}li{margin:12px 0}</style><h1>FlowType · 回放演示</h1><p>既有真实事件的展示页，未重新推理。暂停、拖动和倍速跟随音频进度；音频结束后的等待可单独暂停。构造回放不等于麦克风落字。</p><ul>'+''.join(links)+'</ul>')
+    (output/'analysis-source').mkdir()
+    shutil.copyfile(Path(__file__),output/'analysis-source/replay.py')
+    write_json(output/'render-protocol.json',dict(created_at_utc=datetime.now(timezone.utc).isoformat(),
+        split=protocol['config']['split'],source_run=str(run),source_protocol_sha256=sha(run/'protocol.json'),
+        source_sessions_sha256=sha(run/'sessions.json'),source_summary_sha256=sha(run/'summary.json'),
+        source_results_sha256=source_hashes,renderer_sha256=sha(Path(__file__)),additional_inference_runs=0,
+        rendered_files_sha256={str(p.relative_to(output)):sha(p) for p in sorted(output.rglob('*')) if p.is_file()}))
+    return output
 
 
 def run_sessions(root,split):

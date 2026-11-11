@@ -21,6 +21,7 @@ def main():
     p.add_argument('--prepare-annotations', action='store_true')
     p.add_argument('--import-annotations', type=Path)
     p.add_argument('--split', choices=['dev','eval'], default='eval')
+    p.add_argument('--render-run', type=Path, help='Render frozen replay events into a new view; no inference')
     p = commands.add_parser('correction')
     p.add_argument('--root', type=Path, required=True)
     p.add_argument('--allow-cloud', action='store_true')
@@ -42,8 +43,14 @@ def main():
         print(run_correction(args.root,profile=args.profile))
     elif args.command == 'replay':
         from .annotate import prepare_annotations, import_annotations
-        from .replay import run_sessions
-        print(import_annotations(args.root,args.import_annotations) if args.import_annotations else prepare_annotations(args.root) if args.prepare_annotations else run_sessions(args.root,args.split))
+        from .replay import run_sessions, render_run
+        if args.render_run:
+            if args.prepare_annotations or args.import_annotations:parser.error('--render-run cannot modify annotations')
+            from datetime import datetime, timezone
+            output=args.root/'replay-views'/datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+            print(render_run(args.render_run,output))
+        else:
+            print(import_annotations(args.root,args.import_annotations) if args.import_annotations else prepare_annotations(args.root) if args.prepare_annotations else run_sessions(args.root,args.split))
     elif args.command == 'assets':
         from .assets import assets
         print(assets(args.root, args.download))

@@ -6,6 +6,8 @@
 
 从仓库根目录执行。需要现有 `swift build` 依赖产物、macOS arm64/Metal、`uv`、`curl`、`ffmpeg`；没有模型时推理会立即失败，不会暗中联网下载或换模型。
 
+播放器脚本的行为测试还需要 Node.js 18+，无需安装浏览器测试框架。
+
 ```sh
 uv venv build/interview-bench/.venv --python 3.11
 uv pip sync tools/interview_bench/requirements.lock.txt --python build/interview-bench/.venv/bin/python
@@ -49,6 +51,15 @@ python -m tools.interview_bench replay --root build/interview-bench --import-ann
 自动分段、静音拼接来源边界不是人工真值。未完成试听时仍可算MER与结果返回时间，endpoint/final-from-speech为null/manual_pending。每四条真人片段拼接，头尾1s，内间隔400/600/1200ms；这是构造回放。HTML按真实返回事件显示逐段文字，非token streaming或客户端落字。
 
 开发集3会话×whole/fixed5/VAD300/600/900；评测集6会话×whole/fixed5/VAD600，参数预先固定。展示每会话延迟，不用六条估计稳定p95 SLA。另需真人完成60–90秒录制和客户端三次短句/混说/术语麦克风→TextEdit演示。未观察到实际落字不得把dispatch写成成功。
+
+已有回放可只重新生成展示页，不启动ASR、不修改冻结事件：
+
+```sh
+python -m tools.interview_bench replay --root build/interview-bench \
+  --render-run docs/evidence/iflytek-interview/2026-11-11-four-modules/replay/eval
+```
+
+输出为新的 `replay-views/<UTC>/`，包含入口页、渲染来源/输出哈希与排版源码。播放器跟随音频 currentTime，支持暂停、拖动、倍速与缓冲；音频结束后的已记录ASR结果等待可单独暂停。展示速度不改变原始事件时间或任何评分。真人操作步骤见 [最后验收清单](../../docs/interviews/2026-11-11-iflytek-final-acceptance.md)。
 
 ## 云端纠错与预算
 
