@@ -69,3 +69,23 @@ class VerificationTests(unittest.TestCase):
             validate_frozen_sources(run)
             (run/'source-snapshot/backends.py').write_text('changed')
             with self.assertRaises(ValueError):validate_frozen_sources(run)
+
+    def test_dispatch_only_never_passes_manual_insertion_check(self):
+        from tools.interview_bench.verify import verify_manual
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            observations=[dict(kind=k,observer='test-fixture-human',observed_at_utc='2026-11-11T00:00:00+00:00',
+                               target_app='TextEdit',spoken_text='test',observed_text='test',confirmed_inserted=True)
+                          for k in ['short','mixed','technical']]
+            write_json(root/'manual-demonstrations.json',dict(microphone=dict(status='confirmed',observations=observations)))
+            self.assertEqual(verify_manual(root)['microphone_demo']['status'],'passed')
+            for r in observations:r.pop('observed_text');r['dispatch_sent']=True
+            write_json(root/'manual-demonstrations.json',dict(microphone=dict(status='confirmed',observations=observations)))
+            self.assertEqual(verify_manual(root)['microphone_demo']['status'],'failed')
+            self.assertEqual(verify_manual(root)['recorded_replay_demo']['status'],'manual_pending')
+
+    def test_manual_record_wrong_json_type_is_failed(self):
+        from tools.interview_bench.verify import verify_manual
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);write_json(root/'manual-demonstrations.json',[])
+            self.assertEqual(verify_manual(root)['microphone_demo']['status'],'failed')

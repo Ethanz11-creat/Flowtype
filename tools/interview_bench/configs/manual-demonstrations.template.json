@@ -1,0 +1,11 @@
+{
+  "microphone": {
+    "status": "pending",
+    "observations": [
+      {"kind": "short", "observer": "", "observed_at_utc": "", "target_app": "TextEdit", "spoken_text": "", "observed_text": "", "confirmed_inserted": false},
+      {"kind": "mixed", "observer": "", "observed_at_utc": "", "target_app": "TextEdit", "spoken_text": "", "observed_text": "", "confirmed_inserted": false},
+      {"kind": "technical", "observer": "", "observed_at_utc": "", "target_app": "TextEdit", "spoken_text": "", "observed_text": "", "confirmed_inserted": false}
+    ]
+  },
+  "replay_recording": {"status": "pending", "observer": "", "path": "", "sha256": ""}
+}

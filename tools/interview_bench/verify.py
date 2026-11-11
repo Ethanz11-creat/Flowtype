@@ -80,6 +80,45 @@ def validate_correction_matrix(tasks, rows):
         if any(g!=groups[0] for g in groups):raise ValueError('Condition IDs differ')
 
 
+def verify_manual(root):
+    from datetime import datetime
+    import subprocess
+    result={k:check('manual_pending',reason=reason) for k,reason in [
+        ('microphone_demo','3 real microphone/TextEdit insertions require a human observation record'),
+        ('recorded_replay_demo','60–90s replay recording requires a real media file and human observation')]}
+    path=root/'manual-demonstrations.json'
+    if not path.exists():return result
+    try:manual=json.loads(path.read_text())
+    except (ValueError,TypeError):return {k:check('failed',reason='invalid manual record') for k in result}
+    if not isinstance(manual,dict):return {k:check('failed',reason='manual record must be an object') for k in result}
+    microphone=manual.get('microphone',{})
+    if not isinstance(microphone,dict):return {k:check('failed',reason='invalid manual record sections') for k in result}
+    if microphone.get('status')=='confirmed':
+        try:
+            observations=microphone['observations']
+            if len(observations)!=3 or {o['kind'] for o in observations}!={'short','mixed','technical'}:raise ValueError('cases')
+            for o in observations:
+                if not o['observer'].strip() or not o['spoken_text'].strip() or not o['observed_text'].strip() or o['target_app']!='TextEdit' or o['confirmed_inserted'] is not True:raise ValueError('actual observed text required')
+                timestamp=datetime.fromisoformat(o['observed_at_utc'])
+                if timestamp.utcoffset() is None:raise ValueError('timestamp timezone')
+            result['microphone_demo']=check('passed',evidence='human observation, not independently proven by dispatch')
+        except (ValueError,KeyError,TypeError,AttributeError):result['microphone_demo']=check('failed',reason='incomplete human insertion observations')
+    recording=manual.get('replay_recording',{})
+    if not isinstance(recording,dict):
+        result['recorded_replay_demo']=check('failed',reason='invalid recording section');return result
+    if recording.get('status')=='confirmed':
+        try:
+            video=Path(recording['path'])
+            if not video.is_absolute():video=root/video
+            if not recording['observer'].strip() or sha(video)!=recording['sha256']:raise ValueError('recording identity')
+            probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration','-of','json',str(video)],capture_output=True,text=True,check=True)
+            seconds=float(json.loads(probe.stdout)['format']['duration'])
+            if not 60<=seconds<=90:raise ValueError('recording duration')
+            result['recorded_replay_demo']=check('passed',seconds=seconds,evidence='media hash/duration plus human observation')
+        except (ValueError,KeyError,TypeError,AttributeError,FileNotFoundError,subprocess.SubprocessError):result['recorded_replay_demo']=check('failed',reason='missing/invalid recording or observation')
+    return result
+
+
 def verify(root,profile='full'):
     if profile not in ['full','compact']:raise ValueError('Unknown profile')
     checks={'prepared':verify_prepared(root),'assets':verify_assets(root)};runs=model_runs(root)
@@ -168,9 +207,7 @@ def verify(root,profile='full'):
             checks['correction']=check('passed',run=str(correction),requests=execution['requests'],reported_tokens=execution['reported_tokens'])
         except (ValueError,KeyError,FileNotFoundError,TypeError):checks['correction']=check('failed',run=str(correction))
     else:checks['correction']=check('not_run')
-    # Manual demonstrations have no automated route to confirmation.
-    checks['microphone_demo']=check('manual_pending',reason='3 real microphone/TextEdit insertions must be observed and recorded manually')
-    checks['recorded_replay_demo']=check('manual_pending',reason='60–90s recorded demonstration not yet confirmed')
+    checks.update(verify_manual(root))
     required=list(checks)
     if profile=='compact':required=[k for k in required if k not in ['model-qwen-0.6b','replay-dev']]
     statuses=[checks[k]['status'] for k in required]
