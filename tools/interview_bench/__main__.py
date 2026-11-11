@@ -16,8 +16,34 @@ def main():
     p.add_argument('--root', type=Path, required=True)
     p.add_argument('--models', default='qwen-1.7b,qwen-0.6b,whisper-base')
     p.add_argument('--admission-only', action='store_true')
+    p = commands.add_parser('replay')
+    p.add_argument('--root', type=Path, required=True)
+    p.add_argument('--prepare-annotations', action='store_true')
+    p.add_argument('--import-annotations', type=Path)
+    p.add_argument('--split', choices=['dev','eval'], default='eval')
+    p = commands.add_parser('correction')
+    p.add_argument('--root', type=Path, required=True)
+    p.add_argument('--allow-cloud', action='store_true')
+    for command in ['report','verify']:
+        p = commands.add_parser(command)
+        p.add_argument('--root', type=Path, required=True)
+        p.add_argument('--profile', choices=['full','compact'], default='full')
     args = parser.parse_args()
-    if args.command == 'assets':
+    if args.command == 'report':
+        from .report import report
+        print(report(args.root,args.profile))
+    elif args.command == 'verify':
+        from .verify import verify
+        print(json.dumps(verify(args.root,args.profile), ensure_ascii=False, indent=2))
+    elif args.command == 'correction':
+        if not args.allow_cloud: parser.error('Cloud requests require --allow-cloud')
+        from .correction import run_correction
+        print(run_correction(args.root))
+    elif args.command == 'replay':
+        from .annotate import prepare_annotations, import_annotations
+        from .replay import run_sessions
+        print(import_annotations(args.root,args.import_annotations) if args.import_annotations else prepare_annotations(args.root) if args.prepare_annotations else run_sessions(args.root,args.split))
+    elif args.command == 'assets':
         from .assets import assets
         print(assets(args.root, args.download))
     elif args.command == 'models':

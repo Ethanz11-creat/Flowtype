@@ -33,3 +33,14 @@ class SchemaTests(unittest.TestCase):
             self.assertTrue((output / 'protocol.json').exists())
             with self.assertRaises(FileExistsError):
                 freeze_run({}, p, output)
+
+
+class SnapshotTests(unittest.TestCase):
+    def test_frozen_sources_remain_available_for_later_verification(self):
+        import json
+        from tools.interview_bench.schema import freeze_run,sha
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);inputs=root/'inputs.jsonl';inputs.write_text('{"id":"a","path":"a.wav"}\n')
+            output=root/'run';protocol=freeze_run({},inputs,output)
+            for source,digest in protocol['tool_sha256'].items():
+                self.assertEqual(sha(output/'source-snapshot'/Path(source).relative_to(Path('tools/interview_bench').resolve())),digest)

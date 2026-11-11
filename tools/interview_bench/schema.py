@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import shutil
 from pathlib import Path
 
 
@@ -56,5 +57,9 @@ def freeze_run(config: dict, inputs: Path, output: Path) -> dict:
                 'config': config, 'input_sha256': sha(inputs), 'input_path': str(inputs.resolve()),
                 'tool_sha256': {str(p): sha(p) for p in sorted(Path(__file__).parent.rglob('*'))
                                 if p.is_file() and p.suffix in ('.py', '.swift', '.json', '.txt', '.in') and '__pycache__' not in p.parts}}
+    for source in protocol['tool_sha256']:
+        dest = output / 'source-snapshot' / Path(source).relative_to(Path(__file__).parent)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, dest)
     write_json(output / 'protocol.json', protocol)
     return protocol
