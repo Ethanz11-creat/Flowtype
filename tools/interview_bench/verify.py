@@ -42,6 +42,21 @@ def latest(root,folder):
     return paths[-1].parent if paths else None
 
 
+def validate_correction_matrix(tasks, rows):
+    from collections import Counter
+    expected={('librispeech',c):200 for c in ['plain','contextual','mismatched']}
+    expected.update({('ascend',c):191 for c in ['plain','static_tech']})
+    identity=lambda r:(r['dataset'],r['id'],r['condition'])
+    if Counter((t['dataset'],t['condition']) for t in tasks)!=expected:
+        raise ValueError('Wrong fixed correction matrix')
+    keys=[identity(t) for t in tasks];actual=[identity(r) for r in rows]
+    if len(set(keys))!=982 or len(set(actual))!=982 or len(actual)!=982 or set(keys)!=set(actual):
+        raise ValueError('Incomplete/extra/duplicate corrections')
+    for dataset in ['librispeech','ascend']:
+        groups=[{t['id'] for t in tasks if t['dataset']==d and t['condition']==c} for d,c in expected if d==dataset]
+        if any(g!=groups[0] for g in groups):raise ValueError('Condition IDs differ')
+
+
 def verify(root,profile='full'):
     if profile not in ['full','compact']:raise ValueError('Unknown profile')
     checks={'prepared':verify_prepared(root)};runs=model_runs(root)
@@ -65,6 +80,7 @@ def verify(root,profile='full'):
             for file in ['resource.json','summary.json']:
                 if not (p/file).is_file():raise ValueError('missing model summary')
             summary=json.loads((p/'summary.json').read_text())
+            if summary['prediction_sha256']!=sha(p/'predictions.jsonl') or summary['reference_sha256']!=sha(root/'prepared/ascend/references.jsonl'):raise ValueError('Scoring hash changed')
             if summary['clean']['rows']!=1067 or summary['unknown_reference_rows']!=63 or summary['by_language']['mixed']['rows']!=191:raise ValueError('scoring partitions')
             checks['model-'+model_id]=check('passed',run=str(p),failures=sum(r['status']=='error' for r in predictions))
         except (ValueError,KeyError,FileNotFoundError,TypeError):checks['model-'+model_id]=check('failed',reason='identity/integrity/incomplete model run',run=str(p))
@@ -109,6 +125,9 @@ def verify(root,profile='full'):
         try:
             s=json.loads((correction/'summary.json').read_text());execution=json.loads((correction/'execution.json').read_text())
             tasks=read_rows(correction/'inference-inputs.jsonl');rows=read_rows(correction/'completions.jsonl')
+            validate_correction_matrix(tasks,rows)
+            expected_conditions={f'{d}-{c}' for d,cs in [('librispeech',['raw','plain','contextual','mismatched']),('ascend',['raw','plain','static_tech'])] for c in cs}
+            if set(s['conditions'])!=expected_conditions:raise ValueError('Missing condition summary')
             key=lambda r:(r['dataset'],r['id'],r['condition'])
             if not s['complete'] or not execution['complete'] or len(tasks)!=982 or len(rows)!=982 or len({key(r) for r in rows})!=982 or {key(r) for r in rows}!={key(r) for r in tasks}:raise ValueError('incomplete correction')
             protocol=json.loads((correction/'protocol.json').read_text())

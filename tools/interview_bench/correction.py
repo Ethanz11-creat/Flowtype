@@ -178,9 +178,26 @@ def score_correction(run_dir,root=None):
                 served_models=dict(Counter(r.get('served_model','not_reported') for r in group)),
                 posthoc_candidate_sentence_coverage=covered/len(group),candidate_count=candidate_total,
                 alignment_note='paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment')
+    result['posthoc_coverage']={d:posthoc_coverage(tasks,read_rows(root/'prepared'/d/('references.jsonl' if d=='librispeech' else 'mixed-references.jsonl')),d) for d in ['librispeech','ascend']}
     write_rows(run_dir/'paired-diagnostics.jsonl',diagnostics);write_json(run_dir/'summary.json',result)
     lines=['# Fixed correction matrix','', 'English 200-row custom pilot, mixed ASCEND 191; neither is a technical-term specialist benchmark. Full candidate lists include distractors; mismatched lists are cyclically reassigned and can accidentally contain useful words. Posthoc coverage is scored only after inference. No prompt tuning on these outputs.','', '| Condition | metrics | harmed / originally correct harmed | fallback | median LLM network s | reported tokens / missing |','|---|---|---|---:|---:|---|']
     for name,s in result['conditions'].items():
         d=s['paired_diagnostics'];lines.append(f"| {name} | {json.dumps(s['metrics'])} | {d.get('harmed',0)} / {d.get('previously_correct_harmed',0)} | {s['fallback_count']} | {s['latency_median_seconds']:.3f} | {s['reported_tokens']} / {s['usage_missing']} |")
     lines+=['','API fallback keeps original text and counts in scores. LLM network latency is not ASR RTF or confirmed product end-to-end latency. Alias model versions may vary. Historical pilot is separate; spelling normalization (ardor→ardour) is not acoustic understanding. Candidate-supported wrong replacements and numeral rewrites remain risks.','']
     (run_dir/'report.md').write_text('\n'.join(lines));return result
+
+
+def posthoc_coverage(tasks,references,dataset):
+    refs={r['id']:r for r in references};groups={}
+    tokenize=normalize_hypothesis if dataset=='librispeech' else lambda t:' '.join(mixed_tokens(t))
+    for t in tasks:
+        if t['dataset']!=dataset:continue
+        stats=groups.setdefault(t['condition'],dict(rows=0,sentences_with_candidate=0,rare_target_entries=0,rare_targets_covered=0))
+        r=refs[t['id']];stats['rows']+=1
+        candidates={tokenize(c) for c in t['candidates'] if tokenize(c)}
+        reference=' '+tokenize(r['transcription'])+' '
+        stats['sentences_with_candidate']+=any(' '+c+' ' in reference for c in candidates)
+        targets=[tokenize(w) for w in r.get('rare_words',[])]
+        stats['rare_target_entries']+=len(targets)
+        stats['rare_targets_covered']+=sum(w in candidates for w in targets)
+    return groups

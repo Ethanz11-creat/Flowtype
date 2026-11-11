@@ -1,0 +1,5 @@
+WER: error_rate=3.21420543942459, ref_words=4449, subs=97, ins=9, dels=37
+U-WER: error_rate=2.07963479584073, ref_words=3943, subs=47, ins=9, dels=26
+B-WER: error_rate=12.055335968379447, ref_words=506, subs=50, ins=0, dels=11
+Loaded 200 reference utts from build/interview-bench/correction-runs/20261111T080603494245Z/librispeech-mismatched/official-refs.tsv
+Loaded 200 hypothesis utts from build/interview-bench/correction-runs/20261111T080603494245Z/librispeech-mismatched/scored/official-hypotheses.tsv

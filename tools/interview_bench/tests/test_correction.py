@@ -36,3 +36,13 @@ class CorrectionTests(unittest.TestCase):
         self.assertTrue(all(r['status']=='baseline_empty' and r['text']=='' for r in result))
         for response in [None,{}, {'choices':[{'finish_reason':'length','message':{'content':'wrong'}}]}, {'choices':[{'finish_reason':'stop','message':{'content':''}}]}]:
             self.assertEqual(completion(response,' ORIGINAL ')['text'],' ORIGINAL ')
+
+    def test_posthoc_rare_word_coverage_never_changes_tasks(self):
+        from tools.interview_bench.correction import posthoc_coverage
+        tasks=build_conditions([dict(id='a',asr_text='a',candidates=['x']),dict(id='b',asr_text='b',candidates=['y'])],[],'librispeech')
+        before=json.dumps(tasks)
+        refs=[dict(id='a',transcription='x SECRET',rare_words=['x']),dict(id='b',transcription='y SECRET',rare_words=['y'])]
+        coverage=posthoc_coverage(tasks,refs,'librispeech')
+        self.assertEqual(coverage['contextual']['rare_targets_covered'],2)
+        self.assertEqual(coverage['mismatched']['rare_targets_covered'],0)
+        self.assertEqual(json.dumps(tasks),before)

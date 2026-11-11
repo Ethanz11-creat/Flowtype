@@ -1,0 +1,12 @@
+{
+  "captured_at_utc": "2026-11-11T04:26:23.999388+00:00",
+  "scorer_url": "https://raw.githubusercontent.com/facebookresearch/fbai-speech/main/is21_deep_bias/score.py",
+  "scorer_sha256": "669de80a61cf84ac34aacc18cf4813ca0cf1cae32d6435b3763dfa586ea89649",
+  "scorer_git_blob_sha1": "af9a37ae69d1fbf745f751a0590d0cb2da502268",
+  "notes": [
+    "Official score.py uses the third TSV column (reference rare words) to partition B-WER/U-WER, not the fourth full prompt/distractor list.",
+    "Official alignment uses insertion/deletion cost 3, substitution cost 4; its reported counts may differ from unit-cost Levenshtein alignment.",
+    "Pilot is raw no-context ASR only. No hotwords fed to model. No correction benefit can be inferred from this baseline.",
+    "Hypothesis normalization: NFKC + casefold, curly apostrophes to ASCII, Unicode alphanumerics/whitespace/apostrophes retained, other punctuation separated. No spelling-number conversion or fillers removal."
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "scope": "200-row speaker-balanced custom pilot, not official full test-clean",
+  "rows": 200,
+  "speakers": 40,
+  "failure_count": 0,
+  "empty_output_count": 0,
+  "metrics": {
+    "WER": {
+      "rate_percent": 2.3600809170600137,
+      "reference_words": 4449,
+      "substitutions": 62,
+      "insertions": 7,
+      "deletions": 36
+    },
+    "U-WER": {
+      "rate_percent": 1.9274663961450673,
+      "reference_words": 3943,
+      "substitutions": 43,
+      "insertions": 7,
+      "deletions": 26
+    },
+    "B-WER": {
+      "rate_percent": 5.7312252964426875,
+      "reference_words": 506,
+      "substitutions": 19,
+      "insertions": 0,
+      "deletions": 10
+    }
+  },
+  "audio_seconds": 1692.66,
+  "inference_seconds": 475.16669162816834,
+  "latency_median_seconds": 2.108816188003402,
+  "latency_p95_seconds": 3.68920262507163,
+  "aggregate_rtf": 0.28072187658960945,
+  "official_scorer_sha256": "669de80a61cf84ac34aacc18cf4813ca0cf1cae32d6435b3763dfa586ea89649",
+  "wrapper_sha256": "1d5e3c622b8e823e2132c6e1369fbc6dc7a8cbe2e09144f5833d2df2fffb6a3e",
+  "predictions_sha256": "05ea5b294d60de738e554a5806c752dfd474b1bfbd3044f53410ee6fb2cb5eac",
+  "reference_sha256": "6acf63a3649f63899f0f2edcfc99789b90f2ef38dd38c477fe3b551aa2d95015"
+}

@@ -1,0 +1,355 @@
+{
+  "complete": true,
+  "conditions": {
+    "librispeech-raw": {
+      "metrics": {
+        "WER": {
+          "rate_percent": 2.989435828276017,
+          "reference_words": 4449,
+          "substitutions": 90,
+          "insertions": 7,
+          "deletions": 36
+        },
+        "U-WER": {
+          "rate_percent": 1.90210499619579,
+          "reference_words": 3943,
+          "substitutions": 42,
+          "insertions": 7,
+          "deletions": 26
+        },
+        "B-WER": {
+          "rate_percent": 11.462450592885375,
+          "reference_words": 506,
+          "substitutions": 48,
+          "insertions": 0,
+          "deletions": 10
+        }
+      },
+      "paired_diagnostics": {
+        "same_error_count": 200,
+        "previously_correct_rows": 128,
+        "previously_correct_harmed": 0,
+        "changed": 0
+      },
+      "fallback_count": 0,
+      "baseline_empty": 0,
+      "latency_median_seconds": 0.0,
+      "llm_network_seconds": 0,
+      "usage_missing": 0,
+      "reported_tokens": 0,
+      "served_models": {
+        "not_reported": 200
+      },
+      "posthoc_candidate_sentence_coverage": 0.0,
+      "candidate_count": 0,
+      "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
+    },
+    "librispeech-plain": {
+      "metrics": {
+        "WER": {
+          "rate_percent": 3.236682400539447,
+          "reference_words": 4449,
+          "substitutions": 98,
+          "insertions": 9,
+          "deletions": 37
+        },
+        "U-WER": {
+          "rate_percent": 2.181080395637839,
+          "reference_words": 3943,
+          "substitutions": 49,
+          "insertions": 9,
+          "deletions": 28
+        },
+        "B-WER": {
+          "rate_percent": 11.462450592885375,
+          "reference_words": 506,
+          "substitutions": 49,
+          "insertions": 0,
+          "deletions": 9
+        }
+      },
+      "paired_diagnostics": {
+        "same_error_count": 167,
+        "previously_correct_rows": 128,
+        "previously_correct_harmed": 10,
+        "changed": 41,
+        "harmed": 19,
+        "improved": 14
+      },
+      "fallback_count": 0,
+      "baseline_empty": 0,
+      "latency_median_seconds": 1.9817839380120859,
+      "llm_network_seconds": 439.53788353619166,
+      "usage_missing": 0,
+      "reported_tokens": 28180,
+      "served_models": {
+        "deepseek-ai/DeepSeek-V3": 200
+      },
+      "posthoc_candidate_sentence_coverage": 0.0,
+      "candidate_count": 0,
+      "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
+    },
+    "librispeech-contextual": {
+      "metrics": {
+        "WER": {
+          "rate_percent": 2.3600809170600137,
+          "reference_words": 4449,
+          "substitutions": 62,
+          "insertions": 7,
+          "deletions": 36
+        },
+        "U-WER": {
+          "rate_percent": 1.9274663961450673,
+          "reference_words": 3943,
+          "substitutions": 43,
+          "insertions": 7,
+          "deletions": 26
+        },
+        "B-WER": {
+          "rate_percent": 5.7312252964426875,
+          "reference_words": 506,
+          "substitutions": 19,
+          "insertions": 0,
+          "deletions": 10
+        }
+      },
+      "paired_diagnostics": {
+        "improved": 28,
+        "previously_correct_rows": 128,
+        "previously_correct_harmed": 4,
+        "changed": 37,
+        "same_error_count": 167,
+        "harmed": 5
+      },
+      "fallback_count": 0,
+      "baseline_empty": 0,
+      "latency_median_seconds": 2.108816188003402,
+      "llm_network_seconds": 475.16669162816834,
+      "usage_missing": 0,
+      "reported_tokens": 135241,
+      "served_models": {
+        "deepseek-ai/DeepSeek-V3": 200
+      },
+      "posthoc_candidate_sentence_coverage": 0.76,
+      "candidate_count": 20498,
+      "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
+    },
+    "librispeech-mismatched": {
+      "metrics": {
+        "WER": {
+          "rate_percent": 3.21420543942459,
+          "reference_words": 4449,
+          "substitutions": 97,
+          "insertions": 9,
+          "deletions": 37
+        },
+        "U-WER": {
+          "rate_percent": 2.07963479584073,
+          "reference_words": 3943,
+          "substitutions": 47,
+          "insertions": 9,
+          "deletions": 26
+        },
+        "B-WER": {
+          "rate_percent": 12.055335968379447,
+          "reference_words": 506,
+          "substitutions": 50,
+          "insertions": 0,
+          "deletions": 11
+        }
+      },
+      "paired_diagnostics": {
+        "same_error_count": 179,
+        "previously_correct_rows": 128,
+        "previously_correct_harmed": 6,
+        "changed": 30,
+        "harmed": 14,
+        "improved": 7
+      },
+      "fallback_count": 0,
+      "baseline_empty": 0,
+      "latency_median_seconds": 2.095913625031244,
+      "llm_network_seconds": 452.80369905103,
+      "usage_missing": 0,
+      "reported_tokens": 135233,
+      "served_models": {
+        "deepseek-ai/DeepSeek-V3": 200
+      },
+      "posthoc_candidate_sentence_coverage": 0.015,
+      "candidate_count": 20498,
+      "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
+    },
+    "ascend-raw": {
+      "metrics": {
+        "clean": {
+          "rows": 191,
+          "reference_units": 2997,
+          "hits": 2640,
+          "substitutions": 280,
+          "deletions": 77,
+          "insertions": 62,
+          "edit_errors": 419,
+          "mer": 0.1398064731398065
+        },
+        "by_language": {
+          "mixed": {
+            "rows": 191,
+            "reference_units": 2997,
+            "hits": 2640,
+            "substitutions": 280,
+            "deletions": 77,
+            "insertions": 62,
+            "edit_errors": 419,
+            "mer": 0.1398064731398065
+          }
+        }
+      },
+      "paired_diagnostics": {
+        "same_error_count": 191,
+        "previously_correct_rows": 42,
+        "previously_correct_harmed": 0,
+        "changed": 0
+      },
+      "fallback_count": 0,
+      "baseline_empty": 0,
+      "latency_median_seconds": 0,
+      "llm_network_seconds": 0,
+      "usage_missing": 0,
+      "reported_tokens": 0,
+      "served_models": {
+        "not_reported": 191
+      },
+      "posthoc_candidate_sentence_coverage": 0.0,
+      "candidate_count": 0,
+      "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
+    },
+    "ascend-plain": {
+      "metrics": {
+        "clean": {
+          "rows": 191,
+          "reference_units": 2997,
+          "hits": 2575,
+          "substitutions": 270,
+          "deletions": 152,
+          "insertions": 115,
+          "edit_errors": 537,
+          "mer": 0.17917917917917917
+        },
+        "by_language": {
+          "mixed": {
+            "rows": 191,
+            "reference_units": 2997,
+            "hits": 2575,
+            "substitutions": 270,
+            "deletions": 152,
+            "insertions": 115,
+            "edit_errors": 537,
+            "mer": 0.17917917917917917
+          }
+        }
+      },
+      "paired_diagnostics": {
+        "improved": 7,
+        "previously_correct_rows": 42,
+        "previously_correct_harmed": 14,
+        "changed": 80,
+        "harmed": 53,
+        "same_error_count": 131
+      },
+      "fallback_count": 0,
+      "baseline_empty": 0,
+      "latency_median_seconds": 1.5879476249683648,
+      "llm_network_seconds": 345.9129635874415,
+      "usage_missing": 0,
+      "reported_tokens": 21498,
+      "served_models": {
+        "deepseek-ai/DeepSeek-V3": 191
+      },
+      "posthoc_candidate_sentence_coverage": 0.0,
+      "candidate_count": 0,
+      "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
+    },
+    "ascend-static_tech": {
+      "metrics": {
+        "clean": {
+          "rows": 191,
+          "reference_units": 2997,
+          "hits": 2618,
+          "substitutions": 279,
+          "deletions": 100,
+          "insertions": 61,
+          "edit_errors": 440,
+          "mer": 0.14681348014681347
+        },
+        "by_language": {
+          "mixed": {
+            "rows": 191,
+            "reference_units": 2997,
+            "hits": 2618,
+            "substitutions": 279,
+            "deletions": 100,
+            "insertions": 61,
+            "edit_errors": 440,
+            "mer": 0.14681348014681347
+          }
+        }
+      },
+      "paired_diagnostics": {
+        "same_error_count": 173,
+        "previously_correct_rows": 42,
+        "previously_correct_harmed": 3,
+        "changed": 29,
+        "harmed": 14,
+        "improved": 4
+      },
+      "fallback_count": 0,
+      "baseline_empty": 0,
+      "latency_median_seconds": 1.7104202919872478,
+      "llm_network_seconds": 360.05298754933756,
+      "usage_missing": 0,
+      "reported_tokens": 54724,
+      "served_models": {
+        "deepseek-ai/DeepSeek-V3": 191
+      },
+      "posthoc_candidate_sentence_coverage": 0.0,
+      "candidate_count": 5539,
+      "alignment_note": "paired diagnostics use unit-cost edit distance; official B/U aggregate uses weighted alignment"
+    }
+  },
+  "posthoc_coverage": {
+    "librispeech": {
+      "plain": {
+        "rows": 200,
+        "sentences_with_candidate": 0,
+        "rare_target_entries": 501,
+        "rare_targets_covered": 0
+      },
+      "contextual": {
+        "rows": 200,
+        "sentences_with_candidate": 152,
+        "rare_target_entries": 501,
+        "rare_targets_covered": 501
+      },
+      "mismatched": {
+        "rows": 200,
+        "sentences_with_candidate": 3,
+        "rare_target_entries": 501,
+        "rare_targets_covered": 3
+      }
+    },
+    "ascend": {
+      "plain": {
+        "rows": 191,
+        "sentences_with_candidate": 0,
+        "rare_target_entries": 0,
+        "rare_targets_covered": 0
+      },
+      "static_tech": {
+        "rows": 191,
+        "sentences_with_candidate": 0,
+        "rare_target_entries": 0,
+        "rare_targets_covered": 0
+      }
+    }
+  }
+}

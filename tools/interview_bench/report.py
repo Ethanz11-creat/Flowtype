@@ -65,6 +65,8 @@ def report(root, profile='full'):
                 rows=len(new),old_prediction_sha256=sha(root/'prepared/ascend/baseline-predictions.jsonl'),
                 new_prediction_sha256=sha(runs['qwen-1.7b']/'predictions.jsonl'),
                 note='Historical baseline had no separate warmup; new worker has explicit identity and copied Metal resources; deployment build remains SPM debug. Historical run is not pooled into new performance table.'))
+    correction=latest(root,'correction-runs')
+    if correction:render_correction(correction)
     validation=verify(root,profile);write_json(directory/'verification.json',validation)
     lines=['# 科大讯飞面试实验总览','',f"当前矩阵：**{validation['status']}**；profile={profile}。",'',
            '| 项目 | 状态 | 证据 |','|---|---|---|']
@@ -82,3 +84,34 @@ def report(root, profile='full'):
             '', '## 复现','',
             '依次运行 prepare → assets --download → models --admission-only → models → replay --prepare-annotations → replay --split dev/eval → correction --allow-cloud → report/verify。已存在的冻结输入/批次不可覆盖。模型比较必须串行运行，安装及参数见 tools/interview_bench/README.md。', '']
     (directory/'report.md').write_text('\n'.join(lines));return directory/'report.md'
+
+
+def render_correction(run_dir):
+    summary=json.loads((run_dir/'summary.json').read_text())
+    if not summary.get('complete'):return
+    lines=['# 固定矩阵：LLM 纠错实测','',
+        '英语为200条自定义pilot；中英混说为ASCEND的191条。两者均不是技术术语专项或盲测。候选表包含干扰项；错配表可能偶然包含正确词。', '',
+        '| 英语条件 | WER | B-WER | U-WER | 变更句 | 改坏句 | 原本正确的128句中改坏 | fallback | 网络中位秒 |',
+        '|---|---:|---:|---:|---:|---:|---:|---:|---:|']
+    for condition in ['raw','plain','contextual','mismatched']:
+        s=summary['conditions']['librispeech-'+condition];m=s['metrics'];d=s['paired_diagnostics']
+        lines.append(f"| {condition} | {m['WER']['rate_percent']:.2f}% | {m['B-WER']['rate_percent']:.2f}% | {m['U-WER']['rate_percent']:.2f}% | {d.get('changed',0)} | {d.get('harmed',0)} | {d.get('previously_correct_harmed',0)} | {s['fallback_count']} | {s['latency_median_seconds']:.2f} |")
+    lines+=['','| 中英混说条件 | 编辑数/2997（MER） | 变更句 | 改坏句 | 原本正确的42句中改坏 | fallback | 网络中位秒 |','|---|---:|---:|---:|---:|---:|---:|']
+    for condition in ['raw','plain','static_tech']:
+        s=summary['conditions']['ascend-'+condition];m=s['metrics']['clean'];d=s['paired_diagnostics']
+        lines.append(f"| {condition} | {m['edit_errors']}/{m['reference_units']} ({m['mer']:.2%}) | {d.get('changed',0)} | {d.get('harmed',0)} | {d.get('previously_correct_harmed',0)} | {s['fallback_count']} | {s['latency_median_seconds']:.2f} |")
+    lines+=['','参考分母：英语总4449，B506，U3943；mixed2997。官方B/U使用冻结加权对齐；逐句改好/改坏使用单位编辑代价，口径分别保留。','',
+            '正确词表带来专名收益，同时普通词仍可能受损；错配词表和无上下文LLM不是可靠默认增强。mixed上的退化表明该提示与服务组合不能直接作为通用语音纠错器，技术词表的效果需要有术语覆盖的专项数据。', '',
+            '## 推理后词表覆盖','', '| 数据/条件 | 参考中至少命中一个候选的句数 | 稀有目标条目被候选表覆盖 |','|---|---:|---:|']
+    for dataset,groups in summary.get('posthoc_coverage',{}).items():
+        for c,s in groups.items():lines.append(f"| {dataset}/{c} | {s['sentences_with_candidate']}/{s['rows']} | {s['rare_targets_covered']}/{s['rare_target_entries']} |")
+    lines+=['','稀有目标条目是逐句rare_words列表的计数，区别于官方B分母的词出现次数；ASCEND没有该稀有词标注。覆盖只在完成推理后计算，没有进入请求或修改候选表。','',
+        '## 固定选例','', '以下每组按ID取前两个改坏句；展示风险，不能代表随机分布。','']
+    diagnostics=read_rows(run_dir/'paired-diagnostics.jsonl')
+    for dataset,condition in [('librispeech','contextual'),('librispeech','mismatched'),('ascend','plain'),('ascend','static_tech')]:
+        for r in sorted((r for r in diagnostics if r['dataset']==dataset and r['condition']==condition and r['after_errors']>r['before_errors']),key=lambda r:r['id'])[:2]:
+            lines += [f"- {dataset}/{condition} `{r['id']}`：{r['before_errors']}→{r['after_errors']} edits。原始：{r['original']}；纠错：{r['corrected']}；参考：{r['reference']}"]
+    execution=json.loads((run_dir/'execution.json').read_text())
+    lines+=['',f"本批请求{execution['requests']}次，服务报告{execution['reported_tokens']} tokens，usage缺失{execution['usage_missing']}次。模型为服务别名，不是固定权重快照。失败保留原文计分，不重试。网络耗时不等于ASR RTF或已确认落字的端到端时延。", '',
+            '历史pilot单独保留；ardor→ardour一类收益含书写差异，不解释为声学理解。不能按本批错误继续逐句特判或刷提示。','']
+    (run_dir/'report.md').write_text('\n'.join(lines))

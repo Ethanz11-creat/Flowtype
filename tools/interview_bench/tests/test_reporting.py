@@ -54,3 +54,8 @@ class VerificationTests(unittest.TestCase):
             write_json(root/'prepared/manifest.json',{'datasets':{'ascend':{'rows':1,'input_sha256':'WRONG'}}})
             result=verify_prepared(root)
             self.assertEqual(result['status'],'failed')
+
+    def test_correction_requires_every_fixed_condition(self):
+        from tools.interview_bench.verify import validate_correction_matrix
+        tasks=[dict(dataset='librispeech',id=str(i),condition='plain') for i in range(982)]
+        with self.assertRaises(ValueError): validate_correction_matrix(tasks,tasks)
