@@ -26,6 +26,29 @@ def verify_prepared(root):
     except (ValueError,KeyError,TypeError):return check('failed',reason='prepared identity/count validation')
 
 
+def validate_frozen_sources(run):
+    protocol=json.loads((run/'protocol.json').read_text())
+    for source,digest in protocol['tool_sha256'].items():
+        marker='/tools/interview_bench/'
+        if marker not in source:raise ValueError('Unknown frozen source layout')
+        relative=Path(source.split(marker,1)[1])
+        if relative.is_absolute() or '..' in relative.parts:raise ValueError('Invalid source path')
+        if sha(run/'source-snapshot'/relative)!=digest:raise ValueError('Frozen source checksum mismatch')
+
+
+def verify_assets(root):
+    manifest=root/'models/assets.json'
+    if not manifest.exists():return check('not_run')
+    try:
+        assets=json.loads(manifest.read_text())
+        for r in assets['files']:
+            if sha(Path(r['path']))!=r['sha256']:raise ValueError('asset changed')
+        for name,digest in assets['existing_17_files'].items():
+            if sha(Path(assets['paths']['qwen-1.7b'])/name)!=digest:raise ValueError('existing model changed')
+        return check('passed')
+    except (ValueError,KeyError,FileNotFoundError):return check('failed',reason='missing/changed local weight or model asset')
+
+
 def model_runs(root):
     runs={}
     for p in sorted((root/'model-runs').glob('*/run.json')):
@@ -59,12 +82,13 @@ def validate_correction_matrix(tasks, rows):
 
 def verify(root,profile='full'):
     if profile not in ['full','compact']:raise ValueError('Unknown profile')
-    checks={'prepared':verify_prepared(root)};runs=model_runs(root)
+    checks={'prepared':verify_prepared(root),'assets':verify_assets(root)};runs=model_runs(root)
     expected_ids=[r['id'] for r in read_rows(root/'prepared/ascend/inputs.jsonl')] if (root/'prepared/ascend/inputs.jsonl').exists() else []
     for model_id in ['qwen-1.7b','qwen-0.6b','whisper-base']:
         p=runs.get(model_id)
         if not p:checks['model-'+model_id]=check('not_run');continue
         try:
+            validate_frozen_sources(p)
             predictions=read_rows(p/'predictions.jsonl');validate_predictions(expected_ids,predictions)
             protocol=json.loads((p/'protocol.json').read_text());config=protocol['config']
             if len(predictions)!=1130 or config['model_id']!=model_id or config['admission_only'] or protocol['input_sha256']!=sha(root/'prepared/ascend/inputs.jsonl'):raise ValueError('model identity')
@@ -94,6 +118,7 @@ def verify(root,profile='full'):
         if not p:checks['replay-'+split]=check('not_run');continue
         try:
             s=json.loads((p/'summary.json').read_text())
+            validate_frozen_sources(p)
             protocol=json.loads((p/'protocol.json').read_text())
             if sha(p/'annotations.json')!=protocol['config']['annotations_sha256']:raise ValueError('annotation snapshot changed')
             if sha(root/'replay-prepared/sessions.json')!=protocol['input_sha256']:raise ValueError('session input changed')
@@ -123,6 +148,7 @@ def verify(root,profile='full'):
     correction=latest(root,'correction-runs')
     if correction:
         try:
+            validate_frozen_sources(correction)
             s=json.loads((correction/'summary.json').read_text());execution=json.loads((correction/'execution.json').read_text())
             tasks=read_rows(correction/'inference-inputs.jsonl');rows=read_rows(correction/'completions.jsonl')
             if s['completion_sha256']!=sha(correction/'completions.jsonl') or s['inference_input_sha256']!=sha(correction/'inference-inputs.jsonl'):raise ValueError('correction scoring hashes changed')

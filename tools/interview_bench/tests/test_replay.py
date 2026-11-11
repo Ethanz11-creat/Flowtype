@@ -65,3 +65,24 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(result['error_code'],'cancelled')
             self.assertTrue(finished.is_set())
             self.assertEqual(len(clock.delivered),2)
+
+    def test_first_text_skips_successful_empty_segment(self):
+        clock=FakeClock()
+        class Worker:
+            calls=0
+            def transcribe(self,id,path):
+                self.calls+=1;clock.t+=1
+                return dict(text='' if self.calls==1 else 'hello',status='ok')
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'a.wav';sf.write(p,np.zeros(1024),16000,subtype='PCM_16')
+            result=run_replay(p,Cuts(),Worker(),clock)
+            self.assertEqual(result['first_result_seconds'],result['segments'][1]['returned_seconds'])
+
+    def test_endpoint_uses_actual_decision_event_time(self):
+        from tools.interview_bench.replay import score_endpoints
+        result=dict(segments=[dict(start_sample=0,end_sample=200,decision_sample=512,decision_seconds=1.1)],final_result_seconds=2)
+        session=dict(sources=[dict(id='a',offset_sample=0)])
+        annotations=[dict(id='a',status='confirmed',annotator='human',spans=[dict(start_sample=0,end_sample=16000)])]
+        score_endpoints(result,session,annotations)
+        self.assertAlmostEqual(result['endpoint_latency_seconds'][0],.1)
+        self.assertEqual(result['segments'][0]['speech_end_sample'],16000)

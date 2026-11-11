@@ -59,3 +59,13 @@ class VerificationTests(unittest.TestCase):
         from tools.interview_bench.verify import validate_correction_matrix
         tasks=[dict(dataset='librispeech',id=str(i),condition='plain') for i in range(982)]
         with self.assertRaises(ValueError): validate_correction_matrix(tasks,tasks)
+
+    def test_tampered_frozen_source_is_rejected(self):
+        from tools.interview_bench.schema import freeze_run
+        from tools.interview_bench.verify import validate_frozen_sources
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);inputs=root/'input';inputs.write_text('input')
+            run=root/'run';freeze_run({},inputs,run)
+            validate_frozen_sources(run)
+            (run/'source-snapshot/backends.py').write_text('changed')
+            with self.assertRaises(ValueError):validate_frozen_sources(run)

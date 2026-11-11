@@ -35,7 +35,7 @@ def run_replay(audio_path, segmenter, worker, clock=None, cancel=None):
             while True:
                 task=pending.get()
                 if task is None: pending.task_done();break
-                index,segment,enqueued=task
+                index,segment,enqueued,decision_seconds=task
                 if cancel.is_set():
                     event('cancelled_pending',index=index);pending.task_done();continue
                 start=clock.now();event('dequeue',index=index,wait_seconds=start-enqueued)
@@ -49,7 +49,8 @@ def run_replay(audio_path, segmenter, worker, clock=None, cancel=None):
                     text='';status='error';failure='asr_error'
                 result=dict(index=index,text=text,status=status,error_code=failure,
                             wait_seconds=start-enqueued,returned_seconds=clock.now()-origin,
-                            inference_seconds=clock.now()-start,**asdict(segment))
+                            inference_seconds=clock.now()-start,decision_seconds=decision_seconds,
+                            speech_end_sample=None,**asdict(segment))
                 results.append(result);event('result',**result);pending.task_done()
         consumer=threading.Thread(target=consume,name='asr-replay-worker');consumer.start()
         count=0
@@ -58,9 +59,10 @@ def run_replay(audio_path, segmenter, worker, clock=None, cancel=None):
             for segment in segments:
                 if not 0<=segment.start_sample<segment.end_sample<=segmenter.samples_seen<=len(audio):
                     raise ValueError('Future or invalid segment')
-                count+=1;event('segment',index=count,**asdict(segment))
+                count+=1;decision_seconds=clock.now()-origin
+                event('segment',index=count,**asdict(segment))
                 try:
-                    pending.put_nowait((count,segment,clock.now()))
+                    pending.put_nowait((count,segment,clock.now(),decision_seconds))
                     event('enqueue',index=count,queue_depth=pending.qsize())
                 except queue.Full:
                     error='queue_overflow';event('failed',error_code=error,index=count);return False
@@ -81,7 +83,7 @@ def run_replay(audio_path, segmenter, worker, clock=None, cancel=None):
     failed=error or ('asr_error' if any(r['status']!='ok' for r in results) else None)
     return dict(status='failed' if failed else 'ok',error_code=failed,events=events,segments=results,
                 text=' '.join(r['text'] for r in results),audio_seconds=len(audio)/rate,
-                first_result_seconds=results[0]['returned_seconds'] if results else None,
+                first_result_seconds=next((r['returned_seconds'] for r in results if r['text'].strip()),None),
                 final_result_seconds=results[-1]['returned_seconds'] if results else None,
                 endpoint_latency_seconds=None,final_from_speech_seconds=None,annotation_status='manual_pending')
 
@@ -94,7 +96,11 @@ def score_endpoints(result, session, annotations):
     delays=[]
     for segment in result['segments']:
         matched=[s['end_sample'] for s in spans if s['start_sample']<segment['end_sample'] and s['end_sample']>segment['start_sample']]
-        if matched:delays.append(endpoint_latency(segment['decision_sample'],max(matched)))
+        if matched:
+            segment['speech_end_sample']=max(matched)
+            segment['signal_endpoint_latency_seconds']=endpoint_latency(segment['decision_sample'],max(matched))
+            segment['endpoint_latency_seconds']=segment['decision_seconds']-max(matched)/16000
+            delays.append(segment['endpoint_latency_seconds'])
     result.update(annotation_status='confirmed',endpoint_latency_seconds=delays,
                   final_from_speech_seconds=(result['final_result_seconds']-max(s['end_sample'] for s in spans)/16000) if result['final_result_seconds'] is not None else None)
     return result
