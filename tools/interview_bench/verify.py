@@ -203,8 +203,13 @@ def verify(root,profile='full'):
             validate_frozen_sources(p)
             protocol=json.loads((p/'protocol.json').read_text())
             if sha(p/'annotations.json')!=protocol['config']['annotations_sha256']:raise ValueError('annotation snapshot changed')
-            if sha(root/'replay-prepared/sessions.json')!=protocol['input_sha256']:raise ValueError('session input changed')
-            for session in json.loads((p/'sessions.json').read_text()):
+            canonical_path=root/'replay-prepared/sessions.json'
+            if sha(canonical_path)!=protocol['input_sha256'] or protocol['config']['sessions_sha256']!=protocol['input_sha256']:raise ValueError('session input changed')
+            canonical=[r for r in json.loads(canonical_path.read_text()) if r['split']==split]
+            expected_ids={r['id'] for r in canonical}
+            snapshot=json.loads((p/'sessions.json').read_text())
+            if len(canonical)!=count or len(expected_ids)!=count or snapshot!=canonical:raise ValueError('session snapshot identity')
+            for session in snapshot:
                 if sha(Path(session['path']))!=session['sha256']:raise ValueError('session audio changed')
             if set(s)!=set(strategies):raise ValueError('strategy matrix')
             for strategy in strategies:
@@ -212,10 +217,15 @@ def verify(root,profile='full'):
                 if len(group['sessions'])!=count or group['rows']!=count:raise ValueError('session counts')
                 if any(r['status']!='ok' for r in group['sessions']):raise ValueError('failed session')
                 ids={r['id'] for r in group['sessions']}
-                if len(ids)!=count:raise ValueError('duplicate session')
-                for id in ids:
+                if len(ids)!=count or ids!=expected_ids:raise ValueError('missing/extra/duplicate session')
+                predictions=read_rows(p/strategy/'predictions.jsonl')
+                if len(predictions)!=count or {r['id'] for r in predictions}!=expected_ids or any(r['status']!='ok' for r in predictions):raise ValueError('prediction identities/status')
+                predicted={r['id']:r for r in predictions}
+                trace_names={f.name for f in (p/strategy).glob('*.json') if f.name!='summary.json'}
+                if trace_names!={f'{id}.json' for id in expected_ids}:raise ValueError('trace identities')
+                for id in expected_ids:
                     r=json.loads((p/strategy/f'{id}.json').read_text())
-                    if r['status']!='ok':raise ValueError('failed event trace')
+                    if r['status']!='ok' or predicted[id]['text']!=r['text']:raise ValueError('failed/mismatched event trace')
                     ownership=[(x['start_sample'],x['end_sample']) for x in r['segments']]
                     if any(a[1]>b[0] for a,b in zip(ownership,ownership[1:])):raise ValueError('duplicated audio')
                     if r['annotation_status']!='confirmed' and (r['endpoint_latency_seconds'] is not None or r['final_from_speech_seconds'] is not None):raise ValueError('invented human timing')

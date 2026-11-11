@@ -114,3 +114,45 @@ class VerificationTests(unittest.TestCase):
             completions=__import__('tools.interview_bench.schema',fromlist=['read_rows']).read_rows(history/'completions.jsonl')
             write_rows(history/'completions.jsonl',completions[:-1])
             with self.assertRaises(ValueError):historical_corrections(root,history)
+
+    def test_replay_requires_canonical_ids_in_snapshot_summary_and_predictions(self):
+        from tools.interview_bench.schema import freeze_run,sha
+        from tools.interview_bench.verify import verify
+        for corruption in ['summary','predictions','snapshot']:
+            with self.subTest(corruption=corruption),tempfile.TemporaryDirectory() as d:
+                root=Path(d);prepared=root/'replay-prepared';prepared.mkdir()
+                sessions=[];annotations=[]
+                for i in range(6):
+                    audio=root/f'{i}.wav';audio.write_bytes(b'fixed audio identity')
+                    sources=[dict(id=f'{i}-{j}',offset_sample=j*10,frames=10) for j in range(4)]
+                    sessions.append(dict(id=f'eval-{i}',split='eval',path=str(audio),sha256=sha(audio),sources=sources))
+                    annotations.extend(dict(id=r['id'],status='pending',annotator='',spans=[]) for r in sources)
+                write_json(prepared/'sessions.json',sessions);write_json(prepared/'annotations.json',annotations)
+                run=root/'replay-runs/fixture'
+                freeze_run(dict(split='eval',annotations_sha256=sha(prepared/'annotations.json'),sessions_sha256=sha(prepared/'sessions.json')),prepared/'sessions.json',run)
+                write_json(run/'sessions.json',sessions);write_json(run/'annotations.json',annotations)
+                summaries={}
+                trace=dict(status='ok',segments=[],text='',annotation_status='manual_pending',endpoint_latency_seconds=None,final_from_speech_seconds=None)
+                for strategy in ['whole','fixed5','vad600']:
+                    target=run/strategy;target.mkdir()
+                    rows=[dict(id=r['id'],status='ok',text='',audio_seconds=1,latency_seconds=0) for r in sessions]
+                    write_rows(target/'predictions.jsonl',rows)
+                    summaries[strategy]=dict(rows=6,sessions=[dict(id=r['id'],status='ok') for r in sessions])
+                    for session in sessions:write_json(target/(session['id']+'.json'),trace)
+                write_json(run/'summary.json',summaries)
+                self.assertEqual(verify(root)['checks']['replay-eval']['status'],'passed')
+                if corruption=='summary':
+                    summaries['vad600']['sessions'][0]['id']='unexpected-session'
+                    write_json(run/'vad600/unexpected-session.json',trace)
+                    write_json(run/'summary.json',summaries)
+                elif corruption=='predictions':write_rows(run/'vad600/predictions.jsonl',rows[:-1])
+                else:
+                    sessions[0]['id']='unexpected-session';write_json(run/'sessions.json',sessions)
+                self.assertEqual(verify(root)['checks']['replay-eval']['status'],'failed')
+
+    def test_archived_derived_correction_sources_match_provenance(self):
+        from tools.interview_bench.schema import sha
+        root=Path('docs/evidence/iflytek-interview/2026-11-11-four-modules/correction')
+        protocol=json.loads((root/'analysis-protocol.json').read_text())
+        for name,digest in protocol['scoring_sources'].items():
+            self.assertEqual(sha(root/'analysis-source'/name),digest,name)

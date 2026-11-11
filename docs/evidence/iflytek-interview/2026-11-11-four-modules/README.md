@@ -41,3 +41,7 @@ ASCEND：Lovenia et al., LREC 2022，[CAiRE/ASCEND](https://huggingface.co/datas
 LibriSpeech：Panayotov et al., ICASSP 2015，[OpenSLR SLR12](https://www.openslr.org/12/)，CC-BY-4.0。本目录为200条自定义pilot的参考摘录/派生输出；40人每人5句。contextual biasing资源：Le et al., INTERSPEECH 2021，[fbai-speech/is21_deep_bias](https://github.com/facebookresearch/fbai-speech/tree/main/is21_deep_bias)，评分软件MIT；官方脚本SHA256 `669de80a61cf84ac34aacc18cf4813ca0cf1cae32d6435b3763dfa586ea89649`。
 
 Qwen转换模型卡Apache-2.0，Whisper代码/权重MIT，Silero MIT；资产身份与许可文本保留在本地models中，权重和原始音频不进入客户端发行包。本目录整体包含不同许可材料，不能统一套用为仓库代码许可。LLM输出来自SiliconFlow/DeepSeek-V3服务别名；权重版本不可固定，旧pilot单独保留，不跨批次冒充同批对照。
+
+## 最终审查
+
+[独立审查与处理](audit/final-review.md)、[执行台账与取舍](audit/progress.md)。修复了回放磁盘写入失败误报/退出阻塞、会话ID核验及派生源码哈希；新测试41/41、原有研究测试12/12通过。HTML暂停/拖动/变速与文字事件不同步暂缓，不影响归档事件和评分。文件全集见 `SHA256SUMS.json`（不包含自身）。分支保留供后续人工验收，本轮不自动推送或合并。

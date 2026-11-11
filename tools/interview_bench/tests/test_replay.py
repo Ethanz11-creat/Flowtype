@@ -86,3 +86,49 @@ class ReplayTests(unittest.TestCase):
         score_endpoints(result,session,annotations)
         self.assertAlmostEqual(result['endpoint_latency_seconds'][0],.1)
         self.assertEqual(result['segments'][0]['speech_end_sample'],16000)
+
+    def test_audio_write_failure_is_a_failed_segment(self):
+        from unittest.mock import patch
+        class Worker:
+            def transcribe(self,id,path):raise AssertionError('ASR must not run after write failure')
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'input.wav';sf.write(path,np.zeros(100),16000)
+            with patch('tools.interview_bench.replay.sf.write',side_effect=OSError('disk full')):
+                result=run_replay(path,Cuts(),Worker(),FakeClock())
+            self.assertEqual(result['status'],'failed')
+            self.assertEqual(result['error_code'],'audio_write_error')
+            self.assertEqual(result['segments'][0]['status'],'error')
+            self.assertEqual(result['segments'][0]['error_code'],'audio_write_error')
+
+    def test_audio_write_failure_with_full_queue_shuts_down(self):
+        import subprocess,sys,textwrap
+        script=textwrap.dedent("""
+            import tempfile,threading,json
+            from pathlib import Path
+            from unittest.mock import patch
+            import numpy as np
+            import soundfile as sf
+            from tools.interview_bench.replay import run_replay
+            from tools.interview_bench.tests.test_replay import Cuts,FakeClock
+            entered=threading.Event();release=threading.Event()
+            class Clock(FakeClock):
+                def wait_until(self,t):
+                    super().wait_until(t)
+                    if len(self.delivered)==2:assert entered.wait(1)
+                    if len(self.delivered)==6:release.set()
+            class Worker:
+                def transcribe(self,*args):raise AssertionError('unexpected ASR')
+            def fail(*args,**kwargs):
+                entered.set();assert release.wait(1);raise OSError('disk full')
+            with tempfile.TemporaryDirectory() as d:
+                path=Path(d)/'input.wav';sf.write(path,np.zeros(512*20),16000)
+                with patch('tools.interview_bench.replay.sf.write',side_effect=fail):
+                    result=run_replay(path,Cuts(),Worker(),Clock())
+                assert result['status']=='failed'
+                assert any(r['error_code']=='audio_write_error' for r in result['segments'])
+                assert not any(t.name=='asr-replay-worker' for t in threading.enumerate())
+                print('clean shutdown')
+        """)
+        result=subprocess.run([sys.executable,'-B','-c',script],capture_output=True,text=True,timeout=4)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn('clean shutdown',result.stdout)

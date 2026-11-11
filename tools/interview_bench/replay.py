@@ -28,35 +28,46 @@ def run_replay(audio_path, segmenter, worker, clock=None, cancel=None):
     if rate!=16000 or audio.ndim!=1:raise ValueError('Expected 16kHz mono')
     pending=queue.Queue(maxsize=4);events=[];results=[];lock=threading.Lock()
     origin=clock.now();error=None
+    consumer_failed=threading.Event();consumer_failure=[None]
     def event(kind,**kwargs):
         with lock:events.append(dict(event=kind,at_seconds=clock.now()-origin,**kwargs))
     with tempfile.TemporaryDirectory(prefix='flowtype-replay-') as tmp:
         def consume():
             while True:
                 task=pending.get()
-                if task is None: pending.task_done();break
-                index,segment,enqueued,decision_seconds=task
-                if cancel.is_set():
-                    event('cancelled_pending',index=index);pending.task_done();continue
-                start=clock.now();event('dequeue',index=index,wait_seconds=start-enqueued)
-                path=Path(tmp)/f'{index}.wav'
-                sf.write(path,audio[segment.start_sample:segment.end_sample],rate,subtype='PCM_16')
                 try:
-                    result=worker.transcribe(str(index),path)
-                    if result.get('status')!='ok': raise RuntimeError('asr_error')
-                    text=result['text'];status='ok';failure=None
-                except Exception:
-                    text='';status='error';failure='asr_error'
-                result=dict(index=index,text=text,status=status,error_code=failure,
-                            wait_seconds=start-enqueued,returned_seconds=clock.now()-origin,
-                            inference_seconds=clock.now()-start,decision_seconds=decision_seconds,
-                            speech_end_sample=None,**asdict(segment))
-                results.append(result);event('result',**result);pending.task_done()
+                    if task is None:break
+                    index,segment,enqueued,decision_seconds=task
+                    if cancel.is_set() or consumer_failed.is_set():
+                        event('cancelled_pending',index=index);continue
+                    start=clock.now();failure='audio_write_error'
+                    try:
+                        event('dequeue',index=index,wait_seconds=start-enqueued)
+                        path=Path(tmp)/f'{index}.wav'
+                        sf.write(path,audio[segment.start_sample:segment.end_sample],rate,subtype='PCM_16')
+                        failure='asr_error'
+                        result=worker.transcribe(str(index),path)
+                        if result.get('status')!='ok':raise RuntimeError('asr_error')
+                        text=result['text'];status='ok';failure=None
+                    except Exception:
+                        text='';status='error'
+                        consumer_failure[0]=failure;consumer_failed.set()
+                    result=dict(index=index,text=text,status=status,error_code=failure,
+                                wait_seconds=start-enqueued,returned_seconds=clock.now()-origin,
+                                inference_seconds=clock.now()-start,decision_seconds=decision_seconds,
+                                speech_end_sample=None,**asdict(segment))
+                    results.append(result);event('result',**result)
+                except BaseException:
+                    consumer_failure[0]='consumer_error';consumer_failed.set()
+                    return
+                finally:
+                    pending.task_done()
         consumer=threading.Thread(target=consume,name='asr-replay-worker');consumer.start()
         count=0
         def submit(segments):
             nonlocal count,error
             for segment in segments:
+                if consumer_failed.is_set():error=consumer_failure[0];return False
                 if not 0<=segment.start_sample<segment.end_sample<=segmenter.samples_seen<=len(audio):
                     raise ValueError('Future or invalid segment')
                 count+=1;decision_seconds=clock.now()-origin
@@ -70,6 +81,7 @@ def run_replay(audio_path, segmenter, worker, clock=None, cancel=None):
         try:
             for begin in range(0,len(audio),512):
                 if cancel.is_set():error='cancelled';break
+                if consumer_failed.is_set():error=consumer_failure[0];break
                 end=min(begin+512,len(audio));clock.wait_until(origin+end/rate)
                 if cancel.is_set():error='cancelled';break
                 event('audio',end_sample=end)
@@ -78,9 +90,13 @@ def run_replay(audio_path, segmenter, worker, clock=None, cancel=None):
         except BaseException:
             cancel.set();raise
         finally:
-            pending.put(None);consumer.join() # current compute exits before caller closes model
+            # A dead consumer cannot free queue capacity for a blocking sentinel.
+            while consumer.is_alive():
+                try:pending.put(None,timeout=.05);break
+                except queue.Full:continue
+            consumer.join() # current compute exits before caller closes model
     results.sort(key=lambda r:r['index'])
-    failed=error or ('asr_error' if any(r['status']!='ok' for r in results) else None)
+    failed=consumer_failure[0] or error or ('asr_error' if any(r['status']!='ok' for r in results) else None)
     return dict(status='failed' if failed else 'ok',error_code=failed,events=events,segments=results,
                 text=' '.join(r['text'] for r in results),audio_seconds=len(audio)/rate,
                 first_result_seconds=next((r['returned_seconds'] for r in results if r['text'].strip()),None),
