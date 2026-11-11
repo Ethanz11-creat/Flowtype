@@ -1,0 +1,18 @@
+{
+  "dataset": "LibriSpeech test-clean + fbai-speech/is21_deep_bias",
+  "scope": "custom 200-row pilot, not official full test-clean",
+  "selection": "smallest SHA256('20261111:' + utterance_id), 5 per speaker; independent of predictions and rare-word annotations",
+  "rows": 200,
+  "speakers": 40,
+  "audio_seconds": 1692.66,
+  "full_reference_rows": 2620,
+  "source_biasing_blob_sha1": "3b65fb715bd42f3bf6c927aabe5a3ad1861031b5",
+  "source_biasing_sha256": "77f0be388c4f5821c71ee7cab65d1141b40b606e70053c18f0b11346a229d8e2",
+  "selected_reference_sha256": "6acf63a3649f63899f0f2edcfc99789b90f2ef38dd38c477fe3b551aa2d95015",
+  "license": {
+    "LibriSpeech_audio": "CC-BY-4.0",
+    "fbai_speech_software": "MIT"
+  },
+  "asr_context": null,
+  "notes": "Biasing lists kept in reference metadata only. No hints fed to baseline ASR."
+}

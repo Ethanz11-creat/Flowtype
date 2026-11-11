@@ -1,0 +1,80 @@
+[
+  {
+    "id": "1089-134686-0008",
+    "reference": "the chaos in which his ardour extinguished itself was a cold indifferent knowledge of himself",
+    "hypothesis": "the chaos in which his ardor extinguished itself was a cold indifferent knowledge of himself",
+    "rare_word_errors": [
+      {
+        "reference": "ardour",
+        "hypothesis": "ardor",
+        "operation": "substitution"
+      }
+    ],
+    "note": "Text/alignment mismatch only; no independent listening adjudication."
+  },
+  {
+    "id": "1188-133604-0005",
+    "reference": "it is the head of a parrot with a little flower in his beak from a picture of carpaccio's one of his series of the life of saint george",
+    "hypothesis": "it is the head of a parrot with a little flower in his beak from a picture of carpaccius one of his series of the life of saint george",
+    "rare_word_errors": [
+      {
+        "reference": "carpaccio's",
+        "hypothesis": "carpaccius",
+        "operation": "substitution"
+      }
+    ],
+    "note": "Text/alignment mismatch only; no independent listening adjudication."
+  },
+  {
+    "id": "1188-133604-0022",
+    "reference": "you must look at him in the face fight him conquer him with what scathe you may you need not think to keep out of the way of him",
+    "hypothesis": "you must look at him in the face fight him conquer him with what scath you may you need not think to keep out of the way of him",
+    "rare_word_errors": [
+      {
+        "reference": "scathe",
+        "hypothesis": "scath",
+        "operation": "substitution"
+      }
+    ],
+    "note": "Text/alignment mismatch only; no independent listening adjudication."
+  },
+  {
+    "id": "1188-133604-0039",
+    "reference": "it has no beauty whatsoever no specialty of picturesqueness and all its lines are cramped and poor",
+    "hypothesis": "it has no beauty whatsoever no speciality of picturesqueness and all its lines are cramped and poor",
+    "rare_word_errors": [
+      {
+        "reference": "specialty",
+        "hypothesis": "speciality",
+        "operation": "substitution"
+      }
+    ],
+    "note": "Text/alignment mismatch only; no independent listening adjudication."
+  },
+  {
+    "id": "1188-133604-0044",
+    "reference": "it will be well for you if you join not with those who instead of kites fly falcons who instead of obeying the last words of the great cloud shepherd to feed his sheep live the lives how much less than vanity of the war wolf and the gier eagle",
+    "hypothesis": "it will be well for you if you join not with those who instead of kites fly falcons who instead of obeying the last words of the great cloud shepherd to feed his sheep live the lives how much less than vanity of the war wolf and the gear eagle",
+    "rare_word_errors": [
+      {
+        "reference": "gier",
+        "hypothesis": "gear",
+        "operation": "substitution"
+      }
+    ],
+    "note": "Text/alignment mismatch only; no independent listening adjudication."
+  },
+  {
+    "id": "121-123852-0003",
+    "reference": "thought kills me that i am not thought to leap large lengths of miles when thou art gone but that so much of earth and water wrought i must attend time's leisure with my moan receiving nought by elements so slow but heavy tears badges of either's woe",
+    "hypothesis": "thought kills me that i am not thought to leap large lengths of miles when thou art gone but that so much of earth and water wrought i must attend time's leisure with my moan receiving not by elements so slow but heavy tears badges of either's woe",
+    "rare_word_errors": [
+      {
+        "reference": "nought",
+        "hypothesis": "not",
+        "operation": "substitution"
+      }
+    ],
+    "note": "Text/alignment mismatch only; no independent listening adjudication."
+  }
+]

@@ -1,0 +1,5 @@
+WER: error_rate=2.989435828276017, ref_words=4449, subs=90, ins=7, dels=36
+U-WER: error_rate=1.90210499619579, ref_words=3943, subs=42, ins=7, dels=26
+B-WER: error_rate=11.462450592885375, ref_words=506, subs=48, ins=0, dels=10
+Loaded 200 reference utts from build/asr-baseline-20261111/librispeech/pilot200/official-refs.tsv
+Loaded 200 hypothesis utts from build/asr-baseline-20261111/librispeech/pilot200/scored/official-hypotheses.tsv

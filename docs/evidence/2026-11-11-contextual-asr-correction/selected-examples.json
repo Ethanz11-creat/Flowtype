@@ -1,0 +1,41 @@
+{
+  "selection": "deliberately chosen illustrative success/failure/spelling cases; not random or independently listened to",
+  "rows": [
+    {
+      "id": "1089-134686-0008",
+      "condition": "contextual",
+      "reference": "the chaos in which his ardour extinguished itself was a cold indifferent knowledge of himself",
+      "original": "The chaos in which his ardor extinguished itself was a cold, indifferent knowledge of himself.",
+      "corrected": "The chaos in which his ardour extinguished itself was a cold, indifferent knowledge of himself.",
+      "original_errors": 1,
+      "corrected_errors": 0
+    },
+    {
+      "id": "1188-133604-0005",
+      "condition": "contextual",
+      "reference": "it is the head of a parrot with a little flower in his beak from a picture of carpaccio's one of his series of the life of saint george",
+      "original": "It is the head of a parrot with a little flower in his beak from a picture of Carpaccius, one of his series of the life of Saint George.",
+      "corrected": "It is the head of a parrot with a little flower in his beak from a picture of Carpaccio's, one of his series of the life of Saint George.",
+      "original_errors": 1,
+      "corrected_errors": 0
+    },
+    {
+      "id": "260-123286-0006",
+      "condition": "contextual",
+      "reference": "we are losing time and the fact is i have not come all this way to take a little sail upon a pond on a raft",
+      "original": "We are losing time, and the fact is, I have not come all this way to take a little sail upon a pond on a raft.",
+      "corrected": "We are losing time, and the fact is, I have not come all this way to take a little cruise upon a pond on a raft.",
+      "original_errors": 0,
+      "corrected_errors": 1
+    },
+    {
+      "id": "7176-92135-0019",
+      "condition": "contextual",
+      "reference": "i want double nine hal lo",
+      "original": "I want double nine. Hello?",
+      "corrected": "I want to dine. Hello?",
+      "original_errors": 2,
+      "corrected_errors": 4
+    }
+  ]
+}

@@ -1,0 +1,589 @@
+{
+  "created_at_utc": "2026-11-11T04:01:29.780908+00:00",
+  "dataset": "CAiRE/ASCEND",
+  "split": "validation",
+  "revision": "737e9800ae31be9932ba8464c80366559bd28424",
+  "source": "https://huggingface.co/datasets/CAiRE/ASCEND",
+  "download_via": "https://hf-mirror.com",
+  "license": "CC-BY-SA-4.0",
+  "parquet_sha256": "3bdec53d2abfd3dd4f0d86a6df4e27e60f20660edc9b66055ae0ef8ec05cf7e2",
+  "parquet_bytes": 106532266,
+  "script_sha256": "d60f6488108809d9b2b07ccd41ff90e7ef9fe1c2b21ccfb185ccb86cb0159b03",
+  "sample_seed": 20261111,
+  "rows": 1130,
+  "unique_ids": 1130,
+  "language_counts": {
+    "zh": 655,
+    "mixed": 213,
+    "en": 262
+  },
+  "topic_counts": {
+    "technology": 222,
+    "persona": 323,
+    "education": 295,
+    "sports": 290
+  },
+  "topic_language_counts": {
+    "education": {
+      "zh": 172,
+      "en": 57,
+      "mixed": 66
+    },
+    "persona": {
+      "zh": 169,
+      "en": 116,
+      "mixed": 38
+    },
+    "sports": {
+      "zh": 179,
+      "en": 49,
+      "mixed": 62
+    },
+    "technology": {
+      "zh": 135,
+      "en": 40,
+      "mixed": 47
+    }
+  },
+  "speaker_counts": {
+    "20": 335,
+    "12": 646,
+    "7": 149
+  },
+  "session_speaker_groups": 11,
+  "filename_recording_groups": 12,
+  "blank_references": 0,
+  "unknown_reference_rows": 63,
+  "unknown_reference_markers": 68,
+  "clean_reference_rows": 1067,
+  "unknown_reference_by_language": {
+    "zh": 15,
+    "en": 26,
+    "mixed": 22
+  },
+  "audio_decode_successes": 1130,
+  "audio_decode_errors": 0,
+  "audio_formats": {
+    "16000Hz/1ch/PCM_16": 1130
+  },
+  "decoded_duration_seconds": 3323.6099375,
+  "duration_distribution_seconds": {
+    "min": 0.2,
+    "p05": 0.559965625,
+    "median": 2.42,
+    "p95": 7.341999999999999,
+    "max": 13.85
+  },
+  "rms_distribution_dbfs": {
+    "min": -39.267761946113595,
+    "p05": -30.27557645026523,
+    "median": -20.100522851538848,
+    "p95": -12.85102138565876,
+    "max": -9.246579938625562
+  },
+  "maximum_duration_delta_seconds": 0.0002501049041749859,
+  "all_zero_rows": 0,
+  "flag_counts": {
+    "over_0.1pct_samples_near_full_scale": 268
+  },
+  "near_full_scale_flagged_by_speaker": {
+    "20": 5,
+    "12": 262,
+    "7": 1
+  },
+  "duplicate_audio_groups": [],
+  "filename_timing_parsed_rows": 1130,
+  "term_aliases": {
+    "target": {
+      "PyTorch": [
+        "pytorch",
+        "py torch"
+      ],
+      "TensorFlow": [
+        "tensorflow",
+        "tensor flow"
+      ],
+      "LoRA": [
+        "lora"
+      ],
+      "QLoRA": [
+        "qlora"
+      ],
+      "Transformer": [
+        "transformer",
+        "transformers"
+      ],
+      "attention": [
+        "attention"
+      ],
+      "RAG": [
+        "rag"
+      ],
+      "LLM": [
+        "llm",
+        "llms"
+      ],
+      "CUDA": [
+        "cuda"
+      ],
+      "GPU": [
+        "gpu",
+        "gpus"
+      ],
+      "API": [
+        "api",
+        "apis"
+      ],
+      "Docker": [
+        "docker"
+      ],
+      "Kubernetes": [
+        "kubernetes",
+        "k8s"
+      ],
+      "Python": [
+        "python"
+      ],
+      "tokenizer": [
+        "tokenizer",
+        "tokenizers"
+      ],
+      "embedding": [
+        "embedding",
+        "embeddings"
+      ],
+      "batch size": [
+        "batch size",
+        "batch-size"
+      ],
+      "learning rate": [
+        "learning rate",
+        "learning-rate"
+      ],
+      "checkpoint": [
+        "checkpoint",
+        "checkpoints"
+      ],
+      "fine-tuning": [
+        "fine tuning",
+        "fine-tuning",
+        "finetuning"
+      ],
+      "inference": [
+        "inference"
+      ],
+      "Hugging Face": [
+        "hugging face",
+        "huggingface"
+      ],
+      "DeepSeek": [
+        "deepseek"
+      ],
+      "Qwen": [
+        "qwen"
+      ],
+      "OpenAI": [
+        "openai",
+        "open ai"
+      ],
+      "GitHub": [
+        "github",
+        "git hub"
+      ],
+      "JSON": [
+        "json"
+      ],
+      "SQL": [
+        "sql"
+      ],
+      "ASR": [
+        "asr"
+      ],
+      "Whisper": [
+        "whisper"
+      ]
+    },
+    "consumer": {
+      "smartphone": [
+        "smart phone",
+        "smart phones",
+        "smartphone",
+        "smartphones"
+      ],
+      "app": [
+        "app",
+        "apps"
+      ],
+      "computer": [
+        "computer",
+        "computers"
+      ],
+      "Cortana": [
+        "cortana"
+      ],
+      "TV": [
+        "tv"
+      ],
+      "online game": [
+        "online game",
+        "online games"
+      ]
+    }
+  },
+  "term_coverage": {
+    "target": {
+      "PyTorch": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "TensorFlow": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "LoRA": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "QLoRA": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "Transformer": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "attention": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "RAG": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "LLM": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "CUDA": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "GPU": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "API": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "Docker": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "Kubernetes": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "Python": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "tokenizer": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "embedding": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "batch size": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "learning rate": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "checkpoint": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "fine-tuning": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "inference": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "Hugging Face": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "DeepSeek": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "Qwen": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "OpenAI": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "GitHub": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "JSON": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "SQL": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "ASR": {
+        "occurrences": 0,
+        "utterances": 0
+      },
+      "Whisper": {
+        "occurrences": 0,
+        "utterances": 0
+      }
+    },
+    "consumer": {
+      "smartphone": {
+        "occurrences": 14,
+        "utterances": 14
+      },
+      "app": {
+        "occurrences": 5,
+        "utterances": 5
+      },
+      "computer": {
+        "occurrences": 1,
+        "utterances": 1
+      },
+      "Cortana": {
+        "occurrences": 1,
+        "utterances": 1
+      },
+      "TV": {
+        "occurrences": 1,
+        "utterances": 1
+      },
+      "online game": {
+        "occurrences": 2,
+        "utterances": 2
+      }
+    }
+  },
+  "target_hit_rows": 0,
+  "english_tokens_top50": [
+    [
+      "i",
+      104
+    ],
+    [
+      "the",
+      100
+    ],
+    [
+      "and",
+      74
+    ],
+    [
+      "in",
+      67
+    ],
+    [
+      "you",
+      58
+    ],
+    [
+      "to",
+      55
+    ],
+    [
+      "is",
+      50
+    ],
+    [
+      "um",
+      50
+    ],
+    [
+      "uh",
+      45
+    ],
+    [
+      "for",
+      38
+    ],
+    [
+      "have",
+      35
+    ],
+    [
+      "a",
+      35
+    ],
+    [
+      "so",
+      35
+    ],
+    [
+      "we",
+      27
+    ],
+    [
+      "my",
+      25
+    ],
+    [
+      "do",
+      22
+    ],
+    [
+      "think",
+      22
+    ],
+    [
+      "when",
+      20
+    ],
+    [
+      "it's",
+      20
+    ],
+    [
+      "of",
+      20
+    ],
+    [
+      "not",
+      19
+    ],
+    [
+      "that",
+      19
+    ],
+    [
+      "it",
+      17
+    ],
+    [
+      "many",
+      16
+    ],
+    [
+      "but",
+      15
+    ],
+    [
+      "on",
+      15
+    ],
+    [
+      "hong",
+      15
+    ],
+    [
+      "kong",
+      15
+    ],
+    [
+      "students",
+      15
+    ],
+    [
+      "some",
+      14
+    ],
+    [
+      "because",
+      14
+    ],
+    [
+      "can",
+      14
+    ],
+    [
+      "there",
+      14
+    ],
+    [
+      "time",
+      13
+    ],
+    [
+      "this",
+      13
+    ],
+    [
+      "just",
+      13
+    ],
+    [
+      "very",
+      13
+    ],
+    [
+      "are",
+      12
+    ],
+    [
+      "or",
+      12
+    ],
+    [
+      "swimming",
+      12
+    ],
+    [
+      "phone",
+      11
+    ],
+    [
+      "as",
+      11
+    ],
+    [
+      "go",
+      11
+    ],
+    [
+      "university",
+      11
+    ],
+    [
+      "want",
+      11
+    ],
+    [
+      "like",
+      10
+    ],
+    [
+      "smart",
+      10
+    ],
+    [
+      "your",
+      10
+    ],
+    [
+      "will",
+      10
+    ],
+    [
+      "english",
+      10
+    ]
+  ],
+  "listening_pack_rows": 33,
+  "human_listening_completed": 0,
+  "asr_inference_performed": false
+}

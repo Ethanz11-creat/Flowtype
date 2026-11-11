@@ -1,0 +1,5 @@
+WER: error_rate=3.3715441672285906, ref_words=4449, subs=101, ins=11, dels=38
+U-WER: error_rate=2.383971595232057, ref_words=3943, subs=54, ins=11, dels=29
+B-WER: error_rate=11.067193675889328, ref_words=506, subs=47, ins=0, dels=9
+Loaded 200 reference utts from build/contextual-asr-correction-20261111/pilot200/plain/official-refs.tsv
+Loaded 200 hypothesis utts from build/contextual-asr-correction-20261111/pilot200/plain/scored/official-hypotheses.tsv

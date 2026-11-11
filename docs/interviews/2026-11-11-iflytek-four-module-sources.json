@@ -1,0 +1,219 @@
+{
+  "recorded_at_utc": "2026-11-11T05:29:09.291708+00:00",
+  "scope": "read-only public documentation/metadata; no new model weights downloaded or experiments executed",
+  "sources": [
+    {
+      "name": "qwen-official",
+      "url": "https://huggingface.co/Qwen/Qwen3-ASR-0.6B/raw/main/README.md",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/qwen-official.txt"
+    },
+    {
+      "name": "whisper-official",
+      "url": "https://raw.githubusercontent.com/openai/whisper/main/README.md",
+      "exit_code": 0,
+      "bytes": 8246,
+      "sha256": "38c180c2a8d8ba628a3e131ad42bf06c8a51bb681efb30fbe28d5a0f4b65f288",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisper-official.txt"
+    },
+    {
+      "name": "silero-official",
+      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/master/README.md",
+      "exit_code": 0,
+      "bytes": 9725,
+      "sha256": "cd0ee56c91b8042e62a714c0c94bc8b74dbea127a483e390f8033bb8ec8cec78",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-official.txt"
+    },
+    {
+      "name": "silero-utils",
+      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/master/src/silero_vad/utils_vad.py",
+      "exit_code": 0,
+      "bytes": 31474,
+      "sha256": "7e0f9b3334ee4feb79abcf2251be12458329077bce28c8540878ed9d35e5aa6b",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-utils.txt"
+    },
+    {
+      "name": "qwen-06-metadata",
+      "url": "https://huggingface.co/api/models/aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/qwen-06-metadata.txt"
+    },
+    {
+      "name": "whisperkit-metadata",
+      "url": "https://huggingface.co/api/models/argmaxinc/whisperkit-coreml",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisperkit-metadata.txt"
+    },
+    {
+      "name": "silero-mlx-metadata",
+      "url": "https://huggingface.co/api/models/aufklarer/Silero-VAD-v5-MLX",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-mlx-metadata.txt"
+    },
+    {
+      "name": "qwen-official-mirror",
+      "url": "https://hf-mirror.com/Qwen/Qwen3-ASR-0.6B/raw/main/README.md",
+      "exit_code": 0,
+      "bytes": 57456,
+      "sha256": "5058416891bc47a2051557765997e8c42f8eb78a0e33c3e775bd17d4b0ba4d50",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/qwen-official-mirror.txt"
+    },
+    {
+      "name": "qwen-06-metadata-mirror",
+      "url": "https://hf-mirror.com/api/models/aufklarer/Qwen3-ASR-0.6B-MLX-4bit",
+      "exit_code": 0,
+      "bytes": 1418,
+      "sha256": "844d79aa3bac99934668ac91ceb0ee3f85a6b5e957b421bb620ea740c1bb1f63",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/qwen-06-metadata-mirror.txt"
+    },
+    {
+      "name": "whisperkit-metadata-mirror",
+      "url": "https://hf-mirror.com/api/models/argmaxinc/whisperkit-coreml",
+      "exit_code": 0,
+      "bytes": 46980,
+      "sha256": "b114f321edbd769f3a6997288739913bdbc7348a4f7fe47e9a5716268c9eb911",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisperkit-metadata-mirror.txt"
+    },
+    {
+      "name": "silero-mlx-metadata-mirror",
+      "url": "https://hf-mirror.com/api/models/aufklarer/Silero-VAD-v5-MLX",
+      "exit_code": 0,
+      "bytes": 1034,
+      "sha256": "68d3fea7480f8d2c6cc099ee4679df01374d5bc7beb3eaad1178fd7a45e2a33c",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-mlx-metadata-mirror.txt"
+    },
+    {
+      "name": "whisperkit-recommended-models",
+      "url": "https://raw.githubusercontent.com/argmaxinc/WhisperKit/e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef/README.md",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisperkit-recommended-models.txt"
+    },
+    {
+      "name": "ascend-official",
+      "url": "https://raw.githubusercontent.com/CAiRE/ASCEND/main/README.md",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/ascend-official.txt"
+    },
+    {
+      "name": "silero-v5-tag",
+      "url": "https://api.github.com/repos/snakers4/silero-vad/git/ref/tags/v5.1",
+      "exit_code": 0,
+      "bytes": 378,
+      "sha256": "5af71cf5f8d2d82270e75c4426cf17842abbb075239084c182452ca2f605e346",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-v5-tag.txt"
+    },
+    {
+      "name": "silero-pypi",
+      "url": "https://pypi.org/pypi/silero-vad/json",
+      "exit_code": 0,
+      "bytes": 29503,
+      "sha256": "2107ea9680e128aa9c2e86b33cbee38e88cadba63c7416a183e2a4db95c12528",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-pypi.txt"
+    },
+    {
+      "name": "whisper-transcribe",
+      "url": "https://raw.githubusercontent.com/openai/whisper/main/whisper/transcribe.py",
+      "exit_code": 0,
+      "bytes": 30375,
+      "sha256": "176f5ab30e961bec2a7872f5701a1f5bf3cbfc77946e50512f0f0cf00a1ceacf",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisper-transcribe.txt"
+    },
+    {
+      "name": "qwen06-config",
+      "url": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/raw/bc441bd1e4295c1f42d9879f056049a925b6e013/config.json",
+      "exit_code": 0,
+      "bytes": 7187,
+      "sha256": "923618cf5ca452fda0253a6be5c1a17f94a2e4851d3b98beb45848565587bd72",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/qwen06-config.txt"
+    },
+    {
+      "name": "silero-v5-tree",
+      "url": "https://api.github.com/repos/snakers4/silero-vad/git/trees/84768cefdf5a3852400e9d8237f7315d14b64a08?recursive=1",
+      "exit_code": 0,
+      "bytes": 19087,
+      "sha256": "1ccd5304598451c9859a25a8d02fc914269bfad5a36192e9d814561ef6c52ac9",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-v5-tree.txt"
+    },
+    {
+      "name": "silero-v5-utils",
+      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/84768cefdf5a3852400e9d8237f7315d14b64a08/src/silero_vad/utils_vad.py",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-v5-utils.txt"
+    },
+    {
+      "name": "whisper-model-registry",
+      "url": "https://raw.githubusercontent.com/openai/whisper/main/whisper/__init__.py",
+      "exit_code": 28,
+      "bytes": 0,
+      "sha256": null,
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisper-model-registry.txt"
+    },
+    {
+      "name": "whisper-commit",
+      "url": "https://api.github.com/repos/openai/whisper/commits/main",
+      "exit_code": 0,
+      "bytes": 10071,
+      "sha256": "be3097e9e5fc3fbea55ee4d6f00ad871e443aa0aeffdfcf00848333f491ba84a",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisper-commit.txt"
+    },
+    {
+      "name": "whisper-pypi",
+      "url": "https://pypi.org/pypi/openai-whisper/json",
+      "exit_code": 0,
+      "bytes": 20499,
+      "sha256": "06152a206e7ee82226d54c9f58935a099556a1fc4cb39983ae159f5abc70f1ab",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisper-pypi.txt"
+    },
+    {
+      "name": "silero-v5-utils-api",
+      "url": "https://api.github.com/repos/snakers4/silero-vad/git/blobs/c60371a0854bacbdbfb24d9122f7c95e0c550526",
+      "exit_code": 0,
+      "bytes": 26355,
+      "sha256": "99bb62902cfcb1c6afd6a68f7c21df664338f70f835743c0bf5a3f59511640b9",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/silero-v5-utils-api.txt"
+    },
+    {
+      "name": "whisper-registry-api",
+      "url": "https://api.github.com/repos/openai/whisper/contents/whisper/__init__.py?ref=86098128c0b4f24f0e2aa2994de830614b474227",
+      "exit_code": 0,
+      "bytes": 11297,
+      "sha256": "8d276f93008f4177210ce89cb546cbafcd580c6f89a6c8c3b4b88152f3050538",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/whisper-registry-api.txt"
+    },
+    {
+      "name": "pytorch-28-metadata",
+      "url": "https://pypi.org/pypi/torch/2.8.0/json",
+      "exit_code": 0,
+      "bytes": 56939,
+      "sha256": "956e3ce7d4d3c1a07a088b58756ba31b96f59e8e382a5456e6bd7edfabb40e88",
+      "local_cache": "build/research/2026-11-11-iflytek-four-modules/pytorch-28-metadata.txt"
+    }
+  ],
+  "verified_git_blobs": {
+    "silero_v5_utils": "c60371a0854bacbdbfb24d9122f7c95e0c550526",
+    "whisper_registry": "f284ec0453b2c5efb025963f6a56a5dc404f78a7"
+  },
+  "local_dependencies": {
+    "speech_swift_revision": "10bcb4648932a8a8d8caa7ee6ef9d866abd95ff8",
+    "whisperkit_revision": "e2adabbe7d98dc4d0ab9a5b75424ecc42a9cdbef"
+  },
+  "notes": [
+    "HF main requests timed out; successful mirror metadata and fixed config used.",
+    "GitHub raw failures remain recorded; successful Git blob/contents API replacements independently verified.",
+    "README/source retrieval does not establish local runtime compatibility or benchmark results."
+  ]
+}

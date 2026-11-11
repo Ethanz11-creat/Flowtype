@@ -1,0 +1,17 @@
+{
+  "ascend_predictions": 1130,
+  "ascend_clean_rows": 1067,
+  "ascend_independent_dp_edits": 1362,
+  "ascend_reference_units": 11479,
+  "librispeech_pilot_predictions": 200,
+  "librispeech_independent_unit_cost_edits": 133,
+  "librispeech_reference_words": 4449,
+  "librispeech_rare_reference_words": 506,
+  "librispeech_export_exact_pcm_checks": 200,
+  "metric_behavior_tests": 7,
+  "metric_test_failures": 0,
+  "official_handcount_fixture": "2/6 total, 1/2 rare, 1/4 other",
+  "native_initial_compile_and_smoke": "exit 0, 3 real audio samples",
+  "native_build_helper_reexecution": "exit 0 after decoding quoted linker paths",
+  "original_binary_hash_matches_snapshot": true
+}

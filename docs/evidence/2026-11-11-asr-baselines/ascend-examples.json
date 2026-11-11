@@ -1,0 +1,65 @@
+[
+  {
+    "id": "00001",
+    "language": "mixed",
+    "reference": "小朋友我回想一下when i was in elementary school",
+    "hypothesis": "小朋友，我我回想一下，回来。I'm going to school.",
+    "reference_units": 14,
+    "mer": 0.42857142857142855,
+    "note": "Text mismatch example; not independently listened/adjudicated."
+  },
+  {
+    "id": "00091",
+    "language": "zh",
+    "reference": "可以",
+    "hypothesis": "",
+    "reference_units": 2,
+    "mer": 1.0,
+    "note": "Text mismatch example; not independently listened/adjudicated."
+  },
+  {
+    "id": "00142",
+    "language": "mixed",
+    "reference": "在一些比较大公司比如像C R P或者说像一些金融公司他们下面会有一些这样的部门去做他们自己的",
+    "hypothesis": "在一些比较大的公司，比如像CLP或者是像一些建筑公司，他们下面会有一些这样的部门去做他们自己的。",
+    "reference_units": 44,
+    "mer": 0.1590909090909091,
+    "note": "Text mismatch example; not independently listened/adjudicated."
+  },
+  {
+    "id": "00338",
+    "language": "mixed",
+    "reference": "你有抱过koala bear",
+    "hypothesis": "你有抱過，可阿拉貝爾嗎？",
+    "reference_units": 6,
+    "mer": 1.1666666666666667,
+    "note": "Text mismatch example; not independently listened/adjudicated."
+  },
+  {
+    "id": "00581",
+    "language": "mixed",
+    "reference": "那另外一个我的观点就是说这个bedtimes是不是一定要像你刚刚说的是吃饭完之后呢",
+    "hypothesis": "那另外一個，我的觀點是說，這個 bad times 是不是一定要像你剛剛說的，是吃飯完之後呢？",
+    "reference_units": 34,
+    "mer": 0.4117647058823529,
+    "note": "Text mismatch example; not independently listened/adjudicated."
+  },
+  {
+    "id": "00685",
+    "language": "zh",
+    "reference": "送",
+    "hypothesis": "",
+    "reference_units": 1,
+    "mer": 1.0,
+    "note": "Text mismatch example; not independently listened/adjudicated."
+  },
+  {
+    "id": "01038",
+    "language": "mixed",
+    "reference": "呃对最近那个outdoor swimming pool开了然后刚去了一次然后最近因为要赶那个final report就很少去了",
+    "hypothesis": "嗯，就因为最近那个All the Swim Proof不是开了吗？不可能吗？然后刚去了一次。然后最近因为要改那个Final Report，就很少去了。",
+    "reference_units": 35,
+    "mer": 0.45714285714285713,
+    "note": "Text mismatch example; not independently listened/adjudicated."
+  }
+]

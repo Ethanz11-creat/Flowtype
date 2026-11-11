@@ -1,0 +1,281 @@
+{
+  "archived_at_utc": "2026-11-11T05:35:41.768334+00:00",
+  "active_branches": [
+    "main",
+    "flowtype-local",
+    "feat/iflytek-interview"
+  ],
+  "interview_base_commit": "fce500f647ade0ac1e25593ffb950be412358d30",
+  "archived": [
+    {
+      "branch": "flowtype-dev",
+      "tag": "archive/2026-11-11/flowtype-dev",
+      "commit": "e200b98bbdb534666e97cdcc9801459924eb709f",
+      "unique_commits_not_in_retained_product_or_main": 27,
+      "unique_commits": [
+        {
+          "commit": "e200b98bbdb534666e97cdcc9801459924eb709f",
+          "date": "2026-05-26",
+          "subject": "feat: provider management UI, hotkey/translation settings, experience fixes"
+        },
+        {
+          "commit": "ef937c3c7159d0c92a85b048021b7d6870a064a8",
+          "date": "2026-05-26",
+          "subject": "feat: enumerate and select microphone devices"
+        },
+        {
+          "commit": "09876ce8b8cfc59d7518b1f715eaa34932d3631f",
+          "date": "2026-05-26",
+          "subject": "feat: translation session pipeline + translation trigger detector"
+        },
+        {
+          "commit": "cb71e9b7721aae51bb3263ca6880e2803269f194",
+          "date": "2026-05-26",
+          "subject": "feat: non-modifier trigger keys + tap debounce + toggle mode"
+        },
+        {
+          "commit": "fdbc1e2db31f0a4e93f12227057e871a5d9d54b1",
+          "date": "2026-05-25",
+          "subject": "fix: remove holdToRecord, fix ConfigurationStore.save, add translateText"
+        },
+        {
+          "commit": "19a456cc674ffc18a38573c1d5517517ec82262a",
+          "date": "2026-05-25",
+          "subject": "feat: refactor Configuration with LLMProvider, TranslationConfig, InteractionMode"
+        },
+        {
+          "commit": "378638d0c6cd0530f816ea2410f67c101132a086",
+          "date": "2026-05-25",
+          "subject": "chore: gitignore .worktrees directory"
+        },
+        {
+          "commit": "c9adf9a66f18ca61d8a5a61369d2437e0a47d34c",
+          "date": "2026-05-16",
+          "subject": "qwen3-front"
+        },
+        {
+          "commit": "30a0cf5a2761ff22a1219bdec5309290453e4a2e",
+          "date": "2026-05-16",
+          "subject": "qwen3"
+        },
+        {
+          "commit": "f7d2ebc5b946520c22fbde23cc27e45a7b4e2720",
+          "date": "2026-05-16",
+          "subject": "qwen3"
+        },
+        {
+          "commit": "45c73b6e83e5baf730b92240bf861bec02d90ac7",
+          "date": "2026-05-15",
+          "subject": "fix: add serial queue to StreamingSegmentFormer, fix task handle cleanup"
+        },
+        {
+          "commit": "df3f8ba6afe1b1ee00556191fc21f7250b6e4b6e",
+          "date": "2026-05-15",
+          "subject": "feat: integrate streaming pipeline, remove legacy slicing architecture"
+        },
+        {
+          "commit": "186756a1f7cb0a3095a664d46091a0c1953404a7",
+          "date": "2026-05-15",
+          "subject": "feat: add TranscriptionPipeline with dynamic workers and quality assessment"
+        },
+        {
+          "commit": "2b0a5124a0a3eaf94d3950394dbed436846481fb",
+          "date": "2026-05-15",
+          "subject": "feat: MLXWhisperProvider supports initial_prompt, segments, and condition_on_previous"
+        },
+        {
+          "commit": "b512e43972003cf7ccd05b2b58cebfa36d5e9a40",
+          "date": "2026-05-15",
+          "subject": "feat: add StreamingSegmentFormer with VAD-driven adaptive segmentation"
+        },
+        {
+          "commit": "69345a07319f15a93b69b199eda3fd8c6989d485",
+          "date": "2026-05-15",
+          "subject": "feat: add StableTextAccumulator with overlap dedup and stable/pending window"
+        },
+        {
+          "commit": "f8a51419d4726aafdf7e8689f11694a85cfc6330",
+          "date": "2026-05-15",
+          "subject": "feat: add edit distance utility for overlap alignment"
+        },
+        {
+          "commit": "74538dcca93abf6413fdeabd7fe99a522da92011",
+          "date": "2026-05-15",
+          "subject": "feat: add streaming pipeline data models and configuration"
+        },
+        {
+          "commit": "be072b4788323013746fde5ed76839da2eb69ff7",
+          "date": "2026-05-15",
+          "subject": "feat(server): enhance /transcribe with segments, initial_prompt, condition_on_previous"
+        },
+        {
+          "commit": "92aea8e763c0fbee0b7ed707e3063ce1fa17b198",
+          "date": "2026-05-15",
+          "subject": "feat(server): add Silero VAD model and /vad endpoint"
+        },
+        {
+          "commit": "2a79c58a7c42203aa1cab45f3da274248f384e54",
+          "date": "2026-05-15",
+          "subject": "add streaming ASR pipeline implementation plan"
+        },
+        {
+          "commit": "448ce3125fd888d20b1d275e00d06556ee541bf9",
+          "date": "2026-05-15",
+          "subject": "add streaming ASR pipeline redesign spec"
+        },
+        {
+          "commit": "ffd3e401d9c300b56a3f41da69f12a6b3372d4c3",
+          "date": "2026-05-14",
+          "subject": "turbo v2.0"
+        },
+        {
+          "commit": "b0c0826bd2c105c3179d67f367464db42915c113",
+          "date": "2026-05-14",
+          "subject": "unify session lifecycle into single state machine with stability polish"
+        },
+        {
+          "commit": "56f976fa684ff262e9d9d8f4636d7b26fbf770a2",
+          "date": "2026-05-09",
+          "subject": "turbo v1.0"
+        },
+        {
+          "commit": "d6a7a3d32b1c96fb8afdb4b9e3c1b7fd52e57f65",
+          "date": "2026-05-07",
+          "subject": "readme_update"
+        },
+        {
+          "commit": "7c82566b2e38533c8a2a6f42b62b157ed7d16d07",
+          "date": "2026-05-07",
+          "subject": "v1.0"
+        }
+      ],
+      "restore_command": "git switch -c flowtype-dev archive/2026-11-11/flowtype-dev"
+    },
+    {
+      "branch": "flowtype-trae",
+      "tag": "archive/2026-11-11/flowtype-trae",
+      "commit": "1b60bc01cd23795b38ffaf276cde838b80347c79",
+      "unique_commits_not_in_retained_product_or_main": 4,
+      "unique_commits": [
+        {
+          "commit": "1b60bc01cd23795b38ffaf276cde838b80347c79",
+          "date": "2026-06-26",
+          "subject": "feat(cloud-asr): add cloud ASR provider, model presets, hardware-based recommendations, config validation"
+        },
+        {
+          "commit": "3329eb9a3dd39ecbf0435a60cfe9460c77c3c96b",
+          "date": "2026-06-26",
+          "subject": "feat(config): ASREngineType, HardwareTier, CloudASRConfig, new config fields with backward compat"
+        },
+        {
+          "commit": "0e60e4d6664c66e9e680c01144bd301f3ee59efb",
+          "date": "2026-06-26",
+          "subject": "docs(plan): cloud ASR + enhanced model management implementation plan"
+        },
+        {
+          "commit": "2746d90da46facabfb2e98a7b5bd64750a874f29",
+          "date": "2026-06-26",
+          "subject": "docs: add cloud ASR and local model management design spec"
+        }
+      ],
+      "restore_command": "git switch -c flowtype-trae archive/2026-11-11/flowtype-trae"
+    },
+    {
+      "branch": "codex/local-first-core",
+      "tag": "archive/2026-11-11/codex/local-first-core",
+      "commit": "038523b8e654303a9764ca2badebce553f1cd522",
+      "unique_commits_not_in_retained_product_or_main": 14,
+      "unique_commits": [
+        {
+          "commit": "038523b8e654303a9764ca2badebce553f1cd522",
+          "date": "2026-10-09",
+          "subject": "fix(web): close task 6 review gaps"
+        },
+        {
+          "commit": "57959942f346116c26132d9f93e0969f72883864",
+          "date": "2026-10-09",
+          "subject": "fix(web): align dual-client controls with backend contracts"
+        },
+        {
+          "commit": "a56a253af67d74a7b3b68be44366cb370ecf37e5",
+          "date": "2026-10-09",
+          "subject": "feat(web): add localhost dual-client interface"
+        },
+        {
+          "commit": "12add8c00041e144a684b4036225e488e78201b8",
+          "date": "2026-10-09",
+          "subject": "docs: record localhost backend verification"
+        },
+        {
+          "commit": "d2c4861609e7bf6d3db0acf3f214663d0db1a050",
+          "date": "2026-10-09",
+          "subject": "feat(server): expose localhost Flowtype backend"
+        },
+        {
+          "commit": "2cba51a1e1f5bf0093e7d100199834bfa706caf1",
+          "date": "2026-10-09",
+          "subject": "fix(core): close capture cancellation and failure races"
+        },
+        {
+          "commit": "f7c10d8192edfbdf39ceb9091e6a618b543313fb",
+          "date": "2026-10-09",
+          "subject": "refactor(core): route dictation through shared service"
+        },
+        {
+          "commit": "22a32a7b8b7410a9128ac14a6ed2c9f40fd3f48b",
+          "date": "2026-10-08",
+          "subject": "feat(asr): add provider catalog and explicit fallback policy"
+        },
+        {
+          "commit": "efb64b55ce87456d363f0d2ad5b7c8b1867e5391",
+          "date": "2026-10-08",
+          "subject": "docs: record task 2 review correction verification"
+        },
+        {
+          "commit": "7552ccdeb0cab0cbfcb60b2266782b3f1fb4d3e6",
+          "date": "2026-10-08",
+          "subject": "fix(core): persist validated metadata from both model import paths"
+        },
+        {
+          "commit": "f7155ec62bf6f971727c2f0b85b982b143c34cda",
+          "date": "2026-10-08",
+          "subject": "feat(core): serialize model lifecycle and import metadata"
+        },
+        {
+          "commit": "1a957e31d111810d2908df0eaa1c4932b3e1b3f6",
+          "date": "2026-10-08",
+          "subject": "fix(core): constrain metric metadata and distinguish model variants"
+        },
+        {
+          "commit": "b656c0bb91244827ce01016ab6428cf94758f89d",
+          "date": "2026-10-08",
+          "subject": "feat(core): add shared session and provider contracts"
+        },
+        {
+          "commit": "acf90f03ef97c3cbbacd47b3cf01d25e61b2a513",
+          "date": "2026-10-08",
+          "subject": "docs: add core and dual-client implementation plan"
+        }
+      ],
+      "restore_command": "git switch -c codex/local-first-core archive/2026-11-11/codex/local-first-core"
+    }
+  ],
+  "backup": {
+    "path": "build/branch-management/2026-11-11/before-cleanup.bundle",
+    "sha256": "139209f081bd7f45cd2fd803f9370fa31b72a56a46c61f1f0fdded1c2c7d8973",
+    "verified": true
+  },
+  "stale_worktree_registration_removed": {
+    "path": "/Users/yiheng/.codex/worktrees/local-first-core/flowtype-local",
+    "directory_was_absent": true,
+    "metadata_backup": "build/branch-management/2026-11-11/stale-worktree-flowtype-local1"
+  },
+  "original_untracked_files_preserved": 48,
+  "remote_branches_changed": false,
+  "local_product_ahead_of_remote_commits": 45,
+  "notes": [
+    "No archived branch commits were discarded or merged.",
+    "Archive tags and bundle are local; no push performed.",
+    "The interview checkpoint commit is made after this record; locate it in the interview branch log."
+  ]
+}

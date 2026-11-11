@@ -1,0 +1,141 @@
+{
+  "rows": 200,
+  "scope": "exploratory pilot; baseline outputs already inspected; not independent blind test",
+  "conditions": {
+    "plain": {
+      "official_metrics": {
+        "WER": {
+          "rate_percent": 3.3715441672285906,
+          "reference_words": 4449,
+          "substitutions": 101,
+          "insertions": 11,
+          "deletions": 38
+        },
+        "U-WER": {
+          "rate_percent": 2.383971595232057,
+          "reference_words": 3943,
+          "substitutions": 54,
+          "insertions": 11,
+          "deletions": 29
+        },
+        "B-WER": {
+          "rate_percent": 11.067193675889328,
+          "reference_words": 506,
+          "substitutions": 47,
+          "insertions": 0,
+          "deletions": 9
+        }
+      },
+      "paired_diagnostics": {
+        "same_error_count": 163,
+        "previously_correct_rows": 128,
+        "previously_correct_harmed": 11,
+        "normalized_text_changed": 45,
+        "harmed": 23,
+        "improved": 14
+      },
+      "delta_percentage_points_vs_raw": {
+        "WER": 0.3821083389525737,
+        "B-WER": -0.3952569169960469,
+        "U-WER": 0.4818665990362667
+      },
+      "fallback_count": 2,
+      "failure_types": {
+        "curl_exit_35": 2
+      },
+      "latency_median_seconds": 2.4638868125039153,
+      "latency_p95_seconds": 9.643606083001941,
+      "usage": {
+        "prompt_tokens": 22531,
+        "completion_tokens": 5279,
+        "total_tokens": 27810
+      },
+      "usage_missing_rows": 2,
+      "served_models": {
+        "deepseek-ai/DeepSeek-V3": 198,
+        "not_reported": 2
+      }
+    },
+    "contextual": {
+      "official_metrics": {
+        "WER": {
+          "rate_percent": 2.4499887615194424,
+          "reference_words": 4449,
+          "substitutions": 66,
+          "insertions": 7,
+          "deletions": 36
+        },
+        "U-WER": {
+          "rate_percent": 2.0035505959928988,
+          "reference_words": 3943,
+          "substitutions": 45,
+          "insertions": 7,
+          "deletions": 27
+        },
+        "B-WER": {
+          "rate_percent": 5.928853754940712,
+          "reference_words": 506,
+          "substitutions": 21,
+          "insertions": 0,
+          "deletions": 9
+        }
+      },
+      "paired_diagnostics": {
+        "improved": 27,
+        "previously_correct_rows": 128,
+        "previously_correct_harmed": 4,
+        "normalized_text_changed": 37,
+        "same_error_count": 167,
+        "harmed": 6
+      },
+      "delta_percentage_points_vs_raw": {
+        "WER": -0.5394470667565745,
+        "B-WER": -5.533596837944663,
+        "U-WER": 0.10144559979710865
+      },
+      "fallback_count": 1,
+      "failure_types": {
+        "curl_exit_56": 1
+      },
+      "latency_median_seconds": 2.65795177052496,
+      "latency_p95_seconds": 13.99275762506295,
+      "usage": {
+        "prompt_tokens": 129202,
+        "completion_tokens": 5333,
+        "total_tokens": 134535
+      },
+      "usage_missing_rows": 1,
+      "served_models": {
+        "deepseek-ai/DeepSeek-V3": 199,
+        "not_reported": 1
+      }
+    }
+  },
+  "baseline_official_metrics": {
+    "WER": {
+      "rate_percent": 2.989435828276017,
+      "reference_words": 4449,
+      "substitutions": 90,
+      "insertions": 7,
+      "deletions": 36
+    },
+    "U-WER": {
+      "rate_percent": 1.90210499619579,
+      "reference_words": 3943,
+      "substitutions": 42,
+      "insertions": 7,
+      "deletions": 26
+    },
+    "B-WER": {
+      "rate_percent": 11.462450592885375,
+      "reference_words": 506,
+      "substitutions": 48,
+      "insertions": 0,
+      "deletions": 10
+    }
+  },
+  "protocol_sha256": "ce0928fb508f3a958660a3b988f40ff4ba7cfa32f9f83bb85a43d39fd5aaed39",
+  "completions_sha256": "c9f7230ea34cd4e5e472979093befc742bb886a46d5932bc77024946c4812c83",
+  "analysis_sha256": "8d8d6b256f7f63ac01ea614506c25723d667dfa6b8405acd813c1fbd4c3acff6",
+  "paired_diagnostic_alignment": "unit-cost edit distance, separate from official aggregate B/U alignment"
+}
