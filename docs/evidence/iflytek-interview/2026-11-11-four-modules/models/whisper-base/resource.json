@@ -1,0 +1,5 @@
+{
+  "maximum_resident_set_size_bytes": 805076992,
+  "scope": "Python model process",
+  "limitation": "macOS process RSS, not complete Metal GPU allocation; desktop load uncontrolled"
+}

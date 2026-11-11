@@ -1,0 +1,5 @@
+{
+  "event": "ready",
+  "model_id": "whisper-base",
+  "load_seconds": 0.52331941598095
+}

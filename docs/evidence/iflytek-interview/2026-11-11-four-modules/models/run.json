@@ -1,0 +1,9 @@
+{
+  "admission_only": false,
+  "model_ids": [
+    "qwen-1.7b",
+    "qwen-0.6b",
+    "whisper-base"
+  ],
+  "background_load": "Existing desktop/client processes left running; no process terminated. Uncontrolled desktop load."
+}

@@ -1,0 +1,73 @@
+[
+  {
+    "model": "qwen-1.7b",
+    "id": "00001",
+    "reference": "小朋友我回想一下when i was in elementary school",
+    "hypothesis": "小朋友，我我回想一下，回来。I'm going to school.",
+    "mer": 0.42857142857142855
+  },
+  {
+    "model": "qwen-1.7b",
+    "id": "00003",
+    "reference": "i have a phone but it's not a smart phone at that time",
+    "hypothesis": "I have the phone, but it's not a smartphone at that time.",
+    "mer": 0.23076923076923078
+  },
+  {
+    "model": "qwen-1.7b",
+    "id": "00005",
+    "reference": "偶尔跟friends传传messages",
+    "hypothesis": "偶尔跟friends传传message。",
+    "mer": 0.14285714285714285
+  },
+  {
+    "model": "qwen-0.6b",
+    "id": "00003",
+    "reference": "i have a phone but it's not a smart phone at that time",
+    "hypothesis": "I have the phone, but it's not a smartphone at the time.",
+    "mer": 0.3076923076923077
+  },
+  {
+    "model": "qwen-0.6b",
+    "id": "00005",
+    "reference": "偶尔跟friends传传messages",
+    "hypothesis": "偶尔跟 friends 传传 message。",
+    "mer": 0.14285714285714285
+  },
+  {
+    "model": "qwen-0.6b",
+    "id": "00010",
+    "reference": "可能餐厅里呀或者是在搭那个地铁的时候看到小朋友们其实有时候手上都会拿着smart phone在玩",
+    "hypothesis": "可能餐厅里啊，或者是在搭那个地铁的时候，都看到小朋友们。其实有时候手上都会拿着Smart phone在玩。",
+    "mer": 0.05128205128205128
+  },
+  {
+    "model": "whisper-base",
+    "id": "00000",
+    "reference": "嗯",
+    "hypothesis": "Mmm.",
+    "mer": 1.0
+  },
+  {
+    "model": "whisper-base",
+    "id": "00001",
+    "reference": "小朋友我回想一下when i was in elementary school",
+    "hypothesis": "小朋友,我回想一下欢迎来我新Amen's School",
+    "mer": 0.42857142857142855
+  },
+  {
+    "model": "whisper-base",
+    "id": "00002",
+    "reference": "like year three",
+    "hypothesis": "like year 3.",
+    "mer": 0.3333333333333333
+  },
+  {
+    "id": "00000",
+    "model_outputs": {
+      "qwen-1.7b": "嗯。",
+      "qwen-0.6b": "嗯。",
+      "whisper-base": "Mmm."
+    }
+  }
+]

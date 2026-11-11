@@ -1,0 +1,5 @@
+torch==2.8.0
+openai-whisper==20250625
+numpy==2.2.6
+soundfile==0.13.1
+jiwer==4.0.0

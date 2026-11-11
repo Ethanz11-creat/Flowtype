@@ -1,0 +1,156 @@
+{
+  "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+  "rows": 1130,
+  "unknown_reference_rows": 63,
+  "failure_count": 0,
+  "empty_output_count": 0,
+  "clean": {
+    "rows": 1067,
+    "reference_units": 11479,
+    "hits": 10260,
+    "substitutions": 833,
+    "deletions": 386,
+    "insertions": 175,
+    "edit_errors": 1394,
+    "mer": 0.12143914975172053
+  },
+  "by_language": {
+    "en": {
+      "rows": 236,
+      "reference_units": 1505,
+      "hits": 1205,
+      "substitutions": 206,
+      "deletions": 94,
+      "insertions": 30,
+      "edit_errors": 330,
+      "mer": 0.21926910299003322
+    },
+    "mixed": {
+      "rows": 191,
+      "reference_units": 2997,
+      "hits": 2614,
+      "substitutions": 274,
+      "deletions": 109,
+      "insertions": 60,
+      "edit_errors": 443,
+      "mer": 0.14781448114781448
+    },
+    "zh": {
+      "rows": 640,
+      "reference_units": 6977,
+      "hits": 6441,
+      "substitutions": 353,
+      "deletions": 183,
+      "insertions": 85,
+      "edit_errors": 621,
+      "mer": 0.08900673641966461
+    }
+  },
+  "by_topic": {
+    "education": {
+      "rows": 284,
+      "reference_units": 3290,
+      "hits": 2997,
+      "substitutions": 198,
+      "deletions": 95,
+      "insertions": 46,
+      "edit_errors": 339,
+      "mer": 0.10303951367781156
+    },
+    "persona": {
+      "rows": 298,
+      "reference_units": 3136,
+      "hits": 2796,
+      "substitutions": 233,
+      "deletions": 107,
+      "insertions": 54,
+      "edit_errors": 394,
+      "mer": 0.1256377551020408
+    },
+    "sports": {
+      "rows": 268,
+      "reference_units": 2894,
+      "hits": 2512,
+      "substitutions": 265,
+      "deletions": 117,
+      "insertions": 51,
+      "edit_errors": 433,
+      "mer": 0.1496199032480995
+    },
+    "technology": {
+      "rows": 217,
+      "reference_units": 2159,
+      "hits": 1955,
+      "substitutions": 137,
+      "deletions": 67,
+      "insertions": 24,
+      "edit_errors": 228,
+      "mer": 0.10560444650301065
+    }
+  },
+  "by_original_speaker_id": {
+    "7": {
+      "rows": 141,
+      "reference_units": 1868,
+      "hits": 1670,
+      "substitutions": 130,
+      "deletions": 68,
+      "insertions": 28,
+      "edit_errors": 226,
+      "mer": 0.12098501070663811
+    },
+    "12": {
+      "rows": 597,
+      "reference_units": 5988,
+      "hits": 5226,
+      "substitutions": 507,
+      "deletions": 255,
+      "insertions": 118,
+      "edit_errors": 880,
+      "mer": 0.14696058784235136
+    },
+    "20": {
+      "rows": 329,
+      "reference_units": 3623,
+      "hits": 3364,
+      "substitutions": 196,
+      "deletions": 63,
+      "insertions": 29,
+      "edit_errors": 288,
+      "mer": 0.07949213359094673
+    }
+  },
+  "latency": {
+    "total_seconds": 717.3016782498453,
+    "median_seconds": 0.499308375059627,
+    "p95_seconds": 1.3983959159813821,
+    "decoded_audio_seconds": 3323.609937500001,
+    "aggregate_rtf": 0.21582005462090875,
+    "first_sample_seconds": 0.20239962497726083
+  },
+  "deployment": {
+    "engine": "Swift/MLX/speech-swift 0.0.15",
+    "dtype": "mixed BF16/4bit affine group64",
+    "quantization": "4bit",
+    "device": "Apple Metal",
+    "build_mode": "SPM debug dependency objects"
+  },
+  "model_id": "qwen-0.6b",
+  "reference_sha256": "68d0940fb05475c36ba98beee9e6b5edc29d0dad5f1685d716089e7817100b6c",
+  "prediction_sha256": "f64e408bfa8c8a3c6c87fd2ece0311cb33d818a4b092590e932dff3bbe614b4e",
+  "scorer_sha256": "3ae91e900cc1fd18784ae3896a7041b430968f0f8b434aede34a5e851cc9164f",
+  "analysis_sha256": "d186734513d6a6229eb25cca2664384c3e21c1f8828f69a5d2f12c102f34fcbd",
+  "timing": {
+    "load_seconds": 0.9419395000441,
+    "warmup_seconds": 1.505914167035371,
+    "batch_wall_seconds": 718.636298541911,
+    "warmup_rows": 3,
+    "scoring_rows": 1130,
+    "audio_seconds": 3323.609937500001
+  },
+  "resource": {
+    "maximum_resident_set_size_bytes": 849362944,
+    "scope": "Native worker process",
+    "limitation": "macOS process RSS, not complete Metal GPU allocation; desktop load uncontrolled"
+  }
+}

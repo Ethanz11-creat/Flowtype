@@ -1,0 +1,27 @@
+Loaded 62 added tokens from tokenizer_config.json
+Loaded tokenizer with 151705 tokens, 151291 merges
+Found 1 safetensor files
+Loading: model.safetensors
+Loaded 1005 weight tensors from files
+Found 301 audio_tower weights
+Applied weights to audio encoder (18 layers)
+Found 704 text decoder weights
+Applied weights to text decoder (28 layers)
+      721.34 real       463.68 user        71.40 sys
+           849362944  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+              195122  page reclaims
+                 537  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                2287  voluntary context switches
+             2198199  involuntary context switches
+       5978774889031  instructions retired
+       1588295167016  cycles elapsed
+          2034847936  peak memory footprint

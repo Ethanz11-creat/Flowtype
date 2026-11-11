@@ -1,0 +1,8 @@
+{
+  "load_seconds": 0.9042464167578146,
+  "warmup_seconds": 2.4586560419993475,
+  "batch_wall_seconds": 887.986805625027,
+  "warmup_rows": 3,
+  "scoring_rows": 1130,
+  "audio_seconds": 3323.609937500001
+}

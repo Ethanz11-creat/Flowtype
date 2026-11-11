@@ -1,0 +1,156 @@
+{
+  "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+  "rows": 1130,
+  "unknown_reference_rows": 63,
+  "failure_count": 0,
+  "empty_output_count": 22,
+  "clean": {
+    "rows": 1067,
+    "reference_units": 11479,
+    "hits": 7165,
+    "substitutions": 3251,
+    "deletions": 1063,
+    "insertions": 691,
+    "edit_errors": 5005,
+    "mer": 0.4360135900339751
+  },
+  "by_language": {
+    "en": {
+      "rows": 236,
+      "reference_units": 1505,
+      "hits": 1009,
+      "substitutions": 346,
+      "deletions": 150,
+      "insertions": 81,
+      "edit_errors": 577,
+      "mer": 0.3833887043189369
+    },
+    "mixed": {
+      "rows": 191,
+      "reference_units": 2997,
+      "hits": 1753,
+      "substitutions": 937,
+      "deletions": 307,
+      "insertions": 291,
+      "edit_errors": 1535,
+      "mer": 0.5121788455121788
+    },
+    "zh": {
+      "rows": 640,
+      "reference_units": 6977,
+      "hits": 4403,
+      "substitutions": 1968,
+      "deletions": 606,
+      "insertions": 319,
+      "edit_errors": 2893,
+      "mer": 0.4146481295685825
+    }
+  },
+  "by_topic": {
+    "education": {
+      "rows": 284,
+      "reference_units": 3290,
+      "hits": 2084,
+      "substitutions": 951,
+      "deletions": 255,
+      "insertions": 238,
+      "edit_errors": 1444,
+      "mer": 0.4389057750759878
+    },
+    "persona": {
+      "rows": 298,
+      "reference_units": 3136,
+      "hits": 2121,
+      "substitutions": 713,
+      "deletions": 302,
+      "insertions": 68,
+      "edit_errors": 1083,
+      "mer": 0.34534438775510207
+    },
+    "sports": {
+      "rows": 268,
+      "reference_units": 2894,
+      "hits": 1665,
+      "substitutions": 915,
+      "deletions": 314,
+      "insertions": 159,
+      "edit_errors": 1388,
+      "mer": 0.479612992398065
+    },
+    "technology": {
+      "rows": 217,
+      "reference_units": 2159,
+      "hits": 1295,
+      "substitutions": 672,
+      "deletions": 192,
+      "insertions": 226,
+      "edit_errors": 1090,
+      "mer": 0.5048633626679018
+    }
+  },
+  "by_original_speaker_id": {
+    "7": {
+      "rows": 141,
+      "reference_units": 1868,
+      "hits": 1326,
+      "substitutions": 322,
+      "deletions": 220,
+      "insertions": 34,
+      "edit_errors": 576,
+      "mer": 0.3083511777301927
+    },
+    "12": {
+      "rows": 597,
+      "reference_units": 5988,
+      "hits": 3623,
+      "substitutions": 1704,
+      "deletions": 661,
+      "insertions": 388,
+      "edit_errors": 2753,
+      "mer": 0.45975283901135605
+    },
+    "20": {
+      "rows": 329,
+      "reference_units": 3623,
+      "hits": 2216,
+      "substitutions": 1225,
+      "deletions": 182,
+      "insertions": 269,
+      "edit_errors": 1676,
+      "mer": 0.46260005520287056
+    }
+  },
+  "latency": {
+    "total_seconds": 861.0750636733137,
+    "median_seconds": 0.6842818125733174,
+    "p95_seconds": 1.163068791036494,
+    "decoded_audio_seconds": 3323.609937500001,
+    "aggregate_rtf": 0.2590782552302179,
+    "first_sample_seconds": 0.4949761249590665
+  },
+  "deployment": {
+    "engine": "PyTorch/openai-whisper",
+    "dtype": "FP32",
+    "quantization": "none",
+    "device": "CPU 4 threads",
+    "build_mode": "Python package"
+  },
+  "model_id": "whisper-base",
+  "reference_sha256": "68d0940fb05475c36ba98beee9e6b5edc29d0dad5f1685d716089e7817100b6c",
+  "prediction_sha256": "f91deb9c05536bfc9ce0958de28fe06bb0ba4eff646cbe96d48f28660f092e28",
+  "scorer_sha256": "3ae91e900cc1fd18784ae3896a7041b430968f0f8b434aede34a5e851cc9164f",
+  "analysis_sha256": "d186734513d6a6229eb25cca2664384c3e21c1f8828f69a5d2f12c102f34fcbd",
+  "timing": {
+    "load_seconds": 0.52331941598095,
+    "warmup_seconds": 1.873831958975643,
+    "batch_wall_seconds": 861.9099350830074,
+    "warmup_rows": 3,
+    "scoring_rows": 1130,
+    "audio_seconds": 3323.609937500001
+  },
+  "resource": {
+    "maximum_resident_set_size_bytes": 805076992,
+    "scope": "Python model process",
+    "limitation": "macOS process RSS, not complete Metal GPU allocation; desktop load uncontrolled"
+  }
+}

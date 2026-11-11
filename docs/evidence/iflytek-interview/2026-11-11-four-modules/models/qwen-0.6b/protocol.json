@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-11-11T08:17:15.110704+00:00",
+  "config": {
+    "model_id": "qwen-0.6b",
+    "admission_only": false,
+    "parameters": {
+      "models": [
+        "qwen-1.7b",
+        "qwen-0.6b",
+        "whisper-base"
+      ],
+      "warmup_rows": 3,
+      "admission_rows": 10,
+      "qwen_options": {
+        "maxTokens": 448,
+        "temperature": 0,
+        "repetitionPenalty": 1.1,
+        "noRepeatNgramSize": 3,
+        "language": null,
+        "context": null
+      },
+      "whisper_options": {
+        "device": "cpu",
+        "fp16": false,
+        "threads": 4,
+        "language": null,
+        "temperature": 0.0,
+        "condition_on_previous_text": false,
+        "task": "transcribe",
+        "initial_prompt": null
+      }
+    },
+    "deployment": {
+      "engine": "Swift/MLX/speech-swift 0.0.15",
+      "dtype": "mixed BF16/4bit affine group64",
+      "quantization": "4bit",
+      "device": "Apple Metal",
+      "build_mode": "SPM debug dependency objects"
+    },
+    "assets_manifest_sha256": "4bba36c0d50103437d73e7bea7d2c02ab8699c1641b517a59f27f7cb4683f970",
+    "assets": {
+      "qwen_06_revision": "bc441bd1e4295c1f42d9879f056049a925b6e013",
+      "silero_revision": "84768cefdf5a3852400e9d8237f7315d14b64a08",
+      "paths": {
+        "qwen-0.6b": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b",
+        "qwen-1.7b": "/Users/yiheng/Library/Application Support/Flowtype/models/aufklarer/Qwen3-ASR-1.7B-MLX-4bit",
+        "whisper-base": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/whisper-base/base.pt"
+      },
+      "licenses": {
+        "qwen-0.6b": "Apache-2.0 (pinned model card)",
+        "qwen-1.7b": "Apache-2.0",
+        "whisper-base": "MIT",
+        "silero-v5.1": "MIT"
+      },
+      "files": [
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/README.md",
+          "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/README.md",
+          "sha256": "225f13ecdd9a64c642b685a0fcfecb4c533856d4add4cc6eff0d18c3f1724f9c",
+          "bytes": 1065
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/config.json",
+          "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/config.json",
+          "sha256": "923618cf5ca452fda0253a6be5c1a17f94a2e4851d3b98beb45848565587bd72",
+          "bytes": 7187
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/merges.txt",
+          "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/merges.txt",
+          "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+          "bytes": 1671853
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/model.safetensors",
+          "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/model.safetensors",
+          "sha256": "70c7e67e588062adce4f10796e47ad42ead51c6671eda61a0987eae38ca95ddf",
+          "bytes": 708236945
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/model.safetensors.index.json",
+          "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/model.safetensors.index.json",
+          "sha256": "e3bb80ef0fd42a5be07b04e90c97d60460bbde8af3531e0bfe9100a61404d81a",
+          "bytes": 71814
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/tokenizer_config.json",
+          "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/tokenizer_config.json",
+          "sha256": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c",
+          "bytes": 12487
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/vocab.json",
+          "source": "https://hf-mirror.com/aufklarer/Qwen3-ASR-0.6B-MLX-4bit/resolve/bc441bd1e4295c1f42d9879f056049a925b6e013/vocab.json",
+          "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+          "bytes": 2776833
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/whisper-base/base.pt",
+          "source": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
+          "sha256": "ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e",
+          "bytes": 145262807
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/silero-v5.1/silero_vad.jit",
+          "source": "https://api.github.com/repos/snakers4/silero-vad/git/blobs/63cb73be394528ef8d4936fdaa4884890754d065",
+          "sha256": "85c48e1f0ecb604e5d2a268f3ccfb912d4f7e935acdc86af5a3fc5b0aea7b29a",
+          "bytes": 2269612
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/silero-v5.1/LICENSE",
+          "source": "https://api.github.com/repos/snakers4/silero-vad/contents/LICENSE?ref=84768cefdf5a3852400e9d8237f7315d14b64a08",
+          "sha256": "2e63e9a38b6e8fc0c7bc37ce174caca1862870856c6daf5697cfb785e925520b",
+          "bytes": 1075
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/whisper-base/LICENSE",
+          "source": "https://api.github.com/repos/openai/whisper/contents/LICENSE?ref=v20250625",
+          "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+          "bytes": 1063
+        },
+        {
+          "path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/models/qwen-0.6b/LICENSE",
+          "source": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "bytes": 11358
+        }
+      ],
+      "existing_17_files": {
+        "config.json": "1928d5e62e90f1c0b085c655fce43ef74ace6731ebf79ec2229729c99a1cf732",
+        "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "model.safetensors": "6d3ded9f339df22308f57f3287b32940a7297c4ffc597debcfbeff41ca0ff8bd",
+        "tokenizer_config.json": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c",
+        "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      }
+    },
+    "binary_sha256": "d7db25c8400bc0ede8f5c76915dd381f5f4c1e8fdf08f87e5e139452cec0c5dc"
+  },
+  "input_sha256": "82f6c26fa929320760ee0f4d5467be655af703ff136a539d8a503fd11c8a2a8d",
+  "input_path": "/Users/yiheng/pycode/flowtype-local/build/interview-bench/model-runs/20261111T080223324612Z/inputs.jsonl",
+  "tool_sha256": {
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/__init__.py": "eb9bf26d77adef17b7b2f58b6f5d82ab8e7faa9802dec1dd25a6c91d13272353",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/__main__.py": "5a131035862ad6b3f79b8a2d43d2176f25d9f54b776c1558cd4c78d20e8be244",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/annotate.py": "b27131a7e4e9f4a5593418904f9d446a2305359268fb9f91e2671eba38b711e8",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/assets.py": "6387cbb83737f5fb41ad04a891c88e2b4c64c2780c25165117eaf576c13bafde",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/backends.py": "d1ece22b0d4ef0344f198e03a45af3617094a04b1db995c586c514cf70d39dee",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/build_native.py": "2ec872a2a9c92caad94bc91d766a38c7a0485bf1770398f1ab4cea50f9da41a8",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/configs/correction.json": "e4e83dfc735a58d7af7c5442775ee54273ad125f84eb434f3a6f2ce31f4d962b",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/configs/models.json": "be889db98ea0e4399f8ce7b2205127c39488c02b3273b01de1b7a6faea1f474b",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/configs/vad.json": "6789fc62eb5c1fc7236618ad796d93b7f1af82501f38e8e859b5c0bbad7c8b3c",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/correction.py": "b53b6f6456da0e15fc981460ee89de7cba875a5608ed262978b90071a6e90bcd",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/models.py": "c2e91db20737c5891784cee265f8ad0a6dde12058449629d6e9bbfb4c42f78d9",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/prepare.py": "669a3ac5de49683c2444fb24e4c091a74ee972d9a06395e933162646e429e32a",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/replay.py": "596456caeeda386565cafe9642e2fc09a6a2ca613e7b38e6aa5ac2d7767a629d",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/report.py": "898715d1c620da2c3f5ac3041bab97ab64af17f29da0d9154e35c2df9682b774",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/requirements.in": "c93624cf62331404470003bd487e508cc9e2adfd1bbb96a45a531f63e1709575",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/requirements.lock.txt": "5dcc75f942c5b0e173edc629c7aa6ba21c81327e9ebad05efef9c47452eb775f",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/schema.py": "e836f1c723b9a3741374af7cf0b572ad188df9a90601a0cc3fdd01445c71c722",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/swift/NativeASRBench.swift": "d3d19ff732bbbd8c2697dc1f9077af626fe2b8321eee65fad7a5860366aaab0d",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_backends.py": "4b049da3bfff71ef1081075031bcc74623bcc5d00ef21e12deac6d51fa85ac6f",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_correction.py": "4d2cd6620b057db3ecfd78ac48ea7496fafbb1f48cfcf11cef05032b2dba5887",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_prepare.py": "6a1bddad6a248c8d229c7ab86819afd57822b1db114ee6b2c3fccef4dc377b26",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_replay.py": "67c3068f5dc69295b0bb27bc279a17648418c7c88db0025c556107d4955f23e0",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_reporting.py": "94c77c096ace849113c13150bc5da83dee2d77d979d7e5a9eac98d4cc63fbd7e",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_schema.py": "dad4d34fa82391b4ba848158211ae793757ae3d42608081a3e4868b6c9d7f3be",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/tests/test_vad.py": "a622f91ca09ae6062381668e9bb61546366699c6bd57d4cf63b867918836de2f",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/vad.py": "6830dcff9fd37a9f99c03f0cd89a4aac1a1bd0f6db0e1ac5533f5893c60038b3",
+    "/Users/yiheng/pycode/flowtype-local/tools/interview_bench/verify.py": "34060eed23cc14ffec2d03d6f7f94099626091c121962bc24d55b8520bee2809"
+  }
+}

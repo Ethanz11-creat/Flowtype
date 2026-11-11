@@ -1,0 +1,5 @@
+{
+  "maximum_resident_set_size_bytes": 1693712384,
+  "scope": "Native worker process",
+  "limitation": "macOS process RSS, not complete Metal GPU allocation; desktop load uncontrolled"
+}
