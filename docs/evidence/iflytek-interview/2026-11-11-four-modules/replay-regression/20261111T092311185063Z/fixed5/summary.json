@@ -1,0 +1,170 @@
+{
+  "tokenization_version": "nfkc-casefold-han-char-latin-word-number-run-v1",
+  "rows": 6,
+  "unknown_reference_rows": 0,
+  "failure_count": 0,
+  "empty_output_count": 0,
+  "clean": {
+    "rows": 6,
+    "reference_units": 235,
+    "hits": 206,
+    "substitutions": 23,
+    "deletions": 6,
+    "insertions": 8,
+    "edit_errors": 37,
+    "mer": 0.1574468085106383
+  },
+  "by_language": {
+    "en": {
+      "rows": 2,
+      "reference_units": 52,
+      "hits": 42,
+      "substitutions": 7,
+      "deletions": 3,
+      "insertions": 3,
+      "edit_errors": 13,
+      "mer": 0.25
+    },
+    "mixed": {
+      "rows": 2,
+      "reference_units": 125,
+      "hits": 109,
+      "substitutions": 13,
+      "deletions": 3,
+      "insertions": 2,
+      "edit_errors": 18,
+      "mer": 0.144
+    },
+    "zh": {
+      "rows": 2,
+      "reference_units": 58,
+      "hits": 55,
+      "substitutions": 3,
+      "deletions": 0,
+      "insertions": 3,
+      "edit_errors": 6,
+      "mer": 0.10344827586206896
+    }
+  },
+  "by_topic": {
+    "constructed_replay": {
+      "rows": 6,
+      "reference_units": 235,
+      "hits": 206,
+      "substitutions": 23,
+      "deletions": 6,
+      "insertions": 8,
+      "edit_errors": 37,
+      "mer": 0.1574468085106383
+    }
+  },
+  "by_original_speaker_id": {
+    "multiple": {
+      "rows": 6,
+      "reference_units": 235,
+      "hits": 206,
+      "substitutions": 23,
+      "deletions": 6,
+      "insertions": 8,
+      "edit_errors": 37,
+      "mer": 0.1574468085106383
+    }
+  },
+  "latency": {
+    "total_seconds": 94.12160825100727,
+    "median_seconds": 16.118479895987548,
+    "p95_seconds": 20.843059333972633,
+    "decoded_audio_seconds": 89.070125,
+    "aggregate_rtf": 1.0567135529562495,
+    "first_sample_seconds": 10.760888417018577
+  },
+  "sessions": [
+    {
+      "id": "eval-zh-1",
+      "status": "ok",
+      "first_result_seconds": 6.454391832929105,
+      "final_result_seconds": 10.760888417018577,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        8.529203478246927e-05,
+        0.00013179192319512367
+      ]
+    },
+    {
+      "id": "eval-zh-2",
+      "status": "ok",
+      "first_result_seconds": 5.978516291012056,
+      "final_result_seconds": 11.787584083038382,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        6.350001785904169e-05,
+        4.4874963350594044e-05,
+        7.766601629555225e-05
+      ]
+    },
+    {
+      "id": "eval-en-1",
+      "status": "ok",
+      "first_result_seconds": 6.129796792054549,
+      "final_result_seconds": 18.493116625002585,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        4.675006493926048e-05,
+        4.558393266052008e-05,
+        5.158304702490568e-05,
+        0.0001620420953258872
+      ]
+    },
+    {
+      "id": "eval-en-2",
+      "status": "ok",
+      "first_result_seconds": 6.36838016693946,
+      "final_result_seconds": 14.207502166973427,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        5.725002847611904e-05,
+        4.9749971367418766e-05,
+        0.000240708002820611
+      ]
+    },
+    {
+      "id": "eval-mixed-1",
+      "status": "ok",
+      "first_result_seconds": 6.222960417042486,
+      "final_result_seconds": 18.02945762500167,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        4.650000482797623e-05,
+        8.962501306086779e-05,
+        0.00010120798833668232,
+        0.0001099579967558384
+      ]
+    },
+    {
+      "id": "eval-mixed-2",
+      "status": "ok",
+      "first_result_seconds": 6.238385916920379,
+      "final_result_seconds": 20.843059333972633,
+      "endpoint_latency_seconds": null,
+      "final_from_speech_seconds": null,
+      "annotation_status": "manual_pending",
+      "wait_seconds": [
+        9.579199831932783e-05,
+        0.00010379194281995296,
+        7.208297029137611e-05,
+        0.00012045796029269695
+      ]
+    }
+  ],
+  "annotation_status": "manual_pending"
+}

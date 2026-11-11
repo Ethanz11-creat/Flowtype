@@ -1,0 +1,521 @@
+{
+  "scope": "Posthoc descriptive audit, not a new algorithm evaluation or a significance test.",
+  "speaker_rows": {
+    "20": 335,
+    "12": 646,
+    "7": 149
+  },
+  "models": {
+    "qwen-1.7b": {
+      "clean": {
+        "rows": 1067,
+        "edits": 1362,
+        "units": 11479,
+        "mer": 0.11865145047478003
+      },
+      "by_speaker": {
+        "7": {
+          "rows": 141,
+          "edits": 201,
+          "units": 1868,
+          "mer": 0.1076017130620985
+        },
+        "12": {
+          "rows": 597,
+          "edits": 792,
+          "units": 5988,
+          "mer": 0.13226452905811623
+        },
+        "20": {
+          "rows": 329,
+          "edits": 369,
+          "units": 3623,
+          "mer": 0.1018492961634005
+        }
+      },
+      "by_language": {
+        "en": {
+          "rows": 236,
+          "edits": 300,
+          "units": 1505,
+          "mer": 0.19933554817275748
+        },
+        "mixed": {
+          "rows": 191,
+          "edits": 419,
+          "units": 2997,
+          "mer": 0.1398064731398065
+        },
+        "zh": {
+          "rows": 640,
+          "edits": 643,
+          "units": 6977,
+          "mer": 0.09215995413501504
+        }
+      }
+    },
+    "qwen-0.6b": {
+      "clean": {
+        "rows": 1067,
+        "edits": 1394,
+        "units": 11479,
+        "mer": 0.12143914975172053
+      },
+      "by_speaker": {
+        "7": {
+          "rows": 141,
+          "edits": 226,
+          "units": 1868,
+          "mer": 0.12098501070663811
+        },
+        "12": {
+          "rows": 597,
+          "edits": 880,
+          "units": 5988,
+          "mer": 0.14696058784235136
+        },
+        "20": {
+          "rows": 329,
+          "edits": 288,
+          "units": 3623,
+          "mer": 0.07949213359094673
+        }
+      },
+      "by_language": {
+        "en": {
+          "rows": 236,
+          "edits": 330,
+          "units": 1505,
+          "mer": 0.21926910299003322
+        },
+        "mixed": {
+          "rows": 191,
+          "edits": 443,
+          "units": 2997,
+          "mer": 0.14781448114781448
+        },
+        "zh": {
+          "rows": 640,
+          "edits": 621,
+          "units": 6977,
+          "mer": 0.08900673641966461
+        }
+      }
+    },
+    "whisper-base": {
+      "clean": {
+        "rows": 1067,
+        "edits": 5005,
+        "units": 11479,
+        "mer": 0.4360135900339751
+      },
+      "by_speaker": {
+        "7": {
+          "rows": 141,
+          "edits": 576,
+          "units": 1868,
+          "mer": 0.3083511777301927
+        },
+        "12": {
+          "rows": 597,
+          "edits": 2753,
+          "units": 5988,
+          "mer": 0.45975283901135605
+        },
+        "20": {
+          "rows": 329,
+          "edits": 1676,
+          "units": 3623,
+          "mer": 0.46260005520287056
+        }
+      },
+      "by_language": {
+        "en": {
+          "rows": 236,
+          "edits": 577,
+          "units": 1505,
+          "mer": 0.3833887043189369
+        },
+        "mixed": {
+          "rows": 191,
+          "edits": 1535,
+          "units": 2997,
+          "mer": 0.5121788455121788
+        },
+        "zh": {
+          "rows": 640,
+          "edits": 2893,
+          "units": 6977,
+          "mer": 0.4146481295685825
+        }
+      }
+    }
+  },
+  "qwen_paired_clean_rows": {
+    "equal_edits": 734,
+    "0.6b_fewer_edits": 149,
+    "1.7b_fewer_edits": 184
+  },
+  "correction": {
+    "ascend-plain": {
+      "rows": 191,
+      "improved": 7,
+      "harmed": 53,
+      "equal_edits": 131,
+      "previously_correct_harmed": 14
+    },
+    "ascend-raw": {
+      "rows": 191,
+      "improved": 0,
+      "harmed": 0,
+      "equal_edits": 191,
+      "previously_correct_harmed": 0
+    },
+    "ascend-static_tech": {
+      "rows": 191,
+      "improved": 4,
+      "harmed": 14,
+      "equal_edits": 173,
+      "previously_correct_harmed": 3
+    },
+    "librispeech-contextual": {
+      "rows": 200,
+      "improved": 28,
+      "harmed": 5,
+      "equal_edits": 167,
+      "previously_correct_harmed": 4
+    },
+    "librispeech-mismatched": {
+      "rows": 200,
+      "improved": 7,
+      "harmed": 14,
+      "equal_edits": 179,
+      "previously_correct_harmed": 6
+    },
+    "librispeech-plain": {
+      "rows": 200,
+      "improved": 14,
+      "harmed": 19,
+      "equal_edits": 167,
+      "previously_correct_harmed": 10
+    },
+    "librispeech-raw": {
+      "rows": 200,
+      "improved": 0,
+      "harmed": 0,
+      "equal_edits": 200,
+      "previously_correct_harmed": 0
+    }
+  },
+  "replay_regression": {
+    "whole": {
+      "old_clean": {
+        "rows": 6,
+        "reference_units": 235,
+        "hits": 216,
+        "substitutions": 17,
+        "deletions": 2,
+        "insertions": 3,
+        "edit_errors": 22,
+        "mer": 0.09361702127659574
+      },
+      "new_clean": {
+        "rows": 6,
+        "edits": 22,
+        "units": 235,
+        "mer": 0.09361702127659574
+      },
+      "changed_text_rows": 0,
+      "sessions": [
+        {
+          "id": "eval-en-1",
+          "text_changed": false,
+          "old_edits": 7,
+          "new_edits": 7,
+          "first_result_seconds": 21.403689709026366,
+          "final_result_seconds": 21.403689709026366,
+          "first_result_delta_seconds": -0.1948027079924941,
+          "final_result_delta_seconds": -0.1948027079924941
+        },
+        {
+          "id": "eval-en-2",
+          "text_changed": false,
+          "old_edits": 1,
+          "new_edits": 1,
+          "first_result_seconds": 15.88831954204943,
+          "final_result_seconds": 15.88831954204943,
+          "first_result_delta_seconds": 0.08797808398958296,
+          "final_result_delta_seconds": 0.08797808398958296
+        },
+        {
+          "id": "eval-mixed-1",
+          "text_changed": false,
+          "old_edits": 3,
+          "new_edits": 3,
+          "first_result_seconds": 22.000004208064638,
+          "final_result_seconds": 22.000004208064638,
+          "first_result_delta_seconds": 1.3835119170835242,
+          "final_result_delta_seconds": 1.3835119170835242
+        },
+        {
+          "id": "eval-mixed-2",
+          "text_changed": false,
+          "old_edits": 8,
+          "new_edits": 8,
+          "first_result_seconds": 24.023352290969342,
+          "final_result_seconds": 24.023352290969342,
+          "first_result_delta_seconds": -0.8323605420300737,
+          "final_result_delta_seconds": -0.8323605420300737
+        },
+        {
+          "id": "eval-zh-1",
+          "text_changed": false,
+          "old_edits": 3,
+          "new_edits": 3,
+          "first_result_seconds": 12.876616458059289,
+          "final_result_seconds": 12.876616458059289,
+          "first_result_delta_seconds": -0.044114208896644413,
+          "final_result_delta_seconds": -0.044114208896644413
+        },
+        {
+          "id": "eval-zh-2",
+          "text_changed": false,
+          "old_edits": 0,
+          "new_edits": 0,
+          "first_result_seconds": 13.405329458997585,
+          "final_result_seconds": 13.405329458997585,
+          "first_result_delta_seconds": 0.1607335419394076,
+          "final_result_delta_seconds": 0.1607335419394076
+        }
+      ]
+    },
+    "fixed5": {
+      "old_clean": {
+        "rows": 6,
+        "reference_units": 235,
+        "hits": 206,
+        "substitutions": 23,
+        "deletions": 6,
+        "insertions": 8,
+        "edit_errors": 37,
+        "mer": 0.1574468085106383
+      },
+      "new_clean": {
+        "rows": 6,
+        "edits": 37,
+        "units": 235,
+        "mer": 0.1574468085106383
+      },
+      "changed_text_rows": 0,
+      "sessions": [
+        {
+          "id": "eval-en-1",
+          "text_changed": false,
+          "old_edits": 13,
+          "new_edits": 13,
+          "first_result_seconds": 6.129796792054549,
+          "final_result_seconds": 18.493116625002585,
+          "first_result_delta_seconds": 0.020369334029965103,
+          "final_result_delta_seconds": 0.021677208016626537
+        },
+        {
+          "id": "eval-en-2",
+          "text_changed": false,
+          "old_edits": 0,
+          "new_edits": 0,
+          "first_result_seconds": 6.36838016693946,
+          "final_result_seconds": 14.207502166973427,
+          "first_result_delta_seconds": 0.2182401668978855,
+          "final_result_delta_seconds": 0.2712525009410456
+        },
+        {
+          "id": "eval-mixed-1",
+          "text_changed": false,
+          "old_edits": 5,
+          "new_edits": 5,
+          "first_result_seconds": 6.222960417042486,
+          "final_result_seconds": 18.02945762500167,
+          "first_result_delta_seconds": 0.09229958395007998,
+          "final_result_delta_seconds": 0.07936979189980775
+        },
+        {
+          "id": "eval-mixed-2",
+          "text_changed": false,
+          "old_edits": 13,
+          "new_edits": 13,
+          "first_result_seconds": 6.238385916920379,
+          "final_result_seconds": 20.843059333972633,
+          "first_result_delta_seconds": 0.0645086249569431,
+          "final_result_delta_seconds": 0.2397594170179218
+        },
+        {
+          "id": "eval-zh-1",
+          "text_changed": false,
+          "old_edits": 3,
+          "new_edits": 3,
+          "first_result_seconds": 6.454391832929105,
+          "final_result_seconds": 10.760888417018577,
+          "first_result_delta_seconds": -0.051670667016878724,
+          "final_result_delta_seconds": -0.23755408287979662
+        },
+        {
+          "id": "eval-zh-2",
+          "text_changed": false,
+          "old_edits": 3,
+          "new_edits": 3,
+          "first_result_seconds": 5.978516291012056,
+          "final_result_seconds": 11.787584083038382,
+          "first_result_delta_seconds": -0.06538008397910744,
+          "final_result_delta_seconds": -0.0003519998863339424
+        }
+      ]
+    },
+    "vad600": {
+      "old_clean": {
+        "rows": 6,
+        "reference_units": 235,
+        "hits": 211,
+        "substitutions": 20,
+        "deletions": 4,
+        "insertions": 6,
+        "edit_errors": 30,
+        "mer": 0.1276595744680851
+      },
+      "new_clean": {
+        "rows": 6,
+        "edits": 30,
+        "units": 235,
+        "mer": 0.1276595744680851
+      },
+      "changed_text_rows": 0,
+      "sessions": [
+        {
+          "id": "eval-en-1",
+          "text_changed": false,
+          "old_edits": 10,
+          "new_edits": 10,
+          "first_result_seconds": 12.006424291059375,
+          "final_result_seconds": 18.274832458002493,
+          "first_result_delta_seconds": -0.204380749957636,
+          "final_result_delta_seconds": 0.04967258300166577
+        },
+        {
+          "id": "eval-en-2",
+          "text_changed": false,
+          "old_edits": 1,
+          "new_edits": 1,
+          "first_result_seconds": 8.763482125010341,
+          "final_result_seconds": 13.470170625019819,
+          "first_result_delta_seconds": 0.007119791000150144,
+          "final_result_delta_seconds": 0.050089624943211675
+        },
+        {
+          "id": "eval-mixed-1",
+          "text_changed": false,
+          "old_edits": 5,
+          "new_edits": 5,
+          "first_result_seconds": 9.536949625005946,
+          "final_result_seconds": 17.42224616603926,
+          "first_result_delta_seconds": -0.09899416693951935,
+          "final_result_delta_seconds": 0.03075670707039535
+        },
+        {
+          "id": "eval-mixed-2",
+          "text_changed": false,
+          "old_edits": 11,
+          "new_edits": 11,
+          "first_result_seconds": 13.313852790975943,
+          "final_result_seconds": 20.45036695804447,
+          "first_result_delta_seconds": -1.4191500010201707,
+          "final_result_delta_seconds": -0.2645959589863196
+        },
+        {
+          "id": "eval-zh-1",
+          "text_changed": false,
+          "old_edits": 3,
+          "new_edits": 3,
+          "first_result_seconds": 6.8422227499540895,
+          "final_result_seconds": 9.633671832969412,
+          "first_result_delta_seconds": -0.006557750049978495,
+          "final_result_delta_seconds": -0.010400625062175095
+        },
+        {
+          "id": "eval-zh-2",
+          "text_changed": false,
+          "old_edits": 0,
+          "new_edits": 0,
+          "first_result_seconds": 7.3451914170291275,
+          "final_result_seconds": 11.301481375005096,
+          "first_result_delta_seconds": 0.13380654202774167,
+          "final_result_delta_seconds": 0.029851875035092235
+        }
+      ]
+    }
+  },
+  "input_sha256": {
+    "prepared/ascend/references.jsonl": "68d0940fb05475c36ba98beee9e6b5edc29d0dad5f1685d716089e7817100b6c",
+    "models/qwen-1.7b/scored_rows.jsonl": "4d16c31222818d54f0e1f549cd3fdb8af2696255c5eb8079def8909f6390de0a",
+    "models/qwen-1.7b/summary.json": "773d60467870774d3fcade74368dee041496c236037bb252f8b2c4ed06c8abc9",
+    "models/qwen-0.6b/scored_rows.jsonl": "18ab943df22eea4400811ba7676e175bb8480edabc4ef30d6bd33adbde635780",
+    "models/qwen-0.6b/summary.json": "9715471b65904ea749be4c394af65a22474aefdf8ddc6904c0be96acf1ba0f21",
+    "models/whisper-base/scored_rows.jsonl": "802f88295df53a242ec5018d76323bddd80a43d5889d919e3db88d034e6ec3f9",
+    "models/whisper-base/summary.json": "91dfc76981d216316339219651234f117e99f335a70c6b2e378f910e2c37c820",
+    "correction/paired-diagnostics.jsonl": "0e9ab968696bdadcc152e48d870dfabc816b7abf50d86b659e5f75a0d3183af4",
+    "correction/summary.json": "bb0c745e64d3dc74b50f2ede1c5c28412bbf92a783a641ef6cbef3b74656a960",
+    "replay/eval/summary.json": "cd2fbc2557fdba15b9feaff88ae540b433da910478f9e0a77d1c3b49cb7d2052",
+    "replay-regression/20261111T092311185063Z/summary.json": "bf1a57665875908f095e5e5086c5c13c1c8229c18f909bcbc8f631540599b8d2",
+    "replay/eval/protocol.json": "ab51ed18d5154ce05ad6eafa96f1ea8d5801445ab140d948850312bb0744ba8f",
+    "replay-regression/20261111T092311185063Z/protocol.json": "c8fe3234ca25f892ad44abc2ddfa5bed36e39dc954656cf81d3151bb2842dee8",
+    "replay/eval/sessions.json": "e2b577c0a91cd9c553a29d893d1b48f97691e5a66419561a1b8c4bf264c6c65a",
+    "replay-regression/20261111T092311185063Z/sessions.json": "e2b577c0a91cd9c553a29d893d1b48f97691e5a66419561a1b8c4bf264c6c65a",
+    "replay/eval/whole/predictions.jsonl": "911b8345c4a1232d628c41c2094ed801be09ec2b9d13d58f3d65150e0fe7e9d2",
+    "replay-regression/20261111T092311185063Z/whole/predictions.jsonl": "e820860fc7a5ae73df83f8519d108dfa7eaf57bd8895338baa225d4db0137e9a",
+    "replay/eval/whole/scored_rows.jsonl": "bbce4e36e9d0ead1a38f6349b9984984df7facbe767ba508725f4288f59f8d2a",
+    "replay-regression/20261111T092311185063Z/whole/scored_rows.jsonl": "be0e8ce149020b6ee9ede4b2b9440e00c8bb91283942165ebcc3ef30732c0cef",
+    "replay/eval/whole/eval-en-1.json": "afd0c366ee5bb9cec2c2f8491398e495fa64c7b21a261c4d50e32fcbc86c24ff",
+    "replay-regression/20261111T092311185063Z/whole/eval-en-1.json": "3dcd686ca8c79f80477509f03bd3d57d01219b136605827998c4d706c73bfb6c",
+    "replay/eval/whole/eval-en-2.json": "434303cfc510a49c0c7f12fbd98838c4126ed0b5d97e95ed7b7cdf8bf409380b",
+    "replay-regression/20261111T092311185063Z/whole/eval-en-2.json": "bab7e34b3cfc6810eb2e5030cfde3ed624e0c88279ced50ea1a06cde2203a075",
+    "replay/eval/whole/eval-mixed-1.json": "819aa605a59a0f1bf1f33dc8430e7a149101d6c5e2a86af5269273e3c73956c8",
+    "replay-regression/20261111T092311185063Z/whole/eval-mixed-1.json": "18c6f510d9c75c10ccca7b4049e91f5ec8424136434197e875cd677b00d125ba",
+    "replay/eval/whole/eval-mixed-2.json": "61107e0f2fce901cdee7853271133c869be00460406b94719c619245e91ea26b",
+    "replay-regression/20261111T092311185063Z/whole/eval-mixed-2.json": "ce3c1c3f5d5c1a5ef8c7b8a036240ffc857ff4572d6297c66e7de1681bac0486",
+    "replay/eval/whole/eval-zh-1.json": "bffe6d5586c577d39fd87bb11f62fa0cc381a10b7ef418b7b42544685643819a",
+    "replay-regression/20261111T092311185063Z/whole/eval-zh-1.json": "a1e6ddac204165632cd79729bf7deb5e572b206ba1ac17509413247966996df2",
+    "replay/eval/whole/eval-zh-2.json": "9d51c41ad2f200030a3a0eb1d08683ea0dba7e02527c6275cd8e16aae41199b4",
+    "replay-regression/20261111T092311185063Z/whole/eval-zh-2.json": "ba0b393b2dafdceb86e4fe8bfc112071513c3bef0991a156573b711e64a95108",
+    "replay/eval/fixed5/predictions.jsonl": "4758d551342dc24d6a07a66490116183859b6a686907a48384516f191b55fadb",
+    "replay-regression/20261111T092311185063Z/fixed5/predictions.jsonl": "8f68f191216e9b36ffc70bb78bce1b5b56b2e74bccc6f3a54ba3eeb870f23396",
+    "replay/eval/fixed5/scored_rows.jsonl": "bb2ea6a021883780373050067cc3cf638601fd89f649250e6e428a8e911ae9d6",
+    "replay-regression/20261111T092311185063Z/fixed5/scored_rows.jsonl": "906bca899a60f5c26435b05fe23ee8b0873a4c9d708ba03c9eeef05ef3638246",
+    "replay/eval/fixed5/eval-en-1.json": "9b781055b6a3275397796ca608b10ed703c4958541d7453616108586a6b820ab",
+    "replay-regression/20261111T092311185063Z/fixed5/eval-en-1.json": "a47a9af544511a603faf2c511ad3cb2a426bbd3ccab275fff784ae1ab0753194",
+    "replay/eval/fixed5/eval-en-2.json": "a6744aef8f3feafa377aff4b4d2ed2bb578d6285f7166d6c919be8499da0b904",
+    "replay-regression/20261111T092311185063Z/fixed5/eval-en-2.json": "eb85e9e4ede4be5d1f290d82b9f179ff337b2195c9df0e6f2fb095cd7eb5c0fd",
+    "replay/eval/fixed5/eval-mixed-1.json": "79e3f932edd3884466324c3f4b9e4c809d7404c19d03915f3cb7f5201176eda3",
+    "replay-regression/20261111T092311185063Z/fixed5/eval-mixed-1.json": "678978dd84e94f17a0e848d8ab0dc6dfca357f8116c5089af5a8a3c610e4ac56",
+    "replay/eval/fixed5/eval-mixed-2.json": "589a77ba18cf3a9c2514483bb87f8a7ac6618b306815034e2ff57e07bab22806",
+    "replay-regression/20261111T092311185063Z/fixed5/eval-mixed-2.json": "faf92c8f994a102eae859708663d3e5a60c9c0f0582c4a3cdaf1e3a2c0879284",
+    "replay/eval/fixed5/eval-zh-1.json": "464bd9cebf0ebf61d1c5d961d6217bc0ddb5bf971caf9a08ef7192b101b78985",
+    "replay-regression/20261111T092311185063Z/fixed5/eval-zh-1.json": "459e3c2725eb11ca0539d43b116203323ae215ad80f77c1cf8b454b628d9ab1c",
+    "replay/eval/fixed5/eval-zh-2.json": "38a6d3f22c740c0f8cdb89bc78a3274337ac7d6dc8a367abc9185c0366ab9baa",
+    "replay-regression/20261111T092311185063Z/fixed5/eval-zh-2.json": "76a0bdf41f1e47ff047cc4a056dca07f1546d928da070647144029fdc6fb2ef3",
+    "replay/eval/vad600/predictions.jsonl": "8e758d511bd15d04852d525990803abf31557d2f42d1ca255d48d47a9848c783",
+    "replay-regression/20261111T092311185063Z/vad600/predictions.jsonl": "85e8f7e34848c4255ffb105d150c7e04027ae1e63e541de3e3c52c5ad1b2f358",
+    "replay/eval/vad600/scored_rows.jsonl": "be11d60b347964f595b210e7e20f486df7cdfdc9a6b409203f920d3e288c99c7",
+    "replay-regression/20261111T092311185063Z/vad600/scored_rows.jsonl": "777d98b33f34f6445498b19cad61f594e7105526c7e94ff7bd61a06c8b3eb504",
+    "replay/eval/vad600/eval-en-1.json": "8d04306d0424ee6dee19bc316fef9d30060cff6df1d9b8eec150d53cfc833667",
+    "replay-regression/20261111T092311185063Z/vad600/eval-en-1.json": "b36f2f4408dfc43d5234b2dce36009fa581a9764e2352b8cf6e6220db8f6a8dc",
+    "replay/eval/vad600/eval-en-2.json": "3730cf9a87d3930f45a448498f967039629c4f93b6a87b2e0b9ece30875fd2ee",
+    "replay-regression/20261111T092311185063Z/vad600/eval-en-2.json": "e5b58b191dde11c563cd5ac9892041e09cfd699f81ee4271b46a70ef3678eff9",
+    "replay/eval/vad600/eval-mixed-1.json": "126d148f6538197729a3d726a01a3026c6c9755b930dada4071acc144ee47f88",
+    "replay-regression/20261111T092311185063Z/vad600/eval-mixed-1.json": "b02daf46522b0c722a41d322c43e1fc627f23403ca90db392653470245044aaa",
+    "replay/eval/vad600/eval-mixed-2.json": "e05a20c1d3b1d67d09384de772f15c73c54bec5b476e16315e15b8b4bcbd1f8e",
+    "replay-regression/20261111T092311185063Z/vad600/eval-mixed-2.json": "5c45d398d8ec93ea55538413fc39b7b56a2799010fa3f0fb55f87e1486215469",
+    "replay/eval/vad600/eval-zh-1.json": "75716c472e7c4c8fedae160825cf762c5db19033ecc5806ddc03feef476b239d",
+    "replay-regression/20261111T092311185063Z/vad600/eval-zh-1.json": "fd09449352f9c2e9acf667924e3152d1a212951f851c232bcdc40ca631376dd3",
+    "replay/eval/vad600/eval-zh-2.json": "b7d69732660a168d16e5b6e25eeb2c7aa3f57471a3a78cf07cb4d31576f53f79",
+    "replay-regression/20261111T092311185063Z/vad600/eval-zh-2.json": "57ddbe1f1a27a407210de2cf63f2908ddc0a7e81fb80094b0ce504579db9a208"
+  },
+  "script_sha256": "b18e1de081b08051bc190d449dd9a400458d5cdfc74ac27d3abfe41fb8375b16"
+}

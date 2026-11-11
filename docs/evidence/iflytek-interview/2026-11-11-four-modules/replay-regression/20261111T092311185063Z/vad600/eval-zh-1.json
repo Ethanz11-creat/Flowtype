@@ -1,0 +1,1694 @@
+{
+  "status": "ok",
+  "error_code": null,
+  "events": [
+    {
+      "event": "audio",
+      "at_seconds": 0.03618120797909796,
+      "end_sample": 512
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.12101920798886567,
+      "end_sample": 1024
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.13167983305174857,
+      "end_sample": 1536
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.13217150000855327,
+      "end_sample": 2048
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.16491337504703552,
+      "end_sample": 2560
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.19560887501575053,
+      "end_sample": 3072
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.22903079201932997,
+      "end_sample": 3584
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.25717029196675867,
+      "end_sample": 4096
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.2930421669734642,
+      "end_sample": 4608
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.3239112920127809,
+      "end_sample": 5120
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.3565140829887241,
+      "end_sample": 5632
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.38813233305700123,
+      "end_sample": 6144
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.4205550419865176,
+      "end_sample": 6656
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.45356004196219146,
+      "end_sample": 7168
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.48324095795396715,
+      "end_sample": 7680
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.517126000020653,
+      "end_sample": 8192
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.5485213330248371,
+      "end_sample": 8704
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.5771557500120252,
+      "end_sample": 9216
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.608603333006613,
+      "end_sample": 9728
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.6444542920216918,
+      "end_sample": 10240
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.6730830420274287,
+      "end_sample": 10752
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.7051567500457168,
+      "end_sample": 11264
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.7404542500153184,
+      "end_sample": 11776
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.7696782499551773,
+      "end_sample": 12288
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.8014502499718219,
+      "end_sample": 12800
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.8324570000404492,
+      "end_sample": 13312
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.8678959580138326,
+      "end_sample": 13824
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.9010638750623912,
+      "end_sample": 14336
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.9294442080426961,
+      "end_sample": 14848
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.9626680000219494,
+      "end_sample": 15360
+    },
+    {
+      "event": "audio",
+      "at_seconds": 0.9961710419738665,
+      "end_sample": 15872
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.025788167025894,
+      "end_sample": 16384
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.0610611670417711,
+      "end_sample": 16896
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.0887643330497667,
+      "end_sample": 17408
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.121739541995339,
+      "end_sample": 17920
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.1533514170441777,
+      "end_sample": 18432
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.185220167040825,
+      "end_sample": 18944
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.2187635420123115,
+      "end_sample": 19456
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.2551016670186073,
+      "end_sample": 19968
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.284002208034508,
+      "end_sample": 20480
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.312940250034444,
+      "end_sample": 20992
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.347796041984111,
+      "end_sample": 21504
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.381257832981646,
+      "end_sample": 22016
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.4131185420555994,
+      "end_sample": 22528
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.4404303330229595,
+      "end_sample": 23040
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.4739779169904068,
+      "end_sample": 23552
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.507098792004399,
+      "end_sample": 24064
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.5397402079543099,
+      "end_sample": 24576
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.5695370000321418,
+      "end_sample": 25088
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.6018752079689875,
+      "end_sample": 25600
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.6362043330445886,
+      "end_sample": 26112
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.6654976250138134,
+      "end_sample": 26624
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.7009659169707447,
+      "end_sample": 27136
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.7325976670254022,
+      "end_sample": 27648
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.7601203749654815,
+      "end_sample": 28160
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.7929138330509886,
+      "end_sample": 28672
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.8290351249743253,
+      "end_sample": 29184
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.8562621669843793,
+      "end_sample": 29696
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.8915461250580847,
+      "end_sample": 30208
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.920880625024438,
+      "end_sample": 30720
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.95703595795203,
+      "end_sample": 31232
+    },
+    {
+      "event": "audio",
+      "at_seconds": 1.9874763749539852,
+      "end_sample": 31744
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.0188417920144275,
+      "end_sample": 32256
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.0498882080428302,
+      "end_sample": 32768
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.0815599580528215,
+      "end_sample": 33280
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.1151058330433443,
+      "end_sample": 33792
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.1477384170284495,
+      "end_sample": 34304
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.1809602919965982,
+      "end_sample": 34816
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.2108653750037774,
+      "end_sample": 35328
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.24374824995175,
+      "end_sample": 35840
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.273738833027892,
+      "end_sample": 36352
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.3070810419740155,
+      "end_sample": 36864
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.3394453329965472,
+      "end_sample": 37376
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.371347749955021,
+      "end_sample": 37888
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.4021539579844102,
+      "end_sample": 38400
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.433031792053953,
+      "end_sample": 38912
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.4672367500606924,
+      "end_sample": 39424
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.499213582952507,
+      "end_sample": 39936
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.533056874992326,
+      "end_sample": 40448
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.565056374995038,
+      "end_sample": 40960
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.5970412499736995,
+      "end_sample": 41472
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.6289835000643507,
+      "end_sample": 41984
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.658418457955122,
+      "end_sample": 42496
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.693038792000152,
+      "end_sample": 43008
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.724294750019908,
+      "end_sample": 43520
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.7570464169839397,
+      "end_sample": 44032
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.786146542057395,
+      "end_sample": 44544
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.820229124976322,
+      "end_sample": 45056
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.851827458012849,
+      "end_sample": 45568
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.8816242499742657,
+      "end_sample": 46080
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.9229778749868274,
+      "end_sample": 46592
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.949202249990776,
+      "end_sample": 47104
+    },
+    {
+      "event": "audio",
+      "at_seconds": 2.9780390829546377,
+      "end_sample": 47616
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.012400957988575,
+      "end_sample": 48128
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.0451688329922035,
+      "end_sample": 48640
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.0770527080167085,
+      "end_sample": 49152
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.1090413329657167,
+      "end_sample": 49664
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.1409432080108672,
+      "end_sample": 50176
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.1696563330478966,
+      "end_sample": 50688
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.2023503750097007,
+      "end_sample": 51200
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.23509724996984,
+      "end_sample": 51712
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.2693942500045523,
+      "end_sample": 52224
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.2975340830162168,
+      "end_sample": 52736
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.3325750830117613,
+      "end_sample": 53248
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.3645317499758676,
+      "end_sample": 53760
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.397044457960874,
+      "end_sample": 54272
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.4290520830545574,
+      "end_sample": 54784
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.4570828749565408,
+      "end_sample": 55296
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.489804874989204,
+      "end_sample": 55808
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.5237395419972017,
+      "end_sample": 56320
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.553291167016141,
+      "end_sample": 56832
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.5874949579592794,
+      "end_sample": 57344
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.6204498329898342,
+      "end_sample": 57856
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.6530567499576136,
+      "end_sample": 58368
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.6801227920223027,
+      "end_sample": 58880
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.717048916965723,
+      "end_sample": 59392
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.747102417051792,
+      "end_sample": 59904
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.7789544579572976,
+      "end_sample": 60416
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.80899941700045,
+      "end_sample": 60928
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.840380667010322,
+      "end_sample": 61440
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.8737313749734312,
+      "end_sample": 61952
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.9090410419739783,
+      "end_sample": 62464
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.940777000039816,
+      "end_sample": 62976
+    },
+    {
+      "event": "audio",
+      "at_seconds": 3.970525832963176,
+      "end_sample": 63488
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.003678458044305,
+      "end_sample": 64000
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.037018958013505,
+      "end_sample": 64512
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.066368667059578,
+      "end_sample": 65024
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.100908666965552,
+      "end_sample": 65536
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.131069708033465,
+      "end_sample": 66048
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.16161737497896,
+      "end_sample": 66560
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.194984999950975,
+      "end_sample": 67072
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.2256476250477135,
+      "end_sample": 67584
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.259020542027429,
+      "end_sample": 68096
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.290891082957387,
+      "end_sample": 68608
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.323848458006978,
+      "end_sample": 69120
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.354890167014673,
+      "end_sample": 69632
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.388933958020061,
+      "end_sample": 70144
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.417122957995161,
+      "end_sample": 70656
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.451867792056873,
+      "end_sample": 71168
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.480070500052534,
+      "end_sample": 71680
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.514595333021134,
+      "end_sample": 72192
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.544293749961071,
+      "end_sample": 72704
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.581046917010099,
+      "end_sample": 73216
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.609314791974612,
+      "end_sample": 73728
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.640388083062135,
+      "end_sample": 74240
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.675590333063155,
+      "end_sample": 74752
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.7090439579915255,
+      "end_sample": 75264
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.7375084169907495,
+      "end_sample": 75776
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.7730963750509545,
+      "end_sample": 76288
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.8030763330170885,
+      "end_sample": 76800
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.855572291999124,
+      "end_sample": 77312
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.866219082963653,
+      "end_sample": 77824
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.899235958000645,
+      "end_sample": 78336
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.933034791960381,
+      "end_sample": 78848
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.960688958060928,
+      "end_sample": 79360
+    },
+    {
+      "event": "audio",
+      "at_seconds": 4.99560941697564,
+      "end_sample": 79872
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.027746957959607,
+      "end_sample": 80384
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.0610518750036135,
+      "end_sample": 80896
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.090389083023183,
+      "end_sample": 81408
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.125032874988392,
+      "end_sample": 81920
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.157048542052507,
+      "end_sample": 82432
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.18850491696503,
+      "end_sample": 82944
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.221040167030878,
+      "end_sample": 83456
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.249016375048086,
+      "end_sample": 83968
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.281689999974333,
+      "end_sample": 84480
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.317037833039649,
+      "end_sample": 84992
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.347787749953568,
+      "end_sample": 85504
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.379488833015785,
+      "end_sample": 86016
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.412640957976691,
+      "end_sample": 86528
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.445050708018243,
+      "end_sample": 87040
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.477072707959451,
+      "end_sample": 87552
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.5050538330106065,
+      "end_sample": 88064
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.540351749979891,
+      "end_sample": 88576
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.571079832967371,
+      "end_sample": 89088
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.605041458038613,
+      "end_sample": 89600
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.634318333002739,
+      "end_sample": 90112
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.665901875006966,
+      "end_sample": 90624
+    },
+    {
+      "event": "segment",
+      "at_seconds": 5.667203375021927,
+      "index": 1,
+      "start_sample": 13312,
+      "end_sample": 82496,
+      "decision_sample": 90624,
+      "reason": "endpoint"
+    },
+    {
+      "event": "enqueue",
+      "at_seconds": 5.667232624953613,
+      "index": 1,
+      "queue_depth": 1
+    },
+    {
+      "event": "dequeue",
+      "at_seconds": 5.667259542038664,
+      "index": 1,
+      "wait_seconds": 4.7791050747036934e-05
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.699248041957617,
+      "end_sample": 91136
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.733033332973719,
+      "end_sample": 91648
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.765029583009891,
+      "end_sample": 92160
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.79631183296442,
+      "end_sample": 92672
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.827348457998596,
+      "end_sample": 93184
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.857456541969441,
+      "end_sample": 93696
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.893065541982651,
+      "end_sample": 94208
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.923072042060085,
+      "end_sample": 94720
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.952080124989152,
+      "end_sample": 95232
+    },
+    {
+      "event": "audio",
+      "at_seconds": 5.987932624993846,
+      "end_sample": 95744
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.018795083044097,
+      "end_sample": 96256
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.048865832970478,
+      "end_sample": 96768
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.085029292036779,
+      "end_sample": 97280
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.117025041952729,
+      "end_sample": 97792
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.1490209579933435,
+      "end_sample": 98304
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.18101654201746,
+      "end_sample": 98816
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.209918832988478,
+      "end_sample": 99328
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.240363167016767,
+      "end_sample": 99840
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.27217433298938,
+      "end_sample": 100352
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.307063832995482,
+      "end_sample": 100864
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.338933499995619,
+      "end_sample": 101376
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.372272750013508,
+      "end_sample": 101888
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.4042874169535935,
+      "end_sample": 102400
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.433036832953803,
+      "end_sample": 102912
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.464386541978456,
+      "end_sample": 103424
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.497728958027437,
+      "end_sample": 103936
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.5292502080556005,
+      "end_sample": 104448
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.5650173330213875,
+      "end_sample": 104960
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.597025291994214,
+      "end_sample": 105472
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.6290344999870285,
+      "end_sample": 105984
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.6579320000018924,
+      "end_sample": 106496
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.691508500021882,
+      "end_sample": 107008
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.722270249971189,
+      "end_sample": 107520
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.757040666998364,
+      "end_sample": 108032
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.786781082977541,
+      "end_sample": 108544
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.821036707959138,
+      "end_sample": 109056
+    },
+    {
+      "event": "result",
+      "at_seconds": 6.842263499973342,
+      "index": 1,
+      "text": "非常快的，但是你在做这些的之前准备的时候，你可以用。",
+      "status": "ok",
+      "error_code": null,
+      "wait_seconds": 4.7791050747036934e-05,
+      "returned_seconds": 6.8422227499540895,
+      "inference_seconds": 1.1749652089783922,
+      "decision_seconds": 5.667167667066678,
+      "speech_end_sample": null,
+      "start_sample": 13312,
+      "end_sample": 82496,
+      "decision_sample": 90624,
+      "reason": "endpoint"
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.850525457994081,
+      "end_sample": 109568
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.888051124988124,
+      "end_sample": 110080
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.922764542046934,
+      "end_sample": 110592
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.949068707996048,
+      "end_sample": 111104
+    },
+    {
+      "event": "audio",
+      "at_seconds": 6.980967957992107,
+      "end_sample": 111616
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.0080579170025885,
+      "end_sample": 112128
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.041617583017796,
+      "end_sample": 112640
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.073821166995913,
+      "end_sample": 113152
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.10703499999363,
+      "end_sample": 113664
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.1403545420616865,
+      "end_sample": 114176
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.168665291974321,
+      "end_sample": 114688
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.204971458064392,
+      "end_sample": 115200
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.232595875044353,
+      "end_sample": 115712
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.268808542052284,
+      "end_sample": 116224
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.298750541987829,
+      "end_sample": 116736
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.3282272920478135,
+      "end_sample": 117248
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.361947000026703,
+      "end_sample": 117760
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.395141707966104,
+      "end_sample": 118272
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.42778237501625,
+      "end_sample": 118784
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.458687167032622,
+      "end_sample": 119296
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.490353750064969,
+      "end_sample": 119808
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.523685874999501,
+      "end_sample": 120320
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.557051582960412,
+      "end_sample": 120832
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.588991041993722,
+      "end_sample": 121344
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.618187083047815,
+      "end_sample": 121856
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.652953707962297,
+      "end_sample": 122368
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.684938500053249,
+      "end_sample": 122880
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.712092750007287,
+      "end_sample": 123392
+    },
+    {
+      "event": "segment",
+      "at_seconds": 7.713620500057004,
+      "index": 2,
+      "start_sample": 90112,
+      "end_sample": 115264,
+      "decision_sample": 123392,
+      "reason": "endpoint"
+    },
+    {
+      "event": "enqueue",
+      "at_seconds": 7.713704542024061,
+      "index": 2,
+      "queue_depth": 1
+    },
+    {
+      "event": "dequeue",
+      "at_seconds": 7.7137310419930145,
+      "index": 2,
+      "wait_seconds": 0.00010433304123580456
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.7490280830534175,
+      "end_sample": 123904
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.776477750041522,
+      "end_sample": 124416
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.8130524170119315,
+      "end_sample": 124928
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.8431636249879375,
+      "end_sample": 125440
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.875500916969031,
+      "end_sample": 125952
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.908112750039436,
+      "end_sample": 126464
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.940242541953921,
+      "end_sample": 126976
+    },
+    {
+      "event": "audio",
+      "at_seconds": 7.9730351669713855,
+      "end_sample": 127488
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.0019472920103,
+      "end_sample": 128000
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.03394324996043,
+      "end_sample": 128512
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.069019458023831,
+      "end_sample": 129024
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.098721832968295,
+      "end_sample": 129536
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.128515167045407,
+      "end_sample": 130048
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.165029542054981,
+      "end_sample": 130560
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.196904083015397,
+      "end_sample": 131072
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.22501670802012,
+      "end_sample": 131584
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.260007124976255,
+      "end_sample": 132096
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.292897667037323,
+      "end_sample": 132608
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.323739374987781,
+      "end_sample": 133120
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.357062750030309,
+      "end_sample": 133632
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.389040042064153,
+      "end_sample": 134144
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.421027833013795,
+      "end_sample": 134656
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.451299333013594,
+      "end_sample": 135168
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.485023792018183,
+      "end_sample": 135680
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.514360332977958,
+      "end_sample": 136192
+    },
+    {
+      "event": "result",
+      "at_seconds": 8.528684500022791,
+      "index": 2,
+      "text": "不让说，你快到深水区了。",
+      "status": "ok",
+      "error_code": null,
+      "wait_seconds": 0.00010433304123580456,
+      "returned_seconds": 8.528663250035606,
+      "inference_seconds": 0.8149339999072254,
+      "decision_seconds": 7.7135877079563215,
+      "speech_end_sample": null,
+      "start_sample": 90112,
+      "end_sample": 115264,
+      "decision_sample": 123392,
+      "reason": "endpoint"
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.549027499975637,
+      "end_sample": 136704
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.58102320798207,
+      "end_sample": 137216
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.60963629197795,
+      "end_sample": 137728
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.644208917045034,
+      "end_sample": 138240
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.67367758299224,
+      "end_sample": 138752
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.706920166965574,
+      "end_sample": 139264
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.740857083001174,
+      "end_sample": 139776
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.771087583038025,
+      "end_sample": 140288
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.801426250021905,
+      "end_sample": 140800
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.833532667020336,
+      "end_sample": 141312
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.867032667039894,
+      "end_sample": 141824
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.8969438750064,
+      "end_sample": 142336
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.95471354201436,
+      "end_sample": 142848
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.961102582979947,
+      "end_sample": 143360
+    },
+    {
+      "event": "audio",
+      "at_seconds": 8.996452833060175,
+      "end_sample": 143872
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.02538512495812,
+      "end_sample": 144384
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.057111541973427,
+      "end_sample": 144896
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.090367541997693,
+      "end_sample": 145408
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.120100333006121,
+      "end_sample": 145920
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.157037958037108,
+      "end_sample": 146432
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.184881082968786,
+      "end_sample": 146944
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.219205499975942,
+      "end_sample": 147456
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.249792041955516,
+      "end_sample": 147968
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.283058208064176,
+      "end_sample": 148480
+    },
+    {
+      "event": "segment",
+      "at_seconds": 9.284102833014913,
+      "index": 3,
+      "start_sample": 130048,
+      "end_sample": 140352,
+      "decision_sample": 148480,
+      "reason": "endpoint"
+    },
+    {
+      "event": "enqueue",
+      "at_seconds": 9.284235832979903,
+      "index": 3,
+      "queue_depth": 1
+    },
+    {
+      "event": "dequeue",
+      "at_seconds": 9.284266332979314,
+      "index": 3,
+      "wait_seconds": 0.000156999914906919
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.314768042066135,
+      "end_sample": 148992
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.346113541978411,
+      "end_sample": 149504
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.380970166996121,
+      "end_sample": 150016
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.408292999956757,
+      "end_sample": 150528
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.445026291999966,
+      "end_sample": 151040
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.47385666705668,
+      "end_sample": 151552
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.504471917054616,
+      "end_sample": 152064
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.5395161670167,
+      "end_sample": 152576
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.572218124987558,
+      "end_sample": 153088
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.603860249975696,
+      "end_sample": 153600
+    },
+    {
+      "event": "result",
+      "at_seconds": 9.633694082964212,
+      "index": 3,
+      "text": "就。",
+      "status": "ok",
+      "error_code": null,
+      "wait_seconds": 0.000156999914906919,
+      "returned_seconds": 9.633671832969412,
+      "inference_seconds": 0.3494072500616312,
+      "decision_seconds": 9.284061374957673,
+      "speech_end_sample": null,
+      "start_sample": 130048,
+      "end_sample": 140352,
+      "decision_sample": 148480,
+      "reason": "endpoint"
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.636185292038135,
+      "end_sample": 154112
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.666471083066426,
+      "end_sample": 154624
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.701036707963794,
+      "end_sample": 155136
+    },
+    {
+      "event": "audio",
+      "at_seconds": 9.701651375042275,
+      "end_sample": 155200
+    }
+  ],
+  "segments": [
+    {
+      "index": 1,
+      "text": "非常快的，但是你在做这些的之前准备的时候，你可以用。",
+      "status": "ok",
+      "error_code": null,
+      "wait_seconds": 4.7791050747036934e-05,
+      "returned_seconds": 6.8422227499540895,
+      "inference_seconds": 1.1749652089783922,
+      "decision_seconds": 5.667167667066678,
+      "speech_end_sample": null,
+      "start_sample": 13312,
+      "end_sample": 82496,
+      "decision_sample": 90624,
+      "reason": "endpoint"
+    },
+    {
+      "index": 2,
+      "text": "不让说，你快到深水区了。",
+      "status": "ok",
+      "error_code": null,
+      "wait_seconds": 0.00010433304123580456,
+      "returned_seconds": 8.528663250035606,
+      "inference_seconds": 0.8149339999072254,
+      "decision_seconds": 7.7135877079563215,
+      "speech_end_sample": null,
+      "start_sample": 90112,
+      "end_sample": 115264,
+      "decision_sample": 123392,
+      "reason": "endpoint"
+    },
+    {
+      "index": 3,
+      "text": "就。",
+      "status": "ok",
+      "error_code": null,
+      "wait_seconds": 0.000156999914906919,
+      "returned_seconds": 9.633671832969412,
+      "inference_seconds": 0.3494072500616312,
+      "decision_seconds": 9.284061374957673,
+      "speech_end_sample": null,
+      "start_sample": 130048,
+      "end_sample": 140352,
+      "decision_sample": 148480,
+      "reason": "endpoint"
+    }
+  ],
+  "text": "非常快的，但是你在做这些的之前准备的时候，你可以用。 不让说，你快到深水区了。 就。",
+  "audio_seconds": 9.7,
+  "first_result_seconds": 6.8422227499540895,
+  "final_result_seconds": 9.633671832969412,
+  "endpoint_latency_seconds": null,
+  "final_from_speech_seconds": null,
+  "annotation_status": "manual_pending"
+}
