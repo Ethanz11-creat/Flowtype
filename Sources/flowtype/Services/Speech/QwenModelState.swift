@@ -574,6 +574,7 @@ final class QwenModelState: ObservableObject {
             status = activeLease == nil ? .notLoaded : .ready
             return .failure(CancellationError())
         } catch {
+            AppLogger.log("[QwenModelState] activation failed: \(String(describing: error))")
             validationFailure = error as? NativeASRActivationError
             if userCancelled {
                 didAutoFallback = false
