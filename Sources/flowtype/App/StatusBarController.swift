@@ -84,16 +84,28 @@ class StatusBarController: NSObject, NSMenuDelegate {
 
         guard let button = statusItem?.button else { return }
 
+        // Accessory apps do not get a Dock tile, so the status item is the
+        // primary visible entry point. Explicitly keep it visible and make the
+        // button render only the icon; this also avoids a hidden item after a
+        // menu-bar layout refresh.
+        statusItem?.isVisible = true
+        button.imageScaling = .scaleProportionallyDown
+        button.imagePosition = .imageOnly
+        button.setAccessibilityLabel("FlowType")
+
         if let url = AppResources.url(forResource: "status_bar_icon", withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             image.size = NSSize(width: 18, height: 18)
             image.isTemplate = true
             button.image = image
+            AppLogger.log("[StatusBar] icon resource loaded: \(url.path)")
         } else {
             button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Flowtype")
+            AppLogger.log("[StatusBar] icon resource missing; using SF Symbol fallback")
         }
 
         originalStatusImage = button.image
+        AppLogger.log("[StatusBar] configured visible=\(statusItem?.isVisible == true) hasButton=\(statusItem?.button != nil) hasImage=\(button.image != nil)")
 
         button.action = #selector(showMenu)
         button.target = self

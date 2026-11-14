@@ -324,6 +324,12 @@ final class QwenModelState: ObservableObject {
     private func prepareConfiguredModel(allowDownload: Bool, restoring: Bool = false) async {
         guard operationID == nil else { return }
         let config = configuration()
+        if restoring {
+            let resolved = localModel(config)
+            let selection = ASRBackendMigration.selection(from: config)
+            let native = [selection.primary, selection.fallback].compactMap { $0?.rawValue }.filter { $0.hasPrefix("native:") }
+            AppLogger.log("[QwenModelState] restore probe policy=\(config.asrRoutingPolicy.rawValue) pendingLegacy=\(config.pendingLegacyNativeResolution) nativeSelection=\(native.joined(separator: ",")) resolved=\(resolved?.directory.path ?? "none")")
+        }
         operationSource = config.downloadSource
         target = nil
         selectionRequest = nil

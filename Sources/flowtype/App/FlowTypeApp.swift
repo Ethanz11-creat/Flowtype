@@ -139,6 +139,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    /// LaunchServices sends a reopen event when the user double-clicks an
+    /// already-running accessory app. Give that gesture a visible result even
+    /// though the app intentionally has no Dock window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        StatusBarController.shared.openSettings()
+        return true
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         ConfigurationStore.shared.flushPendingSave()
         // Cmd+Q mid-recording never reaches stopRecording's device restore; the
