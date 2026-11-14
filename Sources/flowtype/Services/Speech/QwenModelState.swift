@@ -290,8 +290,15 @@ final class QwenModelState: ObservableObject {
     }
 
     func loadModel(provider: QwenASRProvider? = nil) async {
-        guard operationID == nil else { return }
         if activeLease != nil { return }
+        // Model-center startup may already be activating a legacy model when
+        // AppDelegate reaches this compatibility entry point. Wait for that
+        // owned operation so callers observe the final readiness state instead
+        // of mistaking an in-flight activation for a failed load.
+        if let operation {
+            _ = await operation.value
+            return
+        }
         await prepareConfiguredModel(allowDownload: configuration().hasCompletedOnboarding, restoring: true)
     }
 
