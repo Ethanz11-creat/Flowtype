@@ -393,7 +393,18 @@ final class QwenModelState: ObservableObject {
             // Startup restores only offline historical validation. Explicit automatic
             // recovery retains preset origin and its bounded 1.7B -> 0.6B fallback.
             let target: ModelProvisionTarget = allowDownload && !restoring ? .preset(installedPreset) : .offline(resolved)
-            await perform(.init(target: target, source: config.downloadSource, origin: origin, restoringValidatedRuntime: restoring))
+            // Configurations written before the model center had no imported/installed
+            // validation record even when a complete built-in model was already on disk.
+            // Treat that narrow legacy state as a one-time offline activation so the
+            // existing model is validated and registered instead of leaving startup
+            // permanently blocked. No download or cloud request is introduced here.
+            let needsLegacyActivation = restoring && config.pendingLegacyNativeResolution
+                && config.importedASRModels.isEmpty && config.installedASRModels.isEmpty
+            if needsLegacyActivation {
+                AppLogger.log("[QwenModelState] legacy local model found without validation; running one-time offline activation")
+            }
+            await perform(.init(target: target, source: config.downloadSource, origin: origin,
+                                restoringValidatedRuntime: restoring && !needsLegacyActivation))
             return
         }
         guard !restoring else { validationFailure = .validationRequired; publish(.incompleteLocal()); return }
